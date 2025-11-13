@@ -1,0 +1,118 @@
+# JLTSQL Configuration File Example
+# Copy this file to config.yaml and edit as needed
+
+# JV-Link Settings
+jvlink:
+  # JRA-VAN Service Key (required)
+  # Get from https://jra-van.jp/dlb/
+  service_key: "${JVLINK_SERVICE_KEY}"
+
+# Database Settings
+databases:
+  # SQLite Database
+  sqlite:
+    enabled: true
+    path: "./data/keiba.db"
+    pragma:
+      journal_mode: "WAL"
+      synchronous: "NORMAL"
+      cache_size: -64000  # 64MB
+      temp_store: "MEMORY"
+
+  # DuckDB Database (OLAP)
+  duckdb:
+    enabled: true
+    path: "./data/keiba.duckdb"
+    threads: 4
+    memory_limit: "2GB"
+
+  # PostgreSQL Database
+  postgresql:
+    enabled: false
+    host: "${POSTGRES_HOST:localhost}"
+    port: 5432
+    database: "keiba"
+    user: "${POSTGRES_USER}"
+    password: "${POSTGRES_PASSWORD}"
+    pool_size: 5
+    max_overflow: 10
+
+# Data Fetch Settings
+data_fetch:
+  # Initial bulk data fetch
+  initial:
+    enabled: true
+    date_from: "2020-01-01"
+    date_to: "2024-12-31"
+    # Data spec codes
+    # RACE: RA, SE, HR
+    # DIFF: UM, KS, CH, BR, BN
+    # YSCH: Schedule
+    # O1-O6: Odds
+    data_specs:
+      - "RACE"      # Race data (RA, SE, HR)
+      - "DIFF"      # Master data (UM, KS, CH, BR, BN)
+      - "YSCH"      # Schedule
+      - "O1"        # Win/Place/Bracket odds
+      - "O2"        # Quinella odds
+      - "O3"        # Wide odds
+      - "O4"        # Exacta odds
+      - "O5"        # Trio odds
+      - "O6"        # Trifecta odds
+
+  # Real-time data fetch
+  realtime:
+    enabled: true
+    interval_seconds: 60
+    # Real-time data spec codes
+    # 0B12: Race results
+    # 0B15: Horse weights
+    # 0B20: Odds updates
+    # 0B31: Payouts
+    data_specs:
+      - "0B12"      # Race results
+      - "0B15"      # Horse weights
+      - "0B20"      # Odds updates
+      - "0B31"      # Payouts
+
+# Performance Settings
+performance:
+  batch_size: 1000            # Batch insert size
+  commit_interval: 10000      # Commit every N records
+  max_workers: 4              # Parallel processing workers
+  prefetch_size: 100          # Prefetch buffer size
+  memory_limit_mb: 500        # Memory limit for buffering
+
+# Logging Settings
+logging:
+  level: "INFO"               # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  file:
+    enabled: true
+    path: "./logs/jltsql.log"
+    max_size_mb: 100
+    backup_count: 5
+    rotation: "size"          # size or time
+  console:
+    enabled: true
+    colored: true
+  format: "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+
+# Monitoring Settings
+monitoring:
+  metrics_enabled: false
+  health_check_port: 8080
+
+# Advanced Settings
+advanced:
+  retry:
+    max_attempts: 3
+    backoff_factor: 2
+    max_wait_seconds: 60
+  timeout:
+    jvlink_connect: 30
+    jvlink_read: 10
+    db_connect: 10
+    db_query: 300
+  encoding:
+    jvdata: "shift_jis"
+    database: "utf-8"
