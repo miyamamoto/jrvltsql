@@ -178,8 +178,10 @@ class BaseDatabase(ABC):
         columns = list(data.keys())
         values = list(data.values())
         placeholders = ", ".join(["?" for _ in columns])
+        # Quote column names with backticks to support names starting with digits
+        quoted_columns = [f"`{col}`" for col in columns]
 
-        sql = f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES ({placeholders})"
+        sql = f"INSERT INTO {table_name} ({', '.join(quoted_columns)}) VALUES ({placeholders})"
 
         return self.execute(sql, tuple(values))
 
@@ -202,8 +204,10 @@ class BaseDatabase(ABC):
         # Use first row to determine columns
         columns = list(data_list[0].keys())
         placeholders = ", ".join(["?" for _ in columns])
+        # Quote column names with backticks to support names starting with digits
+        quoted_columns = [f"`{col}`" for col in columns]
 
-        sql = f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES ({placeholders})"
+        sql = f"INSERT INTO {table_name} ({', '.join(quoted_columns)}) VALUES ({placeholders})"
 
         # Extract values in correct order for each row
         parameters_list = [
