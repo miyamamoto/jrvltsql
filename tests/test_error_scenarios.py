@@ -232,8 +232,8 @@ class TestResourceConstraints(unittest.TestCase):
         result = importer.import_records(large_batch)
 
         # Should complete without memory errors
-        self.assertIn('imported', result)
-        self.assertIn('failed', result)
+        self.assertIn('records_imported', result)
+        self.assertIn('records_failed', result)
 
         db.disconnect()
         temp_dir.cleanup()

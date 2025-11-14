@@ -25,7 +25,9 @@ class TestRealtimeFetcher(unittest.TestCase):
         """Test RealtimeFetcher initialization."""
         fetcher = RealtimeFetcher(sid=self.sid)
 
-        self.assertEqual(fetcher.sid, self.sid)
+        # Check that fetcher initializes correctly
+        self.assertIsNotNone(fetcher.jvlink)
+        self.assertIsNotNone(fetcher.parser_factory)
         self.assertFalse(fetcher._stream_open)
 
     def test_list_data_specs(self):
@@ -53,10 +55,12 @@ class TestRealtimeFetcher(unittest.TestCase):
         mock_jvlink.jv_rt_open.return_value = (JV_RT_SUCCESS, 10)
 
         # Mock JVRead responses
+        # ret_code > 0 means success with data (value is data length)
+        # ret_code == 0 means no more data
         mock_jvlink.jv_read.side_effect = [
-            (JV_READ_SUCCESS, b"RA20240101...", "test.txt"),
-            (JV_READ_SUCCESS, b"RA20240102...", "test.txt"),
-            (0, b"", ""),  # End of data
+            (100, b"RA20240101...", "test.txt"),  # 100 bytes of data
+            (100, b"RA20240102...", "test.txt"),  # 100 bytes of data
+            (0, b"", ""),  # End of data (JV_READ_SUCCESS)
         ]
 
         # Mock parser

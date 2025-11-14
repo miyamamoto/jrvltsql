@@ -309,9 +309,9 @@ class TestMemoryUsage(PerformanceTestBase):
         # Should complete without memory errors
         result = importer.import_records(records)
 
-        self.assertIn('imported', result)
+        self.assertIn('records_imported', result)
         # Most or all should succeed
-        self.assertGreater(result['imported'], 4000)
+        self.assertGreater(result['records_imported'], 4000)
 
     def test_query_large_result_set(self):
         """Test querying large result sets."""
