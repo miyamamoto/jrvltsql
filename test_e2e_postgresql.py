@@ -28,9 +28,9 @@ try:
     db_config = {
         "host": "localhost",
         "port": 5432,
-        "database": "keiba_test",
-        "user": "postgres",
-        "password": "",  # 空パスワードで試行
+        "database": "jvlinktest",
+        "user": "testuser",
+        "password": "testpass",
         "connect_timeout": 5
     }
     db = PostgreSQLDatabase(db_config)
