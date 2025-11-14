@@ -2,10 +2,12 @@
 
 JRA-VAN DataLabの競馬データをSQLite/DuckDB/PostgreSQLにリアルタイムインポートするPythonツール
 
+[![Tests](https://github.com/miyamamoto/jltsql/actions/workflows/test.yml/badge.svg)](https://github.com/miyamamoto/jltsql/actions/workflows/test.yml)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)](https://www.microsoft.com/windows)
 [![Version](https://img.shields.io/badge/version-1.0.0--rc1-orange.svg)](https://github.com/miyamamoto/jltsql/releases)
+[![Coverage](https://img.shields.io/badge/coverage-32%25-yellow.svg)](https://github.com/miyamamoto/jltsql)
 
 ## 概要
 
