@@ -47,10 +47,67 @@ class DataImporter:
         self._batches_processed = 0
 
         # Map record types to table names
+        # Note: Table names match schema.py table definitions (e.g. NL_RA, not NL_RA_RACE)
         self._table_map = {
-            "RA": "NL_RA_RACE",
-            "SE": "NL_SE_RACE_UMA",
-            "HR": "NL_HR_PAY",
+            # NL_ tables (蓄積データ)
+            "RA": "NL_RA",  # レース詳細
+            "SE": "NL_SE",  # 馬毎レース情報
+            "HR": "NL_HR",  # 払戻
+            "JG": "NL_JG",  # 除外馬
+            "H1": "NL_H1",  # 単勝・複勝オッズ
+            "H6": "NL_H6",  # 単勝・複勝オッズ（6レースまとめ）
+            "O1": "NL_O1",  # 馬連オッズ
+            "O2": "NL_O2",  # ワイドオッズ
+            "O3": "NL_O3",  # 枠連オッズ
+            "O4": "NL_O4",  # 馬単オッズ
+            "O5": "NL_O5",  # 三連複オッズ
+            "O6": "NL_O6",  # 三連単オッズ
+            "YS": "NL_YS",  # スケジュール
+            "UM": "NL_UM",  # 馬マスター
+            "KS": "NL_KS",  # 騎手マスター
+            "CH": "NL_CH",  # 調教師マスター
+            "BR": "NL_BR",  # 繁殖馬マスター
+            "BN": "NL_BN",  # 生産者マスター
+            "HN": "NL_HN",  # 馬主マスター
+            "SK": "NL_SK",  # 競走馬見積もり
+            "RC": "NL_RC",  # レースコメント
+            "CC": "NL_CC",  # コース変更
+            "TC": "NL_TC",  # タイムコメント
+            "CS": "NL_CS",  # コメントショート
+            "CK": "NL_CK",  # 勝利騎手・調教師コメント
+            "WC": "NL_WC",  # 天候コメント
+            "AV": "NL_AV",  # 場外発売情報
+            "JC": "NL_JC",  # 重量変更情報
+            "HC": "NL_HC",  # 異常区分情報
+            "HS": "NL_HS",  # 配当金情報
+            "HY": "NL_HY",  # 払戻情報（地方競馬）
+            "WE": "NL_WE",  # 気象情報
+            "WF": "NL_WF",  # 風情報
+            "WH": "NL_WH",  # 馬場情報
+            "TM": "NL_TM",  # タイムマスター
+            "TK": "NL_TK",  # 追切マスター
+            "BT": "NL_BT",  # 調教Bタイム
+            "DM": "NL_DM",  # データマスター
+            # RT_ tables (速報データ)
+            "RT_RA": "RT_RA",  # レース詳細（速報）
+            "RT_SE": "RT_SE",  # 馬毎レース情報（速報）
+            "RT_HR": "RT_HR",  # 払戻（速報）
+            "RT_O1": "RT_O1",  # 馬連オッズ（速報）
+            "RT_O2": "RT_O2",  # ワイドオッズ（速報）
+            "RT_O3": "RT_O3",  # 枠連オッズ（速報）
+            "RT_O4": "RT_O4",  # 馬単オッズ（速報）
+            "RT_O5": "RT_O5",  # 三連複オッズ（速報）
+            "RT_O6": "RT_O6",  # 三連単オッズ（速報）
+            "RT_H1": "RT_H1",  # 単勝・複勝オッズ（速報）
+            "RT_H6": "RT_H6",  # 単勝・複勝オッズ6R（速報）
+            "RT_WE": "RT_WE",  # 気象情報（速報）
+            "RT_WH": "RT_WH",  # 馬場情報（速報）
+            "RT_JC": "RT_JC",  # 重量変更情報（速報）
+            "RT_CC": "RT_CC",  # コース変更（速報）
+            "RT_TC": "RT_TC",  # タイムコメント（速報）
+            "RT_TM": "RT_TM",  # タイムマスター（速報）
+            "RT_DM": "RT_DM",  # データマスター（速報）
+            "RT_AV": "RT_AV",  # 場外発売情報（速報）
         }
 
         logger.info(
@@ -94,9 +151,10 @@ class DataImporter:
         try:
             for record in records:
                 # Get record type and table name
-                record_type = record.get("headRecordSpec")
+                # Note: Japanese parsers use 'レコード種別ID' for record type
+                record_type = record.get("レコード種別ID") or record.get("headRecordSpec")
                 if not record_type:
-                    logger.warning("Record missing headRecordSpec")
+                    logger.warning("Record missing record type field (レコード種別ID or headRecordSpec)")
                     self._records_failed += 1
                     continue
 
@@ -210,9 +268,10 @@ class DataImporter:
         Returns:
             True if successful, False otherwise
         """
-        record_type = record.get("headRecordSpec")
+        # Note: Japanese parsers use 'レコード種別ID' for record type
+        record_type = record.get("レコード種別ID") or record.get("headRecordSpec")
         if not record_type:
-            logger.warning("Record missing headRecordSpec")
+            logger.warning("Record missing record type field (レコード種別ID or headRecordSpec)")
             return False
 
         table_name = self._table_map.get(record_type)

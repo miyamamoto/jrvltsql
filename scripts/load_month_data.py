@@ -93,8 +93,8 @@ def main(year, month, db, data_spec, create_indexes):
                 # Import data
                 console.print(f"Importing {year}/{month:02d} data...")
 
-                service_key = os.getenv("JVLINK_SERVICE_KEY", "JLTSQL")
-                processor = BatchProcessor(database=database, sid=service_key, batch_size=1000)
+                sid = os.getenv("JVLINK_SID", "JLTSQL")
+                processor = BatchProcessor(database=database, sid=sid, batch_size=1000)
 
                 # Calculate date range for the month
                 from_date = format_date(year, month, 1)
@@ -111,7 +111,8 @@ def main(year, month, db, data_spec, create_indexes):
                 result = processor.process_date_range(
                     data_spec=data_spec,
                     from_date=from_date,
-                    to_date=to_date
+                    to_date=to_date,
+                    option=1  # Setup mode to download initial data
                 )
 
                 console.print("\n[bold green]OK - Import complete![/bold green]")

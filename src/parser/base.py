@@ -63,7 +63,27 @@ class BaseParser(ABC):
         if not self.record_type:
             raise ValueError(f"{self.__class__.__name__} must define record_type")
 
-        self._fields: List[FieldDef] = self._define_fields()
+        # Get field definitions (may be tuples or FieldDef objects)
+        field_defs = self._define_fields()
+
+        # Convert tuples to FieldDef objects if necessary
+        self._fields: List[FieldDef] = []
+        for field_def in field_defs:
+            if isinstance(field_def, tuple):
+                # Legacy format: (start, length, name)
+                start, length, name = field_def
+                self._fields.append(FieldDef(
+                    name=name,
+                    start=start - 1,  # Convert 1-indexed to 0-indexed
+                    length=length,
+                    type="str",
+                    description=""
+                ))
+            elif isinstance(field_def, FieldDef):
+                self._fields.append(field_def)
+            else:
+                raise ValueError(f"Invalid field definition type: {type(field_def)}")
+
         self._field_map: Dict[str, FieldDef] = {f.name: f for f in self._fields}
 
         logger.debug(
@@ -73,11 +93,11 @@ class BaseParser(ABC):
         )
 
     @abstractmethod
-    def _define_fields(self) -> List[FieldDef]:
+    def _define_fields(self) -> List:
         """Define fields for this record type.
 
         Returns:
-            List of FieldDef objects defining the record structure
+            List of FieldDef objects or tuples (start, length, name) defining the record structure
         """
         pass
 

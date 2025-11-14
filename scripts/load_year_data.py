@@ -134,16 +134,16 @@ def load_data_to_database(db_type, year, data_spec, create_indexes_flag, batch_s
             from dotenv import load_dotenv
             load_dotenv()
 
-            service_key = os.getenv("JVLINK_SERVICE_KEY")
-            if not service_key:
-                console.print("[yellow]Warning: JVLINK_SERVICE_KEY not found in .env file[/yellow]")
-                console.print("[yellow]Using default 'JLTSQL' as service ID[/yellow]")
-                service_key = "JLTSQL"
+            sid = os.getenv("JVLINK_SID")
+            if not sid:
+                console.print("[yellow]Warning: JVLINK_SID not found in .env file[/yellow]")
+                console.print("[yellow]Using default 'JLTSQL' as session ID[/yellow]")
+                sid = "JLTSQL"
 
             # Create batch processor
             processor = BatchProcessor(
                 database=database,
-                sid=service_key,
+                sid=sid,
                 batch_size=batch_size
             )
 
