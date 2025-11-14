@@ -95,6 +95,14 @@ def generate_all_parsers(formats):
 
 def generate_schema_definitions(formats):
     """Generate schema definitions for all record types."""
+    # Record types that are provided in real-time (JVRTOpen)
+    # Based on JV-Data4901.xlsx specification
+    REALTIME_RECORD_TYPES = [
+        'AV', 'CC', 'DM', 'H1', 'H6', 'HR', 'JC',
+        'O1', 'O2', 'O3', 'O4', 'O5', 'O6',
+        'RA', 'SE', 'TC', 'TM', 'WE', 'WH'
+    ]
+
     schemas = {}
 
     for record_id, format_data in sorted(formats.items()):
@@ -118,24 +126,24 @@ def generate_schema_definitions(formats):
         column_defs_str = '\n'.join(column_defs)
         primary_key = f"PRIMARY KEY ({', '.join(key_columns)})" if key_columns else ""
 
-        # NL_ table (Normal Load - historical data)
+        # NL_ table (Normal Load - historical data) - ALL record types
         nl_table_name = f"NL_{record_id}"
         nl_schema = f'''        CREATE TABLE IF NOT EXISTS {nl_table_name} (
 {column_defs_str}
 
             {primary_key}
         )'''
+        schemas[nl_table_name] = nl_schema
 
-        # RT_ table (Real-Time data)
-        rt_table_name = f"RT_{record_id}"
-        rt_schema = f'''        CREATE TABLE IF NOT EXISTS {rt_table_name} (
+        # RT_ table (Real-Time data) - ONLY for real-time record types
+        if record_id in REALTIME_RECORD_TYPES:
+            rt_table_name = f"RT_{record_id}"
+            rt_schema = f'''        CREATE TABLE IF NOT EXISTS {rt_table_name} (
 {column_defs_str}
 
             {primary_key}
         )'''
-
-        schemas[nl_table_name] = nl_schema
-        schemas[rt_table_name] = rt_schema
+            schemas[rt_table_name] = rt_schema
 
     return schemas
 

@@ -35,55 +35,48 @@ class RealtimeUpdater:
 
     # Table mapping from record type to RT_ tables (Real-Time data)
     # Real-time updates use RT_ prefix, historical data uses NL_ prefix
+    #
+    # IMPORTANT: Only 19 record types are provided via JVRTOpen (real-time)
+    # Based on JV-Data4901.xlsx specification (Sheet 6: データ種別一覧 > 速報系データ)
     RECORD_TYPE_TABLE = {
-        # Race data (Format 1-6)
-        "TK": "RT_TK",  # Format 1: 特別登録馬
+        # Race data (0B12, 0B15)
         "RA": "RT_RA",  # Format 2: レース詳細
         "SE": "RT_SE",  # Format 3: 馬毎レース情報
         "HR": "RT_HR",  # Format 4: 払戻
-        "H1": "RT_H1",  # Format 5: 票数（単勝・複勝）
+
+        # Odds data (0B30-0B36)
+        "O1": "RT_O1",  # Format 7: オッズ（単勝・複勝）
+        "O2": "RT_O2",  # Format 8: オッズ（枠連）
+        "O3": "RT_O3",  # Format 9: オッズ（馬連）
+        "O4": "RT_O4",  # Format 10: オッズ（ワイド）
+        "O5": "RT_O5",  # Format 11: オッズ（馬単）
+        "O6": "RT_O6",  # Format 12: オッズ（３連複・３連単）
+
+        # Vote data (0B20)
+        "H1": "RT_H1",  # Format 5: 票数（単勝・複勝等）
         "H6": "RT_H6",  # Format 6: 票数（３連単）
 
-        # Odds data (Format 11-16)
-        "O1": "RT_O1",  # Format 11: オッズ（単勝・複勝）
-        "O2": "RT_O2",  # Format 12: オッズ（枠連）
-        "O3": "RT_O3",  # Format 13: オッズ（馬連）
-        "O4": "RT_O4",  # Format 14: オッズ（ワイド）
-        "O5": "RT_O5",  # Format 15: オッズ（馬単）
-        "O6": "RT_O6",  # Format 16: オッズ（３連複・３連単）
+        # Baba/Kaisai (0B11, 0B14, 0B16)
+        "WH": "RT_WH",  # Format 101: 馬場状態
+        "WE": "RT_WE",  # Format 102: 開催情報
 
-        # Master data (Format 21-32)
-        "UM": "RT_UM",  # Format 21: 馬マスタ
-        "KS": "RT_KS",  # Format 22: 騎手マスタ
-        "CH": "RT_CH",  # Format 23: 調教師マスタ
-        "BR": "RT_BR",  # Format 24: 馬主マスタ
-        "BN": "RT_BN",  # Format 25: 生産者マスタ
-        "HN": "RT_HN",  # Format 26: 繁殖馬マスタ
-        "SK": "RT_SK",  # Format 27: 産駒マスタ
-        "RC": "RT_RC",  # Format 28: レコードマスタ
-        "CK": "RT_CK",  # Format 29: 競走馬条件クラス
-        "HC": "RT_HC",  # Format 30: 馬場状態コード
-        "HS": "RT_HS",  # Format 31: 配当・返還・コーナー順位
-        "HY": "RT_HY",  # Format 32: 東西所属変更
+        # Data mining (0B13, 0B17)
+        "DM": "RT_DM",  # Format 28: データマイニング（タイム型）
+        "TM": "RT_TM",  # Format 29: データマイニング（対戦型）
 
-        # Change data (Format 41-56)
-        "YS": "RT_YS",  # Format 41: 抹消馬
-        "BT": "RT_BT",  # Format 43: 繁殖馬馬産地
-        "CS": "RT_CS",  # Format 45: 競走条件
-        "DM": "RT_DM",  # Format 47: 場外発売馬券発売日
-        "TM": "RT_TM",  # Format 51: タイム記録
-        "WF": "RT_WF",  # Format 52: 追い切り
-        "JG": "RT_JG",  # Format 53: 重賞
-        "WC": "RT_WC",  # Format 54: 天候コード
-        "WH": "RT_WH",  # Format 55: 勝ち馬
-        "WE": "RT_WE",  # Format 56: 勝ち馬（地方交流）
-
-        # Other data
-        "AV": "RT_AV",  # Format 81: 場外発売情報
-        "JC": "RT_JC",  # Format 91: 騎手成績
-        "TC": "RT_TC",  # Format 92: 調教師成績
+        # Performance data (0B14, 0B16)
+        "AV": "RT_AV",  # Format 103: 場外発売情報
+        "JC": "RT_JC",  # Format 104: 騎手成績
+        "TC": "RT_TC",  # Format 105: 調教師成績
         "CC": "RT_CC",  # Format 106: 競走馬成績
     }
+
+    # Note: The following record types are NOT provided in real-time:
+    # - TK (特別登録馬) - Accumulated data only
+    # - UM, KS, CH, BR, BN, HN, SK, RC (Master data) - Updated via DIFF/DIFN
+    # - CK, HC, HS, HY (Code/Status data) - Updated via SNAP/SNPN
+    # - YS, BT, CS (Change data) - Updated via YSCH, SLOP, etc.
+    # - WF (WIN5), JG (重賞), WC (天候) - Not in real-time stream
 
     def __init__(self, database: BaseDatabase):
         """Initialize real-time updater.
