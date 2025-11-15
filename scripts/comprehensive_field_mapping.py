@@ -313,6 +313,110 @@ COMPREHENSIVE_FIELD_MAPPING = {
     "<マイニング予想>": "MiningYoso",
     "<レコード保持馬情報>": "RecordHolderInfo",
 
+    # Course related
+    "コース": "Course",
+    "コース改修年月日": "CourseKaishuDate",
+    "コース説明": "CourseDescription",
+    "馬場周り": "BabaMawari",
+
+    # Sales/Trading info
+    "父馬_繁殖登録番号": "SireHansyokuNum",
+    "母馬_繁殖登録番号": "DamHansyokuNum",
+    "生年": "BirthYear",
+    "主催者・市場コード": "SponsorMarketCode",
+    "主催者名称": "SponsorName",
+    "市場の名称": "MarketName",
+    "市場の開催期間(開始日)": "MarketStartDate",
+    "市場の開催期間(終了日)": "MarketEndDate",
+    "取引時の競走馬の年齢": "TradingAge",
+    "取引価格": "TradingPrice",
+
+    # Weather/Track state
+    "変更識別": "HenkoID",
+    "天候状態": "TenkoState",
+    "馬場状態・芝": "SibaBabaState",
+    "馬場状態・ダート": "DirtBabaState",
+
+    # Multi-race betting (重勝式)
+    "<重勝式対象レース情報>": "JyusyoshikiTargetInfo",
+    "重勝式発売票数": "JyusyoshikiHatsubaiHyosu",
+    "<有効票数情報>": "YukoHyosuInfo",
+    "的中無フラグ": "TekichuNashiFlag",
+    "キャリーオーバー金額初期": "CarryOverInitial",
+    "キャリーオーバー金額残高": "CarryOverBalance",
+    "<重勝式払戻情報>": "JyusyoshikiHaraiInfo",
+
+    # Prize money totals
+    "平地本賞金累計": "HeichiHonsyokinTotal",
+    "障害本賞金累計": "SyogaiHonsyokinTotal",
+    "平地付加賞金累計": "HeichiFukasyokinTotal",
+    "障害付加賞金累計": "SyogaiFukasyokinTotal",
+    "平地収得賞金累計": "HeichiSyutokuTotal",
+    "障害収得賞金累計": "SyogaiSyutokuTotal",
+
+    # Distance-based performance (turf)
+    "芝1200以下・着回数": "Siba1200IkaChaku",
+    "芝1201-1400・着回数": "Siba1201_1400Chaku",
+    "芝1401-1600・着回数": "Siba1401_1600Chaku",
+    "芝1601-1800・着回数": "Siba1601_1800Chaku",
+    "芝1801-2000・着回数": "Siba1801_2000Chaku",
+    "芝2001-2200・着回数": "Siba2001_2200Chaku",
+    "芝2201-2400・着回数": "Siba2201_2400Chaku",
+    "芝2401-2800・着回数": "Siba2401_2800Chaku",
+    "芝2801以上・着回数": "Siba2801OverChaku",
+
+    # Distance-based performance (dirt)
+    "ダ1200以下・着回数": "Dirt1200IkaChaku",
+    "ダ1201-1400・着回数": "Dirt1201_1400Chaku",
+    "ダ1401-1600・着回数": "Dirt1401_1600Chaku",
+    "ダ1601-1800・着回数": "Dirt1601_1800Chaku",
+    "ダ1801-2000・着回数": "Dirt1801_2000Chaku",
+    "ダ2001-2200・着回数": "Dirt2001_2200Chaku",
+    "ダ2201-2400・着回数": "Dirt2201_2400Chaku",
+    "ダ2401-2800・着回数": "Dirt2401_2800Chaku",
+    "ダ2801以上・着回数": "Dirt2801OverChaku",
+
+    # Racecourse-based performance (turf)
+    "札幌芝・着回数": "SapporoSibaChaku",
+    "函館芝・着回数": "HakodateSibaChaku",
+    "福島芝・着回数": "FukushimaSibaChaku",
+    "新潟芝・着回数": "NiigataSibaChaku",
+    "東京芝・着回数": "TokyoSibaChaku",
+    "中山芝・着回数": "NakayamaSibaChaku",
+    "中京芝・着回数": "ChukyoSibaChaku",
+    "京都芝・着回数": "KyotoSibaChaku",
+    "阪神芝・着回数": "HanshinSibaChaku",
+    "小倉芝・着回数": "KokuraSibaChaku",
+
+    # Racecourse-based performance (dirt)
+    "札幌ダ・着回数": "SapporoDirtChaku",
+    "函館ダ・着回数": "HakodateDirtChaku",
+    "福島ダ・着回数": "FukushimaDirtChaku",
+    "新潟ダ・着回数": "NiigataDirtChaku",
+    "東京ダ・着回数": "TokyoDirtChaku",
+    "中山ダ・着回数": "NakayamaDirtChaku",
+    "中京ダ・着回数": "ChukyoDirtChaku",
+    "京都ダ・着回数": "KyotoDirtChaku",
+    "阪神ダ・着回数": "HanshinDirtChaku",
+    "小倉ダ・着回数": "KokuraDirtChaku",
+
+    # Racecourse-based performance (obstacle)
+    "札幌障・着回数": "SapporoSyogaiChaku",
+    "函館障・着回数": "HakodateSyogaiChaku",
+    "福島障・着回数": "FukushimaSyogaiChaku",
+    "新潟障・着回数": "NiigataSyogaiChaku",
+    "東京障・着回数": "TokyoSyogaiChaku",
+    "中山障・着回数": "NakayamaSyogaiChaku",
+    "中京障・着回数": "ChukyoSyogaiChaku",
+    "京都障・着回数": "KyotoSyogaiChaku",
+    "阪神障・着回数": "HanshinSyogaiChaku",
+    "小倉障・着回数": "KokuraSyogaiChaku",
+
+    # Results/Stats blocks
+    "<騎手本年･累計成績情報>": "KisyuResultsInfo",
+    "<調教師本年･累計成績情報>": "ChokyosiResultsInfo",
+    "<本年･累計成績情報>": "ResultsInfo",
+
     # Others
     "異常区分コード": "IJyoCD",
     "事由区分": "JiyuKubun",
@@ -331,6 +435,8 @@ COMPREHENSIVE_FIELD_MAPPING = {
     "予定頭数": "YoteiTosu",
     "アルファベット区分": "AlphabetKubun",
     "3歳条件 繰上げ出走頭数": "Kuriage3sai",
+    "返還フラグ": "HenkanFlag",
+    "不成立フラグ": "FuseirituFlag",
 }
 
 

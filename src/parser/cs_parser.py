@@ -30,7 +30,7 @@ class CSParser(BaseParser):
             FieldDef("JyoCD", 11, 2, description="競馬場コード"),
             FieldDef("Kyori", 13, 4, convert_type="SMALLINT", description="距離"),
             FieldDef("TrackCD", 17, 2, description="トラックコード"),
-            FieldDef("コース改修年月日", 19, 8, description="コース改修年月日"),
-            FieldDef("コース説明", 27, 6800, description="コース説明"),
+            FieldDef("CourseKaishuDate", 19, 8, description="コース改修年月日"),
+            FieldDef("CourseDescription", 27, 6800, description="コース説明"),
             FieldDef("RecordDelimiter", 6827, 2, description="レコード区切"),
         ]
