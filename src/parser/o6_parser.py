@@ -36,8 +36,8 @@ class O6Parser(BaseParser):
             FieldDef("Ninki", 27, 8, convert_type="SMALLINT", description="発表月日時分"),
             FieldDef("TorokuTosu", 35, 2, convert_type="SMALLINT", description="登録頭数"),
             FieldDef("SyussoTosu", 37, 2, convert_type="SMALLINT", description="出走頭数"),
-            FieldDef("発売フラグ　3連単", 39, 1, description="発売フラグ　3連単"),
-            FieldDef("<3連単オッズ>", 40, 17, description="<3連単オッズ>"),
+            FieldDef("HatsubaiFlag8", 39, 1, description="発売フラグ　3連単"),
+            FieldDef("SanrentanOddsBlock", 40, 17, description="<3連単オッズ>"),
             FieldDef("SanrentanHyosuTotal", 83272, 11, description="3連単票数合計"),
             FieldDef("RecordDelimiter", 83283, 2, description="レコード区切"),
         ]

@@ -37,6 +37,6 @@ class JGParser(BaseParser):
             FieldDef("Umaban", 37, 36, convert_type="SMALLINT", description="馬名"),
             FieldDef("Bamei", 73, 3, description="出馬投票受付順番"),
             FieldDef("JiyuKubun", 76, 1, description="出走区分"),
-            FieldDef("除外状態区分", 77, 1, description="除外状態区分"),
+            FieldDef("JyogaiJotaiKubun", 77, 1, description="除外状態区分"),
             FieldDef("RecordDelimiter", 78, 2, description="レコード区切"),
         ]

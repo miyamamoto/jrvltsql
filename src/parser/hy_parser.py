@@ -29,6 +29,6 @@ class HYParser(BaseParser):
             FieldDef("MakeDate", 3, 8, convert_type="DATE", description="データ作成年月日"),
             FieldDef("KettoNum", 11, 10, description="血統登録番号"),
             FieldDef("Bamei", 21, 36, description="馬名"),
-            FieldDef("馬名の意味由来", 57, 64, description="馬名の意味由来"),
+            FieldDef("BameiMeaning", 57, 64, description="馬名の意味由来"),
             FieldDef("RecordDelimiter", 121, 2, description="レコード区切"),
         ]

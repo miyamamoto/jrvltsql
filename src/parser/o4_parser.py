@@ -36,8 +36,8 @@ class O4Parser(BaseParser):
             FieldDef("Ninki", 27, 8, convert_type="SMALLINT", description="発表月日時分"),
             FieldDef("TorokuTosu", 35, 2, convert_type="SMALLINT", description="登録頭数"),
             FieldDef("SyussoTosu", 37, 2, convert_type="SMALLINT", description="出走頭数"),
-            FieldDef("発売フラグ　馬単", 39, 1, description="発売フラグ　馬単"),
-            FieldDef("<馬単オッズ>", 40, 13, description="<馬単オッズ>"),
+            FieldDef("HatsubaiFlag6", 39, 1, description="発売フラグ　馬単"),
+            FieldDef("UmatanOddsBlock", 40, 13, description="<馬単オッズ>"),
             FieldDef("UmatanHyosuTotal", 4018, 11, description="馬単票数合計"),
             FieldDef("RecordDelimiter", 4029, 2, description="レコード区切"),
         ]

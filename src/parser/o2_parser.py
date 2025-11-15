@@ -36,8 +36,8 @@ class O2Parser(BaseParser):
             FieldDef("OddsHigh", 27, 8, description="発表月日時分"),
             FieldDef("Ninki", 35, 2, convert_type="SMALLINT", description="登録頭数"),
             FieldDef("SyussoTosu", 37, 2, convert_type="SMALLINT", description="出走頭数"),
-            FieldDef("発売フラグ　馬連", 39, 1, description="発売フラグ　馬連"),
-            FieldDef("<馬連オッズ>", 40, 13, description="<馬連オッズ>"),
+            FieldDef("HatsubaiFlag4", 39, 1, description="発売フラグ　馬連"),
+            FieldDef("UmarenOddsBlock", 40, 13, description="<馬連オッズ>"),
             FieldDef("UmarenHyosuTotal", 2029, 11, description="馬連票数合計"),
             FieldDef("RecordDelimiter", 2040, 2, description="レコード区切"),
         ]

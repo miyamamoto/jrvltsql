@@ -60,6 +60,6 @@ class TKParser(BaseParser):
             FieldDef("CourseKubunCD", 642, 2, description="コース区分"),
             FieldDef("HandeDate", 644, 8, description="ハンデ発表日"),
             FieldDef("TorokuTosu", 652, 3, convert_type="SMALLINT", description="登録頭数"),
-            FieldDef("<登録馬毎情報>", 655, 70, description="<登録馬毎情報>"),
+            FieldDef("TorokuUmaInfo", 655, 70, description="<登録馬毎情報>"),
             FieldDef("RecordDelimiter", 21655, 2, description="レコード区切"),
         ]

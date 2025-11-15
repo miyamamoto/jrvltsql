@@ -194,6 +194,15 @@ COMPREHENSIVE_FIELD_MAPPING = {
     "返還フラグ　3連複": "HenkanFlag8",
     "返還フラグ　3連単": "HenkanFlag9",
 
+    "発売フラグ　単勝": "HatsubaiFlag1",
+    "発売フラグ　複勝": "HatsubaiFlag2",
+    "発売フラグ　枠連": "HatsubaiFlag3",
+    "発売フラグ　馬連": "HatsubaiFlag4",
+    "発売フラグ　ワイド": "HatsubaiFlag5",
+    "発売フラグ　馬単": "HatsubaiFlag6",
+    "発売フラグ　3連複": "HatsubaiFlag7",
+    "発売フラグ　3連単": "HatsubaiFlag8",
+
     "返還馬番情報(馬番01～28)": "HenkanUmabanInfo",
     "返還枠番情報(枠番1～8)": "HenkanWakubanInfo",
     "返還同枠情報(枠番1～8)": "HenkanDowakuInfo",
@@ -268,6 +277,42 @@ COMPREHENSIVE_FIELD_MAPPING = {
     "9ハロンタイム合計(1800M～0M)": "HaronTime9Total",
     "10ハロンタイム合計(2000M～0M)": "HaronTime10Total",
 
+    # Odds/Betting blocks
+    "<単勝オッズ>": "TansyoOddsBlock",
+    "<複勝オッズ>": "FukusyoOddsBlock",
+    "<枠連オッズ>": "WakurenOddsBlock",
+    "<馬連オッズ>": "UmarenOddsBlock",
+    "<ワイドオッズ>": "WideOddsBlock",
+    "<馬単オッズ>": "UmatanOddsBlock",
+    "<3連複オッズ>": "SanrenfukuOddsBlock",
+    "<3連単オッズ>": "SanrentanOddsBlock",
+
+    "<単勝票数>": "TansyoHyosuBlock",
+    "<複勝票数>": "FukusyoHyosuBlock",
+    "<枠連票数>": "WakurenHyosuBlock",
+    "<馬連票数>": "UmarenHyosuBlock",
+    "<ワイド票数>": "WideHyosuBlock",
+    "<馬単票数>": "UmatanHyosuBlock",
+    "<3連複票数>": "SanrenfukuHyosuBlock",
+    "<3連単票数>": "SanrentanHyosuBlock",
+
+    # Special keys and classifications
+    "複勝着払キー": "FukusyoChakubaraiKey",
+    "除外状態区分": "JyogaiJotaiKubun",
+    "出馬投票受付順番": "SyutsubaTohyoJunban",
+    "出走区分": "SyussoKubun",
+    "産駒持込区分": "SankoMochikomiKubun",
+    "輸入年": "YunyuYear",
+    "3代血統 繁殖登録番号": "SandaiKettoNum",
+    "馬名の意味由来": "BameiMeaning",
+
+    # Information blocks
+    "<登録馬毎情報>": "TorokuUmaInfo",
+    "<重賞案内>": "JyusyoAnnai",
+    "<馬体重情報>": "BataijyuInfo",
+    "<マイニング予想>": "MiningYoso",
+    "<レコード保持馬情報>": "RecordHolderInfo",
+
     # Others
     "異常区分コード": "IJyoCD",
     "事由区分": "JiyuKubun",
@@ -283,6 +328,9 @@ COMPREHENSIVE_FIELD_MAPPING = {
     "新規": "Shinki",
     "削除": "Delete",
     "抹消": "Massho",
+    "予定頭数": "YoteiTosu",
+    "アルファベット区分": "AlphabetKubun",
+    "3歳条件 繰上げ出走頭数": "Kuriage3sai",
 }
 
 
@@ -323,10 +371,6 @@ def map_field_name(japanese_name: str) -> str:
             return "JyokenCD4"
         elif "最若年条件" in japanese_name:
             return "JyokenCD5"
-
-    # Special structures (keep as is or use tag)
-    if japanese_name.startswith("<") and japanese_name.endswith(">"):
-        return japanese_name
 
     # Default: return as is (will be marked for manual review)
     return japanese_name
