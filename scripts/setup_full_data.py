@@ -40,7 +40,7 @@ class FullDataSetup:
         print(f"取得期間: {self.args.from_year}年 ～ {self.current_year}年")
         print(f"データ仕様: DIFF (マスタ) + RACE (レース)")
         if not self.args.without_odds:
-            print(f"オッズ: O1, O2, O6 (含む)")
+            print(f"オッズ: O1-O6 全種類 (単勝・複勝・馬連・ワイド・枠連・馬単・3連複・3連単)")
         else:
             print(f"オッズ: なし")
         if self.args.start_monitor:
@@ -79,9 +79,9 @@ class FullDataSetup:
                 if not self.args.continue_on_error:
                     return 1
 
-            # オッズデータ (デフォルトで含む)
+            # オッズデータ (デフォルトで全種類含む)
             if not self.args.without_odds:
-                for odds_spec in ["O1", "O2", "O6"]:
+                for odds_spec in ["O1", "O2", "O3", "O4", "O5", "O6"]:
                     if not self._load_year_data(year, odds_spec):
                         self.errors.append(f"{year}年 {odds_spec}取得失敗")
                         if not self.args.continue_on_error:
@@ -211,7 +211,7 @@ def main():
   1. 基本セットアップ (init + create-tables + create-indexes)
   2. 各年のDIFF (マスタデータ) 取得
   3. 各年のRACE (レースデータ) 取得
-  4. デフォルト: 各年のオッズデータ取得 (O1, O2, O6)
+  4. デフォルト: 各年のオッズデータ取得 (O1-O6 全種類)
   5. オプション: リアルタイム監視開始
 
 データ仕様:
@@ -219,6 +219,9 @@ def main():
   RACE : レースデータ (レース詳細、出走馬、払戻)
   O1   : 単勝・複勝オッズ（デフォルトで含む）
   O2   : 馬連オッズ（デフォルトで含む）
+  O3   : ワイドオッズ（デフォルトで含む）
+  O4   : 枠連オッズ（デフォルトで含む）
+  O5   : 馬単オッズ（デフォルトで含む）
   O6   : 3連複・3連単オッズ（デフォルトで含む）
         """,
     )
@@ -240,7 +243,7 @@ def main():
     parser.add_argument(
         "--without-odds",
         action="store_true",
-        help="オッズデータ (O1, O2, O6) を取得しない",
+        help="オッズデータ (O1-O6) を取得しない",
     )
 
     parser.add_argument(

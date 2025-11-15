@@ -48,7 +48,7 @@ copy config\config.yaml.example config\config.yaml
 ### 完全自動セットアップ（最も簡単）
 
 ```bash
-# 2024年以降の全データ（オッズ含む）+ リアルタイム監視まで一括セットアップ
+# 2024年以降の全データ（全オッズO1-O6含む）+ リアルタイム監視まで一括セットアップ
 python scripts/setup_full_data.py --from-year 2024 --start-monitor
 
 # オッズデータを除外する場合
