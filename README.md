@@ -45,6 +45,18 @@ copy config\config.yaml.example config\config.yaml
 
 ## クイックスタート
 
+### 自動セットアップ（推奨）
+
+```bash
+# 基本セットアップ (init + create-tables + create-indexes)
+python scripts/quickstart.py
+
+# データ取得も自動実行
+python scripts/quickstart.py --fetch --from 20240101 --to 20240131 --spec RACE
+```
+
+### 手動セットアップ
+
 ```bash
 # 1. プロジェクト初期化
 jltsql init
