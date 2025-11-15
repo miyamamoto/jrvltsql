@@ -194,7 +194,7 @@ def fetch(ctx, date_from, date_to, data_spec, db, batch_size):
     if db:
         db_type = db
     else:
-        db_type = config.database.get("type", "sqlite")
+        db_type = config.database.get("type", "duckdb")
 
     console.print(f"[bold cyan]Fetching historical data from JRA-VAN...[/bold cyan]\n")
     console.print(f"  Date range: {date_from} → {date_to}")
@@ -299,7 +299,7 @@ def monitor(ctx, daemon, data_spec, interval, db):
     if db:
         db_type = db
     else:
-        db_type = config.database.get("type", "sqlite")
+        db_type = config.database.get("type", "duckdb")
 
     console.print(f"[bold cyan]Starting real-time monitoring...[/bold cyan]\n")
     console.print(f"  Data spec:  {data_spec}")
@@ -417,7 +417,7 @@ def create_tables(ctx, db, create_all, nl_only, rt_only):
     if db:
         db_type = db
     else:
-        db_type = config.database.get("type", "sqlite")
+        db_type = config.database.get("type", "duckdb")
 
     console.print(f"[bold cyan]Creating database tables ({db_type})...[/bold cyan]\n")
 
@@ -530,7 +530,7 @@ def create_indexes(ctx, db, table):
     if db:
         db_type = db
     else:
-        db_type = config.database.get("type", "sqlite")
+        db_type = config.database.get("type", "duckdb")
 
     console.print(f"[bold cyan]Creating database indexes ({db_type})...[/bold cyan]\n")
 
@@ -644,7 +644,7 @@ def export(ctx, table, output_format, output, where, db):
     if db:
         db_type = db
     else:
-        db_type = config.database.get("type", "sqlite")
+        db_type = config.database.get("type", "duckdb")
 
     console.print(f"[bold cyan]Exporting data from {table}...[/bold cyan]\n")
     console.print(f"  Database:      {db_type}")
@@ -914,7 +914,7 @@ def start(ctx, specs, db, batch_size, no_create_tables):
     if db:
         db_type = db
     else:
-        db_type = config.database.get("type", "sqlite")
+        db_type = config.database.get("type", "duckdb")
 
     console.print("[bold cyan]Starting realtime monitoring service...[/bold cyan]\n")
     console.print(f"  Data specs:    {', '.join(data_specs)}")

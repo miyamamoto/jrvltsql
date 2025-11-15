@@ -8,6 +8,10 @@ jvlink:
   service_key: "${JVLINK_SERVICE_KEY}"
 
 # Database Settings
+database:
+  # Default database type (duckdb, sqlite, postgresql)
+  type: "duckdb"
+
 databases:
   # SQLite Database
   sqlite:

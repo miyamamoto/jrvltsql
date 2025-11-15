@@ -1,6 +1,6 @@
 # JLTSQL - JRA-VAN Link To SQL
 
-JRA-VAN DataLabの競馬データをSQLite/DuckDB/PostgreSQLにインポートするPythonツール
+JRA-VAN DataLabの競馬データをDuckDB/SQLite/PostgreSQLにインポートするPythonツール
 
 [![Tests](https://github.com/miyamamoto/jltsql/actions/workflows/test.yml/badge.svg)](https://github.com/miyamamoto/jltsql/actions/workflows/test.yml)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
@@ -8,13 +8,13 @@ JRA-VAN DataLabの競馬データをSQLite/DuckDB/PostgreSQLにインポート�
 
 ## 概要
 
-JRA-VAN DataLab (JV-Link) の競馬データを、SQLite/DuckDB/PostgreSQLにインポートするツールです。
+JRA-VAN DataLab (JV-Link) の競馬データを、DuckDB（標準）/SQLite/PostgreSQLにインポートするツールです。
 
 ### 主な機能
 
 - **全38レコードタイプ対応**: 1986年以降の全競馬データ（57テーブル）
 - **リアルタイム更新**: オッズ、馬体重、レース結果の即時取得
-- **複数DB対応**: SQLite、DuckDB、PostgreSQL
+- **DuckDB標準**: 高速OLAP処理に最適化（SQLite、PostgreSQLも対応）
 - **高速処理**: バッチ処理（1000件/batch）+ 最適化インデックス（120+）
 
 ## 動作環境

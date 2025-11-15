@@ -231,8 +231,8 @@ def main():
     parser.add_argument(
         "--db",
         choices=["sqlite", "duckdb"],
-        default="sqlite",
-        help="データベースタイプ (デフォルト: sqlite)",
+        default="duckdb",
+        help="データベースタイプ (デフォルト: duckdb)",
     )
 
     parser.add_argument(

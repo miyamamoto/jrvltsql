@@ -190,8 +190,8 @@ def load_data_to_database(db_type, year, data_spec, create_indexes_flag, batch_s
 @click.option(
     "--db",
     type=click.Choice(["sqlite", "duckdb", "all"]),
-    default="sqlite",
-    help="Database type to use (default: sqlite)"
+    default="duckdb",
+    help="Database type to use (default: duckdb)"
 )
 @click.option(
     "--spec",
