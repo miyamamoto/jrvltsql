@@ -121,10 +121,10 @@ class CKParser(BaseParser):
             FieldDef("BanusiCode", 6342, 6, description="馬主コード"),
             FieldDef("BanusiName", 6348, 64, description="馬主名(法人格有)"),
             FieldDef("BanusiName_Co", 6412, 64, description="馬主名(法人格無)"),
-            FieldDef("ResultsInfo", 6476, 60, description="<本年･累計成績情報>"),
+            FieldDef("BanusiResultsInfo", 6476, 60, description="<本年･累計成績情報>"),
             FieldDef("BreederCode", 6596, 8, description="生産者コード"),
             FieldDef("BreederName", 6604, 72, description="生産者名(法人格有)"),
             FieldDef("BreederName_Co", 6676, 72, description="生産者名(法人格無)"),
-            FieldDef("ResultsInfo", 6748, 60, description="<本年･累計成績情報>"),
+            FieldDef("BreederResultsInfo", 6748, 60, description="<本年･累計成績情報>"),
             FieldDef("RecordDelimiter", 6868, 2, description="レコード区切"),
         ]

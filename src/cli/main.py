@@ -12,8 +12,8 @@ from src.utils.logger import get_logger, setup_logging_from_config
 # Version
 __version__ = "0.1.0-alpha"
 
-# Console for rich output
-console = Console()
+# Console for rich output (Windows cp932-safe)
+console = Console(legacy_windows=True)
 logger = get_logger(__name__)
 
 
@@ -167,10 +167,11 @@ def version():
 @click.option("--from", "date_from", required=True, help="Start date (YYYYMMDD)")
 @click.option("--to", "date_to", required=True, help="End date (YYYYMMDD)")
 @click.option("--spec", "data_spec", required=True, help="Data specification (RACE, DIFF, etc.)")
+@click.option("--option", "jv_option", type=int, default=1, help="JVOpen option: 0=normal, 1=setup (default), 2=update")
 @click.option("--db", type=click.Choice(["sqlite", "duckdb", "postgresql"]), default=None, help="Database type (default: from config)")
 @click.option("--batch-size", default=1000, help="Batch size for imports (default: 1000)")
 @click.pass_context
-def fetch(ctx, date_from, date_to, data_spec, db, batch_size):
+def fetch(ctx, date_from, date_to, data_spec, jv_option, db, batch_size):
     """Fetch historical data from JRA-VAN DataLab.
 
     \b
@@ -237,7 +238,7 @@ def fetch(ctx, date_from, date_to, data_spec, db, batch_size):
             # Process data
             processor = BatchProcessor(
                 database=database,
-                sid=config.jvlink.get("sid", "JLTSQL") if config else "JLTSQL",
+                sid=config.get("jvlink.sid", "JLTSQL") if config else "JLTSQL",
                 batch_size=batch_size
             )
 
@@ -246,7 +247,8 @@ def fetch(ctx, date_from, date_to, data_spec, db, batch_size):
             result = processor.process_date_range(
                 data_spec=data_spec,
                 from_date=date_from,
-                to_date=date_to
+                to_date=date_to,
+                option=jv_option
             )
 
             # Show results
@@ -254,11 +256,11 @@ def fetch(ctx, date_from, date_to, data_spec, db, batch_size):
             console.print("[bold green][OK] Fetch complete![/bold green]")
             console.print()
             console.print("[bold]Statistics:[/bold]")
-            console.print(f"  Fetched:  {result['fetched']}")
-            console.print(f"  Parsed:   {result['parsed']}")
-            console.print(f"  Imported: {result['imported']}")
-            console.print(f"  Failed:   {result['failed']}")
-            console.print(f"  Batches:  {result.get('batches', 0)}")
+            console.print(f"  Fetched:  {result['records_fetched']}")
+            console.print(f"  Parsed:   {result['records_parsed']}")
+            console.print(f"  Imported: {result['records_imported']}")
+            console.print(f"  Failed:   {result['records_failed']}")
+            console.print(f"  Batches:  {result.get('batches_processed', 0)}")
 
     except KeyboardInterrupt:
         console.print("\n[yellow]Interrupted by user[/yellow]")
@@ -402,7 +404,7 @@ def create_tables(ctx, db, create_all, nl_only, rt_only):
       jltsql create-tables --nl-only      # Create only NL_* tables
       jltsql create-tables --rt-only      # Create only RT_* tables
     """
-    from rich.progress import Progress, SpinnerColumn, TextColumn
+    from rich.progress import Progress, TextColumn
     from src.database.schema import SchemaManager
     from src.database.sqlite_handler import SQLiteDatabase
     from src.database.duckdb_handler import DuckDBDatabase
@@ -457,7 +459,6 @@ def create_tables(ctx, db, create_all, nl_only, rt_only):
             failed_count = 0
 
             with Progress(
-                SpinnerColumn(),
                 TextColumn("[progress.description]{task.description}"),
                 console=console
             ) as progress:
@@ -477,7 +478,7 @@ def create_tables(ctx, db, create_all, nl_only, rt_only):
             console.print()
             console.print(f"[green][OK][/green] Created {created_count} tables")
             if failed_count > 0:
-                console.print(f"[yellow]⚠[/yellow] Failed to create {failed_count} tables")
+                console.print(f"[yellow][!!][/yellow] Failed to create {failed_count} tables")
 
             # Show table statistics
             nl_tables = len([n for n in tables_to_create if n.startswith("NL_")])
@@ -515,7 +516,6 @@ def create_indexes(ctx, db, table):
       jltsql create-indexes --db sqlite        # Create indexes in SQLite
       jltsql create-indexes --table NL_RA      # Create indexes for NL_RA only
     """
-    from rich.progress import Progress, SpinnerColumn, TextColumn
     from src.database.indexes import IndexManager
     from src.database.sqlite_handler import SQLiteDatabase
     from src.database.duckdb_handler import DuckDBDatabase
@@ -680,9 +680,8 @@ def export(ctx, table, output_format, output, where, db):
             console.print(f"[dim]Executing: {sql}[/dim]\n")
 
             # Fetch data
-            from rich.progress import Progress, SpinnerColumn, TextColumn
+            from rich.progress import Progress, TextColumn
             with Progress(
-                SpinnerColumn(),
                 TextColumn("[progress.description]{task.description}"),
                 console=console
             ) as progress:

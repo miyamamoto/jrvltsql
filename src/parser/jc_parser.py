@@ -1,7 +1,6 @@
-"""Parser for JC record - JRA-VAN Standard compliant.
+"""Parser for JC record - Generated from reference schema.
 
-This parser uses JRA-VAN standard field names and type conversions.
-Generated from jv_data_formats.json and JRA-VAN standard schema.
+This parser uses correct field positions calculated from schema field lengths.
 """
 
 from typing import List
@@ -10,39 +9,39 @@ from src.parser.base import BaseParser, FieldDef
 
 
 class JCParser(BaseParser):
-    """Parser for JC record with JRA-VAN standard schema.
+    """Parser for JC record with accurate field positions.
 
-    Uses English/Romanized field names matching JRA-VAN standard database.
+    Total record length: 159 bytes
+    Fields: 20
     """
 
     record_type = "JC"
 
     def _define_fields(self) -> List[FieldDef]:
-        """Define field positions with JRA-VAN standard names and types.
+        """Define field positions calculated from schema.
 
         Returns:
             List of FieldDef objects with type conversion settings
         """
         return [
-            FieldDef("RecordSpec", 0, 2, description="レコード種別ID"),
-            FieldDef("DataKubun", 2, 1, description="データ区分"),
-            FieldDef("MakeDate", 3, 8, convert_type="DATE", description="データ作成年月日"),
-            FieldDef("Year", 11, 4, convert_type="SMALLINT", description="開催年"),
-            FieldDef("MonthDay", 15, 4, convert_type="MONTH_DAY", description="開催月日"),
-            FieldDef("JyoCD", 19, 2, description="競馬場コード"),
-            FieldDef("Kaiji", 21, 2, convert_type="SMALLINT", description="開催回[第N回]"),
-            FieldDef("Nichiji", 23, 2, convert_type="SMALLINT", description="開催日目[N日目]"),
-            FieldDef("RaceNum", 25, 2, convert_type="SMALLINT", description="レース番号"),
-            FieldDef("HappyoTime", 27, 8, convert_type="TIME", description="発表月日時分"),
-            FieldDef("Umaban", 35, 2, convert_type="SMALLINT", description="馬番"),
-            FieldDef("Bamei", 37, 36, description="馬名"),
-            FieldDef("AtoFutan", 73, 3, description="負担重量"),
-            FieldDef("AtoKisyuCode", 76, 5, description="騎手コード"),
-            FieldDef("AtoKisyuName", 81, 34, description="騎手名"),
-            FieldDef("AtoMinaraiCD", 115, 1, description="騎手見習コード"),
-            FieldDef("MaeFutan", 116, 3, description="負担重量"),
-            FieldDef("MaeKisyuCode", 119, 5, description="騎手コード"),
-            FieldDef("MaeKisyuName", 124, 34, description="騎手名"),
-            FieldDef("MaeMinaraiCD", 158, 1, description="騎手見習コード"),
-            FieldDef("RecordDelimiter", 159, 2, description="レコード区切"),
+            FieldDef("RecordSpec", 0, 2),
+            FieldDef("DataKubun", 2, 1),
+            FieldDef("MakeDate", 3, 8, convert_type="DATE"),
+            FieldDef("Year", 11, 4, convert_type="SMALLINT"),
+            FieldDef("MonthDay", 15, 4, convert_type="MONTH_DAY"),
+            FieldDef("JyoCD", 19, 2),
+            FieldDef("Kaiji", 21, 2, convert_type="SMALLINT"),
+            FieldDef("Nichiji", 23, 2, convert_type="SMALLINT"),
+            FieldDef("RaceNum", 25, 2, convert_type="SMALLINT"),
+            FieldDef("HappyoTime", 27, 8, convert_type="TIME"),
+            FieldDef("Umaban", 35, 2, convert_type="SMALLINT"),
+            FieldDef("Bamei", 37, 36),
+            FieldDef("AtoFutan", 73, 3),
+            FieldDef("AtoKisyuCode", 76, 5),
+            FieldDef("AtoKisyuName", 81, 34),
+            FieldDef("AtoMinaraiCD", 115, 1),
+            FieldDef("MaeFutan", 116, 3),
+            FieldDef("MaeKisyuCode", 119, 5),
+            FieldDef("MaeKisyuName", 124, 34),
+            FieldDef("MaeMinaraiCD", 158, 1),
         ]

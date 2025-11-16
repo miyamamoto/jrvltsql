@@ -1,7 +1,6 @@
-"""Parser for CC record - JRA-VAN Standard compliant.
+"""Parser for CC record - Generated from reference schema.
 
-This parser uses JRA-VAN standard field names and type conversions.
-Generated from jv_data_formats.json and JRA-VAN standard schema.
+This parser uses correct field positions calculated from schema field lengths.
 """
 
 from typing import List
@@ -10,34 +9,34 @@ from src.parser.base import BaseParser, FieldDef
 
 
 class CCParser(BaseParser):
-    """Parser for CC record with JRA-VAN standard schema.
+    """Parser for CC record with accurate field positions.
 
-    Uses English/Romanized field names matching JRA-VAN standard database.
+    Total record length: 48 bytes
+    Fields: 15
     """
 
     record_type = "CC"
 
     def _define_fields(self) -> List[FieldDef]:
-        """Define field positions with JRA-VAN standard names and types.
+        """Define field positions calculated from schema.
 
         Returns:
             List of FieldDef objects with type conversion settings
         """
         return [
-            FieldDef("RecordSpec", 0, 2, description="レコード種別ID"),
-            FieldDef("DataKubun", 2, 1, description="データ区分"),
-            FieldDef("MakeDate", 3, 8, convert_type="DATE", description="データ作成年月日"),
-            FieldDef("Year", 11, 4, convert_type="SMALLINT", description="開催年"),
-            FieldDef("MonthDay", 15, 4, convert_type="MONTH_DAY", description="開催月日"),
-            FieldDef("JyoCD", 19, 2, description="競馬場コード"),
-            FieldDef("Kaiji", 21, 2, convert_type="SMALLINT", description="開催回[第N回]"),
-            FieldDef("Nichiji", 23, 2, convert_type="SMALLINT", description="開催日目[N日目]"),
-            FieldDef("RaceNum", 25, 2, convert_type="SMALLINT", description="レース番号"),
-            FieldDef("HappyoTime", 27, 8, convert_type="TIME", description="発表月日時分"),
-            FieldDef("AtoKyori", 35, 4, description="変更後 距離"),
-            FieldDef("AtoTruckCD", 39, 2, description="変更後 トラックコード"),
-            FieldDef("MaeKyori", 41, 4, description="変更前 距離"),
-            FieldDef("MaeTruckCD", 45, 2, description="変更前 トラックコード"),
-            FieldDef("JiyuCD", 47, 1, description="事由区分"),
-            FieldDef("RecordDelimiter", 48, 2, description="レコード区切"),
+            FieldDef("RecordSpec", 0, 2),
+            FieldDef("DataKubun", 2, 1),
+            FieldDef("MakeDate", 3, 8, convert_type="DATE"),
+            FieldDef("Year", 11, 4, convert_type="SMALLINT"),
+            FieldDef("MonthDay", 15, 4, convert_type="MONTH_DAY"),
+            FieldDef("JyoCD", 19, 2),
+            FieldDef("Kaiji", 21, 2, convert_type="SMALLINT"),
+            FieldDef("Nichiji", 23, 2, convert_type="SMALLINT"),
+            FieldDef("RaceNum", 25, 2, convert_type="SMALLINT"),
+            FieldDef("HappyoTime", 27, 8, convert_type="TIME"),
+            FieldDef("AtoKyori", 35, 4),
+            FieldDef("AtoTruckCD", 39, 2),
+            FieldDef("MaeKyori", 41, 4),
+            FieldDef("MaeTruckCD", 45, 2),
+            FieldDef("JiyuCD", 47, 1),
         ]
