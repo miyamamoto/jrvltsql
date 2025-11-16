@@ -74,11 +74,11 @@ class QuickstartRunner:
         print()
         print("このスクリプトは以下を実行します:")
         print("  1. プロジェクト初期化")
-        print("  2. データベーステーブル作成（38テーブル）")
+        print("  2. データベーステーブル作成（57テーブル: NL_38 + RT_19）")
         print("  3. インデックス作成（61インデックス）")
-        print("  4. 全データ取得（蓄積系データ）")
+        print("  4. 全データ取得（蓄積系データ → NL_テーブル）")
         if not self.args.no_monitor:
-            print("  5. リアルタイム監視開始")
+            print("  5. リアルタイム監視開始（速報データ → RT_テーブル）")
         print()
 
         # 期間表示（--yearsが使われた場合はそれも表示）
@@ -220,7 +220,7 @@ class QuickstartRunner:
 
     def _run_create_tables(self) -> bool:
         """テーブル作成"""
-        print("[3/7] データベーステーブル作成（38テーブル）")
+        print("[3/7] データベーステーブル作成（57テーブル: NL_38 + RT_19）")
         print("-" * 80)
 
         try:
