@@ -41,6 +41,7 @@ class BatchProcessor:
         database: BaseDatabase,
         batch_size: int = 1000,
         sid: str = "UNKNOWN",
+        service_key: Optional[str] = None,
     ):
         """Initialize batch processor.
 
@@ -48,14 +49,15 @@ class BatchProcessor:
             database: Database handler instance
             batch_size: Records per batch
             sid: Session ID for JV-Link API (default: "UNKNOWN")
-                 Note: This is NOT the service key. Service key must be
-                 configured in JRA-VAN DataLab application.
+            service_key: Optional JV-Link service key. If provided, it will be set
+                        programmatically without requiring registry configuration.
         """
-        self.fetcher = HistoricalFetcher(sid)
+        self.fetcher = HistoricalFetcher(sid, service_key=service_key)
         self.importer = DataImporter(database, batch_size)
         self.database = database
 
-        logger.info("BatchProcessor initialized", sid=sid)
+        logger.info("BatchProcessor initialized", sid=sid,
+                   has_service_key=service_key is not None)
 
     def process_date_range(
         self,

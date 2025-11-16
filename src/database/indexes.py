@@ -39,11 +39,10 @@ INDEXES = {
     ],
 
     "NL_AV": [
-        # 場外発売情報 (Off-track Betting)
-        "CREATE INDEX IF NOT EXISTS idx_nl_av_date ON NL_AV(Year, MonthDay)",
-        "CREATE INDEX IF NOT EXISTS idx_nl_av_venue ON NL_AV(JyoCD)",
-        "CREATE INDEX IF NOT EXISTS idx_nl_av_race ON NL_AV(RaceNum)",
-        "CREATE INDEX IF NOT EXISTS idx_nl_av_horse ON NL_AV(Umaban)",
+        # 市場取引価格 (Market Transaction Price)
+        # 実際のスキーマ: KettoNum, SaleHostName, SaleName, Price
+        "CREATE INDEX IF NOT EXISTS idx_nl_av_horse ON NL_AV(KettoNum)",
+        "CREATE INDEX IF NOT EXISTS idx_nl_av_sale ON NL_AV(SaleName)",
     ],
 
     "NL_BN": [
@@ -55,14 +54,14 @@ INDEXES = {
     "NL_BR": [
         # 生産者マスタ (Breeder Master)
         "CREATE INDEX IF NOT EXISTS idx_nl_br_name ON NL_BR(BreederName_Co)",
-        "CREATE INDEX IF NOT EXISTS idx_nl_br_location ON NL_BR(BreederAddress)",
+        "CREATE INDEX IF NOT EXISTS idx_nl_br_location ON NL_BR(Address)",
         "CREATE INDEX IF NOT EXISTS idx_nl_br_date ON NL_BR(MakeDate)",
     ],
 
     "NL_BT": [
         # 系統情報 (Bloodline)
-        "CREATE INDEX IF NOT EXISTS idx_nl_bt_system ON NL_BT(KeifuID)",
-        "CREATE INDEX IF NOT EXISTS idx_nl_bt_name ON NL_BT(KeifuName)",
+        "CREATE INDEX IF NOT EXISTS idx_nl_bt_system ON NL_BT(KeitoId)",
+        "CREATE INDEX IF NOT EXISTS idx_nl_bt_name ON NL_BT(KeitoName)",
     ],
 
     "NL_CC": [
@@ -79,9 +78,9 @@ INDEXES = {
 
     "NL_CS": [
         # 成績変更・取消情報 (Result Change/Cancellation)
-        "CREATE INDEX IF NOT EXISTS idx_nl_cs_date ON NL_CS(Year, MonthDay)",
+        # 実際のスキーマにはYear, MonthDay, RaceNumが存在しない
         "CREATE INDEX IF NOT EXISTS idx_nl_cs_venue ON NL_CS(JyoCD)",
-        "CREATE INDEX IF NOT EXISTS idx_nl_cs_race ON NL_CS(RaceNum)",
+        "CREATE INDEX IF NOT EXISTS idx_nl_cs_date ON NL_CS(MakeDate)",
     ],
 
     "NL_DM": [
@@ -97,16 +96,18 @@ INDEXES = {
     ],
 
     "NL_HY": [
-        # 配当 (Dividend/Payout)
-        "CREATE INDEX IF NOT EXISTS idx_nl_hy_date ON NL_HY(Year, MonthDay)",
-        "CREATE INDEX IF NOT EXISTS idx_nl_hy_venue ON NL_HY(JyoCD)",
+        # 馬名意味由来 (Horse Name Meaning/Origin)
+        # 実際のスキーマにはYear, MonthDay, JyoCDが存在しない
+        "CREATE INDEX IF NOT EXISTS idx_nl_hy_date ON NL_HY(MakeDate)",
+        "CREATE INDEX IF NOT EXISTS idx_nl_hy_horse ON NL_HY(Bamei)",
     ],
 
     "NL_JG": [
         # 重賞レース (Graded Stakes Race)
+        # 実際のスキーマにはGradeCDが存在しない
         "CREATE INDEX IF NOT EXISTS idx_nl_jg_date ON NL_JG(Year, MonthDay)",
         "CREATE INDEX IF NOT EXISTS idx_nl_jg_venue ON NL_JG(JyoCD)",
-        "CREATE INDEX IF NOT EXISTS idx_nl_jg_grade ON NL_JG(GradeCD)",
+        "CREATE INDEX IF NOT EXISTS idx_nl_jg_race ON NL_JG(RaceNum)",
     ],
 
     "NL_KS": [
@@ -117,34 +118,34 @@ INDEXES = {
 
     "NL_O1": [
         # オッズ (単勝・複勝) (Odds - Win/Place)
+        # 実際のスキーマにはHappyoTimeが存在しない
         "CREATE INDEX IF NOT EXISTS idx_nl_o1_date ON NL_O1(Year, MonthDay)",
         "CREATE INDEX IF NOT EXISTS idx_nl_o1_venue ON NL_O1(JyoCD)",
         "CREATE INDEX IF NOT EXISTS idx_nl_o1_race ON NL_O1(RaceNum)",
-        "CREATE INDEX IF NOT EXISTS idx_nl_o1_time ON NL_O1(HappyoTime)",
     ],
 
     "NL_O2": [
         # オッズ (枠連) (Odds - Bracket Quinella)
+        # 実際のスキーマにはHappyoTimeが存在しない
         "CREATE INDEX IF NOT EXISTS idx_nl_o2_date ON NL_O2(Year, MonthDay)",
         "CREATE INDEX IF NOT EXISTS idx_nl_o2_venue ON NL_O2(JyoCD)",
         "CREATE INDEX IF NOT EXISTS idx_nl_o2_race ON NL_O2(RaceNum)",
-        "CREATE INDEX IF NOT EXISTS idx_nl_o2_time ON NL_O2(HappyoTime)",
     ],
 
     "NL_O3": [
         # オッズ (馬連) (Odds - Quinella)
+        # 実際のスキーマにはHappyoTimeが存在しない
         "CREATE INDEX IF NOT EXISTS idx_nl_o3_date ON NL_O3(Year, MonthDay)",
         "CREATE INDEX IF NOT EXISTS idx_nl_o3_venue ON NL_O3(JyoCD)",
         "CREATE INDEX IF NOT EXISTS idx_nl_o3_race ON NL_O3(RaceNum)",
-        "CREATE INDEX IF NOT EXISTS idx_nl_o3_time ON NL_O3(HappyoTime)",
     ],
 
     "NL_O4": [
         # オッズ (ワイド) (Odds - Wide)
+        # 実際のスキーマにはHappyoTimeが存在しない
         "CREATE INDEX IF NOT EXISTS idx_nl_o4_date ON NL_O4(Year, MonthDay)",
         "CREATE INDEX IF NOT EXISTS idx_nl_o4_venue ON NL_O4(JyoCD)",
         "CREATE INDEX IF NOT EXISTS idx_nl_o4_race ON NL_O4(RaceNum)",
-        "CREATE INDEX IF NOT EXISTS idx_nl_o4_time ON NL_O4(HappyoTime)",
     ],
 
     "NL_RC": [
@@ -173,10 +174,10 @@ INDEXES = {
     ],
 
     "NL_WH": [
-        # 馬体重 (Horse Weight)
+        # 天候馬場状態変更 (Weather/Track Condition Change)
+        # 実際のスキーマにはRaceNumが存在しない
         "CREATE INDEX IF NOT EXISTS idx_nl_wh_date ON NL_WH(Year, MonthDay)",
         "CREATE INDEX IF NOT EXISTS idx_nl_wh_venue ON NL_WH(JyoCD)",
-        "CREATE INDEX IF NOT EXISTS idx_nl_wh_race ON NL_WH(RaceNum)",
         "CREATE INDEX IF NOT EXISTS idx_nl_wh_time ON NL_WH(HappyoTime)",
     ],
 

@@ -62,8 +62,8 @@ class HistoricalFetcher(BaseFetcher):
         """
         try:
             # Initialize JV-Link
-            logger.info("Initializing JV-Link")
-            self.jvlink.jv_init()
+            logger.info("Initializing JV-Link", has_service_key=self._service_key is not None)
+            self.jvlink.jv_init(service_key=self._service_key)
 
             # Convert dates to fromtime format
             # fromtime format: "YYYYMMDDhhmmss" (single timestamp)

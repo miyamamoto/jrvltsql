@@ -100,7 +100,8 @@ class RealtimeFetcher(BaseFetcher):
 
         try:
             # Initialize JV-Link
-            ret = self.jvlink.jv_init()
+            logger.info("Initializing JV-Link", has_service_key=self._service_key is not None)
+            ret = self.jvlink.jv_init(service_key=self._service_key)
             if ret != JV_RT_SUCCESS:
                 raise FetcherError(f"JV-Link initialization failed: {ret}")
 

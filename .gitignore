@@ -134,6 +134,7 @@ dmypy.json
 data/
 data/*.db
 data/*.duckdb
+data/*.duckdb.wal
 data/*.db-shm
 data/*.db-wal
 

@@ -85,15 +85,49 @@ class JVLinkWrapper:
         except Exception as e:
             raise JVLinkError(f"Failed to create JV-Link COM object: {e}")
 
-    def jv_init(self) -> int:
+    def jv_set_service_key(self, service_key: str) -> int:
+        """Set JV-Link service key programmatically.
+
+        This method allows setting the service key from the application
+        without requiring registry configuration or JRA-VAN DataLab application.
+
+        Args:
+            service_key: JV-Link service key (format: XXXX-XXXX-XXXX-XXXX-X)
+
+        Returns:
+            Result code (0 = success, non-zero = error)
+
+        Raises:
+            JVLinkError: If service key setting fails
+
+        Examples:
+            >>> wrapper = JVLinkWrapper()
+            >>> wrapper.jv_set_service_key("1UJC-VRFM-24YD-K2W4-4")
+            0
+            >>> wrapper.jv_init()
+        """
+        try:
+            result = self._jvlink.JVSetServiceKey(service_key)
+            if result == JV_RT_SUCCESS:
+                logger.info("Service key set successfully")
+            else:
+                logger.error("Failed to set service key", error_code=result)
+                raise JVLinkError("Failed to set service key", error_code=result)
+            return result
+        except Exception as e:
+            if isinstance(e, JVLinkError):
+                raise
+            raise JVLinkError(f"JVSetServiceKey failed: {e}")
+
+    def jv_init(self, service_key: Optional[str] = None) -> int:
         """Initialize JV-Link.
 
         Must be called before any other JV-Link operations.
 
-        Note:
-            Service key must be configured in JRA-VAN DataLab application
-            before calling this method. This method only initializes the
-            API connection using the session ID (sid).
+        Args:
+            service_key: Optional JV-Link service key. If provided, it will be set
+                        before initialization. If not provided, the service key must
+                        be configured in JRA-VAN DataLab application or registry.
 
         Returns:
             Result code (0 = success, non-zero = error)
@@ -102,11 +136,19 @@ class JVLinkWrapper:
             JVLinkError: If initialization fails
 
         Examples:
-            >>> wrapper = JVLinkWrapper()  # sid="UNKNOWN"
-            >>> result = wrapper.jv_init()
-            >>> assert result == 0
+            >>> # Method 1: Set service key programmatically (recommended)
+            >>> wrapper = JVLinkWrapper()
+            >>> wrapper.jv_init(service_key="1UJC-VRFM-24YD-K2W4-4")
+
+            >>> # Method 2: Use pre-configured service key from registry
+            >>> wrapper = JVLinkWrapper()
+            >>> wrapper.jv_init()
         """
         try:
+            # Set service key if provided
+            if service_key is not None:
+                self.jv_set_service_key(service_key)
+
             result = self._jvlink.JVInit(self.sid)
             if result == JV_RT_SUCCESS:
                 logger.info("JV-Link initialized successfully", sid=self.sid)

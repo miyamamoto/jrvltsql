@@ -233,7 +233,8 @@ def fetch(ctx, date_from, date_to, data_spec, jv_option, db, batch_size):
             processor = BatchProcessor(
                 database=database,
                 sid=config.get("jvlink.sid", "JLTSQL") if config else "JLTSQL",
-                batch_size=batch_size
+                batch_size=batch_size,
+                service_key=config.get("jvlink.service_key") if config else None
             )
 
             console.print("[bold]Processing data...[/bold]")
@@ -761,16 +762,16 @@ def config(ctx, show, set_value, get_key):
 
         # Pretty print config
         from rich.tree import Tree
-        tree = Tree("📋 JLTSQL Configuration")
+        tree = Tree("JLTSQL Configuration")
 
         # JV-Link section
-        jvlink_tree = tree.add("🔗 JV-Link")
+        jvlink_tree = tree.add("JV-Link")
         jvlink_config = config_dict.get("jvlink", {})
         jvlink_tree.add(f"SID: {jvlink_config.get('sid', 'N/A')}")
         jvlink_tree.add(f"Service Key: {'*' * 20 if jvlink_config.get('service_key') else 'Not set'}")
 
         # Database section
-        db_tree = tree.add("💾 Database")
+        db_tree = tree.add("Database")
         db_config = config_dict.get("database", {})
         db_tree.add(f"Type: {db_config.get('type', 'N/A')}")
         if db_config.get("path"):
@@ -782,7 +783,7 @@ def config(ctx, show, set_value, get_key):
             db_tree.add(f"User: {db_config.get('user', 'N/A')}")
 
         # Logging section
-        log_tree = tree.add("📝 Logging")
+        log_tree = tree.add("Logging")
         log_config = config_dict.get("logging", {})
         log_tree.add(f"Level: {log_config.get('level', 'INFO')}")
         log_tree.add(f"File: {log_config.get('file', 'logs/jltsql.log')}")

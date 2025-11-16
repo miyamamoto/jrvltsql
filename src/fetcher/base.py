@@ -27,29 +27,33 @@ class BaseFetcher(ABC):
     JV-Data records from JV-Link.
 
     Note:
-        Service key must be configured in JRA-VAN DataLab application
-        before using this class.
+        Service key can be provided programmatically or configured in
+        JRA-VAN DataLab application/registry.
 
     Attributes:
         jvlink: JV-Link wrapper instance
         parser_factory: Parser factory instance
     """
 
-    def __init__(self, sid: str = "UNKNOWN"):
+    def __init__(self, sid: str = "UNKNOWN", service_key: Optional[str] = None):
         """Initialize base fetcher.
 
         Args:
             sid: Session ID for JV-Link API (default: "UNKNOWN")
-                 Note: This is NOT the service key. Service key must be
-                 configured in JRA-VAN DataLab application.
+            service_key: Optional JV-Link service key. If provided, it will be set
+                        programmatically without requiring registry configuration.
+                        If not provided, the service key must be configured in
+                        JRA-VAN DataLab application or registry.
         """
         self.jvlink = JVLinkWrapper(sid)
         self.parser_factory = ParserFactory()
         self._records_fetched = 0
         self._records_parsed = 0
         self._records_failed = 0
+        self._service_key = service_key
 
-        logger.info(f"{self.__class__.__name__} initialized", sid=sid)
+        logger.info(f"{self.__class__.__name__} initialized", sid=sid,
+                   has_service_key=service_key is not None)
 
     @abstractmethod
     def fetch(self, **kwargs) -> Iterator[dict]:

@@ -12,10 +12,10 @@ JRA-VAN DataLab (JV-Link) の競馬データを、DuckDB（標準）/SQLite/Post
 
 ### 主な機能
 
-- **全38レコードタイプ対応**: 1986年以降の全競馬データ（57テーブル）
+- **全38レコードタイプ対応**: 1986年以降の全競馬データ（38テーブル）
 - **リアルタイム更新**: オッズ、馬体重、レース結果の即時取得
 - **DuckDB標準**: 高速OLAP処理に最適化（SQLite、PostgreSQLも対応）
-- **高速処理**: バッチ処理（1000件/batch）+ 最適化インデックス（120+）
+- **高速処理**: バッチ処理（1000件/batch）+ 最適化インデックス（50+）
 
 ## 動作環境
 
@@ -41,7 +41,27 @@ pip install -r requirements.txt
 copy config\config.yaml.example config\config.yaml
 ```
 
-`config\config.yaml` にJRA-VANサービスキーを設定してください。
+`config\config.yaml` にJRA-VANサービスキーを設定してください：
+
+```yaml
+# JV-Link Settings
+jvlink:
+  # JRA-VANサービスキー（必須）
+  # https://jra-van.jp/dlb/ から取得
+  service_key: "XXXX-XXXX-XXXX-XXXX-X"
+```
+
+または、環境変数で設定することもできます：
+
+```bash
+# Windows
+set JVLINK_SERVICE_KEY=XXXX-XXXX-XXXX-XXXX-X
+
+# PowerShell
+$env:JVLINK_SERVICE_KEY="XXXX-XXXX-XXXX-XXXX-X"
+```
+
+**重要**: この実装では、サービスキーをプログラムから設定するため、**Windowsレジストリーを使用しません**。JRA-VAN DataLabアプリケーションのインストールは不要です（JV-Link DLLのみ必要）。
 
 ## クイックスタート
 
@@ -71,10 +91,10 @@ python scripts/quickstart.py --fetch --from 20240101 --to 20240131 --spec RACE
 # 1. プロジェクト初期化
 jltsql init
 
-# 2. テーブル作成（全57テーブル）
+# 2. テーブル作成（全38テーブル）
 jltsql create-tables
 
-# 3. インデックス作成（120+インデックス）
+# 3. インデックス作成（50+インデックス）
 jltsql create-indexes
 
 # 4. 過去データ取得
@@ -99,10 +119,6 @@ jltsql status
 - **NL_CH**: 調教師マスタ
 - **NL_O1～O6**: オッズ（単勝、馬連、ワイド、枠連、馬単、3連複/単）
 - その他27テーブル
-
-### 速報系テーブル (RT_*): 19テーブル
-
-リアルタイム更新用（RT_RA, RT_SE, RT_HR, RT_O1～O6など）
 
 ### 対応レコードタイプ（全38種）
 
