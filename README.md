@@ -1,4 +1,4 @@
-# JLTSQL - JRA-VAN Link To SQL
+# JRVLTSQL - JRA-VAN Link To SQL
 
 JRA-VAN DataLabの競馬データをDuckDB/SQLite/PostgreSQLにインポートするPythonツール
 
