@@ -6,186 +6,108 @@ JRA-VAN DataLabの競馬データをDuckDB/SQLite/PostgreSQLにインポート�
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 
-## 概要
+## 特徴
 
-JRA-VAN DataLab (JV-Link) の競馬データを、DuckDB（標準）/SQLite/PostgreSQLにインポートするツールです。
+- **全38レコードタイプ対応**: 1986年以降の全競馬データ
+- **DuckDB標準**: 高速OLAP処理（SQLite、PostgreSQLも対応）
+- **レジストリー不要**: 設定ファイル/環境変数でサービスキーを管理
+- **バッチ処理最適化**: 1000件/batch + 50+インデックス
 
-### 主な機能
+## 必要要件
 
-- **全38レコードタイプ対応**: 1986年以降の全競馬データ（38テーブル）
-- **リアルタイム更新**: オッズ、馬体重、レース結果の即時取得
-- **DuckDB標準**: 高速OLAP処理に最適化（SQLite、PostgreSQLも対応）
-- **高速処理**: バッチ処理（1000件/batch）+ 最適化インデックス（50+）
-
-## 動作環境
-
-- **OS**: Windows 10/11 (JV-Link COM API)
-- **Python**: 3.10+
-- **必須**: JRA-VAN DataLab会員（月額2,090円）
+- Windows 10/11（JV-Link COM API）
+- Python 3.10+
+- JRA-VAN DataLab会員（月額2,090円）
 
 ## インストール
 
 ```bash
-# リポジトリクローン
-git clone https://github.com/yourusername/jltsql.git
+git clone https://github.com/miyamamoto/jltsql.git
 cd jltsql
-
-# 仮想環境作成
 python -m venv venv
 venv\Scripts\activate
-
-# 依存パッケージインストール
 pip install -r requirements.txt
-
-# 設定ファイル作成
-copy config\config.yaml.example config\config.yaml
 ```
 
-`config\config.yaml` にJRA-VANサービスキーを設定してください：
+## 設定
+
+`config/config.yaml`を作成してサービスキーを設定：
 
 ```yaml
-# JV-Link Settings
 jvlink:
-  # JRA-VANサービスキー（必須）
-  # https://jra-van.jp/dlb/ から取得
   service_key: "XXXX-XXXX-XXXX-XXXX-X"
 ```
 
-または、環境変数で設定することもできます：
+または環境変数で設定：
 
 ```bash
-# Windows
 set JVLINK_SERVICE_KEY=XXXX-XXXX-XXXX-XXXX-X
-
-# PowerShell
-$env:JVLINK_SERVICE_KEY="XXXX-XXXX-XXXX-XXXX-X"
 ```
 
-**重要**: この実装では、サービスキーをプログラムから設定するため、**Windowsレジストリーを使用しません**。JRA-VAN DataLabアプリケーションのインストールは不要です（JV-Link DLLのみ必要）。
+**重要**: レジストリーを使用せず、設定ファイル/環境変数から読み込みます。
 
-## クイックスタート
+## 使い方
 
-### 完全自動セットアップ（最も簡単）
-
-```bash
-# 2024年以降の全データ（全オッズO1-O6含む）+ リアルタイム監視まで一括セットアップ
-python scripts/setup_full_data.py --from-year 2024 --start-monitor
-
-# オッズデータを除外する場合
-python scripts/setup_full_data.py --from-year 2024 --without-odds --start-monitor
-```
-
-### 基本セットアップのみ
+### クイックスタート
 
 ```bash
-# 初期セットアップ (init + create-tables + create-indexes)
-python scripts/quickstart.py
-
-# サンプルデータ取得
-python scripts/quickstart.py --fetch --from 20240101 --to 20240131 --spec RACE
-```
-
-### 手動セットアップ
-
-```bash
-# 1. プロジェクト初期化
+# 1. 初期化
 jltsql init
 
-# 2. テーブル作成（全38テーブル）
+# 2. テーブル作成（38テーブル）
 jltsql create-tables
 
 # 3. インデックス作成（50+インデックス）
 jltsql create-indexes
 
-# 4. 過去データ取得
+# 4. データ取得
 jltsql fetch --from 20240101 --to 20241231 --spec RACE
-
-# 5. リアルタイム監視開始
-jltsql monitor --daemon
-
-# 6. ステータス確認
-jltsql status
 ```
 
-## データベーススキーマ
+### 自動セットアップ
 
-### 蓄積系テーブル (NL_*): 38テーブル
-
-- **NL_RA**: レース詳細
-- **NL_SE**: 馬毎レース情報
-- **NL_HR**: 払戻情報
-- **NL_UM**: 競走馬マスタ
-- **NL_KS**: 騎手マスタ
-- **NL_CH**: 調教師マスタ
-- **NL_O1～O6**: オッズ（単勝、馬連、ワイド、枠連、馬単、3連複/単）
-- その他27テーブル
-
-### 対応レコードタイプ（全38種）
-
-```
-AV, BN, BR, BT, CC, CH, CK, CS, DM,
-H1, H6, HC, HN, HR, HS, HY,
-JC, JG, KS,
-O1, O2, O3, O4, O5, O6,
-RA, RC, SE, SK,
-TC, TK, TM,
-UM,
-WC, WE, WF, WH,
-YS
+```bash
+# 2024年以降の全データを一括セットアップ
+python scripts/quickstart.py
 ```
 
 ## 主要コマンド
 
 ```bash
-# データ取得
-jltsql fetch --from YYYYMMDD --to YYYYMMDD --spec SPEC
-
-# リアルタイム監視
-jltsql monitor [--daemon]
-
-# データエクスポート
-jltsql export --table TABLE --output FILE [--format csv|json|parquet]
-
-# 設定確認
-jltsql config
-
-# ステータス
-jltsql status
+jltsql init                    # 初期化
+jltsql create-tables           # テーブル作成
+jltsql create-indexes          # インデックス作成
+jltsql fetch --spec RACE       # データ取得
+jltsql status                  # ステータス確認
+jltsql config                  # 設定確認
 ```
 
-詳細は `jltsql --help` または各コマンドの `--help` を参照してください。
+詳細: `jltsql --help`
 
-## 開発
+## データベーススキーマ
 
-```bash
-# 開発環境セットアップ
-pip install -r requirements-dev.txt
+全38テーブル（NL_*）:
 
-# テスト実行
-pytest
+| カテゴリ | テーブル | 説明 |
+|---------|---------|------|
+| レース | RA, SE, HR, JG | レース詳細、出馬表、払戻、重賞 |
+| マスタ | UM, KS, CH, BR, BN | 馬、騎手、調教師、生産者、馬主 |
+| オッズ | O1-O6 | 単勝、馬連、ワイド、枠連、馬単、3連複/単 |
+| その他 | H1, H6, WF, YS等 | 払戻、天候、スケジュール等 |
 
-# コードフォーマット
-black src tests
-ruff check src tests
-```
+対応レコードタイプ: AV, BN, BR, BT, CC, CH, CK, CS, DM, H1, H6, HC, HN, HR, HS, HY, JC, JG, KS, O1-O6, RA, RC, SE, SK, TC, TK, TM, UM, WC, WE, WF, WH, YS
 
 ## ライセンス
 
 Apache License 2.0
 
-### JRA-VAN Data Lab利用規約
-
+**JRA-VAN Data Lab利用規約**:
 - データの再配布禁止
 - 個人利用・自社内利用のみ
-- 商用利用は別途契約必要
 - 詳細: https://jra-van.jp/dlb/about/rule.html
 
-## 参考リンク
+## リンク
 
-- [JRA-VAN DataLab公式](https://jra-van.jp/dlb/)
-- [JRA-VAN開発者コミュニティ](https://developer.jra-van.jp/)
-
-## サポート
-
-- バグ報告: [GitHub Issues](https://github.com/yourusername/jltsql/issues)
-- 質問: [GitHub Discussions](https://github.com/yourusername/jltsql/discussions)
+- [JRA-VAN DataLab](https://jra-van.jp/dlb/)
+- [開発者コミュニティ](https://developer.jra-van.jp/)
+- [Issues](https://github.com/miyamamoto/jltsql/issues)
