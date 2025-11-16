@@ -131,12 +131,15 @@ dmypy.json
 
 # Project specific
 # Database files
+data/
 data/*.db
 data/*.duckdb
 data/*.db-shm
 data/*.db-wal
 
 # Log files
+logs/
+*.log
 logs/*.log
 logs/*.log.*
 
