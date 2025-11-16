@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from typing import Iterator, List, Optional, Tuple
 
 from src.database.base import BaseDatabase
-from src.database.schema import SchemaManager
+from src.database.schema import create_all_tables
 from src.fetcher.historical import HistoricalFetcher
 from src.importer.importer import DataImporter
 from src.utils.logger import get_logger
@@ -54,7 +54,6 @@ class BatchProcessor:
         self.fetcher = HistoricalFetcher(sid)
         self.importer = DataImporter(database, batch_size)
         self.database = database
-        self.schema_manager = SchemaManager(database)
 
         logger.info("BatchProcessor initialized", sid=sid)
 
@@ -95,10 +94,11 @@ class BatchProcessor:
 
         # Ensure tables exist
         if ensure_tables:
-            missing = self.schema_manager.get_missing_tables()
-            if missing:
-                logger.info(f"Creating missing tables: {missing}")
-                self.schema_manager.create_all_tables()
+            logger.info("Ensuring all tables exist")
+            try:
+                create_all_tables(self.database)
+            except Exception as e:
+                logger.debug(f"Tables might already exist: {e}")
 
         # Fetch and import records
         try:

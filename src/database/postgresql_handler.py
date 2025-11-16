@@ -132,6 +132,7 @@ class PostgreSQLDatabase(BaseDatabase):
                     host=self.host,
                     port=self.port,
                     database=self.database,
+                    timeout=self.connect_timeout,  # Add timeout parameter
                 )
                 self._cursor = None  # pg8000.native doesn't use cursors
 

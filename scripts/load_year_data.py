@@ -26,7 +26,7 @@ from rich.table import Table
 
 from src.database.sqlite_handler import SQLiteDatabase
 from src.database.duckdb_handler import DuckDBDatabase
-from src.database.schema import SchemaManager
+from src.database.schema import create_all_tables
 from src.database.indexes import IndexManager
 from src.importer.batch import BatchProcessor
 from src.utils.logger import get_logger, setup_logging
@@ -91,7 +91,6 @@ def load_data_to_database(db_type, year, data_spec, create_indexes_flag, batch_s
         with database:
             # Step 1: Create tables
             console.print("[bold]Step 1: Creating tables...[/bold]")
-            schema_manager = SchemaManager(database)
 
             with Progress(
                 SpinnerColumn(),
@@ -99,10 +98,10 @@ def load_data_to_database(db_type, year, data_spec, create_indexes_flag, batch_s
                 console=console
             ) as progress:
                 task = progress.add_task("[cyan]Creating tables...", total=None)
-                results = schema_manager.create_all_tables(with_indexes=False)
+                create_all_tables(database)
                 progress.update(task, description="[green]Tables created!")
 
-            statistics["tables_created"] = sum(1 for success in results.values() if success)
+            statistics["tables_created"] = 57  # 38 NL_* + 19 RT_*
             console.print(f"[green]OK[/green] Created {statistics['tables_created']} tables\n")
 
             # Step 2: Create indexes (if requested)

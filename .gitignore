@@ -166,3 +166,4 @@ desktop.ini
 # Development working files
 .claude/
 .specify/
+setup_jvlink_key.ps1

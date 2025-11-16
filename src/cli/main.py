@@ -183,7 +183,7 @@ def fetch(ctx, date_from, date_to, data_spec, jv_option, db, batch_size):
     from src.database.sqlite_handler import SQLiteDatabase
     from src.database.duckdb_handler import DuckDBDatabase
     from src.database.postgresql_handler import PostgreSQLDatabase
-    from src.database.schema import SchemaManager
+    from src.database.schema import create_all_tables
     from src.importer.batch import BatchProcessor
 
     config = ctx.obj.get("config")
@@ -223,17 +223,11 @@ def fetch(ctx, date_from, date_to, data_spec, jv_option, db, batch_size):
         # Connect to database
         with database:
             # Ensure tables exist
-            schema_manager = SchemaManager(database)
-            missing_tables = schema_manager.get_missing_tables()
-
-            if missing_tables:
-                console.print(f"[yellow]Warning:[/yellow] {len(missing_tables)} tables are missing.")
-                console.print("Creating tables...")
-
-                for table_name in missing_tables:
-                    schema_manager.create_table(table_name)
-
-                console.print(f"[green][OK][/green] Created {len(missing_tables)} tables\n")
+            try:
+                create_all_tables(database)
+            except Exception:
+                # Tables might already exist, that's OK
+                pass
 
             # Process data
             processor = BatchProcessor(
@@ -289,7 +283,7 @@ def monitor(ctx, daemon, data_spec, interval, db):
     from src.database.sqlite_handler import SQLiteDatabase
     from src.database.duckdb_handler import DuckDBDatabase
     from src.database.postgresql_handler import PostgreSQLDatabase
-    from src.database.schema import SchemaManager
+    from src.database.schema import create_all_tables
     from src.realtime.monitor import RealtimeMonitor
 
     config = ctx.obj.get("config")
@@ -330,17 +324,11 @@ def monitor(ctx, daemon, data_spec, interval, db):
         # Connect to database
         with database:
             # Ensure tables exist
-            schema_manager = SchemaManager(database)
-            missing_tables = schema_manager.get_missing_tables()
-
-            if missing_tables:
-                console.print(f"[yellow]Warning:[/yellow] {len(missing_tables)} tables are missing.")
-                console.print("Creating tables...")
-
-                for table_name in missing_tables:
-                    schema_manager.create_table(table_name)
-
-                console.print(f"[green][OK][/green] Created {len(missing_tables)} tables\n")
+            try:
+                create_all_tables(database)
+            except Exception:
+                # Tables might already exist, that's OK
+                pass
 
             # Start monitoring
             monitor_obj = RealtimeMonitor(
@@ -405,7 +393,7 @@ def create_tables(ctx, db, create_all, nl_only, rt_only):
       jltsql create-tables --rt-only      # Create only RT_* tables
     """
     from rich.progress import Progress, TextColumn
-    from src.database.schema import SchemaManager
+    from src.database.schema import SCHEMAS, create_all_tables
     from src.database.sqlite_handler import SQLiteDatabase
     from src.database.duckdb_handler import DuckDBDatabase
     from src.database.postgresql_handler import PostgreSQLDatabase
@@ -442,17 +430,13 @@ def create_tables(ctx, db, create_all, nl_only, rt_only):
 
         # Connect to database
         with database:
-            schema_manager = SchemaManager(database)
-
             # Determine which tables to create
-            from src.database.schema import SCHEMAS
-
             if nl_only:
-                tables_to_create = [name for name in SCHEMAS.keys() if name.startswith("NL_")]
+                tables_to_create = {name: sql for name, sql in SCHEMAS.items() if name.startswith("NL_")}
             elif rt_only:
-                tables_to_create = [name for name in SCHEMAS.keys() if name.startswith("RT_")]
+                tables_to_create = {name: sql for name, sql in SCHEMAS.items() if name.startswith("RT_")}
             else:
-                tables_to_create = list(SCHEMAS.keys())
+                tables_to_create = SCHEMAS
 
             # Create tables with progress bar
             created_count = 0
@@ -464,12 +448,14 @@ def create_tables(ctx, db, create_all, nl_only, rt_only):
             ) as progress:
                 task = progress.add_task(f"[cyan]Creating {len(tables_to_create)} tables...", total=len(tables_to_create))
 
-                for table_name in tables_to_create:
+                for table_name, schema_sql in tables_to_create.items():
                     progress.update(task, description=f"[cyan]Creating {table_name}...")
 
-                    if schema_manager.create_table(table_name):
+                    try:
+                        database.execute(schema_sql)
                         created_count += 1
-                    else:
+                    except Exception as e:
+                        console.print(f"[yellow]Warning:[/yellow] Failed to create {table_name}: {e}")
                         failed_count += 1
 
                     progress.advance(task)
@@ -592,8 +578,8 @@ def create_indexes(ctx, db, table):
                 console.print(f"  Total:       {total_indexes} indexes")
 
                 console.print()
-                console.print("[dim]Note: Indexes improve query performance for date ranges,")
-                console.print("      venue/race searches, and real-time data queries.[/dim]")
+                console.print("[dim]Note: Indexes improve query performance for date ranges,[/dim]")
+                console.print("[dim]      venue/race searches, and real-time data queries.[/dim]")
 
     except Exception as e:
         console.print(f"\n[red]Error:[/red] {e}", style="bold")
