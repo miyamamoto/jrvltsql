@@ -67,9 +67,27 @@ jltsql fetch --from 20240101 --to 20241231 --spec RACE
 ### 自動セットアップ
 
 ```bash
-# 2024年以降の全データを一括セットアップ
+# 直近10年間の全データを一括セットアップ + リアルタイム監視開始（デフォルト）
 python scripts/quickstart.py
+
+# オプション
+python scripts/quickstart.py --years 5                       # 過去5年間のデータ取得
+python scripts/quickstart.py --years 20                      # 過去20年間のデータ取得
+python scripts/quickstart.py --from 20200101 --to 20241231  # 期間を直接指定
+python scripts/quickstart.py --no-odds                       # オッズデータを除外
+python scripts/quickstart.py --no-monitor                    # 監視を開始しない
+python scripts/quickstart.py -y                              # 確認なしで実行
 ```
+
+自動セットアップで実行される処理：
+1. プロジェクト初期化（DB作成）
+2. テーブル作成（38テーブル）
+3. インデックス作成（50+インデックス）
+4. 全データ取得（8基本データ + 4オッズデータ）
+   - DIFN（マスタ情報）、BLDN（血統）、RACE（レース）、YSCH（スケジュール）
+   - TOKU（特別登録）、HOSN（市場取引）、COMM（解説）、SNPN（速報）
+   - SLOP（単複オッズ）、HOYU（馬連ワイド）、WOOD（調教）、MING（当日発表）
+5. リアルタイム監視開始（デーモンプロセス）
 
 ## 主要コマンド
 

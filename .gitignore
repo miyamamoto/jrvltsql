@@ -168,3 +168,6 @@ desktop.ini
 .claude/
 .specify/
 setup_jvlink_key.ps1
+
+# Reference data (JRA-VAN proprietary - not redistributable)
+reference_data/
