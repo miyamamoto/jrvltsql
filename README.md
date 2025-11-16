@@ -2,7 +2,7 @@
 
 JRA-VAN DataLabの競馬データをDuckDB/SQLite/PostgreSQLにインポートするPythonツール
 
-[![Tests](https://github.com/miyamamoto/jltsql/actions/workflows/test.yml/badge.svg)](https://github.com/miyamamoto/jltsql/actions/workflows/test.yml)
+[![Tests](https://github.com/miyamamoto/jrvltsql/actions/workflows/test.yml/badge.svg)](https://github.com/miyamamoto/jrvltsql/actions/workflows/test.yml)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 
@@ -23,8 +23,8 @@ JRA-VAN DataLabの競馬データをDuckDB/SQLite/PostgreSQLにインポート�
 ## インストール
 
 ```bash
-git clone https://github.com/miyamamoto/jltsql.git
-cd jltsql
+git clone https://github.com/miyamamoto/jrvltsql.git
+cd jrvltsql
 python -m venv venv
 venv\Scripts\activate
 pip install -r requirements.txt
@@ -143,4 +143,4 @@ Apache License 2.0
 
 - [JRA-VAN DataLab](https://jra-van.jp/dlb/)
 - [開発者コミュニティ](https://developer.jra-van.jp/)
-- [Issues](https://github.com/miyamamoto/jltsql/issues)
+- [Issues](https://github.com/miyamamoto/jrvltsql/issues)
