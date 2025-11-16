@@ -172,3 +172,21 @@ setup_jvlink_key.ps1
 # Reference data (JRA-VAN proprietary - not redistributable)
 reference_data/*
 !reference_data/README.md
+
+# Development documents and scripts
+TEST_CLEANUP_REPORT.md
+COMMAND_TEST_RESULTS.md
+scripts/analyze_tests.py
+scripts/check_both_databases.py
+scripts/cleanup_tests.py
+scripts/find_missing_record_types.py
+scripts/test_all_data_specs.py
+scripts/load_*.py
+scripts/create_*.py
+scripts/recreate_*.py
+scripts/regenerate_*.py
+scripts/add_*.py
+*.log
+find_missing.log
+load_*.log
+test_*.log
