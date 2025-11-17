@@ -149,22 +149,27 @@ def main():
 
                         print(f"OK (予定: {read_count}件, DL: {download_count}件)")
 
-                        # ダウンロード待機
+                        # ダウンロード待機（待機時間を延長）
                         if download_count > 0:
                             print(f"    ダウンロード待機中...", end='', flush=True)
                             start_time = time.time()
                             while True:
                                 status = jvlink.jv_status()
                                 if status == 0:
+                                    elapsed = time.time() - start_time
+                                    print(f" 完了 ({elapsed:.1f}秒)")
+                                    # ダウンロード完了後、ファイル書き込み完了のため追加待機
+                                    print(f"    ファイル書き込み待機中...", end='', flush=True)
+                                    time.sleep(10)  # 10秒追加待機
                                     print(" 完了")
                                     break
                                 elif status < 0:
                                     print(f" エラー{status}")
                                     break
-                                if time.time() - start_time > 120:
-                                    print(" タイムアウト")
+                                if time.time() - start_time > 600:  # 120秒 → 600秒（10分）に延長
+                                    print(f" タイムアウト (600秒)")
                                     break
-                                time.sleep(1)
+                                time.sleep(2)  # チェック間隔を2秒に延長
 
                         # レコード取得
                         found_records = defaultdict(int)
@@ -235,9 +240,9 @@ def main():
         total_records = 0
 
         for table_name in empty_tables.keys():
-            query = f"SELECT COUNT(*) FROM {table_name}"
-            result = db.execute_query(query)
-            count = result[0][0] if result else 0
+            query = f"SELECT COUNT(*) as count FROM {table_name}"
+            result = db.fetch_one(query)
+            count = result['count'] if result else 0
             total_records += count
 
             if count > 0:
