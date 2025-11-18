@@ -193,3 +193,41 @@ scripts/add_*.py
 find_missing.log
 load_*.log
 test_*.log
+
+# Analysis reports and documentation
+*_REPORT.md
+*_ANALYSIS.md
+*_SUMMARY.md
+*_REVIEW.md
+*_CHECKLIST.md
+MIGRATION_COMPLETE.md
+TEST_RESULTS_*.md
+
+# Test and debug scripts
+test_*.py
+debug_*.py
+demo_*.py
+scripts/test_*.py
+scripts/debug_*.py
+scripts/demo_*.py
+scripts/analyze_*.py
+scripts/apply_*.py
+scripts/benchmark_*.py
+scripts/check_*.py
+scripts/comprehensive_*.py
+scripts/duckdb_performance_*.py
+scripts/fetch_all_*.sh
+scripts/final_*.py
+scripts/fix_*.py
+scripts/get_*.py
+scripts/migrate_*.py
+scripts/profile_*.py
+scripts/validate_*.py
+scripts/verify_*.py
+
+# Generated directories
+docs/
+migrations/
+
+# Temporary files
+nul

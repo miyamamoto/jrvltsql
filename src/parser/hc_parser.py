@@ -58,7 +58,7 @@ class HCParser:
             result = {}
 
             # 1. レコード種別ID (位置:1, 長さ:2)
-            result["MakeDate"] = self.decode_field(data[0:2])
+            result["RecordSpec"] = self.decode_field(data[0:2])
 
             # 2. データ区分 (位置:3, 長さ:1)
             result["ChokyosiCode"] = self.decode_field(data[2:3])

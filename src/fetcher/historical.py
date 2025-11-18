@@ -268,6 +268,11 @@ class HistoricalFetcher(BaseFetcher):
                             completed=100,
                             status="完了",
                         )
+                    # Wait for file system write completion
+                    # JV-Link reports download complete but files may not be written to disk yet
+                    logger.info("Waiting for file write completion...")
+                    time.sleep(10)
+                    logger.info("File write wait completed")
                     return  # Download complete
 
                 if status < 0:

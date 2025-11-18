@@ -1,7 +1,7 @@
 """Parser factory for JV-Data records.
 
 This module provides a factory for creating appropriate parser instances
-based on record type. Supports 30 auto-generated record types from official JV-Data spec.
+based on record type. Supports 38 auto-generated record types from official JV-Data spec.
 
 Auto-generated parsers based on: 公式JV-Data仕様書 Ver.4.9.0.1
 """
@@ -13,14 +13,14 @@ from src.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-# All supported record types (30 official parsers)
+# All supported record types (38 official parsers)
 ALL_RECORD_TYPES = [
-    'BN', 'BR', 'BT', 'CH', 'CS', 'DM',
+    'AV', 'BN', 'BR', 'BT', 'CC', 'CH', 'CK', 'CS', 'DM',
     'H1', 'H6', 'HC', 'HN', 'HR', 'HS', 'HY',
-    'JG', 'KS',
+    'JC', 'JG', 'KS',
     'O1', 'O2', 'O3', 'O4', 'O5', 'O6',
-    'RA', 'RC', 'SE', 'SK', 'TK', 'TM',
-    'UM', 'WF', 'YS'
+    'RA', 'RC', 'SE', 'SK', 'TC', 'TK', 'TM',
+    'UM', 'WC', 'WE', 'WF', 'WH', 'YS'
 ]
 
 
@@ -152,7 +152,8 @@ class ParserFactory:
                 logger.warning(f"No parser available for record type: {record_type}")
                 return None
 
-            return parser.parse(record)
+            parsed_result = parser.parse(record)
+            return parsed_result
 
         except UnicodeDecodeError:
             logger.error("Failed to decode record type")

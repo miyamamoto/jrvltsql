@@ -69,6 +69,8 @@ SCHEMAS = {
 
     "NL_AV": """
         CREATE TABLE IF NOT EXISTS NL_AV (
+            RecordSpec TEXT,
+            DataKubun TEXT,
             KettoNum TEXT,
             SaleHostName TEXT,
             SaleName TEXT,
@@ -124,14 +126,83 @@ SCHEMAS = {
             DirtMigiChaku TEXT,
             DirtHidariChaku TEXT,
             SyogaiChaku TEXT,
+            SibaRyoChaku TEXT,
+            SibaYayaChaku TEXT,
+            SibaOmoChaku TEXT,
+            SibaFuChaku TEXT,
+            DirtRyoChaku TEXT,
+            DirtYayaChaku TEXT,
+            DirtOmoChaku TEXT,
+            DirtFuChaku TEXT,
+            SyogaiRyoChaku TEXT,
+            SyogaiYayaChaku TEXT,
+            SyogaiOmoChaku TEXT,
+            SyogaiFuChaku TEXT,
+            Siba1200IkaChaku TEXT,
+            Siba1201_1400Chaku TEXT,
+            Siba1401_1600Chaku TEXT,
+            Siba1601_1800Chaku TEXT,
+            Siba1801_2000Chaku TEXT,
+            Siba2001_2200Chaku TEXT,
+            Siba2201_2400Chaku TEXT,
+            Siba2401_2800Chaku TEXT,
+            Siba2801OverChaku TEXT,
+            Dirt1200IkaChaku TEXT,
+            Dirt1201_1400Chaku TEXT,
+            Dirt1401_1600Chaku TEXT,
+            Dirt1601_1800Chaku TEXT,
+            Dirt1801_2000Chaku TEXT,
+            Dirt2001_2200Chaku TEXT,
+            Dirt2201_2400Chaku TEXT,
+            Dirt2401_2800Chaku TEXT,
+            Dirt2801OverChaku TEXT,
+            SapporoSibaChaku TEXT,
+            HakodateSibaChaku TEXT,
+            FukushimaSibaChaku TEXT,
+            NiigataSibaChaku TEXT,
+            TokyoSibaChaku TEXT,
+            NakayamaSibaChaku TEXT,
+            ChukyoSibaChaku TEXT,
+            KyotoSibaChaku TEXT,
+            HanshinSibaChaku TEXT,
+            KokuraSibaChaku TEXT,
+            SapporoDirtChaku TEXT,
+            HakodateDirtChaku TEXT,
+            FukushimaDirtChaku TEXT,
+            NiigataDirtChaku TEXT,
+            TokyoDirtChaku TEXT,
+            NakayamaDirtChaku TEXT,
+            ChukyoDirtChaku TEXT,
+            KyotoDirtChaku TEXT,
+            HanshinDirtChaku TEXT,
+            KokuraDirtChaku TEXT,
+            SapporoSyogaiChaku TEXT,
+            HakodateSyogaiChaku TEXT,
+            FukushimaSyogaiChaku TEXT,
+            NiigataSyogaiChaku TEXT,
+            TokyoSyogaiChaku TEXT,
+            NakayamaSyogaiChaku TEXT,
+            ChukyoSyogaiChaku TEXT,
+            KyotoSyogaiChaku TEXT,
+            HanshinSyogaiChaku TEXT,
+            KokuraSyogaiChaku TEXT,
+            KyakusituKeiko TEXT,
+            RegisteredRaceCount TEXT,
             KisyuCode TEXT,
             KisyuName TEXT,
+            KisyuResultsInfo TEXT,
             ChokyosiCode TEXT,
             ChokyosiName TEXT,
+            ChokyosiResultsInfo TEXT,
             BanusiCode TEXT,
             BanusiName TEXT,
+            BanusiName_Co TEXT,
+            BanusiResultsInfo TEXT,
             BreederCode TEXT,
-            BreederName TEXT
+            BreederName TEXT,
+            BreederName_Co TEXT,
+            BreederResultsInfo TEXT,
+            RecordDelimiter TEXT
         )
     """,
     "NL_CH": """
@@ -304,7 +375,8 @@ SCHEMAS = {
     """,
     "NL_H6": """
         CREATE TABLE IF NOT EXISTS NL_H6 (
-            MakeDate TEXT,
+            RecordSpec TEXT,
+            DataKubun TEXT,
             Year TEXT,
             MonthDay TEXT,
             JyoCD TEXT,
@@ -328,7 +400,7 @@ SCHEMAS = {
     """,
     "NL_HC": """
         CREATE TABLE IF NOT EXISTS NL_HC (
-            MakeDate TEXT,
+            RecordSpec TEXT,
             ChokyosiCode TEXT,
             Num TEXT,
             SetYear TEXT,
@@ -614,7 +686,7 @@ SCHEMAS = {
     """,
     "NL_O1": """
         CREATE TABLE IF NOT EXISTS NL_O1 (
-            MakeDate TEXT,
+            RecordSpec TEXT,
             Year TEXT,
             MonthDay TEXT,
             JyoCD TEXT,
@@ -651,7 +723,7 @@ SCHEMAS = {
     """,
     "NL_O2": """
         CREATE TABLE IF NOT EXISTS NL_O2 (
-            MakeDate TEXT,
+            RecordSpec TEXT,
             Year TEXT,
             MonthDay TEXT,
             JyoCD TEXT,
@@ -674,7 +746,7 @@ SCHEMAS = {
     """,
     "NL_O3": """
         CREATE TABLE IF NOT EXISTS NL_O3 (
-            MakeDate TEXT,
+            RecordSpec TEXT,
             Year TEXT,
             MonthDay TEXT,
             JyoCD TEXT,
@@ -698,7 +770,7 @@ SCHEMAS = {
     """,
     "NL_O4": """
         CREATE TABLE IF NOT EXISTS NL_O4 (
-            MakeDate TEXT,
+            RecordSpec TEXT,
             Year TEXT,
             MonthDay TEXT,
             JyoCD TEXT,
@@ -721,7 +793,7 @@ SCHEMAS = {
     """,
     "NL_O5": """
         CREATE TABLE IF NOT EXISTS NL_O5 (
-            MakeDate TEXT,
+            RecordSpec TEXT,
             Year TEXT,
             MonthDay TEXT,
             JyoCD TEXT,
@@ -744,7 +816,7 @@ SCHEMAS = {
     """,
     "NL_O6": """
         CREATE TABLE IF NOT EXISTS NL_O6 (
-            MakeDate TEXT,
+            RecordSpec TEXT,
             Year TEXT,
             MonthDay TEXT,
             JyoCD TEXT,
@@ -982,7 +1054,7 @@ SCHEMAS = {
     """,
     "NL_TK": """
         CREATE TABLE IF NOT EXISTS NL_TK (
-            MakeDate TEXT,
+            RecordSpec TEXT,
             Year TEXT,
             MonthDay TEXT,
             JyoCD TEXT,
@@ -1204,7 +1276,7 @@ SCHEMAS = {
     """,
     "NL_WF": """
         CREATE TABLE IF NOT EXISTS NL_WF (
-            MakeDate TEXT,
+            RecordSpec TEXT,
             Year TEXT,
             MonthDay TEXT,
             Kumi TEXT,
@@ -1378,6 +1450,8 @@ SCHEMAS = {
     """,
     "RT_H6": """
         CREATE TABLE IF NOT EXISTS RT_H6 (
+            RecordSpec TEXT,
+            DataKubun TEXT,
             MakeDate TEXT,
             Year TEXT,
             MonthDay TEXT,

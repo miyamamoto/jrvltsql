@@ -185,7 +185,10 @@ class DataImporter:
                     record.get("headRecordSpec")
                 )
                 if not record_type:
-                    logger.warning("Record missing record type field")
+                    logger.warning(
+                        "Record missing record type field",
+                        record_keys=list(record.keys())[:5] if record else None
+                    )
                     self._records_failed += 1
                     continue
 

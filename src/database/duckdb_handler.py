@@ -122,6 +122,8 @@ class DuckDBDatabase(BaseDatabase):
 
         except duckdb.Error as e:
             logger.error(f"SQL execution failed: {sql[:100]}", error=str(e))
+            if self._connection:
+                self._connection.rollback()
             raise DatabaseError(f"SQL execution failed: {e}")
 
     def executemany(self, sql: str, parameters_list: List[tuple]) -> int:
@@ -146,6 +148,8 @@ class DuckDBDatabase(BaseDatabase):
 
         except duckdb.Error as e:
             logger.error(f"SQL executemany failed: {sql[:100]}", error=str(e))
+            if self._connection:
+                self._connection.rollback()
             raise DatabaseError(f"SQL executemany failed: {e}")
 
     def fetch_one(self, sql: str, parameters: Optional[tuple] = None) -> Optional[Dict[str, Any]]:
@@ -179,6 +183,8 @@ class DuckDBDatabase(BaseDatabase):
 
         except duckdb.Error as e:
             logger.error(f"SQL query failed: {sql[:100]}", error=str(e))
+            if self._connection:
+                self._connection.rollback()
             raise DatabaseError(f"SQL query failed: {e}")
 
     def fetch_all(self, sql: str, parameters: Optional[tuple] = None) -> List[Dict[str, Any]]:
@@ -213,6 +219,8 @@ class DuckDBDatabase(BaseDatabase):
 
         except duckdb.Error as e:
             logger.error(f"SQL query failed: {sql[:100]}", error=str(e))
+            if self._connection:
+                self._connection.rollback()
             raise DatabaseError(f"SQL query failed: {e}")
 
     def create_table(self, table_name: str, schema: str) -> None:
