@@ -18,7 +18,6 @@ class OptimizedDataImporter:
     """Optimized importer for JV-Data records.
 
     Handles batch insertion with database-specific optimizations:
-    - DuckDB: Uses appender API with single transaction
     - PostgreSQL: Uses autocommit mode (already optimized)
     - SQLite: Uses transaction batching
 

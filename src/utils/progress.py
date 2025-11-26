@@ -41,7 +41,8 @@ class JVLinkProgressDisplay:
         Args:
             console: Rich console instance (creates new if None)
         """
-        self.console = console or Console()
+        # Force UTF-8 encoding for Windows console compatibility
+        self.console = console or Console(force_terminal=True, legacy_windows=True)
 
         # Create main progress bar for overall operations
         self.progress = Progress(
@@ -49,7 +50,7 @@ class JVLinkProgressDisplay:
             TextColumn("[bold blue]{task.description}", justify="right"),
             BarColumn(bar_width=40, complete_style="green", finished_style="bright_green"),
             TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-            TextColumn("•"),
+            TextColumn("|"),
             TextColumn("[cyan]{task.fields[status]}"),
             TimeElapsedColumn(),
             TimeRemainingColumn(),

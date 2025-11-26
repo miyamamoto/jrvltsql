@@ -1,6 +1,6 @@
 # JRVLTSQL - JRA-VAN Link To SQL
 
-JRA-VAN DataLabの競馬データをDuckDB/SQLite/PostgreSQLにインポートするPythonツール
+JRA-VAN DataLabの競馬データをSQLite/PostgreSQLにインポートするPythonツール
 
 [![Tests](https://github.com/miyamamoto/jrvltsql/actions/workflows/test.yml/badge.svg)](https://github.com/miyamamoto/jrvltsql/actions/workflows/test.yml)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
@@ -10,7 +10,7 @@ JRA-VAN DataLabの競馬データをDuckDB/SQLite/PostgreSQLにインポート�
 
 - **全38レコードタイプ対応**: 1986年以降の全競馬データ
 - **57テーブル**: NL_38（蓄積系）+ RT_19（速報系）
-- **DuckDB標準**: 高速OLAP処理（SQLite、PostgreSQLも対応）
+- **SQLite標準**: 軽量・高速（PostgreSQLも対応）
 - **レジストリー不要**: 設定ファイル/環境変数でサービスキーを管理
 - **バッチ処理最適化**: 1000件/batch + 50+インデックス
 

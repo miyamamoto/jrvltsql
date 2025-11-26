@@ -1,7 +1,7 @@
 """Database compatibility helpers for cross-DB queries.
 
 This module provides helper functions for writing database-agnostic code
-that works across SQLite, PostgreSQL, and DuckDB.
+that works across SQLite and PostgreSQL.
 """
 
 from typing import Any, Dict, List, Union
@@ -26,7 +26,7 @@ def safe_row_access(row: Union[Dict[str, Any], tuple, list], index_or_key: Union
         IndexError: If index is out of range
 
     Examples:
-        >>> # Works with dict (SQLite, PostgreSQL, DuckDB)
+        >>> # Works with dict (SQLite, PostgreSQL)
         >>> row = {'table_name': 'nl_bn', 'count': 100}
         >>> safe_row_access(row, 'table_name')
         'nl_bn'
@@ -211,8 +211,8 @@ def get_all_tables(db, schema: str = None) -> List[str]:
         List of table names
 
     Examples:
-        >>> from src.database.duckdb_handler import DuckDBDatabase
-        >>> db = DuckDBDatabase({'path': 'test.duckdb'})
+        >>> from src.database.sqlite_handler import SQLiteDatabase
+        >>> db = SQLiteDatabase({'path': 'test.db'})
         >>> with db:
         ...     tables = get_all_tables(db)
         ...     print(f"Found {len(tables)} tables")
@@ -232,11 +232,6 @@ def get_all_tables(db, schema: str = None) -> List[str]:
             sql = "SELECT tablename FROM pg_tables WHERE schemaname = 'public'"
             result = db.fetch_all(sql)
         return extract_column(result, 'tablename')
-
-    elif db_type == 'DuckDBDatabase':
-        sql = "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'"
-        result = db.fetch_all(sql)
-        return extract_column(result, 'table_name')
 
     else:
         raise ValueError(f"Unsupported database type: {db_type}")

@@ -1,7 +1,7 @@
 """JRA-VAN Standard Database Schema Definitions.
 
 Auto-generated from VB2019-Builder source code.
-Compatible with PostgreSQL, DuckDB, MySQL.
+Compatible with PostgreSQL, SQLite.
 """
 
 from typing import Dict

@@ -21,7 +21,7 @@ class BaseDatabase(ABC):
     """Abstract base class for database handlers.
 
     This class defines the interface for all database implementations
-    (SQLite, DuckDB, PostgreSQL).
+    (SQLite, PostgreSQL).
 
     Subclasses must implement:
         - connect(): Establish database connection

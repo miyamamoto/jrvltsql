@@ -9,11 +9,11 @@ jvlink:
 
 # Database Settings
 database:
-  # Default database type (duckdb, sqlite, postgresql)
-  type: "duckdb"
+  # Default database type (sqlite, postgresql)
+  type: "sqlite"
 
 databases:
-  # SQLite Database
+  # SQLite Database (Default - recommended for single-user)
   sqlite:
     enabled: true
     path: "./data/keiba.db"
@@ -23,14 +23,7 @@ databases:
       cache_size: -64000  # 64MB
       temp_store: "MEMORY"
 
-  # DuckDB Database (OLAP)
-  duckdb:
-    enabled: true
-    path: "./data/keiba.duckdb"
-    threads: 4
-    memory_limit: "2GB"
-
-  # PostgreSQL Database
+  # PostgreSQL Database (for multi-user/server deployment)
   postgresql:
     enabled: false
     host: "${POSTGRES_HOST:localhost}"
