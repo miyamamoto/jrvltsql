@@ -449,7 +449,7 @@ class QuickstartRunner:
 
         # 統計情報
         if self.stats['specs_success'] > 0:
-            print("📊 データ取得統計:")
+            print("[STAT] データ取得統計:")
             print(f"  成功: {self.stats['specs_success']}")
             print(f"  失敗: {self.stats['specs_failed']}")
             print()
@@ -470,7 +470,7 @@ class QuickstartRunner:
 
         # 次のステップ
         if success:
-            print("🎉 次のステップ:")
+            print("[NEXT] 次のステップ:")
             print("  1. データ確認: jltsql export --table NL_RA --output races.csv")
             if not self.args.no_monitor:
                 print("  2. 監視状況確認: jltsql status")
