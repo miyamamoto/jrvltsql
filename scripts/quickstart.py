@@ -465,7 +465,9 @@ class QuickstartRunner:
         if self.errors:
             print("[NG] エラー:")
             for error in self.errors:
-                print(f"  - {error}")
+                # Unicode文字をASCII安全に変換
+                safe_error = str(error).encode('ascii', 'replace').decode('ascii')
+                print(f"  - {safe_error}")
             print()
 
         # 次のステップ
