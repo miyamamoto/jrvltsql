@@ -23,6 +23,17 @@ class DataImporter:
     Handles batch insertion of parsed records into database with
     error handling and statistics tracking.
 
+    Duplicate Handling:
+        By default, uses INSERT OR REPLACE to handle duplicate records.
+        This allows safe re-running of imports without creating duplicate data.
+
+        IMPORTANT: For INSERT OR REPLACE to work effectively, tables should
+        have PRIMARY KEY constraints defined on unique identifier columns
+        (e.g., Year + MonthDay + JyoCD + RaceNum for race records).
+
+        Without PRIMARY KEY constraints, all records are inserted which may
+        result in duplicate data. See schema.py for table definitions.
+
     Attributes:
         database: Database handler instance
         batch_size: Number of records to insert per batch

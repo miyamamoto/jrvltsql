@@ -19,6 +19,8 @@ class BatchProcessor:
     """Batch processor for JV-Data import.
 
     Coordinates fetching, parsing, and importing of JV-Data in batches.
+    Fetches data from JV-Link starting from the specified date and filters
+    records client-side based on the end date.
 
     Note:
         Service key must be configured in JRA-VAN DataLab application
@@ -29,6 +31,7 @@ class BatchProcessor:
         >>> db = SQLiteDatabase({"path": "./keiba.db"})
         >>> processor = BatchProcessor(database=db)
         >>> with db:
+        ...     # Fetches from 20240601 onwards, imports records <= 20240630
         ...     processor.process_date_range(
         ...         data_spec="RACE",
         ...         from_date="20240601",
@@ -73,13 +76,17 @@ class BatchProcessor:
         Args:
             data_spec: Data specification code
             from_date: Start date (YYYYMMDD)
-            to_date: End date (YYYYMMDD)
+            to_date: End date (YYYYMMDD) - records are filtered to this date
             option: JVOpen option (0=normal, 1=setup, 2=update)
             auto_commit: Whether to auto-commit
             ensure_tables: Whether to ensure tables exist
 
         Returns:
             Dictionary with processing statistics
+
+        Note:
+            JV-Link fetches all data from from_date onwards, then filters
+            records client-side to only import those with dates <= to_date.
 
         Examples:
             >>> processor = BatchProcessor(database=db)

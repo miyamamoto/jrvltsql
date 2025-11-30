@@ -18,7 +18,8 @@ class HistoricalFetcher(BaseFetcher):
     """Fetcher for historical JV-Data.
 
     Fetches accumulated (蓄積) data from JV-Link for a specified date range
-    and data specification.
+    and data specification. The JV-Link API retrieves all data from the
+    start date onwards, then filters records client-side based on the end date.
 
     Note:
         Service key must be configured in JRA-VAN DataLab application
@@ -46,19 +47,35 @@ class HistoricalFetcher(BaseFetcher):
         Args:
             data_spec: Data specification code (e.g., "RACE", "DIFF")
             from_date: Start date in YYYYMMDD format
-            to_date: End date in YYYYMMDD format
-            option: JVOpen option (0=normal, 1=setup, 2=update)
+                       NOTE: Ignored when option=1 (setup mode) - full data is fetched
+            to_date: End date in YYYYMMDD format (filters records up to this date)
+            option: JVOpen option:
+                    0=normal (differential update, requires previous setup)
+                    1=setup (full data download, ignores from_date)
+                    2=forced update (differential from last read position)
 
         Yields:
-            Dictionary of parsed record data
+            Dictionary of parsed record data with dates <= to_date
 
         Raises:
             FetcherError: If fetching fails
 
+        Note:
+            When option=0 or 2: The JV-Link API retrieves all data from from_date onwards.
+            When option=1 (setup): from_date is ignored and all available data is fetched.
+            Records are filtered client-side to include only those with
+            dates up to and including to_date. Records without date fields
+            (Year/MonthDay) are always included.
+
         Examples:
             >>> fetcher = HistoricalFetcher()  # Uses default sid="UNKNOWN"
-            >>> for record in fetcher.fetch("RACE", "20240601", "20240630"):
-            ...     # Process record
+            >>> # Normal differential update from specific date
+            >>> for record in fetcher.fetch("RACE", "20240601", "20240630", option=0):
+            ...     # Process record (only records with dates <= 20240630)
+            ...     pass
+            >>> # Setup mode - from_date is ignored, fetches all available data
+            >>> for record in fetcher.fetch("RACE", "20000101", "20240630", option=1):
+            ...     # Process all records up to 20240630
             ...     pass
         """
         # Create progress display if enabled
@@ -70,6 +87,20 @@ class HistoricalFetcher(BaseFetcher):
         fetch_task_id = None
 
         try:
+            # Warn if option=1 (setup mode) is used with a from_date that's not the earliest
+            # In setup mode, from_date is ignored and all data is fetched
+            if option == 1 and from_date > "19860101":  # JRA-VAN data starts from 1986
+                logger.warning(
+                    "Setup mode (option=1) ignores from_date parameter",
+                    from_date=from_date,
+                    option=option,
+                    note="All available data will be fetched. from_date is only used for option=0 or option=2",
+                )
+                if self.progress_display:
+                    self.progress_display.print_warning(
+                        f"セットアップモード: from_date({from_date})は無視され、全データを取得します"
+                    )
+
             # Initialize JV-Link
             logger.info("Initializing JV-Link", has_service_key=self._service_key is not None)
             if self.progress_display:
@@ -82,6 +113,7 @@ class HistoricalFetcher(BaseFetcher):
             # Convert dates to fromtime format
             # fromtime format: "YYYYMMDDhhmmss" (single timestamp)
             # JV-Link retrieves data from this timestamp onwards
+            # NOTE: When option=1 (setup mode), fromtime is ignored by JV-Link API
             fromtime = f"{from_date}000000"
 
             # Open data stream
@@ -89,9 +121,14 @@ class HistoricalFetcher(BaseFetcher):
                 "Opening data stream",
                 data_spec=data_spec,
                 from_date=from_date,
+                to_date=to_date,
                 fromtime=fromtime,
                 option=option,
-                note="Retrieves data from fromtime onwards (not a range)",
+                note=(
+                    "option=1: fromtime ignored, fetches all data; "
+                    "option=0/2: retrieves from fromtime onwards; "
+                    "to_date filtering applied in parser"
+                ),
             )
 
             result, read_count, download_count, last_file_timestamp = self.jvlink.jv_open(
@@ -135,8 +172,9 @@ class HistoricalFetcher(BaseFetcher):
                     )
                 self._wait_for_download(download_task_id)
 
-            # Reset statistics
+            # Reset statistics and set total files
             self.reset_statistics()
+            self._total_files = read_count
 
             # Create fetch progress task
             if self.progress_display:
@@ -146,7 +184,7 @@ class HistoricalFetcher(BaseFetcher):
                 )
 
             # Fetch and parse records
-            for data in self._fetch_and_parse(fetch_task_id):
+            for data in self._fetch_and_parse(fetch_task_id, to_date=to_date):
                 yield data
 
             # Log summary
@@ -194,18 +232,32 @@ class HistoricalFetcher(BaseFetcher):
         Args:
             data_spec: Data specification code
             start_date: Start date as datetime
-            end_date: End date as datetime
-            option: JVOpen option
+                        NOTE: Ignored when option=1 (setup mode)
+            end_date: End date as datetime (filters records up to this date)
+            option: JVOpen option:
+                    0=normal (differential update, requires previous setup)
+                    1=setup (full data download, ignores start_date)
+                    2=forced update (differential from last read position)
 
         Yields:
-            Dictionary of parsed record data
+            Dictionary of parsed record data with dates <= end_date
+
+        Note:
+            When option=0 or 2: The JV-Link API retrieves all data from start_date onwards.
+            When option=1 (setup): start_date is ignored and all available data is fetched.
+            Records are filtered client-side to include only those with
+            dates up to and including end_date.
 
         Examples:
             >>> from datetime import datetime
             >>> fetcher = HistoricalFetcher()
             >>> start = datetime(2024, 6, 1)
             >>> end = datetime(2024, 6, 30)
-            >>> for record in fetcher.fetch_with_date_range("RACE", start, end):
+            >>> # Normal differential update
+            >>> for record in fetcher.fetch_with_date_range("RACE", start, end, option=0):
+            ...     pass
+            >>> # Setup mode - start_date ignored
+            >>> for record in fetcher.fetch_with_date_range("RACE", start, end, option=1):
             ...     pass
         """
         from_date = start_date.strftime("%Y%m%d")
@@ -270,8 +322,10 @@ class HistoricalFetcher(BaseFetcher):
                         )
                     # Wait for file system write completion
                     # JV-Link reports download complete but files may not be written to disk yet
-                    logger.info("Waiting for file write completion...")
-                    time.sleep(10)
+                    # 小さなダウンロードでは短い待機時間で十分
+                    wait_time = 2  # 2秒に短縮（元は10秒）
+                    logger.info("Waiting for file write completion...", wait_seconds=wait_time)
+                    time.sleep(wait_time)
                     logger.info("File write wait completed")
                     return  # Download complete
 

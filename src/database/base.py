@@ -173,12 +173,17 @@ class BaseDatabase(ABC):
         """
         pass
 
-    def insert(self, table_name: str, data: Dict[str, Any]) -> int:
+    def insert(self, table_name: str, data: Dict[str, Any], use_replace: bool = True) -> int:
         """Insert single row into table.
+
+        Note: By default uses INSERT OR REPLACE to handle duplicate records.
+        This prevents duplicate data when running imports multiple times.
 
         Args:
             table_name: Name of table
             data: Dictionary mapping column names to values
+            use_replace: If True, use INSERT OR REPLACE (default: True)
+                        If False, use plain INSERT which may fail on duplicates
 
         Returns:
             Number of rows inserted (1 on success)
@@ -195,19 +200,34 @@ class BaseDatabase(ABC):
         # Quote column names using database-specific method
         quoted_columns = [self._quote_identifier(col) for col in columns]
 
-        sql = f"INSERT INTO {table_name} ({', '.join(quoted_columns)}) VALUES ({placeholders})"
+        # Use INSERT OR REPLACE to handle duplicates (UPSERT behavior)
+        # This ensures that running imports multiple times updates existing records
+        # rather than causing constraint violations or creating duplicates
+        insert_clause = "INSERT OR REPLACE INTO" if use_replace else "INSERT INTO"
+        sql = f"{insert_clause} {table_name} ({', '.join(quoted_columns)}) VALUES ({placeholders})"
 
         return self.execute(sql, tuple(values))
 
-    def insert_many(self, table_name: str, data_list: List[Dict[str, Any]]) -> int:
+    def insert_many(self, table_name: str, data_list: List[Dict[str, Any]], use_replace: bool = True) -> int:
         """Insert multiple rows into table.
+
+        Note: By default uses INSERT OR REPLACE to handle duplicate records.
+        This prevents duplicate data when running imports multiple times.
+
+        Duplicate Handling Strategy:
+        - INSERT OR REPLACE acts as UPSERT in SQLite
+        - When a record with the same primary key exists, it is replaced
+        - Without primary keys, all records are inserted (potential duplicates)
+        - This is safe for re-running imports as it updates existing data
 
         Args:
             table_name: Name of table
             data_list: List of dictionaries with same keys
+            use_replace: If True, use INSERT OR REPLACE (default: True)
+                        If False, use plain INSERT which may fail on duplicates
 
         Returns:
-            Number of rows inserted
+            Number of rows inserted/updated
 
         Raises:
             DatabaseError: If insert fails
@@ -221,7 +241,11 @@ class BaseDatabase(ABC):
         # Quote column names using database-specific method
         quoted_columns = [self._quote_identifier(col) for col in columns]
 
-        sql = f"INSERT INTO {table_name} ({', '.join(quoted_columns)}) VALUES ({placeholders})"
+        # Use INSERT OR REPLACE to handle duplicates (UPSERT behavior)
+        # This ensures that running imports multiple times updates existing records
+        # rather than causing constraint violations or creating duplicates
+        insert_clause = "INSERT OR REPLACE INTO" if use_replace else "INSERT INTO"
+        sql = f"{insert_clause} {table_name} ({', '.join(quoted_columns)}) VALUES ({placeholders})"
 
         # Extract values in correct order for each row
         parameters_list = [

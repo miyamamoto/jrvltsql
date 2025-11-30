@@ -101,7 +101,7 @@ class RealtimeFetcher(BaseFetcher):
         try:
             # Initialize JV-Link
             logger.info("Initializing JV-Link", has_service_key=self._service_key is not None)
-            ret = self.jvlink.jv_init(service_key=self._service_key)
+            ret = self.jvlink.jv_init()
             if ret != JV_RT_SUCCESS:
                 raise FetcherError(f"JV-Link initialization failed: {ret}")
 
@@ -138,7 +138,11 @@ class RealtimeFetcher(BaseFetcher):
         except FetcherError:
             raise
         except Exception as e:
-            logger.error("Realtime fetch error", error=str(e))
+            # -114: 契約外エラーはdebugレベル
+            if '-114' in str(e):
+                logger.debug("Realtime fetch skipped (not subscribed)", error=str(e))
+            else:
+                logger.error("Realtime fetch error", error=str(e))
             raise FetcherError(f"Realtime fetch failed: {e}")
         finally:
             self._close_stream()

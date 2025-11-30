@@ -16,6 +16,7 @@ def setup_logging(
     log_file: Optional[str] = None,
     log_to_console: bool = True,
     log_to_file: bool = True,
+    console_level: str = "ERROR",
 ) -> None:
     """Setup logging configuration.
 
@@ -24,6 +25,7 @@ def setup_logging(
         log_file: Path to log file. If None, uses default path
         log_to_console: Whether to log to console
         log_to_file: Whether to log to file
+        console_level: Console log level (default: ERROR - only critical errors)
     """
     # Create logs directory if it doesn't exist
     if log_to_file:
@@ -41,7 +43,7 @@ def setup_logging(
 
     if log_to_console:
         console_handler = logging.StreamHandler(sys.stdout)
-        console_handler.setLevel(logging.INFO)
+        console_handler.setLevel(getattr(logging, console_level.upper()))
         console_formatter = logging.Formatter(
             "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S",
@@ -71,23 +73,35 @@ def setup_logging(
         force=True,
     )
 
-    # Configure structlog
+    # Configure structlog to use stdlib integration (respects handler levels)
     structlog.configure(
         processors=[
             structlog.contextvars.merge_contextvars,
+            structlog.stdlib.filter_by_level,
             structlog.processors.add_log_level,
             structlog.processors.StackInfoRenderer(),
             structlog.dev.set_exc_info,
             structlog.processors.TimeStamper(fmt="iso", utc=False),
-            structlog.dev.ConsoleRenderer() if log_to_console else structlog.processors.JSONRenderer(),
+            structlog.stdlib.PositionalArgumentsFormatter(),
+            structlog.processors.UnicodeDecoder(),
+            structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
         ],
-        wrapper_class=structlog.make_filtering_bound_logger(
-            getattr(logging, level.upper())
-        ),
+        wrapper_class=structlog.stdlib.BoundLogger,
         context_class=dict,
-        logger_factory=structlog.PrintLoggerFactory(),
+        logger_factory=structlog.stdlib.LoggerFactory(),
         cache_logger_on_first_use=True,
     )
+
+    # Update handlers with structlog formatter
+    formatter = structlog.stdlib.ProcessorFormatter(
+        processor=structlog.dev.ConsoleRenderer(),
+        foreign_pre_chain=[
+            structlog.stdlib.add_log_level,
+            structlog.processors.TimeStamper(fmt="iso", utc=False),
+        ],
+    )
+    for handler in handlers:
+        handler.setFormatter(formatter)
 
 
 def get_logger(name: str) -> structlog.BoundLogger:

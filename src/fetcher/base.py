@@ -58,6 +58,8 @@ class BaseFetcher(ABC):
         self._records_fetched = 0
         self._records_parsed = 0
         self._records_failed = 0
+        self._files_processed = 0
+        self._total_files = 0
         self._service_key = service_key
         self.show_progress = show_progress
         self.progress_display: Optional[JVLinkProgressDisplay] = None
@@ -81,11 +83,12 @@ class BaseFetcher(ABC):
         """
         pass
 
-    def _fetch_and_parse(self, task_id: Optional[int] = None) -> Iterator[dict]:
+    def _fetch_and_parse(self, task_id: Optional[int] = None, to_date: Optional[str] = None) -> Iterator[dict]:
         """Internal method to fetch and parse records.
 
         Args:
             task_id: Progress task ID (optional)
+            to_date: End date in YYYYMMDD format (optional, for filtering records)
 
         Yields:
             Dictionary of parsed record data
@@ -113,8 +116,9 @@ class BaseFetcher(ABC):
                     break
 
                 elif ret_code == JV_READ_NO_MORE_DATA:
-                    # File switch (-1)
-                    logger.debug("File switch")
+                    # File switch (-1) - ファイル処理完了
+                    self._files_processed += 1
+                    logger.debug("File switch", files_processed=self._files_processed)
                     continue
 
                 elif ret_code > 0:
@@ -125,6 +129,16 @@ class BaseFetcher(ABC):
                     try:
                         data = self.parser_factory.parse(buff)
                         if data:
+                            # Filter by to_date if specified
+                            if to_date and not self._is_within_date_range(data, to_date):
+                                # Skip records after to_date
+                                logger.debug(
+                                    "Skipping record outside date range",
+                                    record_num=self._records_fetched,
+                                    to_date=to_date,
+                                )
+                                continue
+
                             self._records_parsed += 1
                             yield data
                         else:
@@ -144,25 +158,32 @@ class BaseFetcher(ABC):
 
                     # Update progress display
                     current_time = time.time()
-                    if (
-                        self.progress_display
-                        and task_id is not None
-                        and (current_time - last_update_time) >= update_interval
-                    ):
+                    if (current_time - last_update_time) >= update_interval:
                         elapsed = current_time - self._start_time
                         speed = self._records_fetched / elapsed if elapsed > 0 else 0
 
-                        self.progress_display.update(
-                            task_id,
-                            advance=1,
-                            status=f"{self._records_fetched:,} 件処理中",
+                        # ログに進捗を出力（quickstart.pyで検出用）
+                        logger.info(
+                            "Processing records",
+                            records_fetched=self._records_fetched,
+                            records_parsed=self._records_parsed,
+                            files_processed=self._files_processed,
+                            total_files=self._total_files,
+                            speed=f"{speed:.0f}",
                         )
-                        self.progress_display.update_stats(
-                            fetched=self._records_fetched,
-                            parsed=self._records_parsed,
-                            failed=self._records_failed,
-                            speed=speed,
-                        )
+
+                        if self.progress_display and task_id is not None:
+                            self.progress_display.update(
+                                task_id,
+                                advance=1,
+                                status=f"{self._records_fetched:,} 件処理中",
+                            )
+                            self.progress_display.update_stats(
+                                fetched=self._records_fetched,
+                                parsed=self._records_parsed,
+                                failed=self._records_failed,
+                                speed=speed,
+                            )
                         last_update_time = current_time
 
                 else:
@@ -196,6 +217,42 @@ class BaseFetcher(ABC):
         self._records_fetched = 0
         self._records_parsed = 0
         self._records_failed = 0
+
+    def _is_within_date_range(self, data: dict, to_date: str) -> bool:
+        """Check if a record's date is within the specified range (up to to_date).
+
+        Args:
+            data: Parsed record data dictionary
+            to_date: End date in YYYYMMDD format
+
+        Returns:
+            True if record date <= to_date, False otherwise
+        """
+        # Extract date from record
+        # Most JV-Data records have Year and MonthDay fields
+        year = data.get("Year")
+        month_day = data.get("MonthDay")
+
+        if not year or not month_day:
+            # If date fields are not present, include the record
+            # (don't filter records that don't have date information)
+            return True
+
+        try:
+            # Construct record date as YYYYMMDD
+            record_date = f"{year}{month_day}"
+
+            # Compare as strings (YYYYMMDD format allows string comparison)
+            return record_date <= to_date
+        except Exception as e:
+            logger.warning(
+                "Failed to extract date from record",
+                year=year,
+                month_day=month_day,
+                error=str(e),
+            )
+            # If we can't determine the date, include the record
+            return True
 
     def __repr__(self) -> str:
         """String representation."""

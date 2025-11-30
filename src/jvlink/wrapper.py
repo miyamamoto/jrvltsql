@@ -294,12 +294,20 @@ class JVLinkWrapper:
             if isinstance(jv_result, tuple):
                 result, read_count = jv_result
             else:
-                # Single value means the read count (success case)
-                result = JV_RT_SUCCESS
-                read_count = jv_result
+                # Single value: if negative, it's an error code; if positive/zero, it's read_count
+                if jv_result < 0:
+                    result = jv_result
+                    read_count = 0
+                else:
+                    result = JV_RT_SUCCESS
+                    read_count = jv_result
 
             if result < 0:
-                logger.error("JVRTOpen failed", data_spec=data_spec, error_code=result)
+                # -114: 契約外データ種別（警告レベル、ユーザーには問題なし）
+                if result == -114:
+                    logger.debug("JVRTOpen: data spec not subscribed", data_spec=data_spec, error_code=result)
+                else:
+                    logger.error("JVRTOpen failed", data_spec=data_spec, error_code=result)
                 raise JVLinkError("JVRTOpen failed", error_code=result)
 
             self._is_open = True
