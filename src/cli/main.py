@@ -229,6 +229,15 @@ def fetch(ctx, date_from, date_to, data_spec, jv_option, db, batch_size):
         console.print()
         console.print("[yellow]Note:[/yellow] セットアップモード - 全データ取得（ダイアログが表示されます）")
 
+    # Validate data_spec and option combination
+    from src.jvlink.constants import is_valid_jvopen_combination, JVOPEN_VALID_COMBINATIONS
+    if not is_valid_jvopen_combination(data_spec, jv_option):
+        console.print()
+        console.print(f"[red]Error:[/red] データ種別 '{data_spec}' は option={jv_option} では取得できません")
+        valid_specs = JVOPEN_VALID_COMBINATIONS.get(jv_option, [])
+        console.print(f"       option={jv_option} で取得可能: {', '.join(valid_specs)}")
+        sys.exit(1)
+
     console.print()
 
     try:

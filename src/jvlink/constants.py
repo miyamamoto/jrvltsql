@@ -58,11 +58,49 @@ DATA_SPEC_O4 = "O4"  # 馬単オッズ
 DATA_SPEC_O5 = "O5"  # 3連複オッズ
 DATA_SPEC_O6 = "O6"  # 3連単オッズ
 
-# Real-time Data Specifications
+# Real-time Data Specifications (JVRTOpen用)
 DATA_SPEC_RT_RACE = "0B12"  # 速報レース情報
 DATA_SPEC_RT_WEIGHT = "0B15"  # 速報馬体重
 DATA_SPEC_RT_ODDS = "0B20"  # 速報オッズ
 DATA_SPEC_RT_PAYOUT = "0B31"  # 速報払戻
+
+# JVOpen データ種別とoption対応表
+# Reference: EveryDB2 https://everydb.iwinz.net/edb2_manual/
+# Option: 1=通常データ, 2=今週データ, 3/4=セットアップ
+JVOPEN_VALID_COMBINATIONS = {
+    # Option 1 (通常データ): 全データ種別対応
+    1: ["RACE", "DIFF", "BLOD", "SLOP", "YSCH", "HOSE", "HOYU", "TOKU",
+        "SNAP", "O1", "O2", "O3", "O4", "O5", "O6"],
+    # Option 2 (今週データ): 一部のみ対応
+    2: ["RACE", "DIFF", "SNAP", "O1", "O2", "O3", "O4", "O5", "O6"],
+    # Option 3, 4 (セットアップ): Option 1と同じ
+    3: ["RACE", "DIFF", "BLOD", "SLOP", "YSCH", "HOSE", "HOYU", "TOKU",
+        "SNAP", "O1", "O2", "O3", "O4", "O5", "O6"],
+    4: ["RACE", "DIFF", "BLOD", "SLOP", "YSCH", "HOSE", "HOYU", "TOKU",
+        "SNAP", "O1", "O2", "O3", "O4", "O5", "O6"],
+}
+
+# JVRTOpen データ種別 (速報系・時系列)
+JVRTOPEN_DATA_SPECS = [
+    "0B11", "0B12", "0B13", "0B14", "0B15", "0B16", "0B17",
+    "0B20", "0B30", "0B31", "0B32", "0B33", "0B34", "0B35", "0B36",
+]
+
+
+def is_valid_jvopen_combination(data_spec: str, option: int) -> bool:
+    """Check if data_spec and option combination is valid for JVOpen.
+
+    Args:
+        data_spec: Data specification code (e.g., "RACE", "DIFF")
+        option: JVOpen option (1, 2, 3, or 4)
+
+    Returns:
+        True if the combination is valid, False otherwise
+    """
+    if option not in JVOPEN_VALID_COMBINATIONS:
+        return False
+    return data_spec in JVOPEN_VALID_COMBINATIONS[option]
+
 
 # Record Type Codes (レコード種別)
 RECORD_TYPE_RA = "RA"  # レース詳細
