@@ -163,7 +163,10 @@ INDEXES = {
 
     "NL_TK": [
         # 特別登録馬 (Special Registration Horse)
-        "CREATE INDEX IF NOT EXISTS idx_nl_tk_date ON NL_TK(MakeDate)",
+        # 実際のスキーマにはMakeDateが存在しない
+        "CREATE INDEX IF NOT EXISTS idx_nl_tk_date ON NL_TK(Year, MonthDay)",
+        "CREATE INDEX IF NOT EXISTS idx_nl_tk_venue ON NL_TK(JyoCD)",
+        "CREATE INDEX IF NOT EXISTS idx_nl_tk_race ON NL_TK(RaceNum)",
     ],
 
     "NL_TM": [
@@ -204,11 +207,10 @@ INDEXES = {
     ],
 
     "RT_AV": [
-        # リアルタイム: 場外発売
-        "CREATE INDEX IF NOT EXISTS idx_rt_av_date ON RT_AV(Year, MonthDay)",
-        "CREATE INDEX IF NOT EXISTS idx_rt_av_venue ON RT_AV(JyoCD)",
-        "CREATE INDEX IF NOT EXISTS idx_rt_av_race ON RT_AV(RaceNum)",
-        "CREATE INDEX IF NOT EXISTS idx_rt_av_time ON RT_AV(HappyoTime)",
+        # リアルタイム: 場外発売 (Market Transaction Price)
+        # 実際のスキーマ: KettoNum, SaleHostName, SaleName, Price のみ
+        "CREATE INDEX IF NOT EXISTS idx_rt_av_horse ON RT_AV(KettoNum)",
+        "CREATE INDEX IF NOT EXISTS idx_rt_av_sale ON RT_AV(SaleName)",
     ],
 
     "RT_CC": [
@@ -221,44 +223,46 @@ INDEXES = {
 
     "RT_DM": [
         # リアルタイム: データマイニング
+        # 実際のスキーマにはHappyoTimeが存在しない
         "CREATE INDEX IF NOT EXISTS idx_rt_dm_date ON RT_DM(Year, MonthDay)",
         "CREATE INDEX IF NOT EXISTS idx_rt_dm_venue ON RT_DM(JyoCD)",
         "CREATE INDEX IF NOT EXISTS idx_rt_dm_race ON RT_DM(RaceNum)",
-        "CREATE INDEX IF NOT EXISTS idx_rt_dm_time ON RT_DM(HappyoTime)",
     ],
 
     "RT_O1": [
         # リアルタイム: オッズ (単勝・複勝)
+        # 実際のスキーマにはHappyoTimeが存在しない
         "CREATE INDEX IF NOT EXISTS idx_rt_o1_date ON RT_O1(Year, MonthDay)",
         "CREATE INDEX IF NOT EXISTS idx_rt_o1_venue ON RT_O1(JyoCD)",
         "CREATE INDEX IF NOT EXISTS idx_rt_o1_race ON RT_O1(RaceNum)",
-        "CREATE INDEX IF NOT EXISTS idx_rt_o1_time ON RT_O1(HappyoTime)",
-        # Real-time odds tracking
-        "CREATE INDEX IF NOT EXISTS idx_rt_o1_race_time ON RT_O1(RaceNum, HappyoTime)",
+        "CREATE INDEX IF NOT EXISTS idx_rt_o1_makedate ON RT_O1(MakeDate)",
     ],
 
     "RT_O2": [
         # リアルタイム: オッズ (枠連)
+        # 実際のスキーマにはHappyoTimeが存在しない
         "CREATE INDEX IF NOT EXISTS idx_rt_o2_date ON RT_O2(Year, MonthDay)",
         "CREATE INDEX IF NOT EXISTS idx_rt_o2_venue ON RT_O2(JyoCD)",
         "CREATE INDEX IF NOT EXISTS idx_rt_o2_race ON RT_O2(RaceNum)",
-        "CREATE INDEX IF NOT EXISTS idx_rt_o2_time ON RT_O2(HappyoTime)",
+        "CREATE INDEX IF NOT EXISTS idx_rt_o2_makedate ON RT_O2(MakeDate)",
     ],
 
     "RT_O3": [
         # リアルタイム: オッズ (馬連)
+        # 実際のスキーマにはHappyoTimeが存在しない
         "CREATE INDEX IF NOT EXISTS idx_rt_o3_date ON RT_O3(Year, MonthDay)",
         "CREATE INDEX IF NOT EXISTS idx_rt_o3_venue ON RT_O3(JyoCD)",
         "CREATE INDEX IF NOT EXISTS idx_rt_o3_race ON RT_O3(RaceNum)",
-        "CREATE INDEX IF NOT EXISTS idx_rt_o3_time ON RT_O3(HappyoTime)",
+        "CREATE INDEX IF NOT EXISTS idx_rt_o3_makedate ON RT_O3(MakeDate)",
     ],
 
     "RT_O4": [
         # リアルタイム: オッズ (ワイド)
+        # 実際のスキーマにはHappyoTimeが存在しない
         "CREATE INDEX IF NOT EXISTS idx_rt_o4_date ON RT_O4(Year, MonthDay)",
         "CREATE INDEX IF NOT EXISTS idx_rt_o4_venue ON RT_O4(JyoCD)",
         "CREATE INDEX IF NOT EXISTS idx_rt_o4_race ON RT_O4(RaceNum)",
-        "CREATE INDEX IF NOT EXISTS idx_rt_o4_time ON RT_O4(HappyoTime)",
+        "CREATE INDEX IF NOT EXISTS idx_rt_o4_makedate ON RT_O4(MakeDate)",
     ],
 
     "RT_TC": [
@@ -271,10 +275,10 @@ INDEXES = {
 
     "RT_TM": [
         # リアルタイム: データマイニング (対戦型)
+        # 実際のスキーマにはHappyoTimeが存在しない
         "CREATE INDEX IF NOT EXISTS idx_rt_tm_date ON RT_TM(Year, MonthDay)",
         "CREATE INDEX IF NOT EXISTS idx_rt_tm_venue ON RT_TM(JyoCD)",
         "CREATE INDEX IF NOT EXISTS idx_rt_tm_race ON RT_TM(RaceNum)",
-        "CREATE INDEX IF NOT EXISTS idx_rt_tm_time ON RT_TM(HappyoTime)",
     ],
 
     "RT_WH": [

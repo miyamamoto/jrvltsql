@@ -8,6 +8,32 @@ JV_RT_FILE_NOT_FOUND = -3  # ファイルが見つからない
 JV_RT_INVALID_PARAMETER = -4  # 無効なパラメータ
 JV_RT_DOWNLOAD_FAILED = -5  # ダウンロード失敗
 
+# Service Key Related Error Codes
+JV_RT_SERVICE_KEY_NOT_SET = -100  # サービスキー未設定
+JV_RT_SERVICE_KEY_INVALID = -101  # サービスキーが無効
+JV_RT_SERVICE_KEY_EXPIRED = -102  # サービスキー有効期限切れ
+JV_RT_SERVICE_UNAVAILABLE = -103  # サービス利用不可
+
+# Data Specification Error Codes
+JV_RT_UNSUBSCRIBED_DATA = -111  # 契約外データ種別
+JV_RT_UNSUBSCRIBED_DATA_WARNING = -114  # 契約外データ種別（警告レベル）
+JV_RT_DATA_SPEC_UNUSED = -115  # データ種別未使用
+
+# System Error Codes
+JV_RT_DATABASE_ERROR = -201  # データベースエラー
+JV_RT_FILE_ERROR = -202  # ファイルエラー
+JV_RT_OTHER_ERROR = -203  # その他エラー
+
+# Download Status Codes
+JV_RT_DOWNLOADING = -301  # ダウンロード中
+JV_RT_DOWNLOAD_WAITING = -302  # ダウンロード待ち
+
+# Internal Error Codes
+JV_RT_INTERNAL_ERROR = -401  # 内部エラー
+
+# Resource Error Codes
+JV_RT_OUT_OF_MEMORY = -501  # メモリ不足
+
 # JVRead Return Codes
 JV_READ_SUCCESS = 0  # 読み込み成功（データあり）
 JV_READ_NO_MORE_DATA = -1  # これ以上データなし
@@ -157,6 +183,38 @@ BUFFER_SIZE_JVREAD = 50000  # JVRead buffer size (bytes)
 MAX_RECORD_LENGTH = 20000  # Maximum record length
 
 
+# Error Messages Dictionary
+ERROR_MESSAGES = {
+    # Success and Basic Errors
+    0: "成功",
+    -1: "失敗",
+    -2: "データなし",
+    -3: "ファイルが見つかりません",
+    -4: "無効なパラメータです",
+    -5: "ダウンロードに失敗しました",
+    # Service Key Related Errors
+    -100: "サービスキーが設定されていません",
+    -101: "サービスキーが無効です",
+    -102: "サービスキーの有効期限が切れています",
+    -103: "サービスが利用できません",
+    # Data Specification Errors
+    -111: "契約外のデータ種別です",
+    -114: "契約外のデータ種別です（警告）",
+    -115: "使用されていないデータ種別です",
+    # System Errors
+    -201: "データベースエラーが発生しました",
+    -202: "ファイルエラーが発生しました",
+    -203: "その他のエラーが発生しました",
+    # Download Status
+    -301: "ダウンロード中です",
+    -302: "ダウンロード待ちです",
+    # Internal Errors
+    -401: "内部エラーが発生しました",
+    # Resource Errors
+    -501: "メモリが不足しています",
+}
+
+
 def get_error_message(error_code: int) -> str:
     """Get error message for JV-Link return code.
 
@@ -164,20 +222,9 @@ def get_error_message(error_code: int) -> str:
         error_code: JV-Link return code
 
     Returns:
-        Error message string
+        Error message string in Japanese
     """
-    error_messages = {
-        JV_RT_SUCCESS: "Success",
-        JV_RT_ERROR: "Error occurred",
-        JV_RT_NO_MORE_DATA: "No more data available",
-        JV_RT_FILE_NOT_FOUND: "File not found",
-        JV_RT_INVALID_PARAMETER: "Invalid parameter",
-        JV_RT_DOWNLOAD_FAILED: "Download failed",
-        JV_READ_SUCCESS: "Read success",
-        JV_READ_NO_MORE_DATA: "No more data to read",
-        JV_READ_ERROR: "Read error",
-    }
-    return error_messages.get(error_code, f"Unknown error code: {error_code}")
+    return ERROR_MESSAGES.get(error_code, f"不明なエラーコード: {error_code}")
 
 
 def get_track_name(track_code: str) -> str:

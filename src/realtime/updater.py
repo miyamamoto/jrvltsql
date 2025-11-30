@@ -217,6 +217,51 @@ class RealtimeUpdater:
                 "error": str(e),
             }
 
+    def _get_primary_keys(self, table_name: str) -> list:
+        """Get primary key columns for a table.
+
+        Args:
+            table_name: Table name (e.g., "RT_RA", "RT_SE")
+
+        Returns:
+            List of primary key column names
+
+        Note:
+            Primary key definitions are based on schema.py table definitions.
+            Tables without explicit primary keys return empty list.
+        """
+        PRIMARY_KEY_MAP = {
+            # Race data - standard race identifier
+            "RT_RA": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum"],
+            "RT_SE": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "Umaban"],
+            "RT_HR": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum"],
+
+            # Odds data - race identifier + Umaban or Kumi
+            "RT_O1": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "Umaban"],
+            "RT_O2": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "Kumi"],
+            "RT_O3": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "Kumi"],
+            "RT_O4": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "Kumi"],
+            "RT_O5": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "Kumi"],
+            "RT_O6": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "Kumi"],
+
+            # Vote data
+            "RT_H1": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum"],
+            "RT_H6": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "Kumi"],
+
+            # Tables without explicit PRIMARY KEY in schema
+            # These tables don't have PRIMARY KEY constraints defined
+            "RT_WH": [],  # Baba state - no primary key
+            "RT_WE": [],  # Kaisai info - no primary key
+            "RT_DM": [],  # Data mining (time type) - no primary key
+            "RT_TM": [],  # Data mining (match type) - no primary key
+            "RT_AV": [],  # Sale info - no primary key
+            "RT_JC": [],  # Jockey results - no primary key
+            "RT_TC": [],  # Trainer results - no primary key
+            "RT_CC": [],  # Horse results - no primary key
+        }
+
+        return PRIMARY_KEY_MAP.get(table_name, [])
+
     def _handle_delete_record(self, table_name: str, data: Dict) -> Dict:
         """Handle record deletion.
 
@@ -228,31 +273,62 @@ class RealtimeUpdater:
             Result dictionary with operation details
 
         Note:
-            Instead of physical deletion, we set a delete flag if available,
-            or perform physical deletion based on primary key.
+            Performs physical deletion based on primary key.
+            For tables without primary keys, deletion is not supported.
         """
         try:
+            # Get primary key columns for this table
+            primary_keys = self._get_primary_keys(table_name)
+
+            if not primary_keys:
+                logger.warning(
+                    f"No primary key defined for {table_name}, deletion not supported"
+                )
+                return {
+                    "operation": "delete",
+                    "table": table_name,
+                    "record_type": data.get("RecordSpec"),
+                    "success": False,
+                    "error": "No primary key defined for table",
+                }
+
             # Build WHERE clause from primary key fields
-            # For now, we'll use a simplified approach
-            # TODO: Implement proper primary key detection
+            where_conditions = []
+            where_values = []
 
-            # Option 1: Set delete flag (if table has DeleteFlag column)
-            # Option 2: Physical deletion
+            for key in primary_keys:
+                if key in data:
+                    where_conditions.append(f"{key} = ?")
+                    where_values.append(data[key])
+                else:
+                    logger.warning(
+                        f"Primary key column {key} not found in data for {table_name}"
+                    )
 
-            # For simplicity, we'll do physical deletion based on key fields
-            # This is a simplified implementation
+            # Check if we have all required primary key values
+            if not where_conditions:
+                return {
+                    "operation": "delete",
+                    "table": table_name,
+                    "record_type": data.get("RecordSpec"),
+                    "success": False,
+                    "error": "Missing primary key values in data",
+                }
 
-            logger.warning(
-                f"Delete operation not fully implemented for {table_name}",
-                data=data,
+            # Execute DELETE statement
+            sql = f"DELETE FROM {table_name} WHERE {' AND '.join(where_conditions)}"
+            self.database.execute(sql, tuple(where_values))
+
+            logger.debug(
+                f"Deleted record from {table_name}",
+                where_values=where_values,
             )
 
             return {
                 "operation": "delete",
                 "table": table_name,
                 "record_type": data.get("RecordSpec"),
-                "success": False,
-                "error": "Delete operation not fully implemented",
+                "success": True,
             }
 
         except Exception as e:

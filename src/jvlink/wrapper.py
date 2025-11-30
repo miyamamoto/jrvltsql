@@ -385,9 +385,15 @@ class JVLinkWrapper:
                 # Convert to bytes for consistent handling
                 try:
                     data_bytes = buff_str.encode(ENCODING_JVDATA) if buff_str else b""
-                except Exception:
-                    # If encoding fails, try with error handling
-                    data_bytes = buff_str.encode('shift_jis', errors='ignore') if buff_str else b""
+                except UnicodeEncodeError as e:
+                    logger.warning(
+                        "Encoding error, using fallback",
+                        error=str(e),
+                        position=e.start if hasattr(e, 'start') else None,
+                        character=e.object[e.start:e.end] if hasattr(e, 'start') and hasattr(e, 'end') else None,
+                    )
+                    # Use 'replace' to make data loss visible instead of silently ignoring
+                    data_bytes = buff_str.encode('shift_jis', errors='replace') if buff_str else b""
 
                 logger.debug("JVRead success", data_len=result, actual_len=len(data_bytes), filename=filename_str)
                 return result, data_bytes, filename_str
