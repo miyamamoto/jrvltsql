@@ -160,7 +160,7 @@ class UMParser:
             result["RuikeiSyutokuSyogai"] = self.decode_field(data[1097:1106])
 
             # 47. レコード区切 (位置:1107, 長さ:2)
-            result["reserved1"] = self.decode_field(data[1106:1108])
+            result["Reserved_1107"] = self.decode_field(data[1106:1108])
 
             return result
 

@@ -67,40 +67,38 @@ class BRParser:
             result["MakeDate"] = self.decode_field(data[3:11])
 
             # 4. 生産者コード (位置:12, 長さ:8)
-            result["BreederName_Co"] = self.decode_field(data[11:19])
+            result["BreederCode"] = self.decode_field(data[11:19])
 
             # 5. 生産者名(法人格有) (位置:20, 長さ:72)
-            result["BreederName"] = self.decode_field(data[19:91])
+            result["BreederName_Co"] = self.decode_field(data[19:91])
 
             # 6. 生産者名(法人格無) (位置:92, 長さ:72)
-            result["BreederNameKana"] = self.decode_field(data[91:163])
+            result["BreederName"] = self.decode_field(data[91:163])
 
             # 7. 生産者名半角ｶﾅ (位置:164, 長さ:72)
-            result["BreederNameEng"] = self.decode_field(data[163:235])
+            result["BreederNameKana"] = self.decode_field(data[163:235])
 
             # 8. 生産者名欧字 (位置:236, 長さ:168)
-            result["Address"] = self.decode_field(data[235:403])
+            result["BreederNameEng"] = self.decode_field(data[235:403])
 
             # 9. 生産者住所自治省名 (位置:404, 長さ:20)
-            result["H_SetYear"] = self.decode_field(data[403:423])
+            result["Address"] = self.decode_field(data[403:423])
 
             # 10. <本年･累計成績情報> (位置:424, 長さ:0)
-            result["H_HonSyokinTotal"] = self.decode_field(data[423:423])
-
             # 11. 　　設定年 (位置:424, 長さ:4)
-            result["H_FukaSyokin"] = self.decode_field(data[423:427])
+            result["SetYear"] = self.decode_field(data[423:427])
 
             # 12. 　　本賞金合計 (位置:428, 長さ:10)
-            result["H_ChakuKaisu1"] = self.decode_field(data[427:437])
+            result["HonSyokinTotal"] = self.decode_field(data[427:437])
 
             # 13. 　　付加賞金合計 (位置:438, 長さ:10)
-            result["H_ChakuKaisu2"] = self.decode_field(data[437:447])
+            result["FukaSyokin"] = self.decode_field(data[437:447])
 
             # 14. 　　着回数 (位置:448, 長さ:6)
-            result["H_ChakuKaisu3"] = self.decode_field(data[447:453])
+            result["ChakuKaisu"] = self.decode_field(data[447:453])
 
             # 15. レコード区切 (位置:454, 長さ:2)
-            result["H_ChakuKaisu4"] = self.decode_field(data[453:455])
+            result["Reserved_454"] = self.decode_field(data[453:455])
 
             return result
 

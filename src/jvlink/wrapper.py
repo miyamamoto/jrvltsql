@@ -204,14 +204,6 @@ class JVLinkWrapper:
             # Call with only IN parameters (dataspec, fromtime, option)
             jv_result = self._jvlink.JVOpen(data_spec, fromtime, option)
 
-            # Debug: log the actual return value
-            logger.debug(
-                "JVOpen raw result",
-                jv_result=jv_result,
-                type=type(jv_result).__name__,
-                length=len(jv_result) if isinstance(jv_result, tuple) else "N/A",
-            )
-
             # Handle return value
             if isinstance(jv_result, tuple):
                 if len(jv_result) == 4:
@@ -395,17 +387,17 @@ class JVLinkWrapper:
                     # Use 'replace' to make data loss visible instead of silently ignoring
                     data_bytes = buff_str.encode('shift_jis', errors='replace') if buff_str else b""
 
-                logger.debug("JVRead success", data_len=result, actual_len=len(data_bytes), filename=filename_str)
+                # Note: Per-record debug logging removed to reduce verbosity
                 return result, data_bytes, filename_str
 
             elif result == JV_READ_SUCCESS:
                 # Read complete (0)
-                logger.debug("JVRead: Complete")
+                # Note: Debug log removed - this is logged at higher level in fetcher
                 return result, None, None
 
             elif result == JV_READ_NO_MORE_DATA:
                 # File switch (-1)
-                logger.debug("JVRead: File switch")
+                # Note: Debug log removed - this is very frequent during data fetching
                 return result, None, None
 
             else:

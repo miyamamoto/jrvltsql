@@ -259,8 +259,8 @@ class DataImporter:
             return
 
         try:
-            # Insert batch
-            rows = self.database.insert_many(table_name, batch)
+            # Insert batch using INSERT OR REPLACE
+            rows = self.database.insert_many(table_name, batch, use_replace=True)
 
             self._records_imported += rows
             self._batches_processed += 1
@@ -276,28 +276,45 @@ class DataImporter:
             )
 
         except DatabaseError as e:
-            # Try inserting one by one on batch failure
+            # Rollback failed batch transaction
             logger.warning(
-                f"Batch insert failed, trying individual inserts",
+                f"Batch insert failed, rolling back and trying individual inserts",
                 table=table_name,
                 error=str(e),
             )
 
+            try:
+                self.database.rollback()
+            except Exception as rollback_error:
+                logger.error(
+                    "Rollback failed",
+                    table=table_name,
+                    error=str(rollback_error),
+                )
+
+            # Try inserting one by one on batch failure
+            success_count = 0
+            fail_count = 0
+
             for record in batch:
                 try:
-                    self.database.insert(table_name, record)
-                    self._records_imported += 1
+                    self.database.insert(table_name, record, use_replace=True)
+                    success_count += 1
 
-                    if auto_commit:
-                        self.database.commit()
-
-                except DatabaseError as e:
-                    self._records_failed += 1
+                except DatabaseError as record_error:
+                    fail_count += 1
                     logger.error(
                         "Failed to insert record",
                         table=table_name,
-                        error=str(e),
+                        error=str(record_error),
                     )
+
+            self._records_imported += success_count
+            self._records_failed += fail_count
+
+            # Only commit if we had successful individual inserts
+            if auto_commit and success_count > 0:
+                self.database.commit()
 
     def import_single_record(
         self,
@@ -329,7 +346,7 @@ class DataImporter:
             return False
 
         try:
-            self.database.insert(table_name, record)
+            self.database.insert(table_name, record, use_replace=True)
             self._records_imported += 1
 
             if auto_commit:

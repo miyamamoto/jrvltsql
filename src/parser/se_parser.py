@@ -130,7 +130,7 @@ class SEParser:
             result["Fukusyoku"] = self.decode_field(data[168:228])
 
             # 25. 予備 (位置:229, 長さ:60)
-            result["reserved1"] = self.decode_field(data[228:288])
+            result["Reserved_229"] = self.decode_field(data[228:288])
 
             # 26. 負担重量 (位置:289, 長さ:3)
             result["Futan"] = self.decode_field(data[288:291])
@@ -142,7 +142,7 @@ class SEParser:
             result["Blinker"] = self.decode_field(data[294:295])
 
             # 29. 予備 (位置:296, 長さ:1)
-            result["reserved2"] = self.decode_field(data[295:296])
+            result["Reserved_296"] = self.decode_field(data[295:296])
 
             # 30. 騎手コード (位置:297, 長さ:5)
             result["KisyuCode"] = self.decode_field(data[296:301])
@@ -223,10 +223,10 @@ class SEParser:
             result["Fukasyokin"] = self.decode_field(data[373:381])
 
             # 56. 予備 (位置:382, 長さ:3)
-            result["reserved3"] = self.decode_field(data[381:384])
+            result["Reserved_382"] = self.decode_field(data[381:384])
 
             # 57. 予備 (位置:385, 長さ:3)
-            result["reserved4"] = self.decode_field(data[384:387])
+            result["Reserved_385"] = self.decode_field(data[384:387])
 
             # 58. 後4ハロンタイム (位置:388, 長さ:3)
             result["HaronTimeL4"] = self.decode_field(data[387:390])
@@ -266,7 +266,7 @@ class SEParser:
             result["KyakusituKubun"] = self.decode_field(data[460:461])
 
             # 71. レコード区切 (位置:462, 長さ:2)
-            result["reserved5"] = self.decode_field(data[461:463])
+            result["Reserved_462"] = self.decode_field(data[461:463])
 
             return result
 

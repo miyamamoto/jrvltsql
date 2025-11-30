@@ -118,7 +118,7 @@ class BaseFetcher(ABC):
                 elif ret_code == JV_READ_NO_MORE_DATA:
                     # File switch (-1) - ファイル処理完了
                     self._files_processed += 1
-                    logger.debug("File switch", files_processed=self._files_processed)
+                    # Note: File switch is very frequent, so no debug logging here
                     continue
 
                 elif ret_code > 0:

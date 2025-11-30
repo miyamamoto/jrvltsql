@@ -122,14 +122,8 @@ class RealtimeUpdater:
                 or "1"
             )
 
-            logger.debug(
-                "Processing record",
-                record_type=record_type,
-                table=table_name,
-                kubun=head_data_kubun,
-            )
-
             # Process based on headDataKubun
+            # Note: Per-record debug logging removed to reduce verbosity
             if head_data_kubun == DATA_KUBUN_NEW:
                 return self._handle_new_record(table_name, parsed_data)
             elif head_data_kubun == DATA_KUBUN_UPDATE:
@@ -162,7 +156,7 @@ class RealtimeUpdater:
             # TODO: Implement UPSERT to handle duplicates
             self.database.insert(table_name, clean_data)
 
-            logger.debug(f"Inserted new record into {table_name}")
+            # Note: Per-record debug logging removed to reduce verbosity during real-time processing
 
             return {
                 "operation": "insert",
@@ -199,7 +193,7 @@ class RealtimeUpdater:
             # For now, use INSERT (may cause duplicate key error)
             self.database.insert(table_name, clean_data)
 
-            logger.debug(f"Updated record in {table_name}")
+            # Note: Per-record debug logging removed to reduce verbosity during real-time processing
 
             return {
                 "operation": "update",
@@ -319,10 +313,7 @@ class RealtimeUpdater:
             sql = f"DELETE FROM {table_name} WHERE {' AND '.join(where_conditions)}"
             self.database.execute(sql, tuple(where_values))
 
-            logger.debug(
-                f"Deleted record from {table_name}",
-                where_values=where_values,
-            )
+            # Note: Per-record debug logging removed to reduce verbosity during real-time processing
 
             return {
                 "operation": "delete",

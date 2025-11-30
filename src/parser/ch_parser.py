@@ -67,181 +67,173 @@ class CHParser:
             result["MakeDate"] = self.decode_field(data[3:11])
 
             # 4. 調教師コード (位置:12, 長さ:5)
-            result["DelKubun"] = self.decode_field(data[11:16])
+            result["ChokyosiCode"] = self.decode_field(data[11:16])
 
             # 5. 調教師抹消区分 (位置:17, 長さ:1)
-            result["IssueDate"] = self.decode_field(data[16:17])
+            result["DelKubun"] = self.decode_field(data[16:17])
 
             # 6. 調教師免許交付年月日 (位置:18, 長さ:8)
-            result["DelDate"] = self.decode_field(data[17:25])
+            result["IssueDate"] = self.decode_field(data[17:25])
 
             # 7. 調教師免許抹消年月日 (位置:26, 長さ:8)
-            result["BirthDate"] = self.decode_field(data[25:33])
+            result["DelDate"] = self.decode_field(data[25:33])
 
             # 8. 生年月日 (位置:34, 長さ:8)
-            result["ChokyosiName"] = self.decode_field(data[33:41])
+            result["BirthDate"] = self.decode_field(data[33:41])
 
             # 9. 調教師名 (位置:42, 長さ:34)
-            result["ChokyosiNameKana"] = self.decode_field(data[41:75])
+            result["ChokyosiName"] = self.decode_field(data[41:75])
 
             # 10. 調教師名半角ｶﾅ (位置:76, 長さ:30)
-            result["ChokyosiRyakusyo"] = self.decode_field(data[75:105])
+            result["ChokyosiNameKana"] = self.decode_field(data[75:105])
 
             # 11. 調教師名略称 (位置:106, 長さ:8)
-            result["ChokyosiNameEng"] = self.decode_field(data[105:113])
+            result["ChokyosiRyakusyo"] = self.decode_field(data[105:113])
 
             # 12. 調教師名欧字 (位置:114, 長さ:80)
-            result["SexCD"] = self.decode_field(data[113:193])
+            result["ChokyosiNameEng"] = self.decode_field(data[113:193])
 
             # 13. 性別区分 (位置:194, 長さ:1)
-            result["TozaiCD"] = self.decode_field(data[193:194])
+            result["SexCD"] = self.decode_field(data[193:194])
 
             # 14. 調教師東西所属コード (位置:195, 長さ:1)
-            result["Syotai"] = self.decode_field(data[194:195])
+            result["TozaiCD"] = self.decode_field(data[194:195])
 
             # 15. 招待地域名 (位置:196, 長さ:20)
-            result["SaikinJyusyo1SaikinJyusyoid"] = self.decode_field(data[195:215])
+            result["Syotai"] = self.decode_field(data[195:215])
 
             # 16. <最近重賞勝利情報> (位置:216, 長さ:0)
-            result["SaikinJyusyo1Hondai"] = self.decode_field(data[215:215])
-
             # 17. 　　年月日場回日R (位置:216, 長さ:16)
-            result["SaikinJyusyo1Ryakusyo10"] = self.decode_field(data[215:231])
+            result["SaikinJyusyo1_id"] = self.decode_field(data[215:231])
 
             # 18. 　　競走名本題 (位置:232, 長さ:60)
-            result["SaikinJyusyo1Ryakusyo6"] = self.decode_field(data[231:291])
+            result["SaikinJyusyo1_Hondai"] = self.decode_field(data[231:291])
 
             # 19. 　　競走名略称10文字 (位置:292, 長さ:20)
-            result["SaikinJyusyo1Ryakusyo3"] = self.decode_field(data[291:311])
+            result["SaikinJyusyo1_Ryakusyo10"] = self.decode_field(data[291:311])
 
             # 20. 　　競走名略称6文字 (位置:312, 長さ:12)
-            result["SaikinJyusyo1GradeCD"] = self.decode_field(data[311:323])
+            result["SaikinJyusyo1_Ryakusyo6"] = self.decode_field(data[311:323])
 
             # 21. 　　競走名略称3文字 (位置:324, 長さ:6)
-            result["SaikinJyusyo1SyussoTosu"] = self.decode_field(data[323:329])
+            result["SaikinJyusyo1_Ryakusyo3"] = self.decode_field(data[323:329])
 
             # 22. 　　グレードコード (位置:330, 長さ:1)
-            result["SaikinJyusyo1KettoNum"] = self.decode_field(data[329:330])
+            result["SaikinJyusyo1_GradeCD"] = self.decode_field(data[329:330])
 
             # 23. 　　出走頭数 (位置:331, 長さ:2)
-            result["SaikinJyusyo1Bamei"] = self.decode_field(data[330:332])
+            result["SaikinJyusyo1_SyussoTosu"] = self.decode_field(data[330:332])
 
             # 24. 　　血統登録番号 (位置:333, 長さ:10)
-            result["SaikinJyusyo2SaikinJyusyoid"] = self.decode_field(data[332:342])
+            result["SaikinJyusyo1_KettoNum"] = self.decode_field(data[332:342])
 
             # 25. 　　馬名 (位置:343, 長さ:36)
-            result["SaikinJyusyo2Hondai"] = self.decode_field(data[342:378])
+            result["SaikinJyusyo1_Bamei"] = self.decode_field(data[342:378])
 
             # 26. <本年･前年･累計成績情報> (位置:379, 長さ:0)
-            result["SaikinJyusyo2Ryakusyo10"] = self.decode_field(data[378:378])
-
             # 27. 　　設定年 (位置:379, 長さ:4)
-            result["SaikinJyusyo2Ryakusyo6"] = self.decode_field(data[378:382])
+            result["SetYear"] = self.decode_field(data[378:382])
 
             # 28. 　　平地本賞金合計 (位置:383, 長さ:10)
-            result["SaikinJyusyo2Ryakusyo3"] = self.decode_field(data[382:392])
+            result["HonSyokinH"] = self.decode_field(data[382:392])
 
             # 29. 　　障害本賞金合計 (位置:393, 長さ:10)
-            result["SaikinJyusyo2GradeCD"] = self.decode_field(data[392:402])
+            result["HonSyokinS"] = self.decode_field(data[392:402])
 
             # 30. 　　平地付加賞金合計 (位置:403, 長さ:10)
-            result["SaikinJyusyo2SyussoTosu"] = self.decode_field(data[402:412])
+            result["FukaSyokinH"] = self.decode_field(data[402:412])
 
             # 31. 　　障害付加賞金合計 (位置:413, 長さ:10)
-            result["SaikinJyusyo2KettoNum"] = self.decode_field(data[412:422])
+            result["FukaSyokinS"] = self.decode_field(data[412:422])
 
             # 32. 　　平地着回数 (位置:423, 長さ:6)
-            result["SaikinJyusyo2Bamei"] = self.decode_field(data[422:428])
+            result["ChakuKaisuH"] = self.decode_field(data[422:428])
 
             # 33. 　　障害着回数 (位置:429, 長さ:6)
-            result["SaikinJyusyo3SaikinJyusyoid"] = self.decode_field(data[428:434])
+            result["ChakuKaisuS"] = self.decode_field(data[428:434])
 
             # 34. 　　<競馬場別着回数> (位置:435, 長さ:0)
-            result["SaikinJyusyo3Hondai"] = self.decode_field(data[434:434])
-
             # 35. 　　札幌平地着回数 (位置:435, 長さ:6)
-            result["SaikinJyusyo3Ryakusyo10"] = self.decode_field(data[434:440])
+            result["ChakuKaisu01H"] = self.decode_field(data[434:440])
 
             # 36. 　　札幌障害着回数 (位置:441, 長さ:6)
-            result["SaikinJyusyo3Ryakusyo6"] = self.decode_field(data[440:446])
+            result["ChakuKaisu01S"] = self.decode_field(data[440:446])
 
             # 37. 　　函館平地着回数 (位置:447, 長さ:6)
-            result["SaikinJyusyo3Ryakusyo3"] = self.decode_field(data[446:452])
+            result["ChakuKaisu02H"] = self.decode_field(data[446:452])
 
             # 38. 　　函館障害着回数 (位置:453, 長さ:6)
-            result["SaikinJyusyo3GradeCD"] = self.decode_field(data[452:458])
+            result["ChakuKaisu02S"] = self.decode_field(data[452:458])
 
             # 39. 　　福島平地着回数 (位置:459, 長さ:6)
-            result["SaikinJyusyo3SyussoTosu"] = self.decode_field(data[458:464])
+            result["ChakuKaisu03H"] = self.decode_field(data[458:464])
 
             # 40. 　　福島障害着回数 (位置:465, 長さ:6)
-            result["SaikinJyusyo3KettoNum"] = self.decode_field(data[464:470])
+            result["ChakuKaisu03S"] = self.decode_field(data[464:470])
 
             # 41. 　　新潟平地着回数 (位置:471, 長さ:6)
-            result["Field41"] = self.decode_field(data[470:476])
+            result["ChakuKaisu04H"] = self.decode_field(data[470:476])
 
             # 42. 　　新潟障害着回数 (位置:477, 長さ:6)
-            result["Field42"] = self.decode_field(data[476:482])
+            result["ChakuKaisu04S"] = self.decode_field(data[476:482])
 
             # 43. 　　東京平地着回数 (位置:483, 長さ:6)
-            result["Field43"] = self.decode_field(data[482:488])
+            result["ChakuKaisu05H"] = self.decode_field(data[482:488])
 
             # 44. 　　東京障害着回数 (位置:489, 長さ:6)
-            result["Field44"] = self.decode_field(data[488:494])
+            result["ChakuKaisu05S"] = self.decode_field(data[488:494])
 
             # 45. 　　中山平地着回数 (位置:495, 長さ:6)
-            result["Field45"] = self.decode_field(data[494:500])
+            result["ChakuKaisu06H"] = self.decode_field(data[494:500])
 
             # 46. 　　中山障害着回数 (位置:501, 長さ:6)
-            result["Field46"] = self.decode_field(data[500:506])
+            result["ChakuKaisu06S"] = self.decode_field(data[500:506])
 
             # 47. 　　中京平地着回数 (位置:507, 長さ:6)
-            result["Field47"] = self.decode_field(data[506:512])
+            result["ChakuKaisu07H"] = self.decode_field(data[506:512])
 
             # 48. 　　中京障害着回数 (位置:513, 長さ:6)
-            result["Field48"] = self.decode_field(data[512:518])
+            result["ChakuKaisu07S"] = self.decode_field(data[512:518])
 
             # 49. 　　京都平地着回数 (位置:519, 長さ:6)
-            result["Field49"] = self.decode_field(data[518:524])
+            result["ChakuKaisu08H"] = self.decode_field(data[518:524])
 
             # 50. 　　京都障害着回数 (位置:525, 長さ:6)
-            result["Field50"] = self.decode_field(data[524:530])
+            result["ChakuKaisu08S"] = self.decode_field(data[524:530])
 
             # 51. 　　阪神平地着回数 (位置:531, 長さ:6)
-            result["Field51"] = self.decode_field(data[530:536])
+            result["ChakuKaisu09H"] = self.decode_field(data[530:536])
 
             # 52. 　　阪神障害着回数 (位置:537, 長さ:6)
-            result["Field52"] = self.decode_field(data[536:542])
+            result["ChakuKaisu09S"] = self.decode_field(data[536:542])
 
             # 53. 　　小倉平地着回数 (位置:543, 長さ:6)
-            result["Field53"] = self.decode_field(data[542:548])
+            result["ChakuKaisu10H"] = self.decode_field(data[542:548])
 
             # 54. 　　小倉障害着回数 (位置:549, 長さ:6)
-            result["Field54"] = self.decode_field(data[548:554])
+            result["ChakuKaisu10S"] = self.decode_field(data[548:554])
 
             # 55. 　　<距離別着回数> (位置:555, 長さ:0)
-            result["Field55"] = self.decode_field(data[554:554])
-
             # 56. 　　芝16下・着回数 (位置:555, 長さ:6)
-            result["Field56"] = self.decode_field(data[554:560])
+            result["ChakuKaisuSiba1"] = self.decode_field(data[554:560])
 
             # 57. 　　芝22下・着回数 (位置:561, 長さ:6)
-            result["Field57"] = self.decode_field(data[560:566])
+            result["ChakuKaisuSiba2"] = self.decode_field(data[560:566])
 
             # 58. 　　芝22超・着回数 (位置:567, 長さ:6)
-            result["Field58"] = self.decode_field(data[566:572])
+            result["ChakuKaisuSiba3"] = self.decode_field(data[566:572])
 
             # 59. 　　ダ16下・着回数 (位置:573, 長さ:6)
-            result["Field59"] = self.decode_field(data[572:578])
+            result["ChakuKaisuDirt1"] = self.decode_field(data[572:578])
 
             # 60. 　　ダ22下・着回数 (位置:579, 長さ:6)
-            result["Field60"] = self.decode_field(data[578:584])
+            result["ChakuKaisuDirt2"] = self.decode_field(data[578:584])
 
             # 61. 　　ダ22超・着回数 (位置:585, 長さ:6)
-            result["Field61"] = self.decode_field(data[584:590])
+            result["ChakuKaisuDirt3"] = self.decode_field(data[584:590])
 
             # 62. レコード区切 (位置:591, 長さ:2)
-            result["Field62"] = self.decode_field(data[590:592])
+            result["Reserved_591"] = self.decode_field(data[590:592])
 
             return result
 

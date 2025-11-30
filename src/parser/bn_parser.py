@@ -67,40 +67,38 @@ class BNParser:
             result["MakeDate"] = self.decode_field(data[3:11])
 
             # 4. 馬主コード (位置:12, 長さ:6)
-            result["BanusiName"] = self.decode_field(data[11:17])
+            result["BanusiCode"] = self.decode_field(data[11:17])
 
             # 5. 馬主名(法人格有) (位置:18, 長さ:64)
             result["BanusiName_Co"] = self.decode_field(data[17:81])
 
             # 6. 馬主名(法人格無) (位置:82, 長さ:64)
-            result["BanusiNameKana"] = self.decode_field(data[81:145])
+            result["BanusiName"] = self.decode_field(data[81:145])
 
             # 7. 馬主名半角ｶﾅ (位置:146, 長さ:50)
-            result["BanusiNameEng"] = self.decode_field(data[145:195])
+            result["BanusiNameKana"] = self.decode_field(data[145:195])
 
             # 8. 馬主名欧字 (位置:196, 長さ:100)
-            result["Fukusyoku"] = self.decode_field(data[195:295])
+            result["BanusiNameEng"] = self.decode_field(data[195:295])
 
             # 9. 服色標示 (位置:296, 長さ:60)
-            result["H_SetYear"] = self.decode_field(data[295:355])
+            result["Fukusyoku"] = self.decode_field(data[295:355])
 
             # 10. <本年･累計成績情報> (位置:356, 長さ:0)
-            result["H_HonSyokinTotal"] = self.decode_field(data[355:355])
-
             # 11. 　　設定年 (位置:356, 長さ:4)
-            result["H_FukaSyokin"] = self.decode_field(data[355:359])
+            result["SetYear"] = self.decode_field(data[355:359])
 
             # 12. 　　本賞金合計 (位置:360, 長さ:10)
-            result["H_ChakuKaisu1"] = self.decode_field(data[359:369])
+            result["HonSyokinTotal"] = self.decode_field(data[359:369])
 
             # 13. 　　付加賞金合計 (位置:370, 長さ:10)
-            result["H_ChakuKaisu2"] = self.decode_field(data[369:379])
+            result["FukaSyokin"] = self.decode_field(data[369:379])
 
             # 14. 　　着回数 (位置:380, 長さ:6)
-            result["H_ChakuKaisu3"] = self.decode_field(data[379:385])
+            result["ChakuKaisu"] = self.decode_field(data[379:385])
 
             # 15. レコード区切 (位置:386, 長さ:2)
-            result["H_ChakuKaisu4"] = self.decode_field(data[385:387])
+            result["Reserved_386"] = self.decode_field(data[385:387])
 
             return result
 

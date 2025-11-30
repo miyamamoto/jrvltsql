@@ -153,11 +153,7 @@ class BaseParser(ABC):
                 )
                 result[field_def.name] = None
 
-        logger.debug(
-            f"Parsed {self.record_type} record",
-            record_type=self.record_type,
-            field_count=len(result),
-        )
+        # Note: Per-record debug logging removed to reduce verbosity during batch processing
 
         return result
 
