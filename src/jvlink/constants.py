@@ -40,15 +40,29 @@ JV_READ_NO_MORE_DATA = -1  # これ以上データなし
 JV_READ_ERROR = -2  # エラー
 
 # Data Specification Codes
+# Reference: EveryDB2 表5.1-1 https://everydb.iwinz.net/edb2_manual/
+# Note: "N" suffix variants (DIFN, BLDN, HOSN) are aliases used in EveryDB2 documentation
 DATA_SPEC_RACE = "RACE"  # レースデータ (RA, SE, HR, WF, JG)
 DATA_SPEC_DIFF = "DIFF"  # マスタデータ (UM, KS, CH, BR, BN, HN, SK, RC, HC)
+DATA_SPEC_DIFN = "DIFN"  # マスタデータ (DIFF の別名、EveryDB2表記)
 DATA_SPEC_YSCH = "YSCH"  # 開催スケジュール
 DATA_SPEC_TOKU = "TOKU"  # 特別登録馬
 DATA_SPEC_SNAP = "SNAP"  # 出馬表
 DATA_SPEC_SLOP = "SLOP"  # 坂路調教
 DATA_SPEC_BLOD = "BLOD"  # 血統情報
+DATA_SPEC_BLDN = "BLDN"  # 血統情報 (BLOD の別名、EveryDB2表記)
 DATA_SPEC_HOYU = "HOYU"  # 馬名の意味由来
 DATA_SPEC_HOSE = "HOSE"  # 競走馬市場取引価格
+DATA_SPEC_HOSN = "HOSN"  # 競走馬市場取引価格 (HOSE の別名、EveryDB2表記)
+
+# Additional Data Specifications (EveryDB2)
+DATA_SPEC_MING = "MING"  # データマイニング予想
+DATA_SPEC_WOOD = "WOOD"  # ウッドチップ調教
+DATA_SPEC_COMM = "COMM"  # コメント情報
+
+# Trainer/Jockey Change Specifications (option 2 only)
+DATA_SPEC_TCVN = "TCVN"  # 調教師変更情報
+DATA_SPEC_RCVN = "RCVN"  # 騎手変更情報
 
 # Odds Data Specifications
 DATA_SPEC_O1 = "O1"  # 単勝・複勝・枠連オッズ
@@ -73,6 +87,8 @@ JVRTOPEN_SPEED_REPORT_SPECS = {
     "0B15": "払戻情報",           # HR: 払戻
     "0B16": "馬体重",             # WH: 馬体重
     "0B17": "対戦型データマイニング予想",  # TM: 対戦型データマイニング
+    "0B41": "騎手変更情報",        # RC: 騎手変更 (Row D, E両方)
+    "0B42": "調教師変更情報",      # TC: 調教師変更 (Row D, E両方)
 }
 
 # 時系列データ (0B2x-0B3x系) - 継続更新オッズ・票数
@@ -88,8 +104,19 @@ JVRTOPEN_TIME_SERIES_SPECS = {
     "0B36": "3連単オッズ",        # O6: 3連単
 }
 
+# 変更情報データ (0B4x系) - 騎手・調教師変更
+# Row D, E 両方で利用可能
+JVRTOPEN_CHANGE_SPECS = {
+    "0B41": "騎手変更情報",        # RC: 騎手変更
+    "0B42": "調教師変更情報",      # TC: 調教師変更
+}
+
 # 全JVRTOpenデータ種別 (後方互換性のため残す)
-JVRTOPEN_DATA_SPECS = list(JVRTOPEN_SPEED_REPORT_SPECS.keys()) + list(JVRTOPEN_TIME_SERIES_SPECS.keys())
+# Note: 0B41, 0B42 は SPEED_REPORT に含まれているため、重複を避ける
+JVRTOPEN_DATA_SPECS = (
+    list(JVRTOPEN_SPEED_REPORT_SPECS.keys()) +
+    list(JVRTOPEN_TIME_SERIES_SPECS.keys())
+)
 
 # 便利な定数
 DATA_SPEC_RT_RACE = "0B12"     # 速報レース情報
@@ -115,19 +142,50 @@ def is_valid_jvrtopen_spec(data_spec: str) -> bool:
 
 
 # JVOpen データ種別とoption対応表
-# Reference: EveryDB2 https://everydb.iwinz.net/edb2_manual/
-# Option: 1=通常データ, 2=今週データ, 3/4=セットアップ
+# Reference: EveryDB2 表5.1-1 https://everydb.iwinz.net/edb2_manual/
+# Option: 1=通常データ(Row A), 2=今週データ(Row B), 3/4=セットアップ(Row C)
 JVOPEN_VALID_COMBINATIONS = {
-    # Option 1 (通常データ): 全データ種別対応
-    1: ["RACE", "DIFF", "BLOD", "SLOP", "YSCH", "HOSE", "HOYU", "TOKU",
-        "SNAP", "O1", "O2", "O3", "O4", "O5", "O6"],
-    # Option 2 (今週データ): 一部のみ対応
-    2: ["RACE", "DIFF", "SNAP", "O1", "O2", "O3", "O4", "O5", "O6"],
-    # Option 3, 4 (セットアップ): Option 1と同じ
-    3: ["RACE", "DIFF", "BLOD", "SLOP", "YSCH", "HOSE", "HOYU", "TOKU",
-        "SNAP", "O1", "O2", "O3", "O4", "O5", "O6"],
-    4: ["RACE", "DIFF", "BLOD", "SLOP", "YSCH", "HOSE", "HOYU", "TOKU",
-        "SNAP", "O1", "O2", "O3", "O4", "O5", "O6"],
+    # Option 1 (通常データ/Row A): TOKU, RACE, DIFN, BLDN, MING, SLOP, WOOD, YSCH, HOSN, HOYU, COMM
+    1: [
+        "TOKU", "RACE",
+        "DIFF", "DIFN",  # DIFF/DIFN are equivalent
+        "BLOD", "BLDN",  # BLOD/BLDN are equivalent
+        "MING",          # データマイニング予想
+        "SLOP",          # 坂路調教
+        "WOOD",          # ウッドチップ調教
+        "YSCH",          # 開催スケジュール
+        "HOSE", "HOSN",  # HOSE/HOSN are equivalent
+        "HOYU",          # 馬名の意味由来
+        "COMM",          # コメント情報
+        "SNAP",          # 出馬表
+        "O1", "O2", "O3", "O4", "O5", "O6",  # オッズ
+    ],
+    # Option 2 (今週データ/Row B): TOKU, RACE, TCVN, RCVN のみ
+    2: [
+        "TOKU",          # 特別登録馬
+        "RACE",          # レースデータ
+        "TCVN",          # 調教師変更情報
+        "RCVN",          # 騎手変更情報
+    ],
+    # Option 3, 4 (セットアップ/Row C): Option 1と同じ
+    3: [
+        "TOKU", "RACE",
+        "DIFF", "DIFN",
+        "BLOD", "BLDN",
+        "MING", "SLOP", "WOOD", "YSCH",
+        "HOSE", "HOSN", "HOYU", "COMM",
+        "SNAP",
+        "O1", "O2", "O3", "O4", "O5", "O6",
+    ],
+    4: [
+        "TOKU", "RACE",
+        "DIFF", "DIFN",
+        "BLOD", "BLDN",
+        "MING", "SLOP", "WOOD", "YSCH",
+        "HOSE", "HOSN", "HOYU", "COMM",
+        "SNAP",
+        "O1", "O2", "O3", "O4", "O5", "O6",
+    ],
 }
 
 
