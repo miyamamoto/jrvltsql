@@ -54,6 +54,9 @@ NL_H1, NL_H6, RT_H1, RT_H6 (Payout):
 NL_HR, RT_HR (Refund):
     PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
 
+RT_RC (Jockey Change):
+    PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
+
 Benefits with PRIMARY KEY constraints:
 - INSERT OR REPLACE will update existing records instead of duplicating
 - Safe to re-run imports multiple times
@@ -76,18 +79,16 @@ SCHEMAS = {
             DataKubun TEXT,
             MakeDate TEXT,
             BanusiCode TEXT,
-            BanusiName TEXT,
             BanusiName_Co TEXT,
+            BanusiName TEXT,
             BanusiNameKana TEXT,
             BanusiNameEng TEXT,
             Fukusyoku TEXT,
-            H_SetYear TEXT,
-            H_HonSyokinTotal TEXT,
-            H_FukaSyokin TEXT,
-            H_ChakuKaisu1 TEXT,
-            H_ChakuKaisu2 TEXT,
-            H_ChakuKaisu3 TEXT,
-            H_ChakuKaisu4 TEXT,
+            SetYear TEXT,
+            HonSyokinTotal TEXT,
+            FukaSyokin TEXT,
+            ChakuKaisu TEXT,
+            Reserved_386 TEXT,
             PRIMARY KEY (BanusiCode)
         )
     """,
@@ -102,13 +103,11 @@ SCHEMAS = {
             BreederNameKana TEXT,
             BreederNameEng TEXT,
             Address TEXT,
-            H_SetYear TEXT,
-            H_HonSyokinTotal TEXT,
-            H_FukaSyokin TEXT,
-            H_ChakuKaisu1 TEXT,
-            H_ChakuKaisu2 TEXT,
-            H_ChakuKaisu3 TEXT,
-            H_ChakuKaisu4 TEXT,
+            SetYear TEXT,
+            HonSyokinTotal TEXT,
+            FukaSyokin TEXT,
+            ChakuKaisu TEXT,
+            Reserved_454 TEXT,
             PRIMARY KEY (BreederCode)
         )
     """,
@@ -117,11 +116,12 @@ SCHEMAS = {
             RecordSpec TEXT,
             DataKubun TEXT,
             MakeDate TEXT,
+            HansyokuNum TEXT,
             KeitoId TEXT,
             KeitoName TEXT,
-            Field6 TEXT,
-            Field7 TEXT,
-            Field8 TEXT
+            KeitoEx TEXT,
+            RecordDelimiter TEXT,
+            PRIMARY KEY (HansyokuNum)
         )
     """,
 
@@ -132,7 +132,8 @@ SCHEMAS = {
             KettoNum TEXT,
             SaleHostName TEXT,
             SaleName TEXT,
-            Price TEXT
+            Price TEXT,
+            RecordDelimiter TEXT
         )
     """,
 
@@ -280,54 +281,49 @@ SCHEMAS = {
             SexCD TEXT,
             TozaiCD TEXT,
             Syotai TEXT,
-            SaikinJyusyo1SaikinJyusyoid TEXT,
-            SaikinJyusyo1Hondai TEXT,
-            SaikinJyusyo1Ryakusyo10 TEXT,
-            SaikinJyusyo1Ryakusyo6 TEXT,
-            SaikinJyusyo1Ryakusyo3 TEXT,
-            SaikinJyusyo1GradeCD TEXT,
-            SaikinJyusyo1SyussoTosu INTEGER,
-            SaikinJyusyo1KettoNum TEXT,
-            SaikinJyusyo1Bamei TEXT,
-            SaikinJyusyo2SaikinJyusyoid TEXT,
-            SaikinJyusyo2Hondai TEXT,
-            SaikinJyusyo2Ryakusyo10 TEXT,
-            SaikinJyusyo2Ryakusyo6 TEXT,
-            SaikinJyusyo2Ryakusyo3 TEXT,
-            SaikinJyusyo2GradeCD TEXT,
-            SaikinJyusyo2SyussoTosu INTEGER,
-            SaikinJyusyo2KettoNum TEXT,
-            SaikinJyusyo2Bamei TEXT,
-            SaikinJyusyo3SaikinJyusyoid TEXT,
-            SaikinJyusyo3Hondai TEXT,
-            SaikinJyusyo3Ryakusyo10 TEXT,
-            SaikinJyusyo3Ryakusyo6 TEXT,
-            SaikinJyusyo3Ryakusyo3 TEXT,
-            SaikinJyusyo3GradeCD TEXT,
-            SaikinJyusyo3SyussoTosu INTEGER,
-            SaikinJyusyo3KettoNum TEXT,
-            Field41 TEXT,
-            Field42 TEXT,
-            Field43 TEXT,
-            Field44 TEXT,
-            Field45 TEXT,
-            Field46 TEXT,
-            Field47 TEXT,
-            Field48 TEXT,
-            Field49 TEXT,
-            Field50 TEXT,
-            Field51 TEXT,
-            Field52 TEXT,
-            Field53 TEXT,
-            Field54 TEXT,
-            Field55 TEXT,
-            Field56 TEXT,
-            Field57 TEXT,
-            Field58 TEXT,
-            Field59 TEXT,
-            Field60 TEXT,
-            Field61 TEXT,
-            Field62 TEXT,
+            SaikinJyusyo1_id TEXT,
+            SaikinJyusyo1_Hondai TEXT,
+            SaikinJyusyo1_Ryakusyo10 TEXT,
+            SaikinJyusyo1_Ryakusyo6 TEXT,
+            SaikinJyusyo1_Ryakusyo3 TEXT,
+            SaikinJyusyo1_GradeCD TEXT,
+            SaikinJyusyo1_SyussoTosu TEXT,
+            SaikinJyusyo1_KettoNum TEXT,
+            SaikinJyusyo1_Bamei TEXT,
+            SetYear TEXT,
+            HonSyokinH TEXT,
+            HonSyokinS TEXT,
+            FukaSyokinH TEXT,
+            FukaSyokinS TEXT,
+            ChakuKaisuH TEXT,
+            ChakuKaisuS TEXT,
+            ChakuKaisu01H TEXT,
+            ChakuKaisu01S TEXT,
+            ChakuKaisu02H TEXT,
+            ChakuKaisu02S TEXT,
+            ChakuKaisu03H TEXT,
+            ChakuKaisu03S TEXT,
+            ChakuKaisu04H TEXT,
+            ChakuKaisu04S TEXT,
+            ChakuKaisu05H TEXT,
+            ChakuKaisu05S TEXT,
+            ChakuKaisu06H TEXT,
+            ChakuKaisu06S TEXT,
+            ChakuKaisu07H TEXT,
+            ChakuKaisu07S TEXT,
+            ChakuKaisu08H TEXT,
+            ChakuKaisu08S TEXT,
+            ChakuKaisu09H TEXT,
+            ChakuKaisu09S TEXT,
+            ChakuKaisu10H TEXT,
+            ChakuKaisu10S TEXT,
+            ChakuKaisuSiba1 TEXT,
+            ChakuKaisuSiba2 TEXT,
+            ChakuKaisuSiba3 TEXT,
+            ChakuKaisuDirt1 TEXT,
+            ChakuKaisuDirt2 TEXT,
+            ChakuKaisuDirt3 TEXT,
+            Reserved_591 TEXT,
             PRIMARY KEY (ChokyosiCode)
         )
     """,
@@ -340,8 +336,9 @@ SCHEMAS = {
             Kyori TEXT,
             TrackCD TEXT,
             KaishuDate TEXT,
-            Field8 TEXT,
-            Field9 TEXT
+            CourseEx TEXT,
+            RecordDelimiter TEXT,
+            PRIMARY KEY (JyoCD, Kyori, TrackCD)
         )
     """,
     "NL_DM": """
@@ -356,12 +353,11 @@ SCHEMAS = {
             Nichiji TEXT,
             RaceNum TEXT,
             MakeHM TEXT,
-            Umaban1 TEXT,
-            DMTime1 TEXT,
-            DMGosaP1 TEXT,
-            DMGosaM1 TEXT,
-            Umaban2 TEXT,
-            DMTime2 TEXT
+            Umaban TEXT,
+            DMTime TEXT,
+            DMGosaP TEXT,
+            DMGosaM TEXT,
+            RecordDelimiter TEXT
         )
     """,
     "NL_H1": """
@@ -377,60 +373,53 @@ SCHEMAS = {
             RaceNum INTEGER,
             TorokuTosu INTEGER,
             SyussoTosu INTEGER,
-            HatubaiFlag1 INTEGER,
-            HatubaiFlag2 INTEGER,
-            HatubaiFlag3 INTEGER,
-            HatubaiFlag4 INTEGER,
-            HatubaiFlag5 INTEGER,
-            HatubaiFlag6 INTEGER,
-            HatubaiFlag7 INTEGER,
+            HatubaiFlag1 TEXT,
+            HatubaiFlag2 TEXT,
+            HatubaiFlag3 TEXT,
+            HatubaiFlag4 TEXT,
+            HatubaiFlag5 TEXT,
+            HatubaiFlag6 TEXT,
+            HatubaiFlag7 TEXT,
             FukuChakuBaraiKey TEXT,
-            HenkanUma1 INTEGER,
-            HenkanUma2 INTEGER,
-            HenkanUma3 INTEGER,
-            HenkanUma4 INTEGER,
-            HenkanUma5 INTEGER,
-            HenkanUma6 INTEGER,
-            HenkanUma7 INTEGER,
-            HenkanUma8 INTEGER,
-            HenkanUma9 INTEGER,
-            HenkanUma10 INTEGER,
-            HenkanUma11 INTEGER,
-            HenkanUma12 INTEGER,
-            HenkanUma13 INTEGER,
-            HenkanUma14 INTEGER,
-            HenkanUma15 INTEGER,
-            HenkanUma16 INTEGER,
-            HenkanUma17 INTEGER,
-            HenkanUma18 INTEGER,
-            HenkanUma19 INTEGER,
-            HenkanUma20 INTEGER,
-            HenkanUma21 INTEGER,
-            HenkanUma22 INTEGER,
-            HenkanUma23 INTEGER,
-            HenkanUma24 INTEGER,
-            HenkanUma25 INTEGER,
-            HenkanUma26 INTEGER,
-            HenkanUma27 INTEGER,
-            HenkanUma28 INTEGER,
-            HenkanWaku1 INTEGER,
-            HenkanWaku2 INTEGER,
-            HenkanWaku3 INTEGER,
-            HenkanWaku4 INTEGER,
-            HenkanWaku5 INTEGER,
-            HenkanWaku6 INTEGER,
-            HenkanWaku7 INTEGER,
-            HenkanWaku8 INTEGER,
-            HenkanDoWaku1 INTEGER,
-            HenkanDoWaku2 INTEGER,
-            HenkanDoWaku3 INTEGER,
-            HenkanDoWaku4 INTEGER,
-            HenkanDoWaku5 INTEGER,
-            HenkanDoWaku6 INTEGER,
-            HenkanDoWaku7 INTEGER,
-            HenkanDoWaku8 INTEGER,
-            HyoTotal1 REAL,
-            HyoTotal2 REAL,
+            HenkanUma1 TEXT,
+            HenkanUma2 TEXT,
+            HenkanUma3 TEXT,
+            TanUma TEXT,
+            TanHyo REAL,
+            TanNinki INTEGER,
+            FukuUma TEXT,
+            FukuHyo REAL,
+            FukuNinki INTEGER,
+            WakuKumi TEXT,
+            WakuHyo REAL,
+            WakuNinki INTEGER,
+            UmarenKumi TEXT,
+            UmarenHyo REAL,
+            UmarenNinki INTEGER,
+            WideKumi TEXT,
+            WideHyo REAL,
+            WideNinki INTEGER,
+            UmatanKumi TEXT,
+            UmatanHyo REAL,
+            UmatanNinki INTEGER,
+            SanrenfukuKumi TEXT,
+            SanrenfukuHyo REAL,
+            SanrenfukuNinki INTEGER,
+            TanHyoTotal REAL,
+            FukuHyoTotal REAL,
+            WakuHyoTotal REAL,
+            UmarenHyoTotal REAL,
+            WideHyoTotal REAL,
+            UmatanHyoTotal REAL,
+            SanrenfukuHyoTotal REAL,
+            TanHenkanHyoTotal REAL,
+            FukuHenkanHyoTotal REAL,
+            WakuHenkanHyoTotal REAL,
+            UmarenHenkanHyoTotal REAL,
+            WideHenkanHyoTotal REAL,
+            UmatanHenkanHyoTotal REAL,
+            SanrenfukuHenkanHyoTotal REAL,
+            RecordDelimiter TEXT,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
         )
     """,
@@ -438,31 +427,31 @@ SCHEMAS = {
         CREATE TABLE IF NOT EXISTS NL_H6 (
             RecordSpec TEXT,
             DataKubun TEXT,
+            MakeDate TEXT,
             Year INTEGER,
             MonthDay INTEGER,
             JyoCD TEXT,
             Kaiji INTEGER,
             Nichiji INTEGER,
             RaceNum INTEGER,
-            Kumi TEXT,
-            Hyo REAL,
-            Ninki INTEGER,
-            Field11 TEXT,
-            Field12 TEXT,
-            Field13 TEXT,
-            Field14 TEXT,
-            Field15 TEXT,
-            Field16 TEXT,
-            Field17 TEXT,
-            Field18 TEXT,
-            Field19 TEXT,
-            Field20 TEXT,
-            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi)
+            TorokuTosu INTEGER,
+            SyussoTosu INTEGER,
+            HatubaiFlag TEXT,
+            HenkanUma TEXT,
+            SanrentanKumi TEXT,
+            SanrentanHyo REAL,
+            SanrentanNinki INTEGER,
+            SanrentanHyoTotal REAL,
+            SanrentanHenkanHyoTotal REAL,
+            RecordDelimiter TEXT,
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, SanrentanKumi)
         )
     """,
     "NL_HC": """
         CREATE TABLE IF NOT EXISTS NL_HC (
             RecordSpec TEXT,
+            DataKubun TEXT,
+            MakeDate TEXT,
             ChokyosiCode TEXT,
             Num TEXT,
             SetYear TEXT,
@@ -470,17 +459,8 @@ SCHEMAS = {
             HonSyokinSyogai TEXT,
             FukaSyokinHeichi TEXT,
             FukaSyokinSyogai TEXT,
-            HeichiChakukaisu1 TEXT,
-            HeichiChakukaisu2 TEXT,
-            HeichiChakukaisu3 TEXT,
-            HeichiChakukaisu4 TEXT,
-            HeichiChakukaisu5 TEXT,
-            HeichiChakukaisu6 TEXT,
-            SyogaiChakukaisu1 TEXT,
-            SyogaiChakukaisu2 TEXT,
-            SyogaiChakukaisu3 TEXT,
-            SyogaiChakukaisu4 TEXT,
-            SyogaiChakukaisu5 TEXT
+            RecordDelimiter TEXT,
+            PRIMARY KEY (ChokyosiCode, Num, SetYear)
         )
     """,
     "NL_HN": """
@@ -488,23 +468,25 @@ SCHEMAS = {
             RecordSpec TEXT,
             DataKubun TEXT,
             MakeDate TEXT,
-            TresenKubun TEXT,
-            ChokyoDate TEXT,
-            ChokyoTime TEXT,
+            HansyokuNum TEXT,
+            reserved TEXT,
             KettoNum TEXT,
-            HaronTime4 TEXT,
-            LapTime4 TEXT,
-            HaronTime3 TEXT,
-            LapTime3 TEXT,
-            HaronTime2 TEXT,
-            LapTime2 TEXT,
-            LapTime1 TEXT,
-            Field15 TEXT,
-            Field16 TEXT,
-            Field17 TEXT,
-            Field18 TEXT,
-            Field19 TEXT,
-            Field20 TEXT
+            DelKubun TEXT,
+            Bamei TEXT,
+            BameiKana TEXT,
+            BameiEng TEXT,
+            BirthYear TEXT,
+            SexCD TEXT,
+            HinsyuCD TEXT,
+            KeiroCD TEXT,
+            MochiKubun TEXT,
+            ImportYear TEXT,
+            SanchiName TEXT,
+            FHansyokuNum TEXT,
+            MHansyokuNum TEXT,
+            Reserved TEXT,
+            RecordDelimiter TEXT,
+            PRIMARY KEY (HansyokuNum)
         )
     """,
     "NL_HR": """
@@ -547,46 +529,74 @@ SCHEMAS = {
             HenkanFlag7 INTEGER,
             HenkanFlag8 INTEGER,
             HenkanFlag9 INTEGER,
-            HenkanUma1 INTEGER,
-            HenkanUma2 INTEGER,
-            HenkanUma3 INTEGER,
-            HenkanUma4 INTEGER,
-            HenkanUma5 INTEGER,
-            HenkanUma6 INTEGER,
-            HenkanUma7 INTEGER,
-            HenkanUma8 INTEGER,
-            HenkanUma9 INTEGER,
-            HenkanUma10 INTEGER,
-            HenkanUma11 INTEGER,
-            HenkanUma12 INTEGER,
-            HenkanUma13 INTEGER,
-            HenkanUma14 INTEGER,
-            HenkanUma15 INTEGER,
-            HenkanUma16 INTEGER,
-            HenkanUma17 INTEGER,
-            HenkanUma18 INTEGER,
-            HenkanUma19 INTEGER,
-            HenkanUma20 INTEGER,
-            HenkanUma21 INTEGER,
-            HenkanUma22 INTEGER,
-            HenkanUma23 INTEGER,
-            HenkanUma24 INTEGER,
-            HenkanUma25 INTEGER,
-            HenkanUma26 INTEGER,
-            HenkanUma27 INTEGER,
-            HenkanUma28 INTEGER,
-            HenkanWaku1 INTEGER,
-            HenkanWaku2 INTEGER,
-            HenkanWaku3 INTEGER,
-            HenkanWaku4 INTEGER,
-            HenkanWaku5 INTEGER,
-            HenkanWaku6 INTEGER,
-            HenkanWaku7 INTEGER,
-            HenkanWaku8 INTEGER,
-            HenkanDoWaku1 INTEGER,
-            HenkanDoWaku2 INTEGER,
-            HenkanDoWaku3 INTEGER,
-            HenkanDoWaku4 INTEGER,
+            HenkanUma1 TEXT,
+            HenkanUma2 TEXT,
+            HenkanUma3 TEXT,
+            HenkanUma4 TEXT,
+            HenkanUma5 TEXT,
+            HenkanUma6 TEXT,
+            HenkanUma7 TEXT,
+            HenkanUma8 TEXT,
+            HenkanUma9 TEXT,
+            HenkanUma10 TEXT,
+            HenkanUma11 TEXT,
+            HenkanUma12 TEXT,
+            HenkanUma13 TEXT,
+            HenkanUma14 TEXT,
+            HenkanUma15 TEXT,
+            HenkanUma16 TEXT,
+            HenkanUma17 TEXT,
+            HenkanUma18 TEXT,
+            HenkanUma19 TEXT,
+            HenkanUma20 TEXT,
+            HenkanUma21 TEXT,
+            HenkanUma22 TEXT,
+            HenkanUma23 TEXT,
+            HenkanUma24 TEXT,
+            HenkanUma25 TEXT,
+            HenkanUma26 TEXT,
+            HenkanUma27 TEXT,
+            HenkanUma28 TEXT,
+            HenkanWaku1 TEXT,
+            HenkanWaku2 TEXT,
+            HenkanWaku3 TEXT,
+            HenkanWaku4 TEXT,
+            HenkanWaku5 TEXT,
+            HenkanWaku6 TEXT,
+            HenkanWaku7 TEXT,
+            HenkanWaku8 TEXT,
+            HenkanDoWaku1 TEXT,
+            HenkanDoWaku2 TEXT,
+            HenkanDoWaku3 TEXT,
+            HenkanDoWaku4 TEXT,
+            TanUmaban TEXT,
+            TanPay INTEGER,
+            TanNinki INTEGER,
+            FukuUmaban TEXT,
+            FukuPay INTEGER,
+            FukuNinki INTEGER,
+            WakuKumi TEXT,
+            WakuPay INTEGER,
+            WakuNinki INTEGER,
+            UmarenKumi TEXT,
+            UmarenPay INTEGER,
+            UmarenNinki INTEGER,
+            WideKumi TEXT,
+            WidePay INTEGER,
+            WideNinki INTEGER,
+            Yobi1 TEXT,
+            Yobi2 TEXT,
+            Yobi3 TEXT,
+            UmatanKumi TEXT,
+            UmatanPay INTEGER,
+            UmatanNinki INTEGER,
+            SanrenfukuKumi TEXT,
+            SanrenfukuPay INTEGER,
+            SanrenfukuNinki INTEGER,
+            SanrentanKumi TEXT,
+            SanrentanPay INTEGER,
+            SanrentanNinki INTEGER,
+            RecordDelimiter TEXT,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
         )
     """,
@@ -631,12 +641,12 @@ SCHEMAS = {
             Kaiji TEXT,
             Nichiji TEXT,
             RaceNum TEXT,
-            HappyoTime TEXT,
-            Umaban TEXT,
+            KettoNum TEXT,
             Bamei TEXT,
-            JiyuKubun TEXT,
-            Field14 TEXT,
-            Field15 TEXT
+            Num TEXT,
+            SyussoKubun TEXT,
+            JyogaiStateKubun TEXT,
+            RecordDelimiter TEXT
         )
     """,
 
@@ -732,179 +742,152 @@ SCHEMAS = {
             SaikinJyusyo3GradeCD TEXT,
             SaikinJyusyo3SyussoTosu INTEGER,
             SaikinJyusyo3KettoNum TEXT,
-            Field66 TEXT,
-            Field67 TEXT,
-            Field68 TEXT,
-            Field69 TEXT,
-            Field70 TEXT,
-            Field71 TEXT,
-            Field72 TEXT,
-            Field73 TEXT,
-            Field74 TEXT,
-            Field75 TEXT,
-            Field76 TEXT,
-            Field77 TEXT,
-            Field78 TEXT,
-            Field79 TEXT,
+            crlf TEXT,
             PRIMARY KEY (KisyuCode)
         )
     """,
     "NL_O1": """
         CREATE TABLE IF NOT EXISTS NL_O1 (
             RecordSpec TEXT,
+            DataKubun TEXT,
+            MakeDate TEXT,
             Year INTEGER,
             MonthDay INTEGER,
             JyoCD TEXT,
             Kaiji INTEGER,
             Nichiji INTEGER,
             RaceNum INTEGER,
+            HassoTime TEXT,
+            TorokuTosu INTEGER,
+            SyussoTosu INTEGER,
+            TanFlag TEXT,
+            FukuFlag TEXT,
+            WakurenFlag TEXT,
+            FukuChakubaraiKey TEXT,
             Umaban INTEGER,
             TanOdds REAL,
             TanNinki INTEGER,
+            FukuUmaban INTEGER,
             FukuOddsLow REAL,
             FukuOddsHigh REAL,
             FukuNinki INTEGER,
-            Field14 TEXT,
-            Field15 TEXT,
-            Field16 TEXT,
-            Field17 TEXT,
-            Field18 TEXT,
-            Field19 TEXT,
-            Field20 TEXT,
-            Field21 TEXT,
-            Field22 TEXT,
-            Field23 TEXT,
-            Field24 TEXT,
-            Field25 TEXT,
-            Field26 TEXT,
-            Field27 TEXT,
-            Field28 TEXT,
-            Field29 TEXT,
-            Field30 TEXT,
-            Field31 TEXT,
-            Field32 TEXT,
-            Field33 TEXT,
+            Kumi TEXT,
+            WakurenOdds REAL,
+            WakurenNinki INTEGER,
+            TanVote INTEGER,
+            FukuVote INTEGER,
+            WakurenVote INTEGER,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
         )
     """,
     "NL_O2": """
         CREATE TABLE IF NOT EXISTS NL_O2 (
             RecordSpec TEXT,
+            DataKubun TEXT,
+            MakeDate TEXT,
             Year INTEGER,
             MonthDay INTEGER,
             JyoCD TEXT,
             Kaiji INTEGER,
             Nichiji INTEGER,
             RaceNum INTEGER,
+            HassoTime TEXT,
+            TorokuTosu INTEGER,
+            SyussoTosu INTEGER,
+            UmarenFlag TEXT,
             Kumi TEXT,
             Odds REAL,
             Ninki INTEGER,
-            Field11 TEXT,
-            Field12 TEXT,
-            Field13 TEXT,
-            Field14 TEXT,
-            Field15 TEXT,
-            Field16 TEXT,
-            Field17 TEXT,
-            Field18 TEXT,
-            Field19 TEXT,
+            Vote INTEGER,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi)
         )
     """,
     "NL_O3": """
         CREATE TABLE IF NOT EXISTS NL_O3 (
             RecordSpec TEXT,
+            DataKubun TEXT,
+            MakeDate TEXT,
             Year INTEGER,
             MonthDay INTEGER,
             JyoCD TEXT,
             Kaiji INTEGER,
             Nichiji INTEGER,
             RaceNum INTEGER,
+            HassoTime TEXT,
+            TorokuTosu INTEGER,
+            SyussoTosu INTEGER,
+            WideFlag TEXT,
             Kumi TEXT,
             OddsLow REAL,
             OddsHigh REAL,
             Ninki INTEGER,
-            Field12 TEXT,
-            Field13 TEXT,
-            Field14 TEXT,
-            Field15 TEXT,
-            Field16 TEXT,
-            Field17 TEXT,
-            Field18 TEXT,
-            Field19 TEXT,
-            Field20 TEXT,
+            Vote INTEGER,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi)
         )
     """,
     "NL_O4": """
         CREATE TABLE IF NOT EXISTS NL_O4 (
             RecordSpec TEXT,
+            DataKubun TEXT,
+            MakeDate TEXT,
             Year INTEGER,
             MonthDay INTEGER,
             JyoCD TEXT,
             Kaiji INTEGER,
             Nichiji INTEGER,
             RaceNum INTEGER,
+            HassoTime TEXT,
+            TorokuTosu INTEGER,
+            SyussoTosu INTEGER,
+            UmatanFlag TEXT,
             Kumi TEXT,
             Odds REAL,
             Ninki INTEGER,
-            Field11 TEXT,
-            Field12 TEXT,
-            Field13 TEXT,
-            Field14 TEXT,
-            Field15 TEXT,
-            Field16 TEXT,
-            Field17 TEXT,
-            Field18 TEXT,
-            Field19 TEXT,
+            Vote INTEGER,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi)
         )
     """,
     "NL_O5": """
         CREATE TABLE IF NOT EXISTS NL_O5 (
             RecordSpec TEXT,
+            DataKubun TEXT,
+            MakeDate TEXT,
             Year INTEGER,
             MonthDay INTEGER,
             JyoCD TEXT,
             Kaiji INTEGER,
             Nichiji INTEGER,
             RaceNum INTEGER,
+            HassoTime TEXT,
+            TorokuTosu INTEGER,
+            SyussoTosu INTEGER,
+            SanrenpukuFlag TEXT,
             Kumi TEXT,
             Odds REAL,
             Ninki INTEGER,
-            Field11 TEXT,
-            Field12 TEXT,
-            Field13 TEXT,
-            Field14 TEXT,
-            Field15 TEXT,
-            Field16 TEXT,
-            Field17 TEXT,
-            Field18 TEXT,
-            Field19 TEXT,
+            Vote INTEGER,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi)
         )
     """,
     "NL_O6": """
         CREATE TABLE IF NOT EXISTS NL_O6 (
             RecordSpec TEXT,
+            DataKubun TEXT,
+            MakeDate TEXT,
             Year INTEGER,
             MonthDay INTEGER,
             JyoCD TEXT,
             Kaiji INTEGER,
             Nichiji INTEGER,
             RaceNum INTEGER,
+            HassoTime TEXT,
+            TorokuTosu INTEGER,
+            SyussoTosu INTEGER,
+            SanrentanFlag TEXT,
             Kumi TEXT,
             Odds REAL,
             Ninki INTEGER,
-            Field11 TEXT,
-            Field12 TEXT,
-            Field13 TEXT,
-            Field14 TEXT,
-            Field15 TEXT,
-            Field16 TEXT,
-            Field17 TEXT,
-            Field18 TEXT,
-            Field19 TEXT,
+            Vote INTEGER,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi)
         )
     """,
@@ -953,26 +936,25 @@ SCHEMAS = {
             Honsyokin2 REAL,
             Honsyokin3 REAL,
             Honsyokin4 REAL,
-            Honsyokin5 REAL,
-            Honsyokin6 REAL,
-            Honsyokin7 REAL,
-            HonsyokinBefore1 REAL,
-            HonsyokinBefore2 REAL,
-            HonsyokinBefore3 REAL,
-            HonsyokinBefore4 REAL,
-            HonsyokinBefore5 REAL,
-            Fukasyokin1 REAL,
-            Fukasyokin2 REAL,
-            Fukasyokin3 REAL,
-            Fukasyokin4 REAL,
-            Fukasyokin5 REAL,
-            FukasyokinBefore1 REAL,
-            FukasyokinBefore2 REAL,
-            FukasyokinBefore3 REAL,
             HassoTime TEXT,
             HassoTimeBefore TEXT,
             TorokuTosu INTEGER,
             SyussoTosu INTEGER,
+            NyusenTosu INTEGER,
+            TenkoCD TEXT,
+            SibaBabaCD TEXT,
+            DirtBabaCD TEXT,
+            LapTime TEXT,
+            SyogaiMileTime TEXT,
+            Haron3F REAL,
+            Haron4F REAL,
+            Haron3L REAL,
+            Haron4L REAL,
+            Corner TEXT,
+            Syukaisu INTEGER,
+            TsukaJyuni TEXT,
+            RecordUpKubun TEXT,
+            Crlf TEXT,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
         )
     """,
@@ -1009,7 +991,8 @@ SCHEMAS = {
             RecUmaKisyuName1 TEXT,
             RecUmaKettoNum2 TEXT,
             RecUmaBamei2 TEXT,
-            RecUmaUmaKigoCD2 TEXT
+            RecordDelimiter TEXT,
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, RecInfoKubun)
         )
     """,
     "NL_SE": """
@@ -1038,11 +1021,11 @@ SCHEMAS = {
             BanusiCode TEXT,
             BanusiName TEXT,
             Fukusyoku TEXT,
-            reserved1 TEXT,
+            Reserved_229 TEXT,
             Futan REAL,
             FutanBefore REAL,
             Blinker TEXT,
-            reserved2 TEXT,
+            Reserved_296 TEXT,
             KisyuCode TEXT,
             KisyuCodeBefore TEXT,
             KisyuRyakusyo TEXT,
@@ -1069,8 +1052,8 @@ SCHEMAS = {
             Ninki INTEGER,
             Honsyokin REAL,
             Fukasyokin REAL,
-            reserved3 TEXT,
-            reserved4 TEXT,
+            Reserved_382 TEXT,
+            Reserved_385 TEXT,
             HaronTimeL4 REAL,
             HaronTimeL3 REAL,
             KettoNum1 TEXT,
@@ -1083,7 +1066,7 @@ SCHEMAS = {
             DMGosaM REAL,
             DMJyuni INTEGER,
             KyakusituKubun TEXT,
-            reserved5 TEXT,
+            Reserved_462 TEXT,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
         )
     """,
@@ -1092,17 +1075,18 @@ SCHEMAS = {
             RecordSpec TEXT,
             DataKubun TEXT,
             MakeDate TEXT,
+            KettoNum TEXT,
             BirthDate TEXT,
             SexCD TEXT,
             HinsyuCD TEXT,
             KeiroCD TEXT,
             SankuMochiKubun TEXT,
-            ImportYear TEXT,
+            ImportYear INTEGER,
             BreederCode TEXT,
             SanchiName TEXT,
             FNum TEXT,
-            MNum TEXT,
-            FFNum TEXT
+            RecordDelimiter TEXT,
+            PRIMARY KEY (KettoNum)
         )
     """,
 
@@ -1127,13 +1111,42 @@ SCHEMAS = {
     "NL_TK": """
         CREATE TABLE IF NOT EXISTS NL_TK (
             RecordSpec TEXT,
+            DataKubun TEXT,
+            MakeDate TEXT,
             Year TEXT,
             MonthDay TEXT,
             JyoCD TEXT,
             Kaiji TEXT,
             Nichiji TEXT,
             RaceNum TEXT,
-            Num TEXT,
+            YoubiCD TEXT,
+            TokuNum TEXT,
+            Hondai TEXT,
+            Fukudai TEXT,
+            Kakko TEXT,
+            HondaiEng TEXT,
+            FukudaiEng TEXT,
+            KakkoEng TEXT,
+            RaceRyakusyo10 TEXT,
+            RaceRyakusyo6 TEXT,
+            RaceRyakusyo3 TEXT,
+            RaceMeiKubun TEXT,
+            JyusyoKaiji TEXT,
+            GradeCD TEXT,
+            SyubetuCD TEXT,
+            KigoCD TEXT,
+            JyuryoCD TEXT,
+            JyokenCD2 TEXT,
+            JyokenCD3 TEXT,
+            JyokenCD4 TEXT,
+            JyokenCD5 TEXT,
+            JyokenCDYoung TEXT,
+            Kyori TEXT,
+            TrackCD TEXT,
+            CourseKubun TEXT,
+            HandeHappyoDate TEXT,
+            TorokuTosu TEXT,
+            RenbanNum TEXT,
             KettoNum TEXT,
             Bamei TEXT,
             UmaKigoCD TEXT,
@@ -1143,42 +1156,8 @@ SCHEMAS = {
             ChokyosiRyakusyo TEXT,
             Futan TEXT,
             Koryu TEXT,
-            Field18 TEXT,
-            Field19 TEXT,
-            Field20 TEXT,
-            Field21 TEXT,
-            Field22 TEXT,
-            Field23 TEXT,
-            Field24 TEXT,
-            Field25 TEXT,
-            Field26 TEXT,
-            Field27 TEXT,
-            Field28 TEXT,
-            Field29 TEXT,
-            Field30 TEXT,
-            Field31 TEXT,
-            Field32 TEXT,
-            Field33 TEXT,
-            Field34 TEXT,
-            Field35 TEXT,
-            Field36 TEXT,
-            Field37 TEXT,
-            Field38 TEXT,
-            Field39 TEXT,
-            Field40 TEXT,
-            Field41 TEXT,
-            Field42 TEXT,
-            Field43 TEXT,
-            Field44 TEXT,
-            Field45 TEXT,
-            Field46 TEXT,
-            Field47 TEXT,
-            Field48 TEXT,
-            Field49 TEXT,
-            Field50 TEXT,
-            Field51 TEXT,
-            Field52 TEXT,
-            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Num)
+            RecordBreak TEXT,
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, KettoNum)
         )
     """,
     "NL_TM": """
@@ -1186,17 +1165,17 @@ SCHEMAS = {
             RecordSpec TEXT,
             DataKubun TEXT,
             MakeDate TEXT,
-            Year TEXT,
+            Year INTEGER,
             MonthDay TEXT,
             JyoCD TEXT,
-            Kaiji TEXT,
-            Nichiji TEXT,
-            RaceNum TEXT,
+            Kaiji INTEGER,
+            Nichiji INTEGER,
+            RaceNum INTEGER,
             MakeHM TEXT,
-            Umaban1 TEXT,
-            TMScore1 TEXT,
-            Umaban2 TEXT,
-            TMScore2 TEXT
+            Umaban INTEGER,
+            TMScore INTEGER,
+            RecordDelimiter TEXT,
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
         )
     """,
     "NL_UM": """
@@ -1261,7 +1240,7 @@ SCHEMAS = {
             RuikeiFukaSyogai REAL,
             RuikeiSyutokuHeichi REAL,
             RuikeiSyutokuSyogai REAL,
-            reserved1 TEXT,
+            Reserved_1107 TEXT,
             PRIMARY KEY (KettoNum)
         )
     """,
@@ -1296,7 +1275,8 @@ SCHEMAS = {
             LapTime_600M_400M TEXT,
             HaronTime2Total TEXT,
             LapTime_400M_200M TEXT,
-            LapTime_200M_0M TEXT
+            LapTime_200M_0M TEXT,
+            RecordDelimiter TEXT
         )
     """,
 
@@ -1317,7 +1297,8 @@ SCHEMAS = {
             DirtBabaState TEXT,
             TenkoState2 TEXT,
             SibaBabaState2 TEXT,
-            DirtBabaState2 TEXT
+            DirtBabaState2 TEXT,
+            RecordDelimiter TEXT
         )
     """,
 
@@ -1344,30 +1325,30 @@ SCHEMAS = {
     "NL_WF": """
         CREATE TABLE IF NOT EXISTS NL_WF (
             RecordSpec TEXT,
-            Year TEXT,
+            DataKubun TEXT,
+            MakeDate TEXT,
+            Year INTEGER,
             MonthDay TEXT,
+            Yobi1 TEXT,
+            RaceInfo1 TEXT,
+            RaceInfo2 TEXT,
+            RaceInfo3 TEXT,
+            RaceInfo4 TEXT,
+            RaceInfo5 TEXT,
+            Yobi2 TEXT,
+            HatubaiHyosu INTEGER,
+            YukoHyosu INTEGER,
+            HenkanFlag TEXT,
+            FuseirituFlag TEXT,
+            TekichuNasiFlag TEXT,
+            CarryOverStart INTEGER,
+            CarryOverBalance INTEGER,
             Kumi TEXT,
-            PayJyushosiki TEXT,
-            TekichuHyo TEXT,
-            Field7 TEXT,
-            Field8 TEXT,
-            Field9 TEXT,
-            Field10 TEXT,
-            Field11 TEXT,
-            Field12 TEXT,
-            Field13 TEXT,
-            Field14 TEXT,
-            Field15 TEXT,
-            Field16 TEXT,
-            Field17 TEXT,
-            Field18 TEXT,
-            Field19 TEXT,
-            Field20 TEXT,
-            Field21 TEXT,
-            Field22 TEXT,
-            Field23 TEXT,
-            Field24 TEXT,
-            Field25 TEXT
+            PayJyushosiki INTEGER,
+            TekichuHyosu INTEGER,
+            Yobi3 TEXT,
+            RecordDelimiter TEXT,
+            PRIMARY KEY (Year, MonthDay)
         )
     """,
     "NL_YS": """
@@ -1375,26 +1356,26 @@ SCHEMAS = {
             RecordSpec TEXT,
             DataKubun TEXT,
             MakeDate TEXT,
-            Year TEXT,
+            Year INTEGER,
             MonthDay TEXT,
             JyoCD TEXT,
-            Kaiji TEXT,
-            Nichiji TEXT,
+            Kaiji INTEGER,
+            Nichiji INTEGER,
             YoubiCD TEXT,
-            Jyusyo1TokuNum TEXT,
+            Jyusyo1TokuNum INTEGER,
             Jyusyo1Hondai TEXT,
             Jyusyo1Ryakusyo10 TEXT,
             Jyusyo1Ryakusyo6 TEXT,
             Jyusyo1Ryakusyo3 TEXT,
-            Jyusyo1Nkai TEXT,
+            Jyusyo1Nkai INTEGER,
             Jyusyo1GradeCD TEXT,
             Jyusyo1SyubetuCD TEXT,
             Jyusyo1KigoCD TEXT,
             Jyusyo1JyuryoCD TEXT,
-            Jyusyo1Kyori TEXT,
+            Jyusyo1Kyori INTEGER,
             Jyusyo1TrackCD TEXT,
-            Jyusyo2TokuNum TEXT,
-            Jyusyo2Hondai TEXT
+            RecordDelimiter TEXT,
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji)
         )
     """,
 
@@ -1438,12 +1419,11 @@ SCHEMAS = {
             Nichiji TEXT,
             RaceNum TEXT,
             MakeHM TEXT,
-            Umaban1 TEXT,
-            DMTime1 TEXT,
-            DMGosaP1 TEXT,
-            DMGosaM1 TEXT,
-            Umaban2 TEXT,
-            DMTime2 TEXT
+            Umaban TEXT,
+            DMTime TEXT,
+            DMGosaP TEXT,
+            DMGosaM TEXT,
+            RecordDelimiter TEXT
         )
     """,
     "RT_H1": """
@@ -1459,60 +1439,53 @@ SCHEMAS = {
             RaceNum INTEGER,
             TorokuTosu INTEGER,
             SyussoTosu INTEGER,
-            HatubaiFlag1 INTEGER,
-            HatubaiFlag2 INTEGER,
-            HatubaiFlag3 INTEGER,
-            HatubaiFlag4 INTEGER,
-            HatubaiFlag5 INTEGER,
-            HatubaiFlag6 INTEGER,
-            HatubaiFlag7 INTEGER,
+            HatubaiFlag1 TEXT,
+            HatubaiFlag2 TEXT,
+            HatubaiFlag3 TEXT,
+            HatubaiFlag4 TEXT,
+            HatubaiFlag5 TEXT,
+            HatubaiFlag6 TEXT,
+            HatubaiFlag7 TEXT,
             FukuChakuBaraiKey TEXT,
-            HenkanUma1 INTEGER,
-            HenkanUma2 INTEGER,
-            HenkanUma3 INTEGER,
-            HenkanUma4 INTEGER,
-            HenkanUma5 INTEGER,
-            HenkanUma6 INTEGER,
-            HenkanUma7 INTEGER,
-            HenkanUma8 INTEGER,
-            HenkanUma9 INTEGER,
-            HenkanUma10 INTEGER,
-            HenkanUma11 INTEGER,
-            HenkanUma12 INTEGER,
-            HenkanUma13 INTEGER,
-            HenkanUma14 INTEGER,
-            HenkanUma15 INTEGER,
-            HenkanUma16 INTEGER,
-            HenkanUma17 INTEGER,
-            HenkanUma18 INTEGER,
-            HenkanUma19 INTEGER,
-            HenkanUma20 INTEGER,
-            HenkanUma21 INTEGER,
-            HenkanUma22 INTEGER,
-            HenkanUma23 INTEGER,
-            HenkanUma24 INTEGER,
-            HenkanUma25 INTEGER,
-            HenkanUma26 INTEGER,
-            HenkanUma27 INTEGER,
-            HenkanUma28 INTEGER,
-            HenkanWaku1 INTEGER,
-            HenkanWaku2 INTEGER,
-            HenkanWaku3 INTEGER,
-            HenkanWaku4 INTEGER,
-            HenkanWaku5 INTEGER,
-            HenkanWaku6 INTEGER,
-            HenkanWaku7 INTEGER,
-            HenkanWaku8 INTEGER,
-            HenkanDoWaku1 INTEGER,
-            HenkanDoWaku2 INTEGER,
-            HenkanDoWaku3 INTEGER,
-            HenkanDoWaku4 INTEGER,
-            HenkanDoWaku5 INTEGER,
-            HenkanDoWaku6 INTEGER,
-            HenkanDoWaku7 INTEGER,
-            HenkanDoWaku8 INTEGER,
-            HyoTotal1 REAL,
-            HyoTotal2 REAL,
+            HenkanUma1 TEXT,
+            HenkanUma2 TEXT,
+            HenkanUma3 TEXT,
+            TanUma TEXT,
+            TanHyo REAL,
+            TanNinki INTEGER,
+            FukuUma TEXT,
+            FukuHyo REAL,
+            FukuNinki INTEGER,
+            WakuKumi TEXT,
+            WakuHyo REAL,
+            WakuNinki INTEGER,
+            UmarenKumi TEXT,
+            UmarenHyo REAL,
+            UmarenNinki INTEGER,
+            WideKumi TEXT,
+            WideHyo REAL,
+            WideNinki INTEGER,
+            UmatanKumi TEXT,
+            UmatanHyo REAL,
+            UmatanNinki INTEGER,
+            SanrenfukuKumi TEXT,
+            SanrenfukuHyo REAL,
+            SanrenfukuNinki INTEGER,
+            TanHyoTotal REAL,
+            FukuHyoTotal REAL,
+            WakuHyoTotal REAL,
+            UmarenHyoTotal REAL,
+            WideHyoTotal REAL,
+            UmatanHyoTotal REAL,
+            SanrenfukuHyoTotal REAL,
+            TanHenkanHyoTotal REAL,
+            FukuHenkanHyoTotal REAL,
+            WakuHenkanHyoTotal REAL,
+            UmarenHenkanHyoTotal REAL,
+            WideHenkanHyoTotal REAL,
+            UmatanHenkanHyoTotal REAL,
+            SanrenfukuHenkanHyoTotal REAL,
+            RecordDelimiter TEXT,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
         )
     """,
@@ -1527,20 +1500,17 @@ SCHEMAS = {
             Kaiji INTEGER,
             Nichiji INTEGER,
             RaceNum INTEGER,
-            Kumi TEXT,
-            Hyo REAL,
-            Ninki INTEGER,
-            Field11 TEXT,
-            Field12 TEXT,
-            Field13 TEXT,
-            Field14 TEXT,
-            Field15 TEXT,
-            Field16 TEXT,
-            Field17 TEXT,
-            Field18 TEXT,
-            Field19 TEXT,
-            Field20 TEXT,
-            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi)
+            TorokuTosu INTEGER,
+            SyussoTosu INTEGER,
+            HatubaiFlag TEXT,
+            HenkanUma TEXT,
+            SanrentanKumi TEXT,
+            SanrentanHyo REAL,
+            SanrentanNinki INTEGER,
+            SanrentanHyoTotal REAL,
+            SanrentanHenkanHyoTotal REAL,
+            RecordDelimiter TEXT,
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, SanrentanKumi)
         )
     """,
     "RT_HR": """
@@ -1583,46 +1553,74 @@ SCHEMAS = {
             HenkanFlag7 INTEGER,
             HenkanFlag8 INTEGER,
             HenkanFlag9 INTEGER,
-            HenkanUma1 INTEGER,
-            HenkanUma2 INTEGER,
-            HenkanUma3 INTEGER,
-            HenkanUma4 INTEGER,
-            HenkanUma5 INTEGER,
-            HenkanUma6 INTEGER,
-            HenkanUma7 INTEGER,
-            HenkanUma8 INTEGER,
-            HenkanUma9 INTEGER,
-            HenkanUma10 INTEGER,
-            HenkanUma11 INTEGER,
-            HenkanUma12 INTEGER,
-            HenkanUma13 INTEGER,
-            HenkanUma14 INTEGER,
-            HenkanUma15 INTEGER,
-            HenkanUma16 INTEGER,
-            HenkanUma17 INTEGER,
-            HenkanUma18 INTEGER,
-            HenkanUma19 INTEGER,
-            HenkanUma20 INTEGER,
-            HenkanUma21 INTEGER,
-            HenkanUma22 INTEGER,
-            HenkanUma23 INTEGER,
-            HenkanUma24 INTEGER,
-            HenkanUma25 INTEGER,
-            HenkanUma26 INTEGER,
-            HenkanUma27 INTEGER,
-            HenkanUma28 INTEGER,
-            HenkanWaku1 INTEGER,
-            HenkanWaku2 INTEGER,
-            HenkanWaku3 INTEGER,
-            HenkanWaku4 INTEGER,
-            HenkanWaku5 INTEGER,
-            HenkanWaku6 INTEGER,
-            HenkanWaku7 INTEGER,
-            HenkanWaku8 INTEGER,
-            HenkanDoWaku1 INTEGER,
-            HenkanDoWaku2 INTEGER,
-            HenkanDoWaku3 INTEGER,
-            HenkanDoWaku4 INTEGER,
+            HenkanUma1 TEXT,
+            HenkanUma2 TEXT,
+            HenkanUma3 TEXT,
+            HenkanUma4 TEXT,
+            HenkanUma5 TEXT,
+            HenkanUma6 TEXT,
+            HenkanUma7 TEXT,
+            HenkanUma8 TEXT,
+            HenkanUma9 TEXT,
+            HenkanUma10 TEXT,
+            HenkanUma11 TEXT,
+            HenkanUma12 TEXT,
+            HenkanUma13 TEXT,
+            HenkanUma14 TEXT,
+            HenkanUma15 TEXT,
+            HenkanUma16 TEXT,
+            HenkanUma17 TEXT,
+            HenkanUma18 TEXT,
+            HenkanUma19 TEXT,
+            HenkanUma20 TEXT,
+            HenkanUma21 TEXT,
+            HenkanUma22 TEXT,
+            HenkanUma23 TEXT,
+            HenkanUma24 TEXT,
+            HenkanUma25 TEXT,
+            HenkanUma26 TEXT,
+            HenkanUma27 TEXT,
+            HenkanUma28 TEXT,
+            HenkanWaku1 TEXT,
+            HenkanWaku2 TEXT,
+            HenkanWaku3 TEXT,
+            HenkanWaku4 TEXT,
+            HenkanWaku5 TEXT,
+            HenkanWaku6 TEXT,
+            HenkanWaku7 TEXT,
+            HenkanWaku8 TEXT,
+            HenkanDoWaku1 TEXT,
+            HenkanDoWaku2 TEXT,
+            HenkanDoWaku3 TEXT,
+            HenkanDoWaku4 TEXT,
+            TanUmaban TEXT,
+            TanPay INTEGER,
+            TanNinki INTEGER,
+            FukuUmaban TEXT,
+            FukuPay INTEGER,
+            FukuNinki INTEGER,
+            WakuKumi TEXT,
+            WakuPay INTEGER,
+            WakuNinki INTEGER,
+            UmarenKumi TEXT,
+            UmarenPay INTEGER,
+            UmarenNinki INTEGER,
+            WideKumi TEXT,
+            WidePay INTEGER,
+            WideNinki INTEGER,
+            Yobi1 TEXT,
+            Yobi2 TEXT,
+            Yobi3 TEXT,
+            UmatanKumi TEXT,
+            UmatanPay INTEGER,
+            UmatanNinki INTEGER,
+            SanrenfukuKumi TEXT,
+            SanrenfukuPay INTEGER,
+            SanrenfukuNinki INTEGER,
+            SanrentanKumi TEXT,
+            SanrentanPay INTEGER,
+            SanrentanNinki INTEGER,
+            RecordDelimiter TEXT,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
         )
     """,
@@ -1652,6 +1650,8 @@ SCHEMAS = {
     """,
     "RT_O1": """
         CREATE TABLE IF NOT EXISTS RT_O1 (
+            RecordSpec TEXT,
+            DataKubun TEXT,
             MakeDate TEXT,
             Year INTEGER,
             MonthDay INTEGER,
@@ -1659,37 +1659,33 @@ SCHEMAS = {
             Kaiji INTEGER,
             Nichiji INTEGER,
             RaceNum INTEGER,
+            HassoTime TEXT,
+            TorokuTosu INTEGER,
+            SyussoTosu INTEGER,
+            TanFlag TEXT,
+            FukuFlag TEXT,
+            WakurenFlag TEXT,
+            FukuChakubaraiKey TEXT,
             Umaban INTEGER,
             TanOdds REAL,
             TanNinki INTEGER,
+            FukuUmaban INTEGER,
             FukuOddsLow REAL,
             FukuOddsHigh REAL,
             FukuNinki INTEGER,
-            Field14 TEXT,
-            Field15 TEXT,
-            Field16 TEXT,
-            Field17 TEXT,
-            Field18 TEXT,
-            Field19 TEXT,
-            Field20 TEXT,
-            Field21 TEXT,
-            Field22 TEXT,
-            Field23 TEXT,
-            Field24 TEXT,
-            Field25 TEXT,
-            Field26 TEXT,
-            Field27 TEXT,
-            Field28 TEXT,
-            Field29 TEXT,
-            Field30 TEXT,
-            Field31 TEXT,
-            Field32 TEXT,
-            Field33 TEXT,
+            Kumi TEXT,
+            WakurenOdds REAL,
+            WakurenNinki INTEGER,
+            TanVote INTEGER,
+            FukuVote INTEGER,
+            WakurenVote INTEGER,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
         )
     """,
     "RT_O2": """
         CREATE TABLE IF NOT EXISTS RT_O2 (
+            RecordSpec TEXT,
+            DataKubun TEXT,
             MakeDate TEXT,
             Year INTEGER,
             MonthDay INTEGER,
@@ -1697,23 +1693,21 @@ SCHEMAS = {
             Kaiji INTEGER,
             Nichiji INTEGER,
             RaceNum INTEGER,
+            HassoTime TEXT,
+            TorokuTosu INTEGER,
+            SyussoTosu INTEGER,
+            UmarenFlag TEXT,
             Kumi TEXT,
             Odds REAL,
             Ninki INTEGER,
-            Field11 TEXT,
-            Field12 TEXT,
-            Field13 TEXT,
-            Field14 TEXT,
-            Field15 TEXT,
-            Field16 TEXT,
-            Field17 TEXT,
-            Field18 TEXT,
-            Field19 TEXT,
+            Vote INTEGER,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi)
         )
     """,
     "RT_O3": """
         CREATE TABLE IF NOT EXISTS RT_O3 (
+            RecordSpec TEXT,
+            DataKubun TEXT,
             MakeDate TEXT,
             Year INTEGER,
             MonthDay INTEGER,
@@ -1721,24 +1715,22 @@ SCHEMAS = {
             Kaiji INTEGER,
             Nichiji INTEGER,
             RaceNum INTEGER,
+            HassoTime TEXT,
+            TorokuTosu INTEGER,
+            SyussoTosu INTEGER,
+            WideFlag TEXT,
             Kumi TEXT,
             OddsLow REAL,
             OddsHigh REAL,
             Ninki INTEGER,
-            Field12 TEXT,
-            Field13 TEXT,
-            Field14 TEXT,
-            Field15 TEXT,
-            Field16 TEXT,
-            Field17 TEXT,
-            Field18 TEXT,
-            Field19 TEXT,
-            Field20 TEXT,
+            Vote INTEGER,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi)
         )
     """,
     "RT_O4": """
         CREATE TABLE IF NOT EXISTS RT_O4 (
+            RecordSpec TEXT,
+            DataKubun TEXT,
             MakeDate TEXT,
             Year INTEGER,
             MonthDay INTEGER,
@@ -1746,23 +1738,21 @@ SCHEMAS = {
             Kaiji INTEGER,
             Nichiji INTEGER,
             RaceNum INTEGER,
+            HassoTime TEXT,
+            TorokuTosu INTEGER,
+            SyussoTosu INTEGER,
+            UmatanFlag TEXT,
             Kumi TEXT,
             Odds REAL,
             Ninki INTEGER,
-            Field11 TEXT,
-            Field12 TEXT,
-            Field13 TEXT,
-            Field14 TEXT,
-            Field15 TEXT,
-            Field16 TEXT,
-            Field17 TEXT,
-            Field18 TEXT,
-            Field19 TEXT,
+            Vote INTEGER,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi)
         )
     """,
     "RT_O5": """
         CREATE TABLE IF NOT EXISTS RT_O5 (
+            RecordSpec TEXT,
+            DataKubun TEXT,
             MakeDate TEXT,
             Year INTEGER,
             MonthDay INTEGER,
@@ -1770,23 +1760,21 @@ SCHEMAS = {
             Kaiji INTEGER,
             Nichiji INTEGER,
             RaceNum INTEGER,
+            HassoTime TEXT,
+            TorokuTosu INTEGER,
+            SyussoTosu INTEGER,
+            SanrenpukuFlag TEXT,
             Kumi TEXT,
             Odds REAL,
             Ninki INTEGER,
-            Field11 TEXT,
-            Field12 TEXT,
-            Field13 TEXT,
-            Field14 TEXT,
-            Field15 TEXT,
-            Field16 TEXT,
-            Field17 TEXT,
-            Field18 TEXT,
-            Field19 TEXT,
+            Vote INTEGER,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi)
         )
     """,
     "RT_O6": """
         CREATE TABLE IF NOT EXISTS RT_O6 (
+            RecordSpec TEXT,
+            DataKubun TEXT,
             MakeDate TEXT,
             Year INTEGER,
             MonthDay INTEGER,
@@ -1794,18 +1782,14 @@ SCHEMAS = {
             Kaiji INTEGER,
             Nichiji INTEGER,
             RaceNum INTEGER,
+            HassoTime TEXT,
+            TorokuTosu INTEGER,
+            SyussoTosu INTEGER,
+            SanrentanFlag TEXT,
             Kumi TEXT,
             Odds REAL,
             Ninki INTEGER,
-            Field11 TEXT,
-            Field12 TEXT,
-            Field13 TEXT,
-            Field14 TEXT,
-            Field15 TEXT,
-            Field16 TEXT,
-            Field17 TEXT,
-            Field18 TEXT,
-            Field19 TEXT,
+            Vote INTEGER,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi)
         )
     """,
@@ -1854,26 +1838,25 @@ SCHEMAS = {
             Honsyokin2 REAL,
             Honsyokin3 REAL,
             Honsyokin4 REAL,
-            Honsyokin5 REAL,
-            Honsyokin6 REAL,
-            Honsyokin7 REAL,
-            HonsyokinBefore1 REAL,
-            HonsyokinBefore2 REAL,
-            HonsyokinBefore3 REAL,
-            HonsyokinBefore4 REAL,
-            HonsyokinBefore5 REAL,
-            Fukasyokin1 REAL,
-            Fukasyokin2 REAL,
-            Fukasyokin3 REAL,
-            Fukasyokin4 REAL,
-            Fukasyokin5 REAL,
-            FukasyokinBefore1 REAL,
-            FukasyokinBefore2 REAL,
-            FukasyokinBefore3 REAL,
             HassoTime TEXT,
             HassoTimeBefore TEXT,
             TorokuTosu INTEGER,
             SyussoTosu INTEGER,
+            NyusenTosu INTEGER,
+            TenkoCD TEXT,
+            SibaBabaCD TEXT,
+            DirtBabaCD TEXT,
+            LapTime TEXT,
+            SyogaiMileTime TEXT,
+            Haron3F REAL,
+            Haron4F REAL,
+            Haron3L REAL,
+            Haron4L REAL,
+            Corner TEXT,
+            Syukaisu INTEGER,
+            TsukaJyuni TEXT,
+            RecordUpKubun TEXT,
+            Crlf TEXT,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
         )
     """,
@@ -1903,11 +1886,11 @@ SCHEMAS = {
             BanusiCode TEXT,
             BanusiName TEXT,
             Fukusyoku TEXT,
-            reserved1 TEXT,
+            Reserved_229 TEXT,
             Futan REAL,
             FutanBefore REAL,
             Blinker TEXT,
-            reserved2 TEXT,
+            Reserved_296 TEXT,
             KisyuCode TEXT,
             KisyuCodeBefore TEXT,
             KisyuRyakusyo TEXT,
@@ -1934,8 +1917,8 @@ SCHEMAS = {
             Ninki INTEGER,
             Honsyokin REAL,
             Fukasyokin REAL,
-            reserved3 TEXT,
-            reserved4 TEXT,
+            Reserved_382 TEXT,
+            Reserved_385 TEXT,
             HaronTimeL4 REAL,
             HaronTimeL3 REAL,
             KettoNum1 TEXT,
@@ -1948,7 +1931,7 @@ SCHEMAS = {
             DMGosaM REAL,
             DMJyuni INTEGER,
             KyakusituKubun TEXT,
-            reserved5 TEXT,
+            Reserved_462 TEXT,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
         )
     """,
@@ -1997,17 +1980,17 @@ SCHEMAS = {
             RecordSpec TEXT,
             DataKubun TEXT,
             MakeDate TEXT,
-            Year TEXT,
+            Year INTEGER,
             MonthDay TEXT,
             JyoCD TEXT,
-            Kaiji TEXT,
-            Nichiji TEXT,
-            RaceNum TEXT,
+            Kaiji INTEGER,
+            Nichiji INTEGER,
+            RaceNum INTEGER,
             MakeHM TEXT,
-            Umaban1 TEXT,
-            TMScore1 TEXT,
-            Umaban2 TEXT,
-            TMScore2 TEXT
+            Umaban INTEGER,
+            TMScore INTEGER,
+            RecordDelimiter TEXT,
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
         )
     """,
     "RT_WE": """
@@ -2027,7 +2010,8 @@ SCHEMAS = {
             DirtBabaState TEXT,
             TenkoState2 TEXT,
             SibaBabaState2 TEXT,
-            DirtBabaState2 TEXT
+            DirtBabaState2 TEXT,
+            RecordDelimiter TEXT
         )
     """,
     "RT_WH": """
@@ -2051,6 +2035,246 @@ SCHEMAS = {
         )
     """
 }
+
+
+class SchemaManager:
+    """Schema management for JLTSQL database.
+
+    Manages table creation and schema operations.
+    """
+
+    def __init__(self, db: BaseDatabase):
+        """Initialize schema manager.
+
+        Args:
+            db: Database instance
+        """
+        self.db = db
+
+    def get_table_names(self) -> List[str]:
+        """Get list of all table names in schema.
+
+        Returns:
+            List of table names
+        """
+        return list(SCHEMAS.keys())
+
+    def create_table(self, table_name: str) -> bool:
+        """Create single table.
+
+        Args:
+            table_name: Name of table to create
+
+        Returns:
+            True if successful, False otherwise
+        """
+        if table_name not in SCHEMAS:
+            logger.error(f"Unknown table: {table_name}")
+            return False
+
+        try:
+            schema_sql = SCHEMAS[table_name]
+            self.db.execute(schema_sql)
+            logger.info(f"Created table: {table_name}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to create table {table_name}: {e}")
+            return False
+
+    def create_all_tables(self) -> Dict[str, bool]:
+        """Create all tables defined in SCHEMAS.
+
+        Returns:
+            Dictionary mapping table names to success status
+        """
+        logger.info("Creating all tables...")
+        results = {}
+
+        for table_name, schema_sql in SCHEMAS.items():
+            try:
+                self.db.execute(schema_sql)
+                logger.debug(f"Created table: {table_name}")
+                results[table_name] = True
+            except Exception as e:
+                logger.error(f"Failed to create table {table_name}: {e}")
+                results[table_name] = False
+
+        success_count = sum(1 for v in results.values() if v)
+        logger.info(f"Successfully created {success_count}/{len(SCHEMAS)} tables")
+        return results
+
+    def table_exists(self, table_name: str) -> bool:
+        """Check if table exists in database.
+
+        Args:
+            table_name: Name of table to check
+
+        Returns:
+            True if table exists, False otherwise
+        """
+        return self.db.table_exists(table_name)
+
+    def get_existing_tables(self) -> List[str]:
+        """Get list of existing tables.
+
+        Returns:
+            List of table names that exist in database
+        """
+        existing = []
+        for table_name in SCHEMAS.keys():
+            if self.db.table_exists(table_name):
+                existing.append(table_name)
+        return existing
+
+    def get_missing_tables(self) -> List[str]:
+        """Get list of missing tables.
+
+        Returns:
+            List of table names that don't exist in database
+        """
+        missing = []
+        for table_name in SCHEMAS.keys():
+            if not self.db.table_exists(table_name):
+                missing.append(table_name)
+        return missing
+
+    def apply_metadata_to_table(self, table_name: str) -> bool:
+        """Apply metadata to a specific table.
+
+        Args:
+            table_name: Name of table to apply metadata to
+
+        Returns:
+            True if successful, False otherwise
+        """
+        from src.database.schema_metadata import TABLE_METADATA
+
+        # Check if table exists in database
+        if not self.db.table_exists(table_name):
+            logger.warning(f"Table {table_name} does not exist")
+            return False
+
+        # Check if metadata is defined for this table
+        if table_name not in TABLE_METADATA:
+            logger.warning(f"No metadata defined for table {table_name}")
+            return False
+
+        metadata = TABLE_METADATA[table_name]
+        db_type = self.db.get_db_type()
+
+        try:
+            if db_type == "sqlite":
+                # SQLite: Use _metadata table
+                # Create _metadata table if it doesn't exist
+                self.db.execute("""
+                    CREATE TABLE IF NOT EXISTS _metadata (
+                        table_name TEXT NOT NULL,
+                        column_name TEXT NOT NULL DEFAULT '',
+                        description TEXT,
+                        metadata_type TEXT NOT NULL DEFAULT 'column',
+                        PRIMARY KEY (table_name, column_name)
+                    )
+                """)
+
+                # Insert table description (column_name is empty string for table descriptions)
+                self.db.execute(
+                    """INSERT OR REPLACE INTO _metadata (table_name, column_name, description, metadata_type)
+                       VALUES (?, '', ?, 'table')""",
+                    (table_name, metadata.get("description", ""))
+                )
+
+                # Insert column descriptions
+                for col in metadata.get("columns", []):
+                    col_name = col.get("name", "")
+                    col_desc = col.get("description", "")
+                    if col_name:
+                        self.db.execute(
+                            """INSERT OR REPLACE INTO _metadata (table_name, column_name, description, metadata_type)
+                               VALUES (?, ?, ?, 'column')""",
+                            (table_name, col_name, col_desc)
+                        )
+
+            elif db_type in ("postgresql", "duckdb"):
+                # PostgreSQL/DuckDB: Use COMMENT ON
+                # Table comment
+                table_desc = metadata.get("description", "").replace("'", "''")
+                self.db.execute(f"COMMENT ON TABLE {table_name} IS '{table_desc}'")
+
+                # Column comments
+                for col in metadata.get("columns", []):
+                    col_name = col.get("name", "")
+                    col_desc = col.get("description", "").replace("'", "''")
+                    if col_name:
+                        # Use double quotes for column names with Japanese characters
+                        self.db.execute(f'COMMENT ON COLUMN {table_name}."{col_name}" IS \'{col_desc}\'')
+
+            logger.info(f"Applied metadata to table {table_name}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to apply metadata to {table_name}: {e}")
+            return False
+
+    def get_table_metadata(self, table_name: str) -> dict:
+        """Get metadata for a specific table.
+
+        Args:
+            table_name: Name of table
+
+        Returns:
+            Dictionary with table and column metadata
+        """
+        db_type = self.db.get_db_type()
+        result = {"table": None, "columns": {}}
+
+        try:
+            if db_type == "sqlite":
+                # Query _metadata table
+                if not self.db.table_exists("_metadata"):
+                    return result
+
+                # Get table description (column_name is empty string)
+                rows = self.db.fetch_all(
+                    "SELECT description FROM _metadata WHERE table_name = ? AND column_name = ''",
+                    (table_name,)
+                )
+                if rows:
+                    result["table"] = rows[0]["description"]
+
+                # Get column descriptions
+                rows = self.db.fetch_all(
+                    "SELECT column_name, description FROM _metadata WHERE table_name = ? AND column_name != ''",
+                    (table_name,)
+                )
+                for row in rows:
+                    result["columns"][row["column_name"]] = row["description"]
+
+            elif db_type in ("postgresql", "duckdb"):
+                # Query information_schema or pg_description
+                # Implementation depends on specific database
+                # For now, return empty (can be enhanced later)
+                pass
+
+        except Exception as e:
+            logger.error(f"Failed to get metadata for {table_name}: {e}")
+
+        return result
+
+    def apply_all_metadata(self) -> Dict[str, bool]:
+        """Apply metadata to all tables that have metadata defined.
+
+        Returns:
+            Dictionary mapping table names to success status
+        """
+        from src.database.schema_metadata import TABLE_METADATA
+
+        results = {}
+        for table_name in TABLE_METADATA.keys():
+            results[table_name] = self.apply_metadata_to_table(table_name)
+
+        success_count = sum(1 for v in results.values() if v)
+        logger.info(f"Applied metadata to {success_count}/{len(results)} tables")
+        return results
 
 
 def create_all_tables(db: BaseDatabase) -> None:

@@ -66,56 +66,59 @@ class HNParser:
             # 3. データ作成年月日 (位置:4, 長さ:8)
             result["MakeDate"] = self.decode_field(data[3:11])
 
-            # 4. 繁殖登録番号 (位置:12, 長さ:10)
-            result["TresenKubun"] = self.decode_field(data[11:21])
+            # 4. 繁殖登録番号 (位置:12, 長さ:8)
+            result["HansyokuNum"] = self.decode_field(data[11:19])
 
-            # 5. 予備 (位置:22, 長さ:8)
-            result["ChokyoDate"] = self.decode_field(data[21:29])
+            # 5. 予備 (位置:20, 長さ:1)
+            result["reserved"] = self.decode_field(data[19:20])
 
-            # 6. 血統登録番号 (位置:30, 長さ:10)
-            result["ChokyoTime"] = self.decode_field(data[29:39])
+            # 6. 血統登録番号 (位置:21, 長さ:10)
+            result["KettoNum"] = self.decode_field(data[20:30])
 
-            # 7. 予備 (位置:40, 長さ:1)
-            result["KettoNum"] = self.decode_field(data[39:40])
+            # 7. 削除区分 (位置:31, 長さ:1)
+            result["DelKubun"] = self.decode_field(data[30:31])
 
-            # 8. 馬名 (位置:41, 長さ:36)
-            result["HaronTime4"] = self.decode_field(data[40:76])
+            # 8. 馬名 (位置:32, 長さ:36)
+            result["Bamei"] = self.decode_field(data[31:67])
 
-            # 9. 馬名半角ｶﾅ (位置:77, 長さ:40)
-            result["LapTime4"] = self.decode_field(data[76:116])
+            # 9. 馬名半角ｶﾅ (位置:68, 長さ:40)
+            result["BameiKana"] = self.decode_field(data[67:107])
 
-            # 10. 馬名欧字 (位置:117, 長さ:80)
-            result["HaronTime3"] = self.decode_field(data[116:196])
+            # 10. 馬名欧字 (位置:108, 長さ:40)
+            result["BameiEng"] = self.decode_field(data[107:147])
 
-            # 11. 生年 (位置:197, 長さ:4)
-            result["LapTime3"] = self.decode_field(data[196:200])
+            # 11. 生年 (位置:148, 長さ:4)
+            result["BirthYear"] = self.decode_field(data[147:151])
 
-            # 12. 性別コード (位置:201, 長さ:1)
-            result["HaronTime2"] = self.decode_field(data[200:201])
+            # 12. 性別コード (位置:152, 長さ:1)
+            result["SexCD"] = self.decode_field(data[151:152])
 
-            # 13. 品種コード (位置:202, 長さ:1)
-            result["LapTime2"] = self.decode_field(data[201:202])
+            # 13. 品種コード (位置:153, 長さ:1)
+            result["HinsyuCD"] = self.decode_field(data[152:153])
 
-            # 14. 毛色コード (位置:203, 長さ:2)
-            result["LapTime1"] = self.decode_field(data[202:204])
+            # 14. 毛色コード (位置:154, 長さ:2)
+            result["KeiroCD"] = self.decode_field(data[153:155])
 
-            # 15. 繁殖馬持込区分 (位置:205, 長さ:1)
-            result["Field15"] = self.decode_field(data[204:205])
+            # 15. 繁殖馬持込区分 (位置:156, 長さ:1)
+            result["MochiKubun"] = self.decode_field(data[155:156])
 
-            # 16. 輸入年 (位置:206, 長さ:4)
-            result["Field16"] = self.decode_field(data[205:209])
+            # 16. 輸入年 (位置:157, 長さ:4)
+            result["ImportYear"] = self.decode_field(data[156:160])
 
-            # 17. 産地名 (位置:210, 長さ:20)
-            result["Field17"] = self.decode_field(data[209:229])
+            # 17. 産地名 (位置:161, 長さ:20)
+            result["SanchiName"] = self.decode_field(data[160:180])
 
-            # 18. 父馬繁殖登録番号 (位置:230, 長さ:10)
-            result["Field18"] = self.decode_field(data[229:239])
+            # 18. 父馬繁殖登録番号 (位置:181, 長さ:8)
+            result["FHansyokuNum"] = self.decode_field(data[180:188])
 
-            # 19. 母馬繁殖登録番号 (位置:240, 長さ:10)
-            result["Field19"] = self.decode_field(data[239:249])
+            # 19. 母馬繁殖登録番号 (位置:189, 長さ:8)
+            result["MHansyokuNum"] = self.decode_field(data[188:196])
 
-            # 20. レコード区切 (位置:250, 長さ:2)
-            result["Field20"] = self.decode_field(data[249:251])
+            # 20. 予備 (位置:197, 長さ:53)
+            result["Reserved"] = self.decode_field(data[196:249])
+
+            # 21. レコード区切 (位置:250, 長さ:2)
+            result["RecordDelimiter"] = self.decode_field(data[249:251])
 
             return result
 

@@ -87,17 +87,14 @@ class TMParser:
             # 10. データ作成時分 (位置:28, 長さ:4)
             result["MakeHM"] = self.decode_field(data[27:31])
 
-            # 11. <マイニング予想> (位置:32, 長さ:0)
-            result["Umaban1"] = self.decode_field(data[31:31])
+            # 11. 馬番 (位置:32, 長さ:2)
+            result["Umaban"] = self.decode_field(data[31:33])
 
-            # 12. 馬番 (位置:32, 長さ:2)
-            result["TMScore1"] = self.decode_field(data[31:33])
+            # 12. 予測スコア (位置:34, 長さ:4)
+            result["TMScore"] = self.decode_field(data[33:37])
 
-            # 13. 予測スコア (位置:34, 長さ:4)
-            result["Umaban2"] = self.decode_field(data[33:37])
-
-            # 14. レコード区切 (位置:38, 長さ:2)
-            result["TMScore2"] = self.decode_field(data[37:39])
+            # 13. レコード区切 (位置:38, 長さ:2)
+            result["RecordDelimiter"] = self.decode_field(data[37:39])
 
             return result
 

@@ -61,76 +61,73 @@ class WFParser:
             result["RecordSpec"] = self.decode_field(data[0:2])
 
             # 2. データ区分 (位置:3, 長さ:1)
-            result["Year"] = self.decode_field(data[2:3])
+            result["DataKubun"] = self.decode_field(data[2:3])
 
             # 3. データ作成年月日 (位置:4, 長さ:8)
-            result["MonthDay"] = self.decode_field(data[3:11])
+            result["MakeDate"] = self.decode_field(data[3:11])
 
             # 4. 開催年 (位置:12, 長さ:4)
-            result["Kumi"] = self.decode_field(data[11:15])
+            result["Year"] = self.decode_field(data[11:15])
 
             # 5. 開催月日 (位置:16, 長さ:4)
-            result["PayJyushosiki"] = self.decode_field(data[15:19])
+            result["MonthDay"] = self.decode_field(data[15:19])
 
             # 6. 予備 (位置:20, 長さ:2)
-            result["TekichuHyo"] = self.decode_field(data[19:21])
+            result["Yobi1"] = self.decode_field(data[19:21])
 
-            # 7. <重勝式対象レース情報> (位置:22, 長さ:8)
-            result["Field7"] = self.decode_field(data[21:29])
+            # 7. 重勝式対象レース情報1 (位置:22, 長さ:8)
+            result["RaceInfo1"] = self.decode_field(data[21:29])
 
-            # 8. 競馬場コード (位置:30, 長さ:2)
-            result["Field8"] = self.decode_field(data[29:31])
+            # 8. 重勝式対象レース情報2 (位置:30, 長さ:8)
+            result["RaceInfo2"] = self.decode_field(data[29:37])
 
-            # 9. 開催回[第N回] (位置:32, 長さ:2)
-            result["Field9"] = self.decode_field(data[31:33])
+            # 9. 重勝式対象レース情報3 (位置:38, 長さ:8)
+            result["RaceInfo3"] = self.decode_field(data[37:45])
 
-            # 10. 開催日目[N日目] (位置:34, 長さ:2)
-            result["Field10"] = self.decode_field(data[33:35])
+            # 10. 重勝式対象レース情報4 (位置:46, 長さ:8)
+            result["RaceInfo4"] = self.decode_field(data[45:53])
 
-            # 11. レース番号 (位置:36, 長さ:2)
-            result["Field11"] = self.decode_field(data[35:37])
+            # 11. 重勝式対象レース情報5 (位置:54, 長さ:8)
+            result["RaceInfo5"] = self.decode_field(data[53:61])
 
-            # 12. 予備 (位置:38, 長さ:6)
-            result["Field12"] = self.decode_field(data[37:43])
+            # 12. 予備 (位置:62, 長さ:6)
+            result["Yobi2"] = self.decode_field(data[61:67])
 
-            # 13. 重勝式発売票数 (位置:44, 長さ:11)
-            result["Field13"] = self.decode_field(data[43:54])
+            # 13. 重勝式発売票数 (位置:68, 長さ:11)
+            result["HatubaiHyosu"] = self.decode_field(data[67:78])
 
-            # 14. <有効票数情報> (位置:55, 長さ:11)
-            result["Field14"] = self.decode_field(data[54:65])
+            # 14. 有効票数 (位置:79, 長さ:11)
+            result["YukoHyosu"] = self.decode_field(data[78:89])
 
-            # 15. 有効票数 (位置:66, 長さ:11)
-            result["Field15"] = self.decode_field(data[65:76])
+            # 15. 返還フラグ (位置:90, 長さ:1)
+            result["HenkanFlag"] = self.decode_field(data[89:90])
 
-            # 16. 返還フラグ (位置:77, 長さ:1)
-            result["Field16"] = self.decode_field(data[76:77])
+            # 16. 不成立フラグ (位置:91, 長さ:1)
+            result["FuseirituFlag"] = self.decode_field(data[90:91])
 
-            # 17. 不成立フラグ (位置:78, 長さ:1)
-            result["Field17"] = self.decode_field(data[77:78])
+            # 17. 的中無フラグ (位置:92, 長さ:1)
+            result["TekichuNasiFlag"] = self.decode_field(data[91:92])
 
-            # 18. 的中無フラグ (位置:79, 長さ:1)
-            result["Field18"] = self.decode_field(data[78:79])
+            # 18. キャリーオーバー金額初期 (位置:93, 長さ:15)
+            result["CarryOverStart"] = self.decode_field(data[92:107])
 
-            # 19. キャリーオーバー金額初期 (位置:80, 長さ:15)
-            result["Field19"] = self.decode_field(data[79:94])
+            # 19. キャリーオーバー金額残高 (位置:108, 長さ:15)
+            result["CarryOverBalance"] = self.decode_field(data[107:122])
 
-            # 20. キャリーオーバー金額残高 (位置:95, 長さ:15)
-            result["Field20"] = self.decode_field(data[94:109])
+            # 20. 組番 (位置:123, 長さ:10)
+            result["Kumi"] = self.decode_field(data[122:132])
 
-            # 21. <重勝式払戻情報> (位置:110, 長さ:29)
-            result["Field21"] = self.decode_field(data[109:138])
+            # 21. 重勝式払戻金 (位置:133, 長さ:13)
+            result["PayJyushosiki"] = self.decode_field(data[132:145])
 
-            # 22. 組番 (位置:139, 長さ:10)
-            result["Field22"] = self.decode_field(data[138:148])
+            # 22. 的中票数 (位置:146, 長さ:11)
+            result["TekichuHyosu"] = self.decode_field(data[145:156])
 
-            # 23. 重勝式払戻金 (位置:149, 長さ:9)
-            result["Field23"] = self.decode_field(data[148:157])
+            # 23. 予備 (位置:157, 長さ:11)
+            result["Yobi3"] = self.decode_field(data[156:167])
 
-            # 24. 的中票数 (位置:158, 長さ:10)
-            result["Field24"] = self.decode_field(data[157:167])
-
-            # 25. レコード区切 (位置:168, 長さ:2)
-            result["Field25"] = self.decode_field(data[167:169])
+            # 24. レコード区切 (位置:168, 長さ:2)
+            result["RecordDelimiter"] = self.decode_field(data[167:169])
 
             return result
 

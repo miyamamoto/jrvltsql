@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-RCレコードパーサー: ２１．レコードマスタ
+RCレコードパーサー: コースレコード
 
 このファイルは自動生成されました。
 Source: 公式JV-Data仕様書 Ver.4.9.0.1
@@ -16,7 +16,7 @@ class RCParser:
     """
     RCレコードパーサー
 
-    ２１．レコードマスタ
+    コースレコード
     レコード長: 241 bytes
     VBテーブル名: RECORD
     """
@@ -57,101 +57,103 @@ class RCParser:
             # フィールド抽出
             result = {}
 
-            # 1. レコード種別ID (位置:1, 長さ:2)
+            # 1. レコード種別ID (位置:1-2, 長さ:2)
             result["RecordSpec"] = self.decode_field(data[0:2])
 
             # 2. データ区分 (位置:3, 長さ:1)
             result["DataKubun"] = self.decode_field(data[2:3])
 
-            # 3. データ作成年月日 (位置:4, 長さ:8)
+            # 3. データ作成年月日 (位置:4-11, 長さ:8)
             result["MakeDate"] = self.decode_field(data[3:11])
 
             # 4. レコード識別区分 (位置:12, 長さ:1)
             result["RecInfoKubun"] = self.decode_field(data[11:12])
 
-            # 5. 開催年 (位置:13, 長さ:4)
+            # 5. 開催年 (位置:13-16, 長さ:4)
             result["Year"] = self.decode_field(data[12:16])
 
-            # 6. 開催月日 (位置:17, 長さ:4)
+            # 6. 開催月日 (位置:17-20, 長さ:4)
             result["MonthDay"] = self.decode_field(data[16:20])
 
-            # 7. 競馬場コード (位置:21, 長さ:2)
+            # 7. 競馬場コード (位置:21-22, 長さ:2)
             result["JyoCD"] = self.decode_field(data[20:22])
 
-            # 8. 開催回[第N回] (位置:23, 長さ:2)
+            # 8. 開催回[第N回] (位置:23-24, 長さ:2)
             result["Kaiji"] = self.decode_field(data[22:24])
 
-            # 9. 開催日目[N日目] (位置:25, 長さ:2)
+            # 9. 開催日目[N日目] (位置:25-26, 長さ:2)
             result["Nichiji"] = self.decode_field(data[24:26])
 
-            # 10. レース番号 (位置:27, 長さ:2)
+            # 10. レース番号 (位置:27-28, 長さ:2)
             result["RaceNum"] = self.decode_field(data[26:28])
 
-            # 11. 特別競走番号 (位置:29, 長さ:4)
+            # 11. 特別競走番号 (位置:29-32, 長さ:4)
             result["TokuNum"] = self.decode_field(data[28:32])
 
-            # 12. 競走名本題 (位置:33, 長さ:60)
+            # 12. 競走名本題 (位置:33-92, 長さ:60)
             result["Hondai"] = self.decode_field(data[32:92])
 
             # 13. グレードコード (位置:93, 長さ:1)
             result["GradeCD"] = self.decode_field(data[92:93])
 
-            # 14. 競走種別コード (位置:94, 長さ:2)
+            # 14. 競走種別コード・トラックコード (位置:94-95, 長さ:2)
             result["SyubetuCD_TrackCD"] = self.decode_field(data[93:95])
 
-            # 15. 距離 (位置:96, 長さ:4)
+            # 15. 距離 (位置:96-99, 長さ:4)
             result["Kyori"] = self.decode_field(data[95:99])
 
-            # 16. トラックコード (位置:100, 長さ:2)
-            result["RecKubun"] = self.decode_field(data[99:101])
+            # 16. レコード区分 (位置:100, 長さ:1)
+            result["RecKubun"] = self.decode_field(data[99:100])
 
-            # 17. レコード区分 (位置:102, 長さ:1)
-            result["RecTime"] = self.decode_field(data[101:102])
+            # 17. レコードタイム (位置:101-104, 長さ:4)
+            result["RecTime"] = self.decode_field(data[100:104])
 
-            # 18. レコードタイム (位置:103, 長さ:4)
-            result["TenkoCD"] = self.decode_field(data[102:106])
+            # 18. 天候コード (位置:105, 長さ:1)
+            result["TenkoCD"] = self.decode_field(data[104:105])
 
-            # 19. 天候コード (位置:107, 長さ:1)
-            result["SibaBabaCD"] = self.decode_field(data[106:107])
+            # 19. 芝馬場状態コード (位置:106, 長さ:1)
+            result["SibaBabaCD"] = self.decode_field(data[105:106])
 
-            # 20. 芝馬場状態コード (位置:108, 長さ:1)
-            result["DirtBabaCD"] = self.decode_field(data[107:108])
+            # 20. ダート馬場状態コード (位置:107, 長さ:1)
+            result["DirtBabaCD"] = self.decode_field(data[106:107])
 
-            # 21. ダート馬場状態コード (位置:109, 長さ:1)
-            result["RecUmaKettoNum1"] = self.decode_field(data[108:109])
+            # 21. レコード保持馬1 - 血統登録番号 (位置:108-117, 長さ:10)
+            result["RecUmaKettoNum1"] = self.decode_field(data[107:117])
 
-            # 22. <レコード保持馬情報> (位置:110, 長さ:0)
-            result["RecUmaBamei1"] = self.decode_field(data[109:109])
+            # 22. レコード保持馬1 - 馬名 (位置:118-153, 長さ:36)
+            result["RecUmaBamei1"] = self.decode_field(data[117:153])
 
-            # 23. 　　血統登録番号 (位置:110, 長さ:10)
-            result["RecUmaUmaKigoCD1"] = self.decode_field(data[109:119])
+            # 23. レコード保持馬1 - 馬記号コード (位置:154-155, 長さ:2)
+            result["RecUmaUmaKigoCD1"] = self.decode_field(data[153:155])
 
-            # 24. 　　馬名 (位置:120, 長さ:36)
-            result["RecUmaSexCD1"] = self.decode_field(data[119:155])
+            # 24. レコード保持馬1 - 性別コード (位置:156, 長さ:1)
+            result["RecUmaSexCD1"] = self.decode_field(data[155:156])
 
-            # 25. 　　馬記号コード (位置:156, 長さ:2)
-            result["RecUmaChokyosiCode1"] = self.decode_field(data[155:157])
+            # 25. レコード保持馬1 - 調教師コード (位置:157-161, 長さ:5)
+            result["RecUmaChokyosiCode1"] = self.decode_field(data[156:161])
 
-            # 26. 　　性別コード (位置:158, 長さ:1)
-            result["RecUmaChokyosiName1"] = self.decode_field(data[157:158])
+            # 26. レコード保持馬1 - 調教師名 (位置:162-195, 長さ:34)
+            result["RecUmaChokyosiName1"] = self.decode_field(data[161:195])
 
-            # 27. 　　調教師コード (位置:159, 長さ:5)
-            result["RecUmaFutan1"] = self.decode_field(data[158:163])
+            # 27. レコード保持馬1 - 負担重量 (位置:196-198, 長さ:3)
+            result["RecUmaFutan1"] = self.decode_field(data[195:198])
 
-            # 28. 　　調教師名 (位置:164, 長さ:34)
-            result["RecUmaKisyuCode1"] = self.decode_field(data[163:197])
+            # 28. レコード保持馬1 - 騎手コード (位置:199-203, 長さ:5)
+            result["RecUmaKisyuCode1"] = self.decode_field(data[198:203])
 
-            # 29. 　　負担重量 (位置:198, 長さ:3)
-            result["RecUmaKisyuName1"] = self.decode_field(data[197:200])
+            # 29. レコード保持馬1 - 騎手名 (位置:204-237, 長さ:34)
+            result["RecUmaKisyuName1"] = self.decode_field(data[203:237])
 
-            # 30. 　　騎手コード (位置:201, 長さ:5)
-            result["RecUmaKettoNum2"] = self.decode_field(data[200:205])
+            # 30. レコード保持馬2 - 血統登録番号 (位置:238-239, 長さ:2)
+            # 注: レコード長241バイトのため、馬2の血統登録番号は最初の2バイトのみ
+            result["RecUmaKettoNum2"] = self.decode_field(data[237:239])
 
-            # 31. 　　騎手名 (位置:206, 長さ:34)
-            result["RecUmaBamei2"] = self.decode_field(data[205:239])
+            # 31. レコード保持馬2 - 馬名 (位置なし)
+            # 注: レコード長制約のため、馬2の馬名は含まれない
+            result["RecUmaBamei2"] = ""
 
-            # 32. レコード区切 (位置:240, 長さ:2)
-            result["RecUmaUmaKigoCD2"] = self.decode_field(data[239:241])
+            # 32. レコード区切 (位置:240-241, 長さ:2)
+            result["RecordDelimiter"] = self.decode_field(data[239:241])
 
             return result
 

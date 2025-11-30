@@ -84,47 +84,44 @@ class YSParser:
             # 9. 曜日コード (位置:26, 長さ:1)
             result["YoubiCD"] = self.decode_field(data[25:26])
 
-            # 10. <重賞案内> (位置:27, 長さ:0)
-            result["Jyusyo1TokuNum"] = self.decode_field(data[26:26])
+            # 10. 特別競走番号 (位置:27, 長さ:4)
+            result["Jyusyo1TokuNum"] = self.decode_field(data[26:30])
 
-            # 11. 　　特別競走番号 (位置:27, 長さ:4)
-            result["Jyusyo1Hondai"] = self.decode_field(data[26:30])
+            # 11. 競走名本題 (位置:31, 長さ:60)
+            result["Jyusyo1Hondai"] = self.decode_field(data[30:90])
 
-            # 12. 　　競走名本題 (位置:31, 長さ:60)
-            result["Jyusyo1Ryakusyo10"] = self.decode_field(data[30:90])
+            # 12. 競走名略称10文字 (位置:91, 長さ:20)
+            result["Jyusyo1Ryakusyo10"] = self.decode_field(data[90:110])
 
-            # 13. 　　競走名略称10文字 (位置:91, 長さ:20)
-            result["Jyusyo1Ryakusyo6"] = self.decode_field(data[90:110])
+            # 13. 競走名略称6文字 (位置:111, 長さ:12)
+            result["Jyusyo1Ryakusyo6"] = self.decode_field(data[110:122])
 
-            # 14. 　　競走名略称6文字 (位置:111, 長さ:12)
-            result["Jyusyo1Ryakusyo3"] = self.decode_field(data[110:122])
+            # 14. 競走名略称3文字 (位置:123, 長さ:6)
+            result["Jyusyo1Ryakusyo3"] = self.decode_field(data[122:128])
 
-            # 15. 　　競走名略称3文字 (位置:123, 長さ:6)
-            result["Jyusyo1Nkai"] = self.decode_field(data[122:128])
+            # 15. 重賞回次[第N回] (位置:129, 長さ:3)
+            result["Jyusyo1Nkai"] = self.decode_field(data[128:131])
 
-            # 16. 　　重賞回次[第N回] (位置:129, 長さ:3)
-            result["Jyusyo1GradeCD"] = self.decode_field(data[128:131])
+            # 16. グレードコード (位置:132, 長さ:1)
+            result["Jyusyo1GradeCD"] = self.decode_field(data[131:132])
 
-            # 17. 　　グレードコード (位置:132, 長さ:1)
-            result["Jyusyo1SyubetuCD"] = self.decode_field(data[131:132])
+            # 17. 競走種別コード (位置:133, 長さ:2)
+            result["Jyusyo1SyubetuCD"] = self.decode_field(data[132:134])
 
-            # 18. 　　競走種別コード (位置:133, 長さ:2)
-            result["Jyusyo1KigoCD"] = self.decode_field(data[132:134])
+            # 18. 競走記号コード (位置:135, 長さ:3)
+            result["Jyusyo1KigoCD"] = self.decode_field(data[134:137])
 
-            # 19. 　　競走記号コード (位置:135, 長さ:3)
-            result["Jyusyo1JyuryoCD"] = self.decode_field(data[134:137])
+            # 19. 重量種別コード (位置:138, 長さ:1)
+            result["Jyusyo1JyuryoCD"] = self.decode_field(data[137:138])
 
-            # 20. 　　重量種別コード (位置:138, 長さ:1)
-            result["Jyusyo1Kyori"] = self.decode_field(data[137:138])
+            # 20. 距離 (位置:139, 長さ:4)
+            result["Jyusyo1Kyori"] = self.decode_field(data[138:142])
 
-            # 21. 　　距離 (位置:139, 長さ:4)
-            result["Jyusyo1TrackCD"] = self.decode_field(data[138:142])
+            # 21. トラックコード (位置:143, 長さ:2)
+            result["Jyusyo1TrackCD"] = self.decode_field(data[142:144])
 
-            # 22. 　　トラックコード (位置:143, 長さ:2)
-            result["Jyusyo2TokuNum"] = self.decode_field(data[142:144])
-
-            # 23. レコード区切 (位置:145, 長さ:2)
-            result["Jyusyo2Hondai"] = self.decode_field(data[144:146])
+            # 22. レコード区切 (位置:145, 長さ:2)
+            result["RecordDelimiter"] = self.decode_field(data[144:146])
 
             return result
 

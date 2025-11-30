@@ -87,23 +87,22 @@ class DMParser:
             # 10. データ作成時分 (位置:28, 長さ:4)
             result["MakeHM"] = self.decode_field(data[27:31])
 
-            # 11. <マイニング予想> (位置:32, 長さ:0)
-            result["Umaban1"] = self.decode_field(data[31:31])
+            # 11. <マイニング予想> (位置:32, 長さ:0) - セクションヘッダー、スキップ
 
             # 12. 馬番 (位置:32, 長さ:2)
-            result["DMTime1"] = self.decode_field(data[31:33])
+            result["Umaban"] = self.decode_field(data[31:33])
 
             # 13. 予想走破タイム (位置:34, 長さ:5)
-            result["DMGosaP1"] = self.decode_field(data[33:38])
+            result["DMTime"] = self.decode_field(data[33:38])
 
             # 14. 予想誤差(信頼度)＋ (位置:39, 長さ:4)
-            result["DMGosaM1"] = self.decode_field(data[38:42])
+            result["DMGosaP"] = self.decode_field(data[38:42])
 
             # 15. 予想誤差(信頼度)－ (位置:43, 長さ:4)
-            result["Umaban2"] = self.decode_field(data[42:46])
+            result["DMGosaM"] = self.decode_field(data[42:46])
 
             # 16. レコード区切 (位置:47, 長さ:2)
-            result["DMTime2"] = self.decode_field(data[46:48])
+            result["RecordDelimiter"] = self.decode_field(data[46:48])
 
             return result
 

@@ -17,12 +17,12 @@ class HRParser:
     HRレコードパーサー
 
     ４．払戻
-    レコード長: 203 bytes
+    レコード長: 240 bytes
     VBテーブル名: HARAI
     """
 
     RECORD_TYPE = "HR"
-    RECORD_LENGTH = 203
+    RECORD_LENGTH = 240
 
     def __init__(self):
         self.logger = get_logger(__name__)
@@ -171,125 +171,99 @@ class HRParser:
             # 38. 返還フラグ　3連単 (位置:58, 長さ:1)
             result["HenkanFlag9"] = self.decode_field(data[57:58])
 
-            # 39. 返還馬番情報(馬番01～28) (位置:59, 長さ:1)
+            # 39-66. 返還馬番情報　馬番01～28 (位置:59-86, 各1バイト)
             result["HenkanUma1"] = self.decode_field(data[58:59])
-
-            # 40. 返還枠番情報(枠番1～8) (位置:60, 長さ:1)
             result["HenkanUma2"] = self.decode_field(data[59:60])
-
-            # 41. 返還同枠情報(枠番1～8) (位置:61, 長さ:1)
             result["HenkanUma3"] = self.decode_field(data[60:61])
+            result["HenkanUma4"] = self.decode_field(data[61:62])
+            result["HenkanUma5"] = self.decode_field(data[62:63])
+            result["HenkanUma6"] = self.decode_field(data[63:64])
+            result["HenkanUma7"] = self.decode_field(data[64:65])
+            result["HenkanUma8"] = self.decode_field(data[65:66])
+            result["HenkanUma9"] = self.decode_field(data[66:67])
+            result["HenkanUma10"] = self.decode_field(data[67:68])
+            result["HenkanUma11"] = self.decode_field(data[68:69])
+            result["HenkanUma12"] = self.decode_field(data[69:70])
+            result["HenkanUma13"] = self.decode_field(data[70:71])
+            result["HenkanUma14"] = self.decode_field(data[71:72])
+            result["HenkanUma15"] = self.decode_field(data[72:73])
+            result["HenkanUma16"] = self.decode_field(data[73:74])
+            result["HenkanUma17"] = self.decode_field(data[74:75])
+            result["HenkanUma18"] = self.decode_field(data[75:76])
+            result["HenkanUma19"] = self.decode_field(data[76:77])
+            result["HenkanUma20"] = self.decode_field(data[77:78])
+            result["HenkanUma21"] = self.decode_field(data[78:79])
+            result["HenkanUma22"] = self.decode_field(data[79:80])
+            result["HenkanUma23"] = self.decode_field(data[80:81])
+            result["HenkanUma24"] = self.decode_field(data[81:82])
+            result["HenkanUma25"] = self.decode_field(data[82:83])
+            result["HenkanUma26"] = self.decode_field(data[83:84])
+            result["HenkanUma27"] = self.decode_field(data[84:85])
+            result["HenkanUma28"] = self.decode_field(data[85:86])
 
-            # 42. <単勝払戻> (位置:62, 長さ:0)
-            result["HenkanUma4"] = self.decode_field(data[61:61])
+            # 67-74. 返還枠番情報　枠番1～8 (位置:87-94, 各1バイト)
+            result["HenkanWaku1"] = self.decode_field(data[86:87])
+            result["HenkanWaku2"] = self.decode_field(data[87:88])
+            result["HenkanWaku3"] = self.decode_field(data[88:89])
+            result["HenkanWaku4"] = self.decode_field(data[89:90])
+            result["HenkanWaku5"] = self.decode_field(data[90:91])
+            result["HenkanWaku6"] = self.decode_field(data[91:92])
+            result["HenkanWaku7"] = self.decode_field(data[92:93])
+            result["HenkanWaku8"] = self.decode_field(data[93:94])
 
-            # 43. 　　馬番 (位置:62, 長さ:2)
-            result["HenkanUma5"] = self.decode_field(data[61:63])
+            # 75-78. 返還同枠情報　枠番1～8 (位置:95-98, 各1バイト)
+            result["HenkanDoWaku1"] = self.decode_field(data[94:95])
+            result["HenkanDoWaku2"] = self.decode_field(data[95:96])
+            result["HenkanDoWaku3"] = self.decode_field(data[96:97])
+            result["HenkanDoWaku4"] = self.decode_field(data[97:98])
 
-            # 44. 　　払戻金 (位置:64, 長さ:9)
-            result["HenkanUma6"] = self.decode_field(data[63:72])
+            # 79-81. 単勝払戻 (位置:99-109)
+            result["TanUmaban"] = self.decode_field(data[98:100])
+            result["TanPay"] = self.decode_field(data[100:109])
+            result["TanNinki"] = self.decode_field(data[109:111])
 
-            # 45. 　　人気順 (位置:73, 長さ:2)
-            result["HenkanUma7"] = self.decode_field(data[72:74])
+            # 82-84. 複勝払戻 (位置:112-122)
+            result["FukuUmaban"] = self.decode_field(data[111:113])
+            result["FukuPay"] = self.decode_field(data[113:122])
+            result["FukuNinki"] = self.decode_field(data[122:124])
 
-            # 46. <複勝払戻> (位置:75, 長さ:0)
-            result["HenkanUma8"] = self.decode_field(data[74:74])
+            # 85-87. 枠連払戻 (位置:125-135)
+            result["WakuKumi"] = self.decode_field(data[124:126])
+            result["WakuPay"] = self.decode_field(data[126:135])
+            result["WakuNinki"] = self.decode_field(data[135:137])
 
-            # 47. 　　馬番 (位置:75, 長さ:2)
-            result["HenkanUma9"] = self.decode_field(data[74:76])
+            # 88-90. 馬連払戻 (位置:138-150)
+            result["UmarenKumi"] = self.decode_field(data[137:141])
+            result["UmarenPay"] = self.decode_field(data[141:150])
+            result["UmarenNinki"] = self.decode_field(data[150:153])
 
-            # 48. 　　払戻金 (位置:77, 長さ:9)
-            result["HenkanUma10"] = self.decode_field(data[76:85])
+            # 91-93. ワイド払戻 (位置:154-166)
+            result["WideKumi"] = self.decode_field(data[153:157])
+            result["WidePay"] = self.decode_field(data[157:166])
+            result["WideNinki"] = self.decode_field(data[166:169])
 
-            # 49. 　　人気順 (位置:86, 長さ:2)
-            result["HenkanUma11"] = self.decode_field(data[85:87])
+            # 94-96. 予備 (位置:170-182)
+            result["Yobi1"] = self.decode_field(data[169:173])
+            result["Yobi2"] = self.decode_field(data[173:182])
+            result["Yobi3"] = self.decode_field(data[182:185])
 
-            # 50. <枠連払戻> (位置:88, 長さ:0)
-            result["HenkanUma12"] = self.decode_field(data[87:87])
+            # 97-99. 馬単払戻 (位置:186-198)
+            result["UmatanKumi"] = self.decode_field(data[185:189])
+            result["UmatanPay"] = self.decode_field(data[189:198])
+            result["UmatanNinki"] = self.decode_field(data[198:201])
 
-            # 51. 　　組番 (位置:88, 長さ:2)
-            result["HenkanUma13"] = self.decode_field(data[87:89])
+            # 100-102. 3連複払戻 (位置:202-214)
+            result["SanrenfukuKumi"] = self.decode_field(data[201:207])
+            result["SanrenfukuPay"] = self.decode_field(data[207:216])
+            result["SanrenfukuNinki"] = self.decode_field(data[216:219])
 
-            # 52. 　　払戻金 (位置:90, 長さ:9)
-            result["HenkanUma14"] = self.decode_field(data[89:98])
+            # 103-105. 3連単払戻 (位置:220-232)
+            result["SanrentanKumi"] = self.decode_field(data[219:225])
+            result["SanrentanPay"] = self.decode_field(data[225:234])
+            result["SanrentanNinki"] = self.decode_field(data[234:238])
 
-            # 53. 　　人気順 (位置:99, 長さ:2)
-            result["HenkanUma15"] = self.decode_field(data[98:100])
-
-            # 54. <馬連払戻> (位置:101, 長さ:0)
-            result["HenkanUma16"] = self.decode_field(data[100:100])
-
-            # 55. 　　組番 (位置:101, 長さ:4)
-            result["HenkanUma17"] = self.decode_field(data[100:104])
-
-            # 56. 　　払戻金 (位置:105, 長さ:9)
-            result["HenkanUma18"] = self.decode_field(data[104:113])
-
-            # 57. 　　人気順 (位置:114, 長さ:3)
-            result["HenkanUma19"] = self.decode_field(data[113:116])
-
-            # 58. <ワイド払戻> (位置:117, 長さ:0)
-            result["HenkanUma20"] = self.decode_field(data[116:116])
-
-            # 59. 　　組番 (位置:117, 長さ:4)
-            result["HenkanUma21"] = self.decode_field(data[116:120])
-
-            # 60. 　　払戻金 (位置:121, 長さ:9)
-            result["HenkanUma22"] = self.decode_field(data[120:129])
-
-            # 61. 　　人気順 (位置:130, 長さ:3)
-            result["HenkanUma23"] = self.decode_field(data[129:132])
-
-            # 62. <予備> (位置:133, 長さ:0)
-            result["HenkanUma24"] = self.decode_field(data[132:132])
-
-            # 63. 　　予備 (位置:133, 長さ:4)
-            result["HenkanUma25"] = self.decode_field(data[132:136])
-
-            # 64. 　　予備 (位置:137, 長さ:9)
-            result["HenkanUma26"] = self.decode_field(data[136:145])
-
-            # 65. 　　予備 (位置:146, 長さ:3)
-            result["HenkanUma27"] = self.decode_field(data[145:148])
-
-            # 66. <馬単払戻> (位置:149, 長さ:0)
-            result["HenkanUma28"] = self.decode_field(data[148:148])
-
-            # 67. 　　組番 (位置:149, 長さ:4)
-            result["HenkanWaku1"] = self.decode_field(data[148:152])
-
-            # 68. 　　払戻金 (位置:153, 長さ:9)
-            result["HenkanWaku2"] = self.decode_field(data[152:161])
-
-            # 69. 　　人気順 (位置:162, 長さ:3)
-            result["HenkanWaku3"] = self.decode_field(data[161:164])
-
-            # 70. <3連複払戻> (位置:165, 長さ:0)
-            result["HenkanWaku4"] = self.decode_field(data[164:164])
-
-            # 71. 　　組番 (位置:165, 長さ:6)
-            result["HenkanWaku5"] = self.decode_field(data[164:170])
-
-            # 72. 　　払戻金 (位置:171, 長さ:9)
-            result["HenkanWaku6"] = self.decode_field(data[170:179])
-
-            # 73. 　　人気順 (位置:180, 長さ:3)
-            result["HenkanWaku7"] = self.decode_field(data[179:182])
-
-            # 74. <3連単払戻> (位置:183, 長さ:0)
-            result["HenkanWaku8"] = self.decode_field(data[182:182])
-
-            # 75. 　　組番 (位置:183, 長さ:6)
-            result["HenkanDoWaku1"] = self.decode_field(data[182:188])
-
-            # 76. 　　払戻金 (位置:189, 長さ:9)
-            result["HenkanDoWaku2"] = self.decode_field(data[188:197])
-
-            # 77. 　　人気順 (位置:198, 長さ:4)
-            result["HenkanDoWaku3"] = self.decode_field(data[197:201])
-
-            # 78. レコード区切 (位置:202, 長さ:2)
-            result["HenkanDoWaku4"] = self.decode_field(data[201:203])
+            # 106. レコード区切 (位置:239-240)
+            result["RecordDelimiter"] = self.decode_field(data[238:240])
 
             return result
 

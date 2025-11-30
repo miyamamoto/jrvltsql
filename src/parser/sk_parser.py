@@ -67,37 +67,37 @@ class SKParser:
             result["MakeDate"] = self.decode_field(data[3:11])
 
             # 4. 血統登録番号 (位置:12, 長さ:10)
-            result["BirthDate"] = self.decode_field(data[11:21])
+            result["KettoNum"] = self.decode_field(data[11:21])
 
             # 5. 生年月日 (位置:22, 長さ:8)
-            result["SexCD"] = self.decode_field(data[21:29])
+            result["BirthDate"] = self.decode_field(data[21:29])
 
             # 6. 性別コード (位置:30, 長さ:1)
-            result["HinsyuCD"] = self.decode_field(data[29:30])
+            result["SexCD"] = self.decode_field(data[29:30])
 
             # 7. 品種コード (位置:31, 長さ:1)
-            result["KeiroCD"] = self.decode_field(data[30:31])
+            result["HinsyuCD"] = self.decode_field(data[30:31])
 
             # 8. 毛色コード (位置:32, 長さ:2)
-            result["SankuMochiKubun"] = self.decode_field(data[31:33])
+            result["KeiroCD"] = self.decode_field(data[31:33])
 
             # 9. 産駒持込区分 (位置:34, 長さ:1)
-            result["ImportYear"] = self.decode_field(data[33:34])
+            result["SankuMochiKubun"] = self.decode_field(data[33:34])
 
             # 10. 輸入年 (位置:35, 長さ:4)
-            result["BreederCode"] = self.decode_field(data[34:38])
+            result["ImportYear"] = self.decode_field(data[34:38])
 
             # 11. 生産者コード (位置:39, 長さ:8)
-            result["SanchiName"] = self.decode_field(data[38:46])
+            result["BreederCode"] = self.decode_field(data[38:46])
 
             # 12. 産地名 (位置:47, 長さ:20)
-            result["FNum"] = self.decode_field(data[46:66])
+            result["SanchiName"] = self.decode_field(data[46:66])
 
-            # 13. 3代血統 繁殖登録番号 (位置:67, 長さ:10)
-            result["MNum"] = self.decode_field(data[66:76])
+            # 13. 父繁殖登録番号 (位置:67, 長さ:10)
+            result["FNum"] = self.decode_field(data[66:76])
 
             # 14. レコード区切 (位置:77, 長さ:2)
-            result["FFNum"] = self.decode_field(data[76:78])
+            result["RecordDelimiter"] = self.decode_field(data[76:78])
 
             return result
 

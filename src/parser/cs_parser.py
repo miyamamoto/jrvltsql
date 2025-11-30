@@ -38,5 +38,5 @@ class CSParser(BaseParser):
             FieldDef("TrackCD", 17, 2),          # トラックコード
             FieldDef("KaishuDate", 19, 8),       # コース改修年月日
             FieldDef("CourseEx", 27, 6800),      # コース説明
-            FieldDef("RecordSep", 6827, 2),      # レコード区切
+            FieldDef("RecordDelimiter", 6827, 2),      # レコード区切
         ]

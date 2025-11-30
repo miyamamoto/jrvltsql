@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-HCレコードパーサー: ２２．坂路調教
+HCレコードパーサー: 調教師本年・累計成績
 
 このファイルは自動生成されました。
 Source: 公式JV-Data仕様書 Ver.4.9.0.1
@@ -16,7 +16,7 @@ class HCParser:
     """
     HCレコードパーサー
 
-    ２２．坂路調教
+    調教師本年・累計成績
     レコード長: 60 bytes
     VBテーブル名: CHOKYO_SEISEKI
     """
@@ -57,62 +57,38 @@ class HCParser:
             # フィールド抽出
             result = {}
 
-            # 1. レコード種別ID (位置:1, 長さ:2)
+            # 1. レコード種別ID (位置:1-2, 長さ:2)
             result["RecordSpec"] = self.decode_field(data[0:2])
 
             # 2. データ区分 (位置:3, 長さ:1)
-            result["ChokyosiCode"] = self.decode_field(data[2:3])
+            result["DataKubun"] = self.decode_field(data[2:3])
 
-            # 3. データ作成年月日 (位置:4, 長さ:8)
-            result["Num"] = self.decode_field(data[3:11])
+            # 3. データ作成年月日 (位置:4-11, 長さ:8)
+            result["MakeDate"] = self.decode_field(data[3:11])
 
-            # 4. トレセン区分 (位置:12, 長さ:1)
-            result["SetYear"] = self.decode_field(data[11:12])
+            # 4. 調教師コード (位置:12-16, 長さ:5)
+            result["ChokyosiCode"] = self.decode_field(data[11:16])
 
-            # 5. 調教年月日 (位置:13, 長さ:8)
-            result["HonSyokinHeichi"] = self.decode_field(data[12:20])
+            # 5. 本年・累計区分 (位置:17-18, 長さ:2)
+            result["Num"] = self.decode_field(data[16:18])
 
-            # 6. 調教時刻 (位置:21, 長さ:4)
-            result["HonSyokinSyogai"] = self.decode_field(data[20:24])
+            # 6. 集計年 (位置:19-22, 長さ:4)
+            result["SetYear"] = self.decode_field(data[18:22])
 
-            # 7. 血統登録番号 (位置:25, 長さ:10)
-            result["FukaSyokinHeichi"] = self.decode_field(data[24:34])
+            # 7. 本賞金・平地 (位置:23-31, 長さ:9)
+            result["HonSyokinHeichi"] = self.decode_field(data[22:31])
 
-            # 8. <4ハロン800M> (位置:35, 長さ:0)
-            result["FukaSyokinSyogai"] = self.decode_field(data[34:34])
+            # 8. 本賞金・障害 (位置:32-40, 長さ:9)
+            result["HonSyokinSyogai"] = self.decode_field(data[31:40])
 
-            # 9. 4ハロンタイム合計(800M～0M) (位置:35, 長さ:4)
-            result["HeichiChakukaisu1"] = self.decode_field(data[34:38])
+            # 9. 付加賞金・平地 (位置:41-49, 長さ:9)
+            result["FukaSyokinHeichi"] = self.decode_field(data[40:49])
 
-            # 10. ラップタイム(800M～600M) (位置:39, 長さ:3)
-            result["HeichiChakukaisu2"] = self.decode_field(data[38:41])
+            # 10. 付加賞金・障害 (位置:50-58, 長さ:9)
+            result["FukaSyokinSyogai"] = self.decode_field(data[49:58])
 
-            # 11. <3ハロン600M> (位置:42, 長さ:0)
-            result["HeichiChakukaisu3"] = self.decode_field(data[41:41])
-
-            # 12. 3ハロンタイム合計(600M～0M) (位置:42, 長さ:4)
-            result["HeichiChakukaisu4"] = self.decode_field(data[41:45])
-
-            # 13. ラップタイム(600M～400M) (位置:46, 長さ:3)
-            result["HeichiChakukaisu5"] = self.decode_field(data[45:48])
-
-            # 14. <2ハロン400M> (位置:49, 長さ:0)
-            result["HeichiChakukaisu6"] = self.decode_field(data[48:48])
-
-            # 15. 2ハロンタイム合計(400M～0M) (位置:49, 長さ:4)
-            result["SyogaiChakukaisu1"] = self.decode_field(data[48:52])
-
-            # 16. ラップタイム(400M～200M) (位置:53, 長さ:3)
-            result["SyogaiChakukaisu2"] = self.decode_field(data[52:55])
-
-            # 17. <1ハロン200M> (位置:56, 長さ:0)
-            result["SyogaiChakukaisu3"] = self.decode_field(data[55:55])
-
-            # 18. ラップタイム(200M～0M) (位置:56, 長さ:3)
-            result["SyogaiChakukaisu4"] = self.decode_field(data[55:58])
-
-            # 19. レコード区切 (位置:59, 長さ:2)
-            result["SyogaiChakukaisu5"] = self.decode_field(data[58:60])
+            # 11. レコード区切 (位置:59-60, 長さ:2)
+            result["RecordDelimiter"] = self.decode_field(data[58:60])
 
             return result
 

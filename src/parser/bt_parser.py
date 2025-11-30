@@ -37,5 +37,5 @@ class BTParser(BaseParser):
             FieldDef("KeitoId", 21, 30),         # 系統ID
             FieldDef("KeitoName", 51, 36),       # 系統名
             FieldDef("KeitoEx", 87, 6800),       # 系統説明
-            FieldDef("RecordSep", 6887, 2),      # レコード区切
+            FieldDef("RecordDelimiter", 6887, 2),      # レコード区切
         ]

@@ -85,22 +85,22 @@ class JGParser:
             result["RaceNum"] = self.decode_field(data[25:27])
 
             # 10. 血統登録番号 (位置:28, 長さ:10)
-            result["HappyoTime"] = self.decode_field(data[27:37])
+            result["KettoNum"] = self.decode_field(data[27:37])
 
             # 11. 馬名 (位置:38, 長さ:36)
-            result["Umaban"] = self.decode_field(data[37:73])
+            result["Bamei"] = self.decode_field(data[37:73])
 
             # 12. 出馬投票受付順番 (位置:74, 長さ:3)
-            result["Bamei"] = self.decode_field(data[73:76])
+            result["Num"] = self.decode_field(data[73:76])
 
             # 13. 出走区分 (位置:77, 長さ:1)
-            result["JiyuKubun"] = self.decode_field(data[76:77])
+            result["SyussoKubun"] = self.decode_field(data[76:77])
 
             # 14. 除外状態区分 (位置:78, 長さ:1)
-            result["Field14"] = self.decode_field(data[77:78])
+            result["JyogaiStateKubun"] = self.decode_field(data[77:78])
 
             # 15. レコード区切 (位置:79, 長さ:2)
-            result["Field15"] = self.decode_field(data[78:80])
+            result["RecordDelimiter"] = self.decode_field(data[78:80])
 
             return result
 
