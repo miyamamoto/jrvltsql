@@ -61,157 +61,148 @@ class TKParser:
             result["RecordSpec"] = self.decode_field(data[0:2])
 
             # 2. データ区分 (位置:3, 長さ:1)
-            result["Year"] = self.decode_field(data[2:3])
+            result["DataKubun"] = self.decode_field(data[2:3])
 
             # 3. データ作成年月日 (位置:4, 長さ:8)
-            result["MonthDay"] = self.decode_field(data[3:11])
+            result["MakeDate"] = self.decode_field(data[3:11])
 
             # 4. 開催年 (位置:12, 長さ:4)
-            result["JyoCD"] = self.decode_field(data[11:15])
+            result["Year"] = self.decode_field(data[11:15])
 
             # 5. 開催月日 (位置:16, 長さ:4)
-            result["Kaiji"] = self.decode_field(data[15:19])
+            result["MonthDay"] = self.decode_field(data[15:19])
 
             # 6. 競馬場コード (位置:20, 長さ:2)
-            result["Nichiji"] = self.decode_field(data[19:21])
+            result["JyoCD"] = self.decode_field(data[19:21])
 
             # 7. 開催回[第N回] (位置:22, 長さ:2)
-            result["RaceNum"] = self.decode_field(data[21:23])
+            result["Kaiji"] = self.decode_field(data[21:23])
 
             # 8. 開催日目[N日目] (位置:24, 長さ:2)
-            result["Num"] = self.decode_field(data[23:25])
+            result["Nichiji"] = self.decode_field(data[23:25])
 
             # 9. レース番号 (位置:26, 長さ:2)
-            result["KettoNum"] = self.decode_field(data[25:27])
+            result["RaceNum"] = self.decode_field(data[25:27])
 
             # 10. 曜日コード (位置:28, 長さ:1)
-            result["Bamei"] = self.decode_field(data[27:28])
+            result["YoubiCD"] = self.decode_field(data[27:28])
 
             # 11. 特別競走番号 (位置:29, 長さ:4)
-            result["UmaKigoCD"] = self.decode_field(data[28:32])
+            result["TokuNum"] = self.decode_field(data[28:32])
 
             # 12. 競走名本題 (位置:33, 長さ:60)
-            result["SexCD"] = self.decode_field(data[32:92])
+            result["Hondai"] = self.decode_field(data[32:92])
 
             # 13. 競走名副題 (位置:93, 長さ:60)
-            result["TozaiCD"] = self.decode_field(data[92:152])
+            result["Fukudai"] = self.decode_field(data[92:152])
 
             # 14. 競走名カッコ内 (位置:153, 長さ:60)
-            result["ChokyosiCode"] = self.decode_field(data[152:212])
+            result["Kakko"] = self.decode_field(data[152:212])
 
             # 15. 競走名本題欧字 (位置:213, 長さ:120)
-            result["ChokyosiRyakusyo"] = self.decode_field(data[212:332])
+            result["HondaiEng"] = self.decode_field(data[212:332])
 
             # 16. 競走名副題欧字 (位置:333, 長さ:120)
-            result["Futan"] = self.decode_field(data[332:452])
+            result["FukudaiEng"] = self.decode_field(data[332:452])
 
             # 17. 競走名カッコ内欧字 (位置:453, 長さ:120)
-            result["Koryu"] = self.decode_field(data[452:572])
+            result["KakkoEng"] = self.decode_field(data[452:572])
 
             # 18. 競走名略称10文字 (位置:573, 長さ:20)
-            result["Field18"] = self.decode_field(data[572:592])
+            result["RaceRyakusyo10"] = self.decode_field(data[572:592])
 
             # 19. 競走名略称6文字 (位置:593, 長さ:12)
-            result["Field19"] = self.decode_field(data[592:604])
+            result["RaceRyakusyo6"] = self.decode_field(data[592:604])
 
             # 20. 競走名略称3文字 (位置:605, 長さ:6)
-            result["Field20"] = self.decode_field(data[604:610])
+            result["RaceRyakusyo3"] = self.decode_field(data[604:610])
 
             # 21. 競走名区分 (位置:611, 長さ:1)
-            result["Field21"] = self.decode_field(data[610:611])
+            result["RaceMeiKubun"] = self.decode_field(data[610:611])
 
             # 22. 重賞回次[第N回] (位置:612, 長さ:3)
-            result["Field22"] = self.decode_field(data[611:614])
+            result["JyusyoKaiji"] = self.decode_field(data[611:614])
 
             # 23. グレードコード (位置:615, 長さ:1)
-            result["Field23"] = self.decode_field(data[614:615])
+            result["GradeCD"] = self.decode_field(data[614:615])
 
             # 24. 競走種別コード (位置:616, 長さ:2)
-            result["Field24"] = self.decode_field(data[615:617])
+            result["SyubetuCD"] = self.decode_field(data[615:617])
 
             # 25. 競走記号コード (位置:618, 長さ:3)
-            result["Field25"] = self.decode_field(data[617:620])
+            result["KigoCD"] = self.decode_field(data[617:620])
 
             # 26. 重量種別コード (位置:621, 長さ:1)
-            result["Field26"] = self.decode_field(data[620:621])
+            result["JyuryoCD"] = self.decode_field(data[620:621])
 
             # 27. 競走条件コード 2歳条件 (位置:622, 長さ:3)
-            result["Field27"] = self.decode_field(data[621:624])
+            result["JyokenCD2"] = self.decode_field(data[621:624])
 
             # 28. 競走条件コード 3歳条件 (位置:625, 長さ:3)
-            result["Field28"] = self.decode_field(data[624:627])
+            result["JyokenCD3"] = self.decode_field(data[624:627])
 
             # 29. 競走条件コード 4歳条件 (位置:628, 長さ:3)
-            result["Field29"] = self.decode_field(data[627:630])
+            result["JyokenCD4"] = self.decode_field(data[627:630])
 
             # 30. 競走条件コード 5歳以上条件 (位置:631, 長さ:3)
-            result["Field30"] = self.decode_field(data[630:633])
+            result["JyokenCD5"] = self.decode_field(data[630:633])
 
             # 31. 競走条件コード 最若年条件 (位置:634, 長さ:3)
-            result["Field31"] = self.decode_field(data[633:636])
+            result["JyokenCDYoung"] = self.decode_field(data[633:636])
 
             # 32. 距離 (位置:637, 長さ:4)
-            result["Field32"] = self.decode_field(data[636:640])
+            result["Kyori"] = self.decode_field(data[636:640])
 
             # 33. トラックコード (位置:641, 長さ:2)
-            result["Field33"] = self.decode_field(data[640:642])
+            result["TrackCD"] = self.decode_field(data[640:642])
 
             # 34. コース区分 (位置:643, 長さ:2)
-            result["Field34"] = self.decode_field(data[642:644])
+            result["CourseKubun"] = self.decode_field(data[642:644])
 
             # 35. ハンデ発表日 (位置:645, 長さ:8)
-            result["Field35"] = self.decode_field(data[644:652])
+            result["HandeHappyoDate"] = self.decode_field(data[644:652])
 
             # 36. 登録頭数 (位置:653, 長さ:3)
-            result["Field36"] = self.decode_field(data[652:655])
+            result["TorokuTosu"] = self.decode_field(data[652:655])
 
             # 37. <登録馬毎情報> (位置:656, 長さ:0)
-            result["Field37"] = self.decode_field(data[655:655])
+            # Note: This is a header for repeating horse registration data, no actual data to extract
 
             # 38. 　　連番 (位置:656, 長さ:3)
-            result["Field38"] = self.decode_field(data[655:658])
+            result["RenbanNum"] = self.decode_field(data[655:658])
 
             # 39. 　　血統登録番号 (位置:659, 長さ:10)
-            result["Field39"] = self.decode_field(data[658:668])
+            result["KettoNum"] = self.decode_field(data[658:668])
 
             # 40. 　　馬名 (位置:669, 長さ:36)
-            result["Field40"] = self.decode_field(data[668:704])
+            result["Bamei"] = self.decode_field(data[668:704])
 
             # 41. 　　馬記号コード (位置:705, 長さ:2)
-            result["Field41"] = self.decode_field(data[704:706])
+            result["UmaKigoCD"] = self.decode_field(data[704:706])
 
             # 42. 　　性別コード (位置:707, 長さ:1)
-            result["Field42"] = self.decode_field(data[706:707])
+            result["SexCD"] = self.decode_field(data[706:707])
 
             # 43. 　　調教師東西所属コード (位置:708, 長さ:1)
-            result["Field43"] = self.decode_field(data[707:708])
+            result["TozaiCD"] = self.decode_field(data[707:708])
 
             # 44. 　　調教師コード (位置:709, 長さ:5)
-            result["Field44"] = self.decode_field(data[708:713])
+            result["ChokyosiCode"] = self.decode_field(data[708:713])
 
             # 45. 　　調教師名略称 (位置:714, 長さ:8)
-            result["Field45"] = self.decode_field(data[713:721])
+            result["ChokyosiRyakusyo"] = self.decode_field(data[713:721])
 
             # 46. 　　負担重量 (位置:722, 長さ:3)
-            result["Field46"] = self.decode_field(data[721:724])
+            result["Futan"] = self.decode_field(data[721:724])
 
             # 47. 　　交流区分 (位置:725, 長さ:1)
-            result["Field47"] = self.decode_field(data[724:725])
+            result["Koryu"] = self.decode_field(data[724:725])
 
-            # 48. 　　連番002情報 (位置:726, 長さ:0)
-            result["Field48"] = self.decode_field(data[725:725])
-
-            # 49. 　　連番003情報 (位置:726, 長さ:0)
-            result["Field49"] = self.decode_field(data[725:725])
-
-            # 50. 　　　　　・ (位置:726, 長さ:0)
-            result["Field50"] = self.decode_field(data[725:725])
-
-            # 51. 　　連番300情報 (位置:726, 長さ:0)
-            result["Field51"] = self.decode_field(data[725:725])
+            # 48-51. 　　連番002-300情報 (位置:726, 長さ:0)
+            # Note: These are placeholders for additional horse entries (not present in single-entry records)
 
             # 52. レコード区切 (位置:726, 長さ:2)
-            result["Field52"] = self.decode_field(data[725:727])
+            result["RecordBreak"] = self.decode_field(data[725:727])
 
             return result
 

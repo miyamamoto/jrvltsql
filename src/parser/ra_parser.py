@@ -187,64 +187,64 @@ class RAParser:
             result["Honsyokin4"] = self.decode_field(data[737:745])
 
             # 44. 発走時刻 (位置:746, 長さ:4)
-            result["Honsyokin5"] = self.decode_field(data[745:749])
+            result["HassoTime"] = self.decode_field(data[745:749])
 
             # 45. 変更前発走時刻 (位置:750, 長さ:4)
-            result["Honsyokin6"] = self.decode_field(data[749:753])
+            result["HassoTimeBefore"] = self.decode_field(data[749:753])
 
             # 46. 登録頭数 (位置:754, 長さ:2)
-            result["Honsyokin7"] = self.decode_field(data[753:755])
+            result["TorokuTosu"] = self.decode_field(data[753:755])
 
             # 47. 出走頭数 (位置:756, 長さ:2)
-            result["HonsyokinBefore1"] = self.decode_field(data[755:757])
+            result["SyussoTosu"] = self.decode_field(data[755:757])
 
             # 48. 入線頭数 (位置:758, 長さ:2)
-            result["HonsyokinBefore2"] = self.decode_field(data[757:759])
+            result["NyusenTosu"] = self.decode_field(data[757:759])
 
             # 49. 天候コード (位置:760, 長さ:1)
-            result["HonsyokinBefore3"] = self.decode_field(data[759:760])
+            result["TenkoCD"] = self.decode_field(data[759:760])
 
             # 50. 芝馬場状態コード (位置:761, 長さ:1)
-            result["HonsyokinBefore4"] = self.decode_field(data[760:761])
+            result["SibaBabaCD"] = self.decode_field(data[760:761])
 
             # 51. ダート馬場状態コード (位置:762, 長さ:1)
-            result["HonsyokinBefore5"] = self.decode_field(data[761:762])
+            result["DirtBabaCD"] = self.decode_field(data[761:762])
 
             # 52. ラップタイム (位置:763, 長さ:3)
-            result["Fukasyokin1"] = self.decode_field(data[762:765])
+            result["LapTime"] = self.decode_field(data[762:765])
 
             # 53. 障害マイルタイム (位置:766, 長さ:4)
-            result["Fukasyokin2"] = self.decode_field(data[765:769])
+            result["SyogaiMileTime"] = self.decode_field(data[765:769])
 
             # 54. 前3ハロン (位置:770, 長さ:3)
-            result["Fukasyokin3"] = self.decode_field(data[769:772])
+            result["Haron3F"] = self.decode_field(data[769:772])
 
             # 55. 前4ハロン (位置:773, 長さ:3)
-            result["Fukasyokin4"] = self.decode_field(data[772:775])
+            result["Haron4F"] = self.decode_field(data[772:775])
 
             # 56. 後3ハロン (位置:776, 長さ:3)
-            result["Fukasyokin5"] = self.decode_field(data[775:778])
+            result["Haron3L"] = self.decode_field(data[775:778])
 
             # 57. 後4ハロン (位置:779, 長さ:3)
-            result["FukasyokinBefore1"] = self.decode_field(data[778:781])
+            result["Haron4L"] = self.decode_field(data[778:781])
 
             # 58. <コーナー通過順位> (位置:782, 長さ:0)
-            result["FukasyokinBefore2"] = self.decode_field(data[781:781])
+            # Note: This is a section header with 0 length, not an actual field
 
             # 59. 　　コーナー (位置:782, 長さ:1)
-            result["FukasyokinBefore3"] = self.decode_field(data[781:782])
+            result["Corner"] = self.decode_field(data[781:782])
 
             # 60. 　　周回数 (位置:783, 長さ:1)
-            result["HassoTime"] = self.decode_field(data[782:783])
+            result["Syukaisu"] = self.decode_field(data[782:783])
 
             # 61. 　　各通過順位 (位置:784, 長さ:70)
-            result["HassoTimeBefore"] = self.decode_field(data[783:853])
+            result["TsukaJyuni"] = self.decode_field(data[783:853])
 
             # 62. レコード更新区分 (位置:854, 長さ:1)
-            result["TorokuTosu"] = self.decode_field(data[853:854])
+            result["RecordUpKubun"] = self.decode_field(data[853:854])
 
             # 63. レコード区切 (位置:855, 長さ:2)
-            result["SyussoTosu"] = self.decode_field(data[854:856])
+            result["Crlf"] = self.decode_field(data[854:856])
 
             return result
 

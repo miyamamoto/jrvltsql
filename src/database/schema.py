@@ -10,18 +10,16 @@ IMPORTANT - Duplicate Handling & Primary Keys:
 ==============================================
 
 Current Status:
-- Tables do NOT have PRIMARY KEY constraints defined
+- Tables HAVE PRIMARY KEY constraints defined
 - INSERT OR REPLACE is used by default in the importer
-- WITHOUT primary keys, this means duplicate records CAN be created
+- WITH primary keys, duplicate records will be UPDATED instead of created
 
-Recommendation:
-To prevent duplicates when re-running imports, add PRIMARY KEY constraints
-to your tables. Common composite keys for JV-Data tables:
-
-NL_RA (Race Details):
+Primary Keys Implemented:
+-------------------------
+NL_RA, RT_RA (Race Details):
     PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
 
-NL_SE (Horse Race Results):
+NL_SE, RT_SE (Horse Race Results):
     PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
 
 NL_UM (Horse Master):
@@ -33,20 +31,29 @@ NL_KS (Jockey Master):
 NL_CH (Trainer Master):
     PRIMARY KEY (ChokyosiCode)  -- Trainer code
 
-To add primary keys, you can either:
-1. Modify this file to include PRIMARY KEY in CREATE TABLE statements
-2. Run ALTER TABLE commands (requires recreating tables in SQLite)
-3. Create UNIQUE indexes as an alternative (see indexes.py)
+NL_BN (Owner Master):
+    PRIMARY KEY (BanusiCode)  -- Owner code
 
-With PRIMARY KEY constraints:
+NL_BR (Breeder Master):
+    PRIMARY KEY (BreederCode)  -- Breeder code
+
+NL_TK (Withdrawal Horse):
+    PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Num)
+
+NL_O1-O6, RT_O1-O6 (Odds):
+    PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban or Kumi)
+
+NL_H1, NL_H6, RT_H1, RT_H6 (Payout):
+    PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum) or with Kumi
+
+NL_HR, RT_HR (Refund):
+    PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
+
+Benefits with PRIMARY KEY constraints:
 - INSERT OR REPLACE will update existing records instead of duplicating
 - Safe to re-run imports multiple times
 - Better data integrity
-
-Without PRIMARY KEY constraints (current state):
-- INSERT OR REPLACE behaves like regular INSERT
-- May create duplicate records on re-import
-- Consider using UNIQUE indexes or data deduplication queries
+- Prevents duplicate records on re-import
 """
 
 from typing import Dict, List
@@ -63,6 +70,7 @@ SCHEMAS = {
             RecordSpec TEXT,
             DataKubun TEXT,
             MakeDate TEXT,
+            BanusiCode TEXT,
             BanusiName TEXT,
             BanusiName_Co TEXT,
             BanusiNameKana TEXT,
@@ -74,7 +82,8 @@ SCHEMAS = {
             H_ChakuKaisu1 TEXT,
             H_ChakuKaisu2 TEXT,
             H_ChakuKaisu3 TEXT,
-            H_ChakuKaisu4 TEXT
+            H_ChakuKaisu4 TEXT,
+            PRIMARY KEY (BanusiCode)
         )
     """,
     "NL_BR": """
@@ -82,6 +91,7 @@ SCHEMAS = {
             RecordSpec TEXT,
             DataKubun TEXT,
             MakeDate TEXT,
+            BreederCode TEXT,
             BreederName_Co TEXT,
             BreederName TEXT,
             BreederNameKana TEXT,
@@ -93,7 +103,8 @@ SCHEMAS = {
             H_ChakuKaisu1 TEXT,
             H_ChakuKaisu2 TEXT,
             H_ChakuKaisu3 TEXT,
-            H_ChakuKaisu4 TEXT
+            H_ChakuKaisu4 TEXT,
+            PRIMARY KEY (BreederCode)
         )
     """,
     "NL_BT": """
@@ -252,6 +263,7 @@ SCHEMAS = {
             RecordSpec TEXT,
             DataKubun TEXT,
             MakeDate TEXT,
+            ChokyosiCode TEXT,
             DelKubun TEXT,
             IssueDate TEXT,
             DelDate TEXT,
@@ -310,7 +322,8 @@ SCHEMAS = {
             Field59 TEXT,
             Field60 TEXT,
             Field61 TEXT,
-            Field62 TEXT
+            Field62 TEXT,
+            PRIMARY KEY (ChokyosiCode)
         )
     """,
     "NL_CS": """
@@ -412,7 +425,8 @@ SCHEMAS = {
             HenkanDoWaku7 TEXT,
             HenkanDoWaku8 TEXT,
             HyoTotal1 TEXT,
-            HyoTotal2 TEXT
+            HyoTotal2 TEXT,
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
         )
     """,
     "NL_H6": """
@@ -437,7 +451,8 @@ SCHEMAS = {
             Field17 TEXT,
             Field18 TEXT,
             Field19 TEXT,
-            Field20 TEXT
+            Field20 TEXT,
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi)
         )
     """,
     "NL_HC": """
@@ -566,7 +581,8 @@ SCHEMAS = {
             HenkanDoWaku1 TEXT,
             HenkanDoWaku2 TEXT,
             HenkanDoWaku3 TEXT,
-            HenkanDoWaku4 TEXT
+            HenkanDoWaku4 TEXT,
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
         )
     """,
     "NL_HS": """
@@ -648,6 +664,7 @@ SCHEMAS = {
             RecordSpec TEXT,
             DataKubun TEXT,
             MakeDate TEXT,
+            KisyuCode TEXT,
             DelKubun TEXT,
             IssueDate TEXT,
             DelDate TEXT,
@@ -723,7 +740,8 @@ SCHEMAS = {
             Field76 TEXT,
             Field77 TEXT,
             Field78 TEXT,
-            Field79 TEXT
+            Field79 TEXT,
+            PRIMARY KEY (KisyuCode)
         )
     """,
     "NL_O1": """
@@ -760,7 +778,8 @@ SCHEMAS = {
             Field30 TEXT,
             Field31 TEXT,
             Field32 TEXT,
-            Field33 TEXT
+            Field33 TEXT,
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
         )
     """,
     "NL_O2": """
@@ -783,7 +802,8 @@ SCHEMAS = {
             Field16 TEXT,
             Field17 TEXT,
             Field18 TEXT,
-            Field19 TEXT
+            Field19 TEXT,
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi)
         )
     """,
     "NL_O3": """
@@ -807,7 +827,8 @@ SCHEMAS = {
             Field17 TEXT,
             Field18 TEXT,
             Field19 TEXT,
-            Field20 TEXT
+            Field20 TEXT,
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi)
         )
     """,
     "NL_O4": """
@@ -830,7 +851,8 @@ SCHEMAS = {
             Field16 TEXT,
             Field17 TEXT,
             Field18 TEXT,
-            Field19 TEXT
+            Field19 TEXT,
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi)
         )
     """,
     "NL_O5": """
@@ -853,7 +875,8 @@ SCHEMAS = {
             Field16 TEXT,
             Field17 TEXT,
             Field18 TEXT,
-            Field19 TEXT
+            Field19 TEXT,
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi)
         )
     """,
     "NL_O6": """
@@ -876,7 +899,8 @@ SCHEMAS = {
             Field16 TEXT,
             Field17 TEXT,
             Field18 TEXT,
-            Field19 TEXT
+            Field19 TEXT,
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi)
         )
     """,
     "NL_RA": """
@@ -943,7 +967,8 @@ SCHEMAS = {
             HassoTime TEXT,
             HassoTimeBefore TEXT,
             TorokuTosu TEXT,
-            SyussoTosu TEXT
+            SyussoTosu TEXT,
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
         )
     """,
     "NL_RC": """
@@ -1053,7 +1078,8 @@ SCHEMAS = {
             DMGosaM TEXT,
             DMJyuni TEXT,
             KyakusituKubun TEXT,
-            reserved5 TEXT
+            reserved5 TEXT,
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
         )
     """,
     "NL_SK": """
@@ -1146,7 +1172,8 @@ SCHEMAS = {
             Field49 TEXT,
             Field50 TEXT,
             Field51 TEXT,
-            Field52 TEXT
+            Field52 TEXT,
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Num)
         )
     """,
     "NL_TM": """
@@ -1229,7 +1256,8 @@ SCHEMAS = {
             RuikeiFukaSyogai TEXT,
             RuikeiSyutokuHeichi TEXT,
             RuikeiSyutokuSyogai TEXT,
-            reserved1 TEXT
+            reserved1 TEXT,
+            PRIMARY KEY (KettoNum)
         )
     """,
 
@@ -1479,7 +1507,8 @@ SCHEMAS = {
             HenkanDoWaku7 TEXT,
             HenkanDoWaku8 TEXT,
             HyoTotal1 TEXT,
-            HyoTotal2 TEXT
+            HyoTotal2 TEXT,
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
         )
     """,
     "RT_H6": """
@@ -1505,7 +1534,8 @@ SCHEMAS = {
             Field17 TEXT,
             Field18 TEXT,
             Field19 TEXT,
-            Field20 TEXT
+            Field20 TEXT,
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi)
         )
     """,
     "RT_HR": """
@@ -1587,7 +1617,8 @@ SCHEMAS = {
             HenkanDoWaku1 TEXT,
             HenkanDoWaku2 TEXT,
             HenkanDoWaku3 TEXT,
-            HenkanDoWaku4 TEXT
+            HenkanDoWaku4 TEXT,
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
         )
     """,
     "RT_JC": """
@@ -1648,7 +1679,8 @@ SCHEMAS = {
             Field30 TEXT,
             Field31 TEXT,
             Field32 TEXT,
-            Field33 TEXT
+            Field33 TEXT,
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
         )
     """,
     "RT_O2": """
@@ -1671,7 +1703,8 @@ SCHEMAS = {
             Field16 TEXT,
             Field17 TEXT,
             Field18 TEXT,
-            Field19 TEXT
+            Field19 TEXT,
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi)
         )
     """,
     "RT_O3": """
@@ -1695,7 +1728,8 @@ SCHEMAS = {
             Field17 TEXT,
             Field18 TEXT,
             Field19 TEXT,
-            Field20 TEXT
+            Field20 TEXT,
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi)
         )
     """,
     "RT_O4": """
@@ -1718,7 +1752,8 @@ SCHEMAS = {
             Field16 TEXT,
             Field17 TEXT,
             Field18 TEXT,
-            Field19 TEXT
+            Field19 TEXT,
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi)
         )
     """,
     "RT_O5": """
@@ -1741,7 +1776,8 @@ SCHEMAS = {
             Field16 TEXT,
             Field17 TEXT,
             Field18 TEXT,
-            Field19 TEXT
+            Field19 TEXT,
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi)
         )
     """,
     "RT_O6": """
@@ -1764,7 +1800,8 @@ SCHEMAS = {
             Field16 TEXT,
             Field17 TEXT,
             Field18 TEXT,
-            Field19 TEXT
+            Field19 TEXT,
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi)
         )
     """,
     "RT_RA": """
@@ -1831,7 +1868,8 @@ SCHEMAS = {
             HassoTime TEXT,
             HassoTimeBefore TEXT,
             TorokuTosu TEXT,
-            SyussoTosu TEXT
+            SyussoTosu TEXT,
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
         )
     """,
     "RT_SE": """
@@ -1905,7 +1943,8 @@ SCHEMAS = {
             DMGosaM TEXT,
             DMJyuni TEXT,
             KyakusituKubun TEXT,
-            reserved5 TEXT
+            reserved5 TEXT,
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
         )
     """,
     "RT_TC": """

@@ -61,58 +61,58 @@ class O5Parser:
             result["RecordSpec"] = self.decode_field(data[0:2])
 
             # 2. データ区分 (位置:3, 長さ:1)
-            result["Year"] = self.decode_field(data[2:3])
+            result["DataKubun"] = self.decode_field(data[2:3])
 
             # 3. データ作成年月日 (位置:4, 長さ:8)
-            result["MonthDay"] = self.decode_field(data[3:11])
+            result["MakeDate"] = self.decode_field(data[3:11])
 
             # 4. 開催年 (位置:12, 長さ:4)
-            result["JyoCD"] = self.decode_field(data[11:15])
+            result["Year"] = self.decode_field(data[11:15])
 
             # 5. 開催月日 (位置:16, 長さ:4)
-            result["Kaiji"] = self.decode_field(data[15:19])
+            result["MonthDay"] = self.decode_field(data[15:19])
 
             # 6. 競馬場コード (位置:20, 長さ:2)
-            result["Nichiji"] = self.decode_field(data[19:21])
+            result["JyoCD"] = self.decode_field(data[19:21])
 
             # 7. 開催回[第N回] (位置:22, 長さ:2)
-            result["RaceNum"] = self.decode_field(data[21:23])
+            result["Kaiji"] = self.decode_field(data[21:23])
 
             # 8. 開催日目[N日目] (位置:24, 長さ:2)
-            result["Kumi"] = self.decode_field(data[23:25])
+            result["Nichiji"] = self.decode_field(data[23:25])
 
             # 9. レース番号 (位置:26, 長さ:2)
-            result["Odds"] = self.decode_field(data[25:27])
+            result["RaceNum"] = self.decode_field(data[25:27])
 
             # 10. 発表月日時分 (位置:28, 長さ:8)
-            result["Ninki"] = self.decode_field(data[27:35])
+            result["HassoTime"] = self.decode_field(data[27:35])
 
             # 11. 登録頭数 (位置:36, 長さ:2)
-            result["Field11"] = self.decode_field(data[35:37])
+            result["TorokuTosu"] = self.decode_field(data[35:37])
 
             # 12. 出走頭数 (位置:38, 長さ:2)
-            result["Field12"] = self.decode_field(data[37:39])
+            result["SyussoTosu"] = self.decode_field(data[37:39])
 
             # 13. 発売フラグ　3連複 (位置:40, 長さ:1)
-            result["Field13"] = self.decode_field(data[39:40])
+            result["SanrenpukuFlag"] = self.decode_field(data[39:40])
 
             # 14. <3連複オッズ> (位置:41, 長さ:0)
-            result["Field14"] = self.decode_field(data[40:40])
+            # result["Field14"] = self.decode_field(data[40:40])
 
             # 15. 　　組番 (位置:41, 長さ:6)
-            result["Field15"] = self.decode_field(data[40:46])
+            result["Kumi"] = self.decode_field(data[40:46])
 
             # 16. 　　オッズ (位置:47, 長さ:6)
-            result["Field16"] = self.decode_field(data[46:52])
+            result["Odds"] = self.decode_field(data[46:52])
 
             # 17. 　　人気順 (位置:53, 長さ:3)
-            result["Field17"] = self.decode_field(data[52:55])
+            result["Ninki"] = self.decode_field(data[52:55])
 
             # 18. 3連複票数合計 (位置:56, 長さ:11)
-            result["Field18"] = self.decode_field(data[55:66])
+            result["Vote"] = self.decode_field(data[55:66])
 
             # 19. レコード区切 (位置:67, 長さ:2)
-            result["Field19"] = self.decode_field(data[66:68])
+            # result["Field19"] = self.decode_field(data[66:68])
 
             return result
 

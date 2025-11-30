@@ -124,133 +124,133 @@ class H1Parser:
             result["HenkanUma3"] = self.decode_field(data[41:42])
 
             # 23. <単勝票数> (位置:43, 長さ:0)
-            result["HenkanUma4"] = self.decode_field(data[42:42])
+            # (This is a section header, no data)
 
             # 24. 　　馬番 (位置:43, 長さ:2)
-            result["HenkanUma5"] = self.decode_field(data[42:44])
+            result["TanUma"] = self.decode_field(data[42:44])
 
             # 25. 　　票数 (位置:45, 長さ:11)
-            result["HenkanUma6"] = self.decode_field(data[44:55])
+            result["TanHyo"] = self.decode_field(data[44:55])
 
             # 26. 　　人気順 (位置:56, 長さ:2)
-            result["HenkanUma7"] = self.decode_field(data[55:57])
+            result["TanNinki"] = self.decode_field(data[55:57])
 
             # 27. <複勝票数> (位置:58, 長さ:0)
-            result["HenkanUma8"] = self.decode_field(data[57:57])
+            # (This is a section header, no data)
 
             # 28. 　　馬番 (位置:58, 長さ:2)
-            result["HenkanUma9"] = self.decode_field(data[57:59])
+            result["FukuUma"] = self.decode_field(data[57:59])
 
             # 29. 　　票数 (位置:60, 長さ:11)
-            result["HenkanUma10"] = self.decode_field(data[59:70])
+            result["FukuHyo"] = self.decode_field(data[59:70])
 
             # 30. 　　人気順 (位置:71, 長さ:2)
-            result["HenkanUma11"] = self.decode_field(data[70:72])
+            result["FukuNinki"] = self.decode_field(data[70:72])
 
             # 31. <枠連票数> (位置:73, 長さ:0)
-            result["HenkanUma12"] = self.decode_field(data[72:72])
+            # (This is a section header, no data)
 
             # 32. 　　組番 (位置:73, 長さ:2)
-            result["HenkanUma13"] = self.decode_field(data[72:74])
+            result["WakuKumi"] = self.decode_field(data[72:74])
 
             # 33. 　　票数 (位置:75, 長さ:11)
-            result["HenkanUma14"] = self.decode_field(data[74:85])
+            result["WakuHyo"] = self.decode_field(data[74:85])
 
             # 34. 　　人気順 (位置:86, 長さ:2)
-            result["HenkanUma15"] = self.decode_field(data[85:87])
+            result["WakuNinki"] = self.decode_field(data[85:87])
 
             # 35. <馬連票数> (位置:88, 長さ:0)
-            result["HenkanUma16"] = self.decode_field(data[87:87])
+            # (This is a section header, no data)
 
             # 36. 　　組番 (位置:88, 長さ:4)
-            result["HenkanUma17"] = self.decode_field(data[87:91])
+            result["UmarenKumi"] = self.decode_field(data[87:91])
 
             # 37. 　　票数 (位置:92, 長さ:11)
-            result["HenkanUma18"] = self.decode_field(data[91:102])
+            result["UmarenHyo"] = self.decode_field(data[91:102])
 
             # 38. 　　人気順 (位置:103, 長さ:3)
-            result["HenkanUma19"] = self.decode_field(data[102:105])
+            result["UmarenNinki"] = self.decode_field(data[102:105])
 
             # 39. <ワイド票数> (位置:106, 長さ:0)
-            result["HenkanUma20"] = self.decode_field(data[105:105])
+            # (This is a section header, no data)
 
             # 40. 　　組番 (位置:106, 長さ:4)
-            result["HenkanUma21"] = self.decode_field(data[105:109])
+            result["WideKumi"] = self.decode_field(data[105:109])
 
             # 41. 　　票数 (位置:110, 長さ:11)
-            result["HenkanUma22"] = self.decode_field(data[109:120])
+            result["WideHyo"] = self.decode_field(data[109:120])
 
             # 42. 　　人気順 (位置:121, 長さ:3)
-            result["HenkanUma23"] = self.decode_field(data[120:123])
+            result["WideNinki"] = self.decode_field(data[120:123])
 
             # 43. <馬単票数> (位置:124, 長さ:0)
-            result["HenkanUma24"] = self.decode_field(data[123:123])
+            # (This is a section header, no data)
 
             # 44. 　　組番 (位置:124, 長さ:4)
-            result["HenkanUma25"] = self.decode_field(data[123:127])
+            result["UmatanKumi"] = self.decode_field(data[123:127])
 
             # 45. 　　票数 (位置:128, 長さ:11)
-            result["HenkanUma26"] = self.decode_field(data[127:138])
+            result["UmatanHyo"] = self.decode_field(data[127:138])
 
             # 46. 　　人気順 (位置:139, 長さ:3)
-            result["HenkanUma27"] = self.decode_field(data[138:141])
+            result["UmatanNinki"] = self.decode_field(data[138:141])
 
             # 47. <3連複票数> (位置:142, 長さ:0)
-            result["HenkanUma28"] = self.decode_field(data[141:141])
+            # (This is a section header, no data)
 
             # 48. 　　組番 (位置:142, 長さ:6)
-            result["HenkanWaku1"] = self.decode_field(data[141:147])
+            result["SanrenfukuKumi"] = self.decode_field(data[141:147])
 
             # 49. 　　票数 (位置:148, 長さ:11)
-            result["HenkanWaku2"] = self.decode_field(data[147:158])
+            result["SanrenfukuHyo"] = self.decode_field(data[147:158])
 
             # 50. 　　人気順 (位置:159, 長さ:3)
-            result["HenkanWaku3"] = self.decode_field(data[158:161])
+            result["SanrenfukuNinki"] = self.decode_field(data[158:161])
 
             # 51. 単勝票数合計 (位置:162, 長さ:11)
-            result["HenkanWaku4"] = self.decode_field(data[161:172])
+            result["TanHyoTotal"] = self.decode_field(data[161:172])
 
             # 52. 複勝票数合計 (位置:173, 長さ:11)
-            result["HenkanWaku5"] = self.decode_field(data[172:183])
+            result["FukuHyoTotal"] = self.decode_field(data[172:183])
 
             # 53. 枠連票数合計 (位置:184, 長さ:11)
-            result["HenkanWaku6"] = self.decode_field(data[183:194])
+            result["WakuHyoTotal"] = self.decode_field(data[183:194])
 
             # 54. 馬連票数合計 (位置:195, 長さ:11)
-            result["HenkanWaku7"] = self.decode_field(data[194:205])
+            result["UmarenHyoTotal"] = self.decode_field(data[194:205])
 
             # 55. ワイド票数合計 (位置:206, 長さ:11)
-            result["HenkanWaku8"] = self.decode_field(data[205:216])
+            result["WideHyoTotal"] = self.decode_field(data[205:216])
 
             # 56. 馬単票数合計 (位置:217, 長さ:11)
-            result["HenkanDoWaku1"] = self.decode_field(data[216:227])
+            result["UmatanHyoTotal"] = self.decode_field(data[216:227])
 
             # 57. 3連複票数合計 (位置:228, 長さ:11)
-            result["HenkanDoWaku2"] = self.decode_field(data[227:238])
+            result["SanrenfukuHyoTotal"] = self.decode_field(data[227:238])
 
             # 58. 単勝返還票数合計 (位置:239, 長さ:11)
-            result["HenkanDoWaku3"] = self.decode_field(data[238:249])
+            result["TanHenkanHyoTotal"] = self.decode_field(data[238:249])
 
             # 59. 複勝返還票数合計 (位置:250, 長さ:11)
-            result["HenkanDoWaku4"] = self.decode_field(data[249:260])
+            result["FukuHenkanHyoTotal"] = self.decode_field(data[249:260])
 
             # 60. 枠連返還票数合計 (位置:261, 長さ:11)
-            result["HenkanDoWaku5"] = self.decode_field(data[260:271])
+            result["WakuHenkanHyoTotal"] = self.decode_field(data[260:271])
 
             # 61. 馬連返還票数合計 (位置:272, 長さ:11)
-            result["HenkanDoWaku6"] = self.decode_field(data[271:282])
+            result["UmarenHenkanHyoTotal"] = self.decode_field(data[271:282])
 
             # 62. ワイド返還票数合計 (位置:283, 長さ:11)
-            result["HenkanDoWaku7"] = self.decode_field(data[282:293])
+            result["WideHenkanHyoTotal"] = self.decode_field(data[282:293])
 
             # 63. 馬単返還票数合計 (位置:294, 長さ:11)
-            result["HenkanDoWaku8"] = self.decode_field(data[293:304])
+            result["UmatanHenkanHyoTotal"] = self.decode_field(data[293:304])
 
             # 64. 3連複返還票数合計 (位置:305, 長さ:11)
-            result["HyoTotal1"] = self.decode_field(data[304:315])
+            result["SanrenfukuHenkanHyoTotal"] = self.decode_field(data[304:315])
 
             # 65. レコード区切 (位置:316, 長さ:2)
-            result["HyoTotal2"] = self.decode_field(data[315:317])
+            result["RecordDelimiter"] = self.decode_field(data[315:317])
 
             return result
 

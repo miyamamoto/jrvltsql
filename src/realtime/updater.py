@@ -6,6 +6,7 @@ This module handles real-time data updates to the database.
 from typing import Dict, Optional
 
 from src.database.base import BaseDatabase
+from src.jvlink.constants import DATA_KUBUN_NEW, DATA_KUBUN_UPDATE, DATA_KUBUN_DELETE
 from src.parser.factory import ParserFactory
 from src.utils.logger import get_logger
 
@@ -27,11 +28,6 @@ class RealtimeUpdater:
         ...     updater = RealtimeUpdater(db)
         ...     result = updater.process_record(buff)
     """
-
-    # headDataKubun constants
-    DATA_KUBUN_NEW = "1"  # 新規データ
-    DATA_KUBUN_UPDATE = "2"  # 更新データ
-    DATA_KUBUN_DELETE = "3"  # 削除データ
 
     # Table mapping from record type to RT_ tables (Real-Time data)
     # Real-time updates use RT_ prefix, historical data uses NL_ prefix
@@ -119,8 +115,12 @@ class RealtimeUpdater:
                 logger.warning(f"Unknown record type: {record_type}")
                 return None
 
-            # Get headDataKubun
-            head_data_kubun = parsed_data.get("headDataKubun", "1")
+            # Get headDataKubun with fallback to DataKubun
+            head_data_kubun = (
+                parsed_data.get("headDataKubun")
+                or parsed_data.get("DataKubun")
+                or "1"
+            )
 
             logger.debug(
                 "Processing record",
@@ -130,11 +130,11 @@ class RealtimeUpdater:
             )
 
             # Process based on headDataKubun
-            if head_data_kubun == self.DATA_KUBUN_NEW:
+            if head_data_kubun == DATA_KUBUN_NEW:
                 return self._handle_new_record(table_name, parsed_data)
-            elif head_data_kubun == self.DATA_KUBUN_UPDATE:
+            elif head_data_kubun == DATA_KUBUN_UPDATE:
                 return self._handle_update_record(table_name, parsed_data)
-            elif head_data_kubun == self.DATA_KUBUN_DELETE:
+            elif head_data_kubun == DATA_KUBUN_DELETE:
                 return self._handle_delete_record(table_name, parsed_data)
             else:
                 logger.warning(f"Unknown headDataKubun: {head_data_kubun}")
