@@ -218,12 +218,13 @@ class JVLinkWrapper:
                 # Unexpected single value
                 raise ValueError(f"Unexpected JVOpen return type: {type(jv_result)}, expected tuple")
 
-            # Handle result codes:
-            # 0: Success
-            # -1: No data (not an error)
-            # -2: Setup dialog cancelled (not an error)
-            # < -100: Actual errors
-            if result < 0 and result not in [-1, -2]:
+            # Handle result codes for JVOpen:
+            # 0 (JV_RT_SUCCESS): Success
+            # -1 (JV_RT_ERROR): Error - should raise exception
+            # -2 (JV_RT_NO_MORE_DATA): No data available - acceptable for option 1
+            # < -2: Other errors
+            if result < 0 and result != -2:
+                # -1 is JV_RT_ERROR, should raise exception
                 logger.error(
                     "JVOpen failed",
                     data_spec=data_spec,
@@ -232,15 +233,9 @@ class JVLinkWrapper:
                     error_code=result,
                 )
                 raise JVLinkError("JVOpen failed", error_code=result)
-            elif result == -1:
-                logger.info(
-                    "JVOpen: No data available",
-                    data_spec=data_spec,
-                    fromtime=fromtime,
-                )
             elif result == -2:
                 logger.info(
-                    "JVOpen: Setup dialog cancelled",
+                    "JVOpen: No data available",
                     data_spec=data_spec,
                     fromtime=fromtime,
                 )
@@ -379,17 +374,11 @@ class JVLinkWrapper:
                 # Successfully read data (result is data length)
                 # buff_str is already in Shift_JIS encoding (Unicode string from COM)
                 # Convert to bytes for consistent handling
-                try:
-                    data_bytes = buff_str.encode(ENCODING_JVDATA) if buff_str else b""
-                except UnicodeEncodeError as e:
-                    logger.warning(
-                        "Encoding error, using fallback",
-                        error=str(e),
-                        position=e.start if hasattr(e, 'start') else None,
-                        character=e.object[e.start:e.end] if hasattr(e, 'start') and hasattr(e, 'end') else None,
-                    )
-                    # Use 'replace' to make data loss visible instead of silently ignoring
-                    data_bytes = buff_str.encode('shift_jis', errors='replace') if buff_str else b""
+                # JV-Link returns Unicode strings from COM, but some characters
+                # may not be valid Shift-JIS (e.g., U+0192 'ƒ' from garbled data).
+                # Use 'replace' to handle these silently - they're typically in
+                # unused parts of the record buffer.
+                data_bytes = buff_str.encode('shift_jis', errors='replace') if buff_str else b""
 
                 # Note: Per-record debug logging removed to reduce verbosity
                 return result, data_bytes, filename_str
