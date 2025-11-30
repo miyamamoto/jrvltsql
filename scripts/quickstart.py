@@ -11,12 +11,14 @@
 
 import argparse
 import io
+import json
 import os
 import subprocess
 import sys
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Optional
 
 # Windows cp932対策: stdoutをUTF-8に再設定
 if sys.platform == "win32" and sys.stdout.encoding.lower() != "utf-8":
@@ -58,6 +60,53 @@ def interactive_setup() -> dict:
         return _interactive_setup_rich()
     else:
         return _interactive_setup_simple()
+
+
+# セットアップ履歴ファイルのパス
+SETUP_HISTORY_FILE = project_root / "data" / "setup_history.json"
+
+
+def _load_setup_history() -> Optional[dict]:
+    """前回のセットアップ履歴を読み込む
+
+    Returns:
+        前回のセットアップ情報、なければNone
+    """
+    if not SETUP_HISTORY_FILE.exists():
+        return None
+
+    try:
+        with open(SETUP_HISTORY_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except (json.JSONDecodeError, IOError):
+        return None
+
+
+def _save_setup_history(settings: dict, specs: list):
+    """セットアップ履歴を保存する
+
+    Args:
+        settings: セットアップ設定
+        specs: 取得したデータ種別リスト [(spec, desc, option), ...]
+    """
+    history = {
+        'timestamp': datetime.now().isoformat(),
+        'mode': settings.get('mode'),
+        'mode_name': settings.get('mode_name'),
+        'from_date': settings.get('from_date'),
+        'to_date': settings.get('to_date'),
+        'specs': [spec for spec, _, _ in specs],
+        'include_realtime': settings.get('include_realtime', False),
+    }
+
+    # data ディレクトリがなければ作成
+    SETUP_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        with open(SETUP_HISTORY_FILE, 'w', encoding='utf-8') as f:
+            json.dump(history, f, ensure_ascii=False, indent=2)
+    except IOError:
+        pass  # 保存失敗しても継続
 
 
 def _check_jvlink_service_key() -> tuple[bool, str]:
@@ -122,6 +171,9 @@ def _interactive_setup_rich() -> dict:
         console.print("[red]セットアップを中止します。[/red]")
         sys.exit(1)
 
+    # 前回セットアップ履歴を確認
+    last_setup = _load_setup_history()
+
     # セットアップモードの選択
     console.print("[bold]1. セットアップモード[/bold]")
     console.print()
@@ -147,37 +199,70 @@ def _interactive_setup_rich() -> dict:
         "標準 + O1〜O6\n[dim](確定オッズ)[/dim]",
         "全期間\n[dim](1986年〜)[/dim]"
     )
-    mode_table.add_row(
-        "4", "更新",
-        "標準と同じ [cyan](差分のみ)[/cyan]",
-        "前回更新以降"
-    )
+
+    # 更新モードは前回セットアップがある場合のみ表示
+    if last_setup:
+        last_date = datetime.fromisoformat(last_setup['timestamp'])
+        last_date_str = last_date.strftime("%Y-%m-%d %H:%M")
+        mode_table.add_row(
+            "4", "更新",
+            f"前回と同じ ({last_setup.get('mode_name', '?')})\n[dim](差分データのみ)[/dim]",
+            f"前回以降\n[dim]({last_date_str}〜)[/dim]"
+        )
+        choices = ["1", "2", "3", "4"]
+    else:
+        choices = ["1", "2", "3"]
 
     console.print(mode_table)
     console.print()
 
     choice = Prompt.ask(
         "選択",
-        choices=["1", "2", "3", "4"],
+        choices=choices,
         default="1"
     )
 
     today = datetime.now()
-    settings['from_date'] = "19860101"  # 常に全期間
     settings['to_date'] = today.strftime("%Y%m%d")
 
     if choice == "1":
         settings['mode'] = 'simple'
         settings['mode_name'] = '簡易'
+        settings['from_date'] = "19860101"
     elif choice == "2":
         settings['mode'] = 'standard'
         settings['mode_name'] = '標準'
+        settings['from_date'] = "19860101"
     elif choice == "3":
         settings['mode'] = 'full'
         settings['mode_name'] = 'フル'
-    else:  # choice == "4"
+        settings['from_date'] = "19860101"
+    else:  # choice == "4" (更新モード)
         settings['mode'] = 'update'
         settings['mode_name'] = '更新'
+        # 前回のセットアップ情報を引き継ぐ
+        settings['last_setup'] = last_setup
+        # 前回の取得日から開始
+        last_date = datetime.fromisoformat(last_setup['timestamp'])
+        settings['from_date'] = last_date.strftime("%Y%m%d")
+        # 前回のデータ種別を引き継ぐ
+        settings['update_specs'] = last_setup.get('specs', [])
+
+        # 更新範囲を表示
+        console.print()
+        console.print(Panel("[bold]更新情報[/bold]", border_style="yellow"))
+
+        update_info = Table(show_header=False, box=None, padding=(0, 1))
+        update_info.add_column("Key", style="dim")
+        update_info.add_column("Value", style="white")
+
+        update_info.add_row("前回モード", last_setup.get('mode_name', '不明'))
+        update_info.add_row("前回取得日時", last_date.strftime("%Y-%m-%d %H:%M"))
+        update_info.add_row("更新範囲", f"{settings['from_date']} 〜 {settings['to_date']}")
+        specs_str = ", ".join(last_setup.get('specs', []))
+        update_info.add_row("対象データ", specs_str if len(specs_str) <= 40 else specs_str[:37] + "...")
+
+        console.print(update_info)
 
     console.print()
 
@@ -244,6 +329,9 @@ def _interactive_setup_simple() -> dict:
 
     print()
 
+    # 前回セットアップ履歴を確認
+    last_setup = _load_setup_history()
+
     # セットアップモード
     print("1. セットアップモードを選択してください:")
     print()
@@ -252,27 +340,50 @@ def _interactive_setup_simple() -> dict:
     print("   1)  簡易    RACE,DIFF (レース結果・馬情報)       全期間(1986年〜)")
     print("   2)  標準    簡易+BLOD,YSCH,TOKU,SNAP等           全期間(1986年〜)")
     print("   3)  フル    標準+O1〜O6 (確定オッズ)             全期間(1986年〜)")
-    print("   4)  更新    標準と同じ (差分のみ)                前回更新以降")
+    if last_setup:
+        last_date = datetime.fromisoformat(last_setup['timestamp'])
+        print(f"   4)  更新    前回({last_setup.get('mode_name', '?')})と同じ          前回({last_date.strftime('%Y-%m-%d')})以降")
     print()
 
+    valid_choices = ["1", "2", "3"]
+    if last_setup:
+        valid_choices.append("4")
+
     choice = input("選択 [1]: ").strip() or "1"
+    if choice not in valid_choices:
+        choice = "1"
 
     today = datetime.now()
-    settings['from_date'] = "19860101"  # 常に全期間
     settings['to_date'] = today.strftime("%Y%m%d")
 
     if choice == "1":
         settings['mode'] = 'simple'
         settings['mode_name'] = '簡易'
+        settings['from_date'] = "19860101"
     elif choice == "2":
         settings['mode'] = 'standard'
         settings['mode_name'] = '標準'
+        settings['from_date'] = "19860101"
     elif choice == "3":
         settings['mode'] = 'full'
         settings['mode_name'] = 'フル'
-    else:  # choice == "4"
+        settings['from_date'] = "19860101"
+    else:  # choice == "4" (更新モード)
         settings['mode'] = 'update'
         settings['mode_name'] = '更新'
+        settings['last_setup'] = last_setup
+        last_date = datetime.fromisoformat(last_setup['timestamp'])
+        settings['from_date'] = last_date.strftime("%Y%m%d")
+        settings['update_specs'] = last_setup.get('specs', [])
+
+        # 更新範囲を表示
+        print()
+        print("  --- 更新情報 ---")
+        print(f"  前回モード:   {last_setup.get('mode_name', '不明')}")
+        print(f"  前回取得日時: {last_date.strftime('%Y-%m-%d %H:%M')}")
+        print(f"  更新範囲:     {settings['from_date']} 〜 {settings['to_date']}")
+        specs_str = ", ".join(last_setup.get('specs', []))
+        print(f"  対象データ:   {specs_str[:50]}{'...' if len(specs_str) > 50 else ''}")
 
     print()
 
@@ -481,6 +592,10 @@ class QuickstartRunner:
                 if not self._run_background_updater():
                     self.warnings.append("バックグラウンド更新の起動に失敗")
 
+        # 7. セットアップ履歴を保存
+        specs = self._get_specs_for_mode()
+        _save_setup_history(self.settings, specs)
+
         # 完了
         self._print_summary_rich(success=True)
         return 0
@@ -529,7 +644,20 @@ class QuickstartRunner:
         elif mode == 'standard':
             return self.STANDARD_SPECS.copy()
         elif mode == 'update':
-            return self.UPDATE_SPECS.copy()
+            # 更新モード: 前回セットアップのスペックを使用
+            update_specs = self.settings.get('update_specs', [])
+            if update_specs:
+                # 前回のスペック名リストから、対応するスペック定義を取得
+                all_specs = {spec: (spec, desc, opt) for spec, desc, opt in
+                             self.SIMPLE_SPECS + self.STANDARD_SPECS + self.FULL_SPECS}
+                result = []
+                for spec_name in update_specs:
+                    if spec_name in all_specs:
+                        result.append(all_specs[spec_name])
+                if result:
+                    return result
+            # フォールバック: 標準モードのスペック
+            return self.STANDARD_SPECS.copy()
         else:  # full
             return self.FULL_SPECS.copy()
 
@@ -686,6 +814,10 @@ class QuickstartRunner:
         if self.settings.get('enable_background', False):
             print("\nバックグラウンド更新を開始中...")
             self._run_background_updater()
+
+        # 7. セットアップ履歴を保存
+        specs = self._get_specs_for_mode()
+        _save_setup_history(self.settings, specs)
 
         print("\n" + "=" * 60)
         print("セットアップ完了！")
