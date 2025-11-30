@@ -15,53 +15,79 @@ IMPORTANT - Duplicate Handling & Primary Keys:
 ==============================================
 
 Current Status:
-- Tables HAVE PRIMARY KEY constraints defined
+- ALL 58 tables now have PRIMARY KEY constraints defined
 - INSERT OR REPLACE is used by default in the importer
 - WITH primary keys, duplicate records will be UPDATED instead of created
 
 Primary Keys Implemented:
 -------------------------
-NL_RA, RT_RA (Race Details):
-    PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
+Race-related Tables:
+    NL_RA, RT_RA: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
+    NL_SE, RT_SE: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
+    NL_RC: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, RecInfoKubun)
+    NL_TK: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, KettoNum)
+    NL_YS: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji)
 
-NL_SE, RT_SE (Horse Race Results):
-    PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
+Master Tables:
+    NL_UM: PRIMARY KEY (KettoNum)  -- Horse registration number
+    NL_SK: PRIMARY KEY (KettoNum)  -- Horse production
+    NL_KS: PRIMARY KEY (KisyuCode)  -- Jockey code
+    NL_CH: PRIMARY KEY (ChokyosiCode)  -- Trainer code
+    NL_BN: PRIMARY KEY (BanusiCode)  -- Owner code
+    NL_BR: PRIMARY KEY (BreederCode)  -- Breeder code
+    NL_BT: PRIMARY KEY (HansyokuNum)  -- Breeding lineage
+    NL_HN: PRIMARY KEY (HansyokuNum)  -- Breeding horse
+    NL_CS: PRIMARY KEY (JyoCD, Kyori, TrackCD)  -- Course
 
-NL_UM (Horse Master):
-    PRIMARY KEY (KettoNum)  -- Horse registration number
+Odds Tables:
+    NL_O1, RT_O1: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
+    NL_O2, RT_O2: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi)
+    NL_O3, RT_O3: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi)
+    NL_O4, RT_O4: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi)
+    NL_O5, RT_O5: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi)
+    NL_O6, RT_O6: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi)
 
-NL_KS (Jockey Master):
-    PRIMARY KEY (KisyuCode)  -- Jockey code
+Payout Tables:
+    NL_H1, RT_H1: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
+    NL_H6, RT_H6: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, SanrentanKumi)
+    NL_HR, RT_HR: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
 
-NL_CH (Trainer Master):
-    PRIMARY KEY (ChokyosiCode)  -- Trainer code
+Additional Data Tables:
+    NL_CK: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, KettoNum)
+    NL_HC: PRIMARY KEY (ChokyosiCode, Num, SetYear)
+    NL_TM, RT_TM: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
+    NL_WF: PRIMARY KEY (Year, MonthDay)
 
-NL_BN (Owner Master):
-    PRIMARY KEY (BanusiCode)  -- Owner code
+Change Information Tables:
+    NL_CC, RT_CC: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
+    NL_JC, RT_JC: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
+    NL_TC, RT_TC: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
+    NL_JG: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, KettoNum)
+    RT_RC: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
 
-NL_BR (Breeder Master):
-    PRIMARY KEY (BreederCode)  -- Breeder code
+Weather/Track Condition Tables:
+    NL_WE, RT_WE: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, HenkoID)
+    NL_WH, RT_WH: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, HappyoTime, HenkoID)
 
-NL_TK (Withdrawal Horse):
-    PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Num)
+Pace/Data Mining Tables:
+    NL_DM, RT_DM: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
 
-NL_O1-O6, RT_O1-O6 (Odds):
-    PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban or Kumi)
+Sale/Auction Tables:
+    NL_AV, RT_AV: PRIMARY KEY (KettoNum, SaleHostName, SaleName)
+    NL_HS: PRIMARY KEY (KettoNum, SaleCode, FromDate)
 
-NL_H1, NL_H6, RT_H1, RT_H6 (Payout):
-    PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum) or with Kumi
+Workout/Training Tables:
+    NL_WC: PRIMARY KEY (ChokyoDate, ChokyoTime, KettoNum, Course)
 
-NL_HR, RT_HR (Refund):
-    PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
-
-RT_RC (Jockey Change):
-    PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
+Horse Name Table:
+    NL_HY: PRIMARY KEY (Bamei)
 
 Benefits with PRIMARY KEY constraints:
 - INSERT OR REPLACE will update existing records instead of duplicating
 - Safe to re-run imports multiple times
-- Better data integrity
+- Better data integrity and referential consistency
 - Prevents duplicate records on re-import
+- Optimized query performance on primary key columns
 """
 
 from typing import Dict, List
@@ -133,7 +159,8 @@ SCHEMAS = {
             SaleHostName TEXT,
             SaleName TEXT,
             Price TEXT,
-            RecordDelimiter TEXT
+            RecordDelimiter TEXT,
+            PRIMARY KEY (KettoNum, SaleHostName, SaleName)
         )
     """,
 
@@ -153,7 +180,8 @@ SCHEMAS = {
             AtoTruckCD TEXT,
             MaeKyori TEXT,
             MaeTruckCD TEXT,
-            JiyuCD TEXT
+            JiyuCD TEXT,
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
         )
     """,
 
@@ -358,7 +386,8 @@ SCHEMAS = {
             DMTime TEXT,
             DMGosaP TEXT,
             DMGosaM TEXT,
-            RecordDelimiter TEXT
+            RecordDelimiter TEXT,
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
         )
     """,
     "NL_H1": """
@@ -617,7 +646,8 @@ SCHEMAS = {
             ToDate TEXT,
             Barei TEXT,
             Price TEXT,
-            Field15 TEXT
+            Field15 TEXT,
+            PRIMARY KEY (KettoNum, SaleCode, FromDate)
         )
     """,
     "NL_HY": """
@@ -628,7 +658,8 @@ SCHEMAS = {
             Bamei TEXT,
             Field5 TEXT,
             Field6 TEXT,
-            Field7 TEXT
+            Field7 TEXT,
+            PRIMARY KEY (Bamei)
         )
     """,
     "NL_JG": """
@@ -647,7 +678,8 @@ SCHEMAS = {
             Num TEXT,
             SyussoKubun TEXT,
             JyogaiStateKubun TEXT,
-            RecordDelimiter TEXT
+            RecordDelimiter TEXT,
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, KettoNum)
         )
     """,
 
@@ -672,7 +704,8 @@ SCHEMAS = {
             MaeFutan TEXT,
             MaeKisyuCode TEXT,
             MaeKisyuName TEXT,
-            MaeMinaraiCD TEXT
+            MaeMinaraiCD TEXT,
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
         )
     """,
     "NL_KS": """
@@ -1107,7 +1140,8 @@ SCHEMAS = {
             AtoJi TEXT,
             AtoFun TEXT,
             MaeJi TEXT,
-            MaeFun TEXT
+            MaeFun TEXT,
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
         )
     """,
     "NL_TK": """
@@ -1278,7 +1312,8 @@ SCHEMAS = {
             HaronTime2Total TEXT,
             LapTime_400M_200M TEXT,
             LapTime_200M_0M TEXT,
-            RecordDelimiter TEXT
+            RecordDelimiter TEXT,
+            PRIMARY KEY (ChokyoDate, ChokyoTime, KettoNum, Course)
         )
     """,
 
@@ -1300,7 +1335,8 @@ SCHEMAS = {
             TenkoState2 TEXT,
             SibaBabaState2 TEXT,
             DirtBabaState2 TEXT,
-            RecordDelimiter TEXT
+            RecordDelimiter TEXT,
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, HenkoID)
         )
     """,
 
@@ -1321,7 +1357,8 @@ SCHEMAS = {
             AtoDirtBabaCD TEXT,
             MaeTenkoCD TEXT,
             MaeSibaBabaCD TEXT,
-            MaeDirtBabaCD TEXT
+            MaeDirtBabaCD TEXT,
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, HappyoTime, HenkoID)
         )
     """,
     "NL_WF": """
@@ -1384,10 +1421,14 @@ SCHEMAS = {
     # RT_ tables (Real-time data)
     "RT_AV": """
         CREATE TABLE IF NOT EXISTS RT_AV (
+            RecordSpec TEXT,
+            DataKubun TEXT,
             KettoNum TEXT,
             SaleHostName TEXT,
             SaleName TEXT,
-            Price TEXT
+            Price TEXT,
+            RecordDelimiter TEXT,
+            PRIMARY KEY (KettoNum, SaleHostName, SaleName)
         )
     """,
     "RT_CC": """
@@ -1406,7 +1447,8 @@ SCHEMAS = {
             AtoTruckCD TEXT,
             MaeKyori TEXT,
             MaeTruckCD TEXT,
-            JiyuCD TEXT
+            JiyuCD TEXT,
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
         )
     """,
     "RT_DM": """
@@ -1425,7 +1467,8 @@ SCHEMAS = {
             DMTime TEXT,
             DMGosaP TEXT,
             DMGosaM TEXT,
-            RecordDelimiter TEXT
+            RecordDelimiter TEXT,
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
         )
     """,
     "RT_H1": """
@@ -1647,7 +1690,8 @@ SCHEMAS = {
             MaeFutan TEXT,
             MaeKisyuCode TEXT,
             MaeKisyuName TEXT,
-            MaeMinaraiCD TEXT
+            MaeMinaraiCD TEXT,
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
         )
     """,
     "RT_O1": """
@@ -1952,7 +1996,8 @@ SCHEMAS = {
             AtoJi TEXT,
             AtoFun TEXT,
             MaeJi TEXT,
-            MaeFun TEXT
+            MaeFun TEXT,
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
         )
     """,
     # RT_RC: 騎手変更情報 (0B41) - リアルタイム用
@@ -2013,7 +2058,8 @@ SCHEMAS = {
             TenkoState2 TEXT,
             SibaBabaState2 TEXT,
             DirtBabaState2 TEXT,
-            RecordDelimiter TEXT
+            RecordDelimiter TEXT,
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, HenkoID)
         )
     """,
     "RT_WH": """
@@ -2033,7 +2079,8 @@ SCHEMAS = {
             AtoDirtBabaCD TEXT,
             MaeTenkoCD TEXT,
             MaeSibaBabaCD TEXT,
-            MaeDirtBabaCD TEXT
+            MaeDirtBabaCD TEXT,
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, HappyoTime, HenkoID)
         )
     """
 }

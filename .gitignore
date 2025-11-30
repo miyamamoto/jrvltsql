@@ -203,8 +203,10 @@ test_*.log
 MIGRATION_COMPLETE.md
 TEST_RESULTS_*.md
 
-# Test and debug scripts
+# Test and debug scripts (except official test suite)
 test_*.py
+!tests/test_parsers.py
+!tests/test_integration.py
 debug_*.py
 demo_*.py
 scripts/test_*.py
@@ -214,6 +216,7 @@ scripts/analyze_*.py
 scripts/apply_*.py
 scripts/benchmark_*.py
 scripts/check_*.py
+!scripts/check_data_quality.py
 scripts/comprehensive_*.py
 scripts/duckdb_performance_*.py
 scripts/fetch_all_*.sh
@@ -223,6 +226,7 @@ scripts/get_*.py
 scripts/migrate_*.py
 scripts/profile_*.py
 scripts/validate_*.py
+!scripts/validate_schema_parser.py
 scripts/verify_*.py
 
 # Generated directories

@@ -5,15 +5,44 @@ JRA-VAN DataLabの競馬データをSQLite/PostgreSQLにインポートするPyt
 [![Tests](https://github.com/miyamamoto/jrvltsql/actions/workflows/test.yml/badge.svg)](https://github.com/miyamamoto/jrvltsql/actions/workflows/test.yml)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Python](https://img.shields.io/badge/python-3.10+%20(32bit)-blue.svg)](https://www.python.org/downloads/)
+[![Version](https://img.shields.io/badge/version-2.0.0-green.svg)](https://github.com/miyamamoto/jrvltsql/releases)
+
+## What's New in v2.0.0
+
+### Complete Data Integrity
+- **全58テーブルにPRIMARY KEY制約を追加**: データの一意性を保証
+- **スキーマ/パーサー完全一致**: 57/57パーサーがスキーマと整合（100%）
+- **404ユニットテスト**: 全43パーサーを網羅的にテスト
+- **11統合テスト**: エンドツーエンドの動作を検証
+
+### New Tools
+- **`scripts/validate_schema_parser.py`**: スキーマとパーサーの整合性チェックツール
+- **`scripts/check_data_quality.py`**: データ品質検証ツール
+- **`tests/test_parsers.py`**: 全パーサーの包括的なユニットテスト
+- **`tests/test_integration.py`**: 統合テストスイート
+
+### quickstart.py Improvements
+- **新オプション追加**: `--db-path`, `--from-date`, `--to-date`, `--years`, `--no-odds`, `--no-monitor`, `--log-file`
+- **対話形式のサービスキー入力**: より使いやすいセットアップ体験
+- **Claude Code風モダンUI**: 視覚的に分かりやすいインターフェース
+
+### Quality Assurance
+- **100% スキーマ/パーサー整合性**: 57/57パーサーが検証済み
+- **完全テストカバレッジ**: 全パーサーをユニット/統合テストで検証
+- **データ品質検証**: 自動的なデータ整合性チェック
+
+---
 
 ## 特徴
 
 - **全38レコードタイプ対応**: 1986年以降の全競馬データ
 - **58テーブル**: NL_38（蓄積系）+ RT_20（速報系）
+- **完全なデータ整合性**: 全テーブルにPRIMARY KEY制約
 - **SQLite標準**: 軽量・高速（PostgreSQLも対応）
 - **レジストリー不要**: 設定ファイル/環境変数でサービスキーを管理
 - **バッチ処理最適化**: 1000件/batch + 61インデックス
 - **JV-Link API完全対応**: JVOpen/JVRTOpen の全データ種別に対応
+- **品質保証**: 404ユニットテスト + 11統合テスト
 
 ## クイックスタート
 
@@ -70,12 +99,26 @@ jvlink:
 
 ```bash
 jltsql quickstart              # 対話形式で初期セットアップ
+jltsql quickstart --years 5    # 過去5年分のデータ取得
+jltsql quickstart --no-odds    # オッズデータを除外
+jltsql quickstart --no-monitor # セットアップ後の監視をスキップ
 jltsql init                    # 初期化のみ
 jltsql create-tables           # テーブル作成
 jltsql create-indexes          # インデックス作成
 jltsql fetch --spec RACE       # データ取得
 jltsql monitor                 # リアルタイム監視
 jltsql status                  # ステータス確認
+```
+
+### quickstart オプション（v2.0.0新機能）
+```bash
+--db-path PATH       # データベースファイルパス（デフォルト: data/jrvltsql.db）
+--from-date DATE     # 開始日（YYYYMMDD形式）
+--to-date DATE       # 終了日（YYYYMMDD形式）
+--years N            # 過去N年分のデータ取得（デフォルト: 10）
+--no-odds            # オッズデータ（O1-O6）を除外
+--no-monitor         # セットアップ後のリアルタイム監視をスキップ
+--log-file PATH      # ログファイルパス
 ```
 
 詳細: `jltsql --help`
@@ -125,11 +168,57 @@ JV-Link API仕様に準拠。
 
 ## 開発者向け
 
+### 開発環境のセットアップ
+
 ```bash
 git clone https://github.com/miyamamoto/jrvltsql.git
 cd jrvltsql
 pip install -e ".[dev]"
+```
+
+### データ品質検証ツール
+
+#### スキーマ/パーサー整合性チェック
+```bash
+python scripts/validate_schema_parser.py
+```
+出力例: `✓ Schema/Parser validation: 57/57 parsers match (100.0%)`
+
+#### データ品質チェック
+```bash
+python scripts/check_data_quality.py
+```
+全テーブルのPRIMARY KEY制約、データ整合性を検証
+
+### テスト実行
+
+#### パーサーユニットテスト（404テスト）
+```bash
+pytest tests/test_parsers.py -v
+```
+全43パーサーを網羅的にテスト
+
+#### 統合テスト（11テスト）
+パーサー → インポーター → SQLiteの一連の流れをテスト
+
+```bash
+# Windows
+run_integration_tests.bat
+
+# または直接実行
+pytest tests/test_integration.py -v
+```
+
+統合テストの詳細は [tests/INTEGRATION_TESTS.md](tests/INTEGRATION_TESTS.md) を参照
+
+#### 全テスト実行（415テスト）
+```bash
 pytest
+```
+
+#### カバレッジ付き実行
+```bash
+pytest --cov=src --cov-report=term --cov-report=html
 ```
 
 ## ライセンス

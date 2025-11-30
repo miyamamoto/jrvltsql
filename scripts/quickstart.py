@@ -29,9 +29,12 @@ if sys.platform == "win32" and sys.stdout.encoding.lower() != "utf-8":
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-# ログ設定: コンソールにはERROR以上のみ表示、それ以外はファイルに出力
+# ログ設定: 自動設定を無効化（進捗表示を邪魔しないため）
+# 環境変数でモジュールインポート時の自動ログ設定をスキップ
+os.environ['JLTSQL_SKIP_AUTO_LOGGING'] = '1'
 from src.utils.logger import setup_logging
-setup_logging(level="DEBUG", console_level="ERROR", log_to_file=True, log_to_console=True)
+# 初期設定: ログファイル出力は無効（main()で引数に基づいて再設定）
+setup_logging(level="DEBUG", console_level="CRITICAL", log_to_file=False, log_to_console=False)
 
 try:
     from rich.console import Console
@@ -840,6 +843,14 @@ class QuickstartRunner:
             'specs_skipped': 0,     # 契約外などでスキップ
             'specs_failed': 0,      # 実際のエラー
         }
+        # データベースパス設定
+        db_path_setting = settings.get('db_path')
+        if db_path_setting:
+            self.db_path = Path(db_path_setting)
+            if not self.db_path.is_absolute():
+                self.db_path = self.project_root / self.db_path
+        else:
+            self.db_path = self.project_root / "data" / "keiba.db"
 
     def run(self) -> int:
         """完全自動セットアップ実行"""
@@ -960,26 +971,20 @@ class QuickstartRunner:
         """モードに応じたスペックリストを取得（蓄積系のみ）"""
         mode = self.settings.get('mode', 'simple')
         if mode == 'simple':
-            return self.SIMPLE_SPECS.copy()
+            specs = self.SIMPLE_SPECS.copy()
         elif mode == 'standard':
-            return self.STANDARD_SPECS.copy()
+            specs = self.STANDARD_SPECS.copy()
         elif mode == 'update':
-            # 更新モード: 前回セットアップのスペックを使用
-            update_specs = self.settings.get('update_specs', [])
-            if update_specs:
-                # 前回のスペック名リストから、対応するスペック定義を取得
-                all_specs = {spec: (spec, desc, opt) for spec, desc, opt in
-                             self.SIMPLE_SPECS + self.STANDARD_SPECS + self.FULL_SPECS}
-                result = []
-                for spec_name in update_specs:
-                    if spec_name in all_specs:
-                        result.append(all_specs[spec_name])
-                if result:
-                    return result
-            # フォールバック: 標準モードのスペック
-            return self.STANDARD_SPECS.copy()
+            # 更新モード: UPDATE_SPECSを使用（option=2で今週データのみ）
+            specs = self.UPDATE_SPECS.copy()
         else:  # full
-            return self.FULL_SPECS.copy()
+            specs = self.FULL_SPECS.copy()
+
+        # --no-odds: オッズ系スペック(O1-O6)を除外
+        if self.settings.get('no_odds'):
+            specs = [(s, d, o) for s, d, o in specs if not s.startswith('O')]
+
+        return specs
 
     def _should_fetch_realtime(self) -> bool:
         """速報系データを取得するかどうか"""
@@ -1318,8 +1323,7 @@ class QuickstartRunner:
             from src.importer.importer import DataImporter
 
             # データベース接続
-            db_path = self.project_root / "data" / "keiba.db"
-            db = SQLiteDatabase({"path": str(db_path)})
+            db = SQLiteDatabase({"path": str(self.db_path)})
 
             with db:
                 fetcher = RealtimeFetcher(sid="JLTSQL")
@@ -1531,16 +1535,20 @@ class QuickstartRunner:
         return ('unknown', f'終了コード {returncode}')
 
     def _fetch_single_spec_with_progress(self, spec: str, option: int) -> tuple:
-        """単一データスペック取得（スピナー付きリアルタイム進捗表示）
+        """単一データスペック取得（直接API呼び出し + JVLinkProgressDisplay）
+
+        BatchProcessorを直接呼び出すことで、JVLinkProgressDisplayの
+        リッチな進捗表示がそのまま動作します。
 
         Returns:
             tuple: (status, details)
                 status: "success", "nodata", "skipped", "failed"
                 details: dict with progress info
         """
-        import re
-        from rich.live import Live
-        from rich.text import Text
+        from src.database.sqlite_handler import SQLiteDatabase
+        from src.database.schema import create_all_tables
+        from src.importer.batch import BatchProcessor
+        from src.jvlink.wrapper import JVLinkError
 
         details = {
             'download_count': 0,
@@ -1555,262 +1563,78 @@ class QuickstartRunner:
             'error_message': None,
         }
 
-        # 時間計測用
-        phase_start_time = [time.time()]  # リストにしてクロージャで更新可能に
-
-        # 処理状態
-        current_phase = "初期化"
-        current_table = None
-        tables_processed = []
-        frame_idx = [0]  # リストにしてクロージャで更新可能に
-
-        def get_spinner():
-            """スピナー文字を取得（呼び出すたびにアニメーション）"""
-            frame = self.SPINNER_FRAMES[frame_idx[0] % len(self.SPINNER_FRAMES)]
-            frame_idx[0] += 1
-            return frame
-
-        def make_status_display():
-            """現在の処理状態を表示用テキストで返す"""
-            spinner = get_spinner()
-
-            if current_phase == "初期化":
-                return Text.assemble(
-                    ("    ", ""),
-                    (spinner, "cyan"),
-                    (" 初期化中...", "dim")
-                )
-
-            elif current_phase == "ダウンロード":
-                return Text.assemble(
-                    ("    ", ""),
-                    (spinner, "cyan"),
-                    (f" ダウンロード中... ", "dim"),
-                    (f"({details['download_count']}ファイル)", "dim cyan")
-                )
-
-            elif current_phase == "読み込み":
-                if details['records_fetched'] > 0:
-                    # レコード処理中の進捗を表示
-                    # ファイル進捗と残り時間を計算
-                    files_done = details['files_processed']
-                    files_total = details['total_files']
-
-                    progress_text = ""
-                    eta_text = ""
-
-                    if files_total > 0 and files_done > 0:
-                        pct = (files_done / files_total) * 100
-                        progress_text = f" ({files_done}/{files_total}ファイル {pct:.0f}%)"
-
-                        # 残り時間を計算
-                        elapsed = time.time() - phase_start_time[0]
-                        if files_done > 0:
-                            time_per_file = elapsed / files_done
-                            remaining_files = files_total - files_done
-                            eta_seconds = time_per_file * remaining_files
-                            if eta_seconds > 60:
-                                eta_text = f" 残り約{int(eta_seconds // 60)}分{int(eta_seconds % 60)}秒"
-                            else:
-                                eta_text = f" 残り約{int(eta_seconds)}秒"
-
-                    return Text.assemble(
-                        ("    ", ""),
-                        (spinner, "cyan"),
-                        (f" レコード処理中: ", "dim"),
-                        (f"{details['records_fetched']:,}件", "cyan"),
-                        (f" ({details['speed']}件/秒)", "dim") if details['speed'] else ("", ""),
-                        (progress_text, "dim"),
-                        (eta_text, "yellow") if eta_text else ("", "")
-                    )
-                else:
-                    return Text.assemble(
-                        ("    ", ""),
-                        (spinner, "cyan"),
-                        (f" ファイル読み取り中: ", "dim"),
-                        (f"{details['read_count']:,}ファイル", "dim cyan")
-                    )
-
-            elif current_phase == "保存":
-                if details['records_saved'] > 0:
-                    return Text.assemble(
-                        ("    ", ""),
-                        (spinner, "cyan"),
-                        (f" {current_table} 保存中: ", "dim"),
-                        (f"{details['records_saved']:,}件", "cyan")
-                    )
-                else:
-                    return Text.assemble(
-                        ("    ", ""),
-                        (spinner, "cyan"),
-                        (f" {current_table} 保存中...", "dim")
-                    )
-
-            elif current_phase == "完了":
-                return Text.assemble(("    ", ""), ("✓ 処理完了", "green"))
-
-            else:
-                return Text.assemble(
-                    ("    ", ""),
-                    (spinner, "cyan"),
-                    (f" {current_phase}...", "dim")
-                )
-
         try:
-            cmd = [
-                sys.executable, "-u", "-m", "src.cli.main", "fetch",
-                "--from", self.settings['from_date'],
-                "--to", self.settings['to_date'],
-                "--spec", spec,
-                "--option", str(option),
-            ]
+            # 設定読み込み
+            from src.utils.config import load_config
+            config = load_config(str(self.project_root / "config" / "config.yaml"))
 
-            # 環境変数でPythonのバッファリングを無効化
-            env = os.environ.copy()
-            env['PYTHONUNBUFFERED'] = '1'
+            # データベース接続（コマンドライン引数で上書き可能）
+            db_config = {"path": str(self.db_path)}
 
-            # Popenでリアルタイム出力を取得
-            # stderrもstdoutにマージして全てのメッセージをキャプチャ
-            process = subprocess.Popen(
-                cmd,
-                cwd=self.project_root,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                encoding='utf-8',
-                errors='replace',
-                bufsize=1,
-                env=env,
-            )
+            database = SQLiteDatabase(db_config)
 
-            output_lines = []
-            error_lines = []  # エラーっぽい行を保存
+            with database:
+                # テーブル作成（必要に応じて）
+                try:
+                    create_all_tables(database)
+                except Exception:
+                    pass  # 既存テーブルがあってもOK
 
-            # Live表示でスピナーを回しながら進捗を表示
-            with Live(make_status_display(), console=console, refresh_per_second=10, transient=True) as live:
-                for line in process.stdout:
-                    output_lines.append(line)
+                # BatchProcessorを直接呼び出し（show_progress=Trueでリッチ進捗表示）
+                processor = BatchProcessor(
+                    database=database,
+                    sid=config.get("jvlink.sid", "JLTSQL"),
+                    batch_size=1000,
+                    service_key=config.get("jvlink.service_key"),
+                    show_progress=True,  # JVLinkProgressDisplayを有効化
+                )
 
-                    # エラー関連のキーワードを含む行を保存
-                    line_lower = line.lower()
-                    if any(keyword in line_lower for keyword in ['error', 'exception', 'failed', 'エラー', 'traceback']):
-                        error_lines.append(line.strip())
+                # データ取得実行
+                result = processor.process_date_range(
+                    data_spec=spec,
+                    from_date=self.settings['from_date'],
+                    to_date=self.settings['to_date'],
+                    option=option,
+                )
 
-                    # ダウンロード数を抽出
-                    if 'download_count=' in line or 'download_count:' in line:
-                        match = re.search(r'download_count[=:]\s*(\d+)', line)
-                        if match:
-                            count = int(match.group(1))
-                            if count > 0 and details['download_count'] == 0:
-                                details['download_count'] = count
-                                current_phase = "ダウンロード"
+                # 結果をdetailsに反映
+                details['records_fetched'] = result.get('records_fetched', 0)
+                details['records_parsed'] = result.get('records_parsed', 0)
+                details['records_saved'] = result.get('records_imported', 0)
 
-                    # 読み取り件数を抽出
-                    if 'read_count=' in line or 'read_count:' in line:
-                        match = re.search(r'read_count[=:]\s*(\d+)', line)
-                        if match:
-                            count = int(match.group(1))
-                            if count > 0:
-                                details['read_count'] = count
-                                details['total_files'] = count  # read_countはファイル数
-                                if current_phase != "読み込み":
-                                    current_phase = "読み込み"
-                                    phase_start_time[0] = time.time()  # 読み込みフェーズ開始時刻を記録
-
-                    # ダウンロード完了
-                    if 'Download completed' in line:
-                        if current_phase != "読み込み":
-                            current_phase = "読み込み"
-                            phase_start_time[0] = time.time()  # 読み込みフェーズ開始時刻を記録
-
-                    # レコード処理中の進捗を抽出（Processing records records_fetched=xxx）
-                    if 'records_fetched=' in line:
-                        match = re.search(r'records_fetched[=:]\s*(\d+)', line)
-                        if match:
-                            details['records_fetched'] = int(match.group(1))
-                        speed_match = re.search(r'speed[=:]\s*(\d+)', line)
-                        if speed_match:
-                            details['speed'] = speed_match.group(1)
-                        # ファイル進捗を抽出
-                        files_done_match = re.search(r'files_processed[=:]\s*(\d+)', line)
-                        if files_done_match:
-                            details['files_processed'] = int(files_done_match.group(1))
-                        files_total_match = re.search(r'total_files[=:]\s*(\d+)', line)
-                        if files_total_match:
-                            details['total_files'] = int(files_total_match.group(1))
-
-                    # バッチ保存を検出
-                    if 'Batch inserted' in line and 'table=' in line:
-                        current_phase = "保存"
-                        table_match = re.search(r'table[=:]\s*(NL_[A-Z0-9]+|RT_[A-Z0-9]+)', line)
-                        if table_match:
-                            current_table = table_match.group(1)
-                            if current_table not in tables_processed:
-                                tables_processed.append(current_table)
-
-                        records_match = re.search(r'records[=:]\s*(\d+)', line)
-                        if records_match:
-                            details['records_saved'] += int(records_match.group(1))
-
-                    # パース済みレコード数を抽出
-                    if 'records_parsed=' in line or 'records_parsed:' in line:
-                        match = re.search(r'records_parsed[=:]\s*(\d+)', line)
-                        if match:
-                            details['records_parsed'] = int(match.group(1))
-
-                    # 毎行で表示を更新（スピナーを回す）
-                    live.update(make_status_display())
-
-            # プロセス終了を待つ
-            process.wait(timeout=600)
-            returncode = process.returncode
-            output = ''.join(output_lines)
-
-            # 処理したテーブル一覧を表示
-            if tables_processed:
-                tables_str = ", ".join(tables_processed)
-                console.print(f"    [dim]処理テーブル: {tables_str}[/dim]")
-
-            # 出力から状態を判定
-            if returncode == 0:
-                if "No data available" in output or "read_count=0" in output or "read_count: 0" in output:
+                # 成功判定
+                if result.get('records_fetched', 0) == 0:
                     return ("nodata", details)
+
                 return ("success", details)
+
+        except JVLinkError as e:
+            error_code = getattr(e, 'error_code', None)
+            error_str = str(e)
+
+            # エラーコード別の判定
+            if error_code == -111 or '契約' in error_str:
+                details['error_type'] = 'contract'
+                details['error_message'] = 'データ提供サービス契約外です'
+                self.warnings.append(f"{spec}: {details['error_message']}")
+                return ("skipped", details)
+            elif error_code in (-100, -101, -102, -103):
+                details['error_type'] = 'auth'
+                details['error_message'] = f'JV-Link認証エラー: {error_str}'
+            elif error_code == -2:
+                # No data available
+                return ("nodata", details)
             else:
-                # データなし判定（正常）
-                if "No data" in output or "read_count=0" in output or "read_count: 0" in output:
-                    return ("nodata", details)
+                details['error_type'] = 'connection'
+                details['error_message'] = f'JV-Linkエラー: {error_str}'
 
-                # エラー分析（error_linesも渡す）
-                error_type, error_message = self._analyze_error(output, returncode, error_lines)
-                details['error_type'] = error_type
-                details['error_message'] = error_message
-
-                # 契約外は警告として処理
-                if error_type == 'contract':
-                    self.warnings.append(f"{spec}: {error_message}")
-                    return ("skipped", details)
-
-                # その他のエラー
-                self.errors.append({
-                    'spec': spec,
-                    'type': error_type,
-                    'message': error_message,
-                })
-                return ("failed", details)
-
-        except subprocess.TimeoutExpired:
-            error_msg = "処理がタイムアウトしました（10分以上経過）"
-            details['error_type'] = 'timeout'
-            details['error_message'] = error_msg
             self.errors.append({
                 'spec': spec,
-                'type': 'timeout',
-                'message': error_msg,
+                'type': details['error_type'],
+                'message': details['error_message'],
             })
-            if process:
-                process.kill()
             return ("failed", details)
+
         except Exception as e:
             error_msg = f"予期しないエラー: {str(e)[:100]}"
             details['error_type'] = 'exception'
@@ -1884,8 +1708,32 @@ def main():
                         help="バックグラウンド更新を開始（蓄積系定期更新 + 速報系監視）")
     parser.add_argument("-y", "--yes", action="store_true", help="確認スキップ（非対話モード）")
     parser.add_argument("-i", "--interactive", action="store_true", help="対話モード（デフォルト）")
+    parser.add_argument("--db-path", type=str, default=None,
+                        help="データベースファイルパス（デフォルト: data/keiba.db）")
+    parser.add_argument("--from-date", type=str, default=None,
+                        help="取得開始日 (YYYYMMDD形式、デフォルト: 19860101)")
+    parser.add_argument("--to-date", type=str, default=None,
+                        help="取得終了日 (YYYYMMDD形式、デフォルト: 今日)")
+    parser.add_argument("--years", type=int, default=None,
+                        help="取得期間（年数）。指定すると--from-dateは無視される")
+    parser.add_argument("--no-odds", action="store_true",
+                        help="オッズデータ(O1-O6)を除外")
+    parser.add_argument("--no-monitor", action="store_true",
+                        help="バックグラウンド監視を無効化")
+    parser.add_argument("--log-file", type=str, default=None,
+                        help="ログファイルパス（指定するとログ出力有効。デフォルト: 無効）")
 
     args = parser.parse_args()
+
+    # ログ設定: --log-file指定時のみファイルに出力
+    if args.log_file:
+        setup_logging(
+            level="DEBUG",
+            console_level="CRITICAL",
+            log_to_file=True,
+            log_to_console=False,
+            log_file=args.log_file
+        )
 
     # 対話モードかどうかを判定
     # コマンドライン引数が指定されていなければ対話モード
@@ -1902,8 +1750,17 @@ def main():
         settings = {}
         today = datetime.now()
 
-        settings['from_date'] = "19860101"  # 常に全期間
-        settings['to_date'] = today.strftime("%Y%m%d")
+        # 日付設定
+        if args.years:
+            # --years指定時: 過去N年分
+            from_date = (today - timedelta(days=365 * args.years)).strftime("%Y%m%d")
+            settings['from_date'] = from_date
+        elif args.from_date:
+            settings['from_date'] = args.from_date
+        else:
+            settings['from_date'] = "19860101"  # デフォルト: 全期間
+
+        settings['to_date'] = args.to_date if args.to_date else today.strftime("%Y%m%d")
 
         # モード設定（デフォルトは簡易）
         mode = args.mode or 'simple'
@@ -1915,7 +1772,13 @@ def main():
         settings['include_realtime'] = args.include_realtime
 
         # バックグラウンド更新
-        settings['enable_background'] = args.background
+        settings['enable_background'] = args.background and not args.no_monitor
+
+        # データベースパス
+        settings['db_path'] = args.db_path
+
+        # オッズ除外
+        settings['no_odds'] = args.no_odds
 
     # 実行
     try:
