@@ -484,7 +484,7 @@ SCHEMAS = {
             SanchiName TEXT,
             FHansyokuNum TEXT,
             MHansyokuNum TEXT,
-            Reserved TEXT,
+            Reserved_197 TEXT,
             RecordDelimiter TEXT,
             PRIMARY KEY (HansyokuNum)
         )

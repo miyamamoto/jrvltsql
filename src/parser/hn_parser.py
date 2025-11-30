@@ -115,7 +115,7 @@ class HNParser:
             result["MHansyokuNum"] = self.decode_field(data[188:196])
 
             # 20. 予備 (位置:197, 長さ:53)
-            result["Reserved"] = self.decode_field(data[196:249])
+            result["Reserved_197"] = self.decode_field(data[196:249])
 
             # 21. レコード区切 (位置:250, 長さ:2)
             result["RecordDelimiter"] = self.decode_field(data[249:251])
