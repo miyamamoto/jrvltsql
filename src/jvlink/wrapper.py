@@ -170,7 +170,7 @@ class JVLinkWrapper:
         self,
         data_spec: str,
         fromtime: str,
-        option: int = 0,
+        option: int = 1,
     ) -> Tuple[int, int, int, str]:
         """Open JV-Link data stream for historical data.
 
@@ -179,7 +179,11 @@ class JVLinkWrapper:
             fromtime: Start time in YYYYMMDDhhmmss format (14 digits)
                      Example: "20241103000000"
                      Retrieves data from this timestamp onwards
-            option: Option flag (0=normal, 1=setup, 2=update)
+            option: Option flag:
+                    1=通常データ（差分データ取得）
+                    2=今週データ（直近のレースのみ）
+                    3=セットアップ（ダイアログ表示あり）
+                    4=分割セットアップ（初回のみダイアログ）
 
         Returns:
             Tuple of (result_code, read_count, download_count, last_file_timestamp)

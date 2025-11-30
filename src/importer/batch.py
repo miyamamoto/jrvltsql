@@ -67,7 +67,7 @@ class BatchProcessor:
         data_spec: str,
         from_date: str,
         to_date: str,
-        option: int = 0,
+        option: int = 1,
         auto_commit: bool = True,
         ensure_tables: bool = True,
     ) -> dict:
@@ -77,7 +77,11 @@ class BatchProcessor:
             data_spec: Data specification code
             from_date: Start date (YYYYMMDD)
             to_date: End date (YYYYMMDD) - records are filtered to this date
-            option: JVOpen option (0=normal, 1=setup, 2=update)
+            option: JVOpen option:
+                    1=通常データ（差分データ取得）
+                    2=今週データ（直近のレースのみ）
+                    3=セットアップ（全データ取得、ダイアログ表示）
+                    4=分割セットアップ（初回のみダイアログ）
             auto_commit: Whether to auto-commit
             ensure_tables: Whether to ensure tables exist
 

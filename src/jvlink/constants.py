@@ -107,9 +107,12 @@ DATA_KUBUN_DELETE = "9"  # 抹消
 DATA_KUBUN_ERASE = "0"  # 削除
 
 # JVOpen Options
-JVOPEN_OPTION_NORMAL = 0  # 通常
-JVOPEN_OPTION_SETUP = 1  # セットアップ
-JVOPEN_OPTION_UPDATE = 2  # 更新
+# IMPORTANT: Option values start from 1, NOT 0
+# Reference: https://keibasoft.memo.wiki/d/JVOpen
+JVOPEN_OPTION_NORMAL = 1       # 通常データ取得（差分データ、蓄積系メンテナンス用）
+JVOPEN_OPTION_THIS_WEEK = 2    # 今週データ取得（直近のレースのみ、非蓄積系用）
+JVOPEN_OPTION_SETUP = 3        # セットアップデータ取得（ダイアログ表示あり）
+JVOPEN_OPTION_SETUP_SPLIT = 4  # セットアップデータ取得（分割用、初回のみダイアログ）
 
 # Race Track Codes (競馬場コード)
 TRACK_SAPPORO = "01"  # 札幌

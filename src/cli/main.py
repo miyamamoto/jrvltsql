@@ -164,7 +164,7 @@ def version():
 
 
 @cli.command()
-@click.option("--from", "date_from", required=True, help="Start date (YYYYMMDD) - ignored when --option=1")
+@click.option("--from", "date_from", required=True, help="Start date (YYYYMMDD)")
 @click.option("--to", "date_to", required=True, help="End date (YYYYMMDD) - filters records up to this date")
 @click.option("--spec", "data_spec", required=True, help="Data specification (RACE, DIFF, etc.)")
 @click.option(
@@ -172,7 +172,7 @@ def version():
     "jv_option",
     type=int,
     default=1,
-    help="JVOpen option: 0=normal (differential, needs prior setup), 1=setup (full data, ignores --from), 2=forced update (default: 1)"
+    help="JVOpen option: 1=通常データ（差分）, 2=今週データ, 3=セットアップ（ダイアログ）, 4=分割セットアップ (default: 1)"
 )
 @click.option("--db", type=click.Choice(["sqlite", "postgresql"]), default=None, help="Database type (default: from config)")
 @click.option("--batch-size", default=1000, help="Batch size for imports (default: 1000)")
@@ -180,25 +180,25 @@ def version():
 def fetch(ctx, date_from, date_to, data_spec, jv_option, db, batch_size):
     """Fetch historical data from JRA-VAN DataLab.
 
-    IMPORTANT: The --from parameter behavior depends on --option:
-      - option=0 (normal): Fetches differential data from --from date onwards
-      - option=1 (setup): Fetches ALL available data, IGNORES --from parameter
-      - option=2 (update): Fetches differential data from last read position
+    JVOpen option meanings:
+      - option=1 (通常データ): 差分データ取得（蓄積系メンテナンス用）
+      - option=2 (今週データ): 直近のレースに関するデータのみ
+      - option=3 (セットアップ): 全データ取得（ダイアログ表示あり）
+      - option=4 (分割セットアップ): 全データ取得（初回のみダイアログ）
 
-    The --to parameter always filters records client-side to only import
-    records with dates up to and including the --to date. Records without
-    date fields are always included.
+    The --to parameter filters records client-side to only import
+    records with dates up to and including the --to date.
 
     \b
     Examples:
-      # Setup mode - fetches all data (ignores --from)
+      # 通常データ取得（差分データ）
       jltsql fetch --from 20240101 --to 20241231 --spec RACE --option 1
 
-      # Normal differential update from specific date (requires prior setup)
-      jltsql fetch --from 20240101 --to 20241231 --spec RACE --option 0
+      # 今週データ取得（直近のレースのみ）
+      jltsql fetch --from 20240101 --to 20241231 --spec RACE --option 2
 
-      # Forced update from last position
-      jltsql fetch --from 20240101 --to 20241231 --spec DIFF --option 2
+      # セットアップ（全データ取得）
+      jltsql fetch --from 20240101 --to 20241231 --spec DIFF --option 3
     """
     from rich.progress import Progress, BarColumn, TextColumn, TimeRemainingColumn
     from src.database.sqlite_handler import SQLiteDatabase
@@ -217,17 +217,17 @@ def fetch(ctx, date_from, date_to, data_spec, jv_option, db, batch_size):
     else:
         db_type = config.get("database.type", "sqlite")
 
+    option_names = {1: "通常データ", 2: "今週データ", 3: "セットアップ", 4: "分割セットアップ"}
     console.print(f"[bold cyan]Fetching historical data from JRA-VAN...[/bold cyan]\n")
     console.print(f"  Date range: {date_from} -- {date_to}")
     console.print(f"  Data spec:  {data_spec}")
-    console.print(f"  Option:     {jv_option} ({'setup mode - ignores --from' if jv_option == 1 else 'normal/update mode'})")
+    console.print(f"  Option:     {jv_option} ({option_names.get(jv_option, '不明')})")
     console.print(f"  Database:   {db_type}")
 
-    # Warn if setup mode is used with a from_date that's not the earliest
-    if jv_option == 1 and date_from > "19860101":
+    # Warn if setup mode (3 or 4) is used
+    if jv_option in (3, 4):
         console.print()
-        console.print("[yellow]Note:[/yellow] Setup mode (--option=1) ignores the --from parameter.")
-        console.print("       All available data will be fetched regardless of --from value.")
+        console.print("[yellow]Note:[/yellow] セットアップモード - 全データ取得（ダイアログが表示されます）")
 
     console.print()
 

@@ -40,19 +40,19 @@ class HistoricalFetcher(BaseFetcher):
         data_spec: str,
         from_date: str,
         to_date: str,
-        option: int = 0,
+        option: int = 1,
     ) -> Iterator[dict]:
         """Fetch historical data.
 
         Args:
             data_spec: Data specification code (e.g., "RACE", "DIFF")
             from_date: Start date in YYYYMMDD format
-                       NOTE: Ignored when option=1 (setup mode) - full data is fetched
             to_date: End date in YYYYMMDD format (filters records up to this date)
             option: JVOpen option:
-                    0=normal (differential update, requires previous setup)
-                    1=setup (full data download, ignores from_date)
-                    2=forced update (differential from last read position)
+                    1=通常データ（差分データ取得、蓄積系メンテナンス用）
+                    2=今週データ（直近のレースのみ、非蓄積系用）
+                    3=セットアップ（全データ取得、ダイアログ表示あり）
+                    4=分割セットアップ（全データ取得、初回のみダイアログ）
 
         Yields:
             Dictionary of parsed record data with dates <= to_date
@@ -61,20 +61,18 @@ class HistoricalFetcher(BaseFetcher):
             FetcherError: If fetching fails
 
         Note:
-            When option=0 or 2: The JV-Link API retrieves all data from from_date onwards.
-            When option=1 (setup): from_date is ignored and all available data is fetched.
             Records are filtered client-side to include only those with
             dates up to and including to_date. Records without date fields
             (Year/MonthDay) are always included.
 
         Examples:
             >>> fetcher = HistoricalFetcher()  # Uses default sid="UNKNOWN"
-            >>> # Normal differential update from specific date
-            >>> for record in fetcher.fetch("RACE", "20240601", "20240630", option=0):
+            >>> # 通常データ取得（差分データ）
+            >>> for record in fetcher.fetch("RACE", "20240601", "20240630", option=1):
             ...     # Process record (only records with dates <= 20240630)
             ...     pass
-            >>> # Setup mode - from_date is ignored, fetches all available data
-            >>> for record in fetcher.fetch("RACE", "20000101", "20240630", option=1):
+            >>> # セットアップ（全データ取得）
+            >>> for record in fetcher.fetch("RACE", "20000101", "20240630", option=3):
             ...     # Process all records up to 20240630
             ...     pass
         """
@@ -87,18 +85,15 @@ class HistoricalFetcher(BaseFetcher):
         fetch_task_id = None
 
         try:
-            # Warn if option=1 (setup mode) is used with a from_date that's not the earliest
-            # In setup mode, from_date is ignored and all data is fetched
-            if option == 1 and from_date > "19860101":  # JRA-VAN data starts from 1986
-                logger.warning(
-                    "Setup mode (option=1) ignores from_date parameter",
-                    from_date=from_date,
+            # Info for setup mode (option 3 or 4)
+            if option in (3, 4):
+                logger.info(
+                    "セットアップモード - 全データを取得します",
                     option=option,
-                    note="All available data will be fetched. from_date is only used for option=0 or option=2",
                 )
                 if self.progress_display:
-                    self.progress_display.print_warning(
-                        f"セットアップモード: from_date({from_date})は無視され、全データを取得します"
+                    self.progress_display.print_info(
+                        f"セットアップモード(option={option}): 全データを取得します"
                     )
 
             # Initialize JV-Link
@@ -113,7 +108,7 @@ class HistoricalFetcher(BaseFetcher):
             # Convert dates to fromtime format
             # fromtime format: "YYYYMMDDhhmmss" (single timestamp)
             # JV-Link retrieves data from this timestamp onwards
-            # NOTE: When option=1 (setup mode), fromtime is ignored by JV-Link API
+            # Option meanings: 1=通常データ, 2=今週データ, 3/4=セットアップ
             fromtime = f"{from_date}000000"
 
             # Open data stream
@@ -125,9 +120,9 @@ class HistoricalFetcher(BaseFetcher):
                 fromtime=fromtime,
                 option=option,
                 note=(
-                    "option=1: fromtime ignored, fetches all data; "
-                    "option=0/2: retrieves from fromtime onwards; "
-                    "to_date filtering applied in parser"
+                    "option=1: 通常データ（差分）; "
+                    "option=2: 今週データ; "
+                    "option=3/4: セットアップ（全データ）"
                 ),
             )
 
@@ -225,26 +220,24 @@ class HistoricalFetcher(BaseFetcher):
         data_spec: str,
         start_date: datetime,
         end_date: datetime,
-        option: int = 0,
+        option: int = 1,
     ) -> Iterator[dict]:
         """Fetch historical data using datetime objects.
 
         Args:
             data_spec: Data specification code
             start_date: Start date as datetime
-                        NOTE: Ignored when option=1 (setup mode)
             end_date: End date as datetime (filters records up to this date)
             option: JVOpen option:
-                    0=normal (differential update, requires previous setup)
-                    1=setup (full data download, ignores start_date)
-                    2=forced update (differential from last read position)
+                    1=通常データ（差分データ取得、蓄積系メンテナンス用）
+                    2=今週データ（直近のレースのみ、非蓄積系用）
+                    3=セットアップ（全データ取得、ダイアログ表示あり）
+                    4=分割セットアップ（全データ取得、初回のみダイアログ）
 
         Yields:
             Dictionary of parsed record data with dates <= end_date
 
         Note:
-            When option=0 or 2: The JV-Link API retrieves all data from start_date onwards.
-            When option=1 (setup): start_date is ignored and all available data is fetched.
             Records are filtered client-side to include only those with
             dates up to and including end_date.
 
@@ -253,11 +246,11 @@ class HistoricalFetcher(BaseFetcher):
             >>> fetcher = HistoricalFetcher()
             >>> start = datetime(2024, 6, 1)
             >>> end = datetime(2024, 6, 30)
-            >>> # Normal differential update
-            >>> for record in fetcher.fetch_with_date_range("RACE", start, end, option=0):
-            ...     pass
-            >>> # Setup mode - start_date ignored
+            >>> # 通常データ取得（差分データ）
             >>> for record in fetcher.fetch_with_date_range("RACE", start, end, option=1):
+            ...     pass
+            >>> # セットアップ（全データ取得）
+            >>> for record in fetcher.fetch_with_date_range("RACE", start, end, option=3):
             ...     pass
         """
         from_date = start_date.strftime("%Y%m%d")
