@@ -1303,8 +1303,33 @@ class QuickstartRunner:
             self.stats['specs_failed'] += 1
             print("NG")
 
+    def _get_recent_race_dates(self, days: int = 7) -> list:
+        """過去N日間の開催日（土日）を取得
+
+        Args:
+            days: 遡る日数（デフォルト: 7日間）
+
+        Returns:
+            list: YYYYMMDD形式の日付リスト（新しい順）
+        """
+        from datetime import datetime, timedelta
+
+        race_dates = []
+        now = datetime.now()
+
+        for i in range(days):
+            date = now - timedelta(days=i)
+            # 競馬開催日は土曜(5)と日曜(6)
+            if date.weekday() in (5, 6):
+                race_dates.append(date.strftime("%Y%m%d"))
+
+        return race_dates
+
     def _fetch_single_realtime_spec(self, spec: str) -> tuple:
         """単一のリアルタイムスペックを取得（速報系/時系列共通）
+
+        JVRTOpenにはkeyパラメータ（日付: YYYYMMDD）が必要。
+        過去1週間の開催日（土日）を対象にデータを取得する。
 
         Returns:
             tuple: (status, details)
@@ -1324,32 +1349,44 @@ class QuickstartRunner:
             # データベース接続
             db = SQLiteDatabase({"path": str(self.db_path)})
 
+            # 過去1週間の開催日を取得
+            race_dates = self._get_recent_race_dates(days=7)
+
+            if not race_dates:
+                return ("nodata", details)
+
+            total_records = 0
+
             with db:
                 fetcher = RealtimeFetcher(sid="JLTSQL")
                 importer = DataImporter(db, batch_size=1000)
 
-                records = []
-                try:
-                    for record in fetcher.fetch(data_spec=spec, continuous=False):
-                        records.append(record)
-                except Exception as e:
-                    error_str = str(e)
-                    # 契約外チェック
-                    if '-111' in error_str or '契約' in error_str:
-                        return ("skipped", details)
-                    # データなしチェック
-                    if 'no data' in error_str.lower() or 'no more data' in error_str.lower():
-                        return ("nodata", details)
-                    raise
+                for date_key in race_dates:
+                    records = []
+                    try:
+                        for record in fetcher.fetch(data_spec=spec, key=date_key, continuous=False):
+                            records.append(record)
+                    except Exception as e:
+                        error_str = str(e)
+                        # 契約外チェック
+                        if '-111' in error_str or '-114' in error_str or '契約' in error_str:
+                            return ("skipped", details)
+                        # データなし (-1) は次の日付へ
+                        if '-1' in error_str or 'no data' in error_str.lower():
+                            continue
+                        raise
 
-                if not records:
+                    if records:
+                        # インポート
+                        import_stats = importer.import_records(iter(records), auto_commit=True)
+                        total_records += import_stats.get('records_imported', len(records))
+
+                details['records_saved'] = total_records
+
+                if total_records > 0:
+                    return ("success", details)
+                else:
                     return ("nodata", details)
-
-                # インポート
-                import_stats = importer.import_records(iter(records), auto_commit=True)
-                details['records_saved'] = import_stats.get('records_imported', len(records))
-
-                return ("success", details)
 
         except Exception as e:
             error_str = str(e)

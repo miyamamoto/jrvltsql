@@ -52,7 +52,7 @@ class RealtimeFetcher(BaseFetcher):
     def fetch(
         self,
         data_spec: str = "0B12",
-        key: str = "",
+        key: Optional[str] = None,
         continuous: bool = False,
     ) -> Iterator[dict]:
         """Fetch realtime data.
@@ -64,7 +64,10 @@ class RealtimeFetcher(BaseFetcher):
         Args:
             data_spec: Realtime data specification code (default: "0B12")
                       See RT_DATA_SPECS for available codes.
-            key: Optional search key for filtering data
+            key: Search key for filtering data. Format depends on data type:
+                 - Date format: YYYYMMDD (e.g., "20251130")
+                 - Race format: YYYYMMDDJJRR (e.g., "202511300105")
+                 If None, uses today's date.
             continuous: If True, keeps stream open for continuous updates.
                        If False, fetches current data then closes.
 
@@ -89,6 +92,13 @@ class RealtimeFetcher(BaseFetcher):
                 "Proceeding anyway, but this may not be valid."
             )
 
+        # Default key to today's date if not specified
+        # JVRTOpen requires a date key (YYYYMMDD) to function properly
+        if key is None:
+            from datetime import datetime
+            key = datetime.now().strftime("%Y%m%d")
+            logger.debug("Using today's date as key", key=key)
+
         try:
             # Initialize JV-Link
             logger.info("Initializing JV-Link", has_service_key=self._service_key is not None)
@@ -99,6 +109,7 @@ class RealtimeFetcher(BaseFetcher):
             logger.info(
                 "Starting realtime data fetch",
                 data_spec=data_spec,
+                key=key,
                 spec_name=RT_DATA_SPECS.get(data_spec, "Unknown"),
                 continuous=continuous,
             )
