@@ -1658,6 +1658,7 @@ class QuickstartRunner:
                 # NL_RAテーブルから開催情報を取得（Kaiji/Nichiji含む）
                 # Year + MonthDay で日付を構成
                 # PostgreSQLでは printf の代わりに lpad を使用
+                # pg8000では :name 形式のプレースホルダーを使用
                 if db.get_db_type() == 'postgresql':
                     query = """
                         SELECT DISTINCT
@@ -1667,8 +1668,8 @@ class QuickstartRunner:
                             nichiji,
                             racenum
                         FROM nl_ra
-                        WHERE (year || lpad(monthday::text, 4, '0')) >= ?
-                          AND (year || lpad(monthday::text, 4, '0')) <= ?
+                        WHERE (year || lpad(monthday::text, 4, '0')) >= :from_date
+                          AND (year || lpad(monthday::text, 4, '0')) <= :to_date
                         ORDER BY race_date, jyocd, racenum
                     """
                 else:
@@ -1684,7 +1685,11 @@ class QuickstartRunner:
                           AND (Year || printf('%04d', MonthDay)) <= ?
                         ORDER BY race_date, JyoCD, RaceNum
                     """
-                results = db.fetch_all(query, (from_date, to_date))
+                # PostgreSQLでは辞書形式、SQLiteではタプル形式でパラメータを渡す
+                if db.get_db_type() == 'postgresql':
+                    results = db.fetch_all(query, {'from_date': from_date, 'to_date': to_date})
+                else:
+                    results = db.fetch_all(query, (from_date, to_date))
                 # fetch_all returns a list of dictionaries with lowercase keys for PostgreSQL
                 # For consistency, we convert dict rows to tuple rows
                 if db.get_db_type() == 'postgresql':
