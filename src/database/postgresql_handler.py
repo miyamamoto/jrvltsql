@@ -112,7 +112,17 @@ class PostgreSQLDatabase(BaseDatabase):
                 ORDER BY array_position(i.indkey, a.attnum)
             """
             rows = self.fetch_all(sql, (table_name.lower(),))
-            return [row.get('attname', '').lower() for row in rows]
+            # Handle both dict rows (psycopg) and list rows (pg8000.native)
+            result = []
+            for row in rows:
+                if isinstance(row, dict):
+                    result.append(row.get('attname', '').lower())
+                elif isinstance(row, (list, tuple)):
+                    # pg8000.native returns list of lists
+                    result.append(str(row[0]).lower() if row else '')
+                else:
+                    result.append(str(row).lower())
+            return result
         except Exception as e:
             logger.warning(f"Could not get primary key for {table_name}: {e}")
             return []
@@ -307,11 +317,17 @@ class PostgreSQLDatabase(BaseDatabase):
             sql, params = self._convert_placeholders_and_params(sql, parameters)
 
             if DRIVER == "pg8000":
-                # pg8000.native returns list of dicts
+                # pg8000.native returns list of lists, need to convert to dict
                 if isinstance(params, dict):
                     rows = self._connection.run(sql, **params)
                 else:
                     rows = self._connection.run(sql)
+                if not rows:
+                    return None
+                # Get column names from connection.columns
+                columns = [col['name'] for col in self._connection.columns] if self._connection.columns else []
+                if columns and rows:
+                    return dict(zip(columns, rows[0]))
                 return rows[0] if rows else None
             else:  # psycopg
                 if params:
@@ -348,12 +364,18 @@ class PostgreSQLDatabase(BaseDatabase):
             sql, params = self._convert_placeholders_and_params(sql, parameters)
 
             if DRIVER == "pg8000":
-                # pg8000.native returns list of dicts directly
+                # pg8000.native returns list of lists, need to convert to dicts
                 if isinstance(params, dict):
                     rows = self._connection.run(sql, **params)
                 else:
                     rows = self._connection.run(sql)
-                return rows if rows else []
+                if not rows:
+                    return []
+                # Get column names from connection.columns
+                columns = [col['name'] for col in self._connection.columns] if self._connection.columns else []
+                if columns:
+                    return [dict(zip(columns, row)) for row in rows]
+                return rows  # Return as-is if no column info
             else:  # psycopg
                 if params:
                     self._cursor.execute(sql, params)
