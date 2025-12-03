@@ -106,6 +106,15 @@ python scripts/quickstart.py --mode full --from-date 20200101 --to-date 20231231
 # デフォルト設定で起動
 python scripts/background_updater.py
 
+# バックグラウンドで起動（ウィンドウなし）
+python scripts/background_updater.py --background
+
+# サービス状態を確認
+python scripts/background_updater.py --status
+
+# バックグラウンドサービスを停止
+python scripts/background_updater.py --stop
+
 # 更新間隔を60分に設定
 python scripts/background_updater.py --interval 60
 
@@ -115,6 +124,17 @@ python scripts/background_updater.py --api-port 9000
 # APIを無効化
 python scripts/background_updater.py --no-api
 ```
+
+**オプション:**
+
+| オプション | 説明 |
+|-----------|------|
+| `--background` | ウィンドウなしでバックグラウンド起動 |
+| `--stop` | バックグラウンドサービスを停止 |
+| `--status` | サービス状態を確認 |
+| `--interval N` | 更新間隔を分単位で指定（デフォルトは動的調整） |
+| `--api-port PORT` | APIサーバーのポート番号（デフォルト: 8765） |
+| `--no-api` | HTTP APIを無効化 |
 
 ---
 
