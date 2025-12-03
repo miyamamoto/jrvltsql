@@ -458,72 +458,29 @@ def _interactive_setup_rich() -> dict:
 
     console.print()
 
-    # 時系列オッズの取得
-    console.print("[bold]2. オッズ変動履歴の取得[/bold]")
-    console.print("[dim]過去のレースで、発売開始から締切までオッズがどう変化したかを記録したデータです。[/dim]")
-    console.print("[dim]例: 発売開始時は10倍だった馬が、締切時には3倍になった、など[/dim]")
+    # 時系列オッズについての説明（過去データは取得不可）
+    # JVRTOpenの時系列オッズはレース開催中のみ取得可能
+    # レース確定後は削除されるため、過去データの一括取得は不可
+    console.print("[bold]2. オッズ変動履歴について[/bold]")
+    console.print()
+    console.print(Panel(
+        "[bold]オッズ変動履歴（時系列オッズ）について[/bold]\n\n"
+        "発売開始から締切までのオッズ推移を記録するデータです。\n"
+        "例: 発売開始時10倍 → 締切時3倍 のような変化を追跡できます。\n\n"
+        "[yellow]重要: 過去データの一括取得はできません[/yellow]\n"
+        "[dim]JRA-VANの仕様により、時系列オッズはレース開催中のみ取得可能です。\n"
+        "レース確定後はサーバーから削除されます。[/dim]\n\n"
+        "[cyan]オッズ変動履歴を蓄積するには:[/cyan]\n"
+        "  1. 自動更新サービス（バックグラウンド更新）を有効にする\n"
+        "  2. レース開催日に起動しておく\n"
+        "  → 開催中のオッズが自動的にTS_O1-O6テーブルに蓄積されます",
+        border_style="blue",
+    ))
     console.print()
 
-    ts_table = Table(show_header=False, box=None, padding=(0, 1))
-    ts_table.add_column("Key", style="dim", width=12)
-    ts_table.add_column("Value", style="white")
-    ts_table.add_row("取得可能期間", "[cyan]過去1年間[/cyan]")
-    ts_table.add_row("用途", "オッズ分析・予想の参考に")
-    console.print(ts_table)
-    console.print()
-
-    settings['include_timeseries'] = Confirm.ask("オッズ変動履歴を取得しますか？", default=False)
-
-    if settings['include_timeseries']:
-        console.print()
-        console.print("[dim]取得期間を選択してください:[/dim]")
-        console.print("  [cyan]1[/cyan]. 過去1ヶ月")
-        console.print("  [cyan]2[/cyan]. 過去3ヶ月")
-        console.print("  [cyan]3[/cyan]. 過去6ヶ月")
-        console.print("  [cyan]4[/cyan]. 過去1年間 [dim](推奨)[/dim]")
-        console.print("  [cyan]5[/cyan]. カスタム期間")
-        console.print()
-
-        while True:
-            choice = Prompt.ask("選択", default="4")
-            if choice == "1":
-                settings['timeseries_months'] = 1
-                break
-            elif choice == "2":
-                settings['timeseries_months'] = 3
-                break
-            elif choice == "3":
-                settings['timeseries_months'] = 6
-                break
-            elif choice == "4":
-                settings['timeseries_months'] = 12
-                break
-            elif choice == "5":
-                months_str = Prompt.ask("何ヶ月分取得しますか？ (1-24)", default="12")
-                try:
-                    months = int(months_str)
-                    if months < 1:
-                        months = 1
-                    if months > 12:
-                        console.print()
-                        console.print(Panel(
-                            f"[yellow]警告: {months}ヶ月分は非常に時間がかかります[/yellow]\n"
-                            "[dim]1年以上前のデータは公式サポート外です。\n"
-                            "APIコールが多いため、数時間かかる可能性があります。[/dim]",
-                            border_style="yellow",
-                        ))
-                        if not Confirm.ask("本当に続行しますか？", default=False):
-                            settings['timeseries_months'] = 12
-                            console.print("[dim]1年間に設定しました[/dim]")
-                            break
-                    settings['timeseries_months'] = months
-                    break
-                except ValueError:
-                    console.print("[red]数値を入力してください[/red]")
-            else:
-                console.print("[red]1-5の数字を入力してください[/red]")
-    else:
-        settings['timeseries_months'] = 12  # デフォルト
+    # 時系列オッズは初期セットアップでは取得しない
+    settings['include_timeseries'] = False
+    settings['timeseries_months'] = 0
 
     console.print()
 
@@ -630,7 +587,7 @@ def _interactive_setup_rich() -> dict:
     confirm_table.add_column("Value", style="white")
 
     confirm_table.add_row("取得モード", settings['mode_name'])
-    confirm_table.add_row("オッズ変動履歴", "[green]取得する[/green]" if settings.get('include_timeseries') else "[dim]取得しない[/dim]")
+    confirm_table.add_row("オッズ変動履歴", "[dim]自動更新で蓄積[/dim]")
     confirm_table.add_row("当日レース情報", "[green]取得する[/green]" if settings.get('include_realtime') else "[dim]取得しない[/dim]")
     if settings.get('keep_existing_background'):
         confirm_table.add_row("自動更新", "[cyan]起動中（継続）[/cyan]")
@@ -735,60 +692,29 @@ def _interactive_setup_simple() -> dict:
 
     print()
 
-    # 時系列オッズ
-    print("2. オッズ変動履歴を取得しますか？")
-    print("   過去のレースで、発売開始から締切までオッズがどう変化したかの記録です。")
-    print("   例: 発売開始時10倍だった馬が、締切時には3倍になった、など")
+    # 時系列オッズについての説明（過去データは取得不可）
+    print("2. オッズ変動履歴について")
     print()
-    print("   取得可能期間: 過去1年間")
-    print("   用途:         オッズ分析・予想の参考に")
+    print("   ┌────────────────────────────────────────────────────────┐")
+    print("   │ オッズ変動履歴（時系列オッズ）について                 │")
+    print("   │                                                        │")
+    print("   │ 発売開始から締切までのオッズ推移を記録するデータです。 │")
+    print("   │ 例: 発売開始時10倍 → 締切時3倍 のような変化を追跡     │")
+    print("   │                                                        │")
+    print("   │ [重要] 過去データの一括取得はできません                │")
+    print("   │ JRA-VANの仕様により、時系列オッズはレース開催中のみ    │")
+    print("   │ 取得可能です。レース確定後はサーバーから削除されます。 │")
+    print("   │                                                        │")
+    print("   │ オッズ変動履歴を蓄積するには:                          │")
+    print("   │   1. 自動更新サービス（バックグラウンド更新）を有効に  │")
+    print("   │   2. レース開催日に起動しておく                        │")
+    print("   │   → 開催中のオッズがTS_O1-O6テーブルに蓄積されます     │")
+    print("   └────────────────────────────────────────────────────────┘")
     print()
-    print("   [y/N]: ", end="")
-    timeseries_choice = input().strip().lower()
-    settings['include_timeseries'] = timeseries_choice in ('y', 'yes')
 
-    if settings['include_timeseries']:
-        print()
-        print("   取得期間を選択してください:")
-        print("     1) 過去1ヶ月")
-        print("     2) 過去3ヶ月")
-        print("     3) 過去6ヶ月")
-        print("     4) 過去1年間 (推奨)")
-        print("     5) カスタム期間")
-        print()
-        print("   [1-5, デフォルト=4]: ", end="")
-        period_choice = input().strip()
-
-        if period_choice == "1":
-            settings['timeseries_months'] = 1
-        elif period_choice == "2":
-            settings['timeseries_months'] = 3
-        elif period_choice == "3":
-            settings['timeseries_months'] = 6
-        elif period_choice == "5":
-            print("   何ヶ月分取得しますか？ (1-24): ", end="")
-            try:
-                months = int(input().strip())
-                if months < 1:
-                    months = 1
-                if months > 12:
-                    print()
-                    print("   [警告] {}ヶ月分は非常に時間がかかります".format(months))
-                    print("   1年以上前のデータは公式サポート外です。")
-                    print("   APIコールが多いため、数時間かかる可能性があります。")
-                    print()
-                    print("   本当に続行しますか？ [y/N]: ", end="")
-                    confirm = input().strip().lower()
-                    if confirm not in ('y', 'yes'):
-                        months = 12
-                        print("   1年間に設定しました")
-                settings['timeseries_months'] = months
-            except ValueError:
-                settings['timeseries_months'] = 12
-        else:
-            settings['timeseries_months'] = 12
-    else:
-        settings['timeseries_months'] = 12
+    # 時系列オッズは初期セットアップでは取得しない
+    settings['include_timeseries'] = False
+    settings['timeseries_months'] = 0
 
     print()
 
@@ -887,7 +813,7 @@ def _interactive_setup_simple() -> dict:
     print("-" * 60)
     print("設定確認:")
     print(f"  取得モード:       {settings['mode_name']}")
-    print(f"  オッズ変動履歴:   {'取得する' if settings.get('include_timeseries') else '取得しない'}")
+    print(f"  オッズ変動履歴:   自動更新で蓄積")
     print(f"  当日レース情報:   {'取得する' if settings.get('include_realtime') else '取得しない'}")
     if settings.get('keep_existing_background'):
         print("  自動更新:         起動中（継続）")
