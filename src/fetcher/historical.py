@@ -150,8 +150,8 @@ class HistoricalFetcher(BaseFetcher):
                     note="No new data since this timestamp",
                 )
                 if self.progress_display:
-                    self.progress_display.print_warning(
-                        f"データなし: {data_spec} (from={from_date})"
+                    self.progress_display.print_info(
+                        f"最新です: {data_spec} - 新しいデータはありません"
                     )
                 return  # No data to fetch
 
