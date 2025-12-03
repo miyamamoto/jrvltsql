@@ -330,12 +330,67 @@ def _print_header_rich():
     console.print()
     console.print(Panel(
         f"[bold]{HORSE_EMOJI} JLTSQL[/bold] [dim]{version}[/dim]\n"
-        "[white]JRA-VAN DataLab → SQLite[/white]\n"
+        "[white]JRA-VAN DataLab → SQLite / PostgreSQL[/white]\n"
         "[dim]競馬データベース自動セットアップ[/dim]",
         border_style="blue",
         padding=(1, 2),
     ))
     console.print()
+
+
+def _test_postgresql_connection(host: str, port: int, database: str, user: str, password: str):
+    """PostgreSQL接続をテスト
+
+    Args:
+        host: ホスト名
+        port: ポート番号
+        database: データベース名
+        user: ユーザー名
+        password: パスワード
+
+    Returns:
+        (成功/失敗, メッセージ)
+    """
+    try:
+        # PostgreSQLドライバのインポート
+        try:
+            import pg8000.native
+            driver = "pg8000"
+        except ImportError:
+            try:
+                import psycopg
+                driver = "psycopg"
+            except ImportError:
+                return False, "PostgreSQLドライバがインストールされていません。\npip install pg8000 または pip install psycopg を実行してください。"
+
+        # 接続テスト
+        if driver == "pg8000":
+            conn = pg8000.native.Connection(
+                host=host,
+                port=port,
+                database=database,
+                user=user,
+                password=password,
+                timeout=10
+            )
+            conn.close()
+        else:  # psycopg
+            import psycopg
+            conn = psycopg.connect(
+                host=host,
+                port=port,
+                dbname=database,
+                user=user,
+                password=password,
+                connect_timeout=10
+            )
+            conn.close()
+
+        return True, f"接続成功: {user}@{host}:{port}/{database}"
+
+    except Exception as e:
+        error_msg = str(e)
+        return False, f"接続失敗: {error_msg}"
 
 
 def _interactive_setup_rich() -> dict:
@@ -345,8 +400,110 @@ def _interactive_setup_rich() -> dict:
 
     settings = {}
 
+    # データベース選択
+    console.print("[bold]0. データベース選択[/bold]")
+    console.print()
+
+    db_table = Table(show_header=True, box=box.SIMPLE, padding=(0, 1))
+    db_table.add_column("No", style="cyan", width=3, justify="center")
+    db_table.add_column("データベース", width=12)
+    db_table.add_column("説明", width=50)
+
+    db_table.add_row(
+        "1", "SQLite",
+        "[dim](デフォルト)[/dim] ファイルベースのデータベース、設定不要"
+    )
+    db_table.add_row(
+        "2", "PostgreSQL",
+        "高性能データベース、サーバー設定が必要"
+    )
+
+    console.print(db_table)
+    console.print()
+
+    db_choice = Prompt.ask(
+        "選択",
+        choices=["1", "2"],
+        default="1"
+    )
+
+    if db_choice == "1":
+        # SQLite
+        settings['db_type'] = 'sqlite'
+        settings['db_path'] = 'data/keiba.db'
+        console.print("[dim]SQLiteを使用します (data/keiba.db)[/dim]")
+    else:
+        # PostgreSQL
+        settings['db_type'] = 'postgresql'
+        console.print()
+        console.print("[cyan]PostgreSQL接続設定[/cyan]")
+        console.print()
+
+        # 接続設定の入力
+        while True:
+            pg_host = Prompt.ask("ホスト", default="localhost")
+            pg_port = IntPrompt.ask("ポート", default=5432)
+            pg_database = Prompt.ask("データベース名", default="keiba")
+            pg_user = Prompt.ask("ユーザー名", default="postgres")
+
+            # パスワード入力（マスク表示）
+            from rich.prompt import Prompt as RichPrompt
+            pg_password = RichPrompt.ask("パスワード", password=True)
+
+            console.print()
+            console.print("[cyan]接続テスト中...[/cyan]")
+
+            # 接続テスト
+            success, message = _test_postgresql_connection(
+                pg_host, pg_port, pg_database, pg_user, pg_password
+            )
+
+            if success:
+                console.print(f"[green]✓[/green] {message}")
+                settings['pg_host'] = pg_host
+                settings['pg_port'] = pg_port
+                settings['pg_database'] = pg_database
+                settings['pg_user'] = pg_user
+                settings['pg_password'] = pg_password
+                break
+            else:
+                console.print(f"[red]✗[/red] {message}")
+                console.print()
+                console.print(Panel(
+                    "[bold]PostgreSQLのインストール・設定方法[/bold]\n\n"
+                    "[cyan]1. PostgreSQLのインストール:[/cyan]\n"
+                    "   https://www.postgresql.org/download/\n\n"
+                    "[cyan]2. データベースの作成:[/cyan]\n"
+                    "   psql -U postgres\n"
+                    "   CREATE DATABASE keiba;\n\n"
+                    "[cyan]3. Pythonドライバのインストール:[/cyan]\n"
+                    "   pip install pg8000",
+                    border_style="yellow",
+                ))
+                console.print()
+
+                console.print("  [cyan]1)[/cyan] 再試行")
+                console.print("  [cyan]2)[/cyan] SQLiteに切り替え")
+                console.print()
+
+                retry_choice = Prompt.ask(
+                    "選択",
+                    choices=["1", "2"],
+                    default="1"
+                )
+                console.print()
+
+                if retry_choice == "2":
+                    console.print("[dim]SQLiteに切り替えます (data/keiba.db)[/dim]")
+                    settings['db_type'] = 'sqlite'
+                    settings['db_path'] = 'data/keiba.db'
+                    break
+                # retry_choice == "1" の場合はループ継続
+
+    console.print()
+
     # サービスキーの確認（JV-Link APIで実際にチェック）
-    console.print("[bold]0. JV-Link サービスキー確認[/bold]")
+    console.print("[bold]1. JV-Link サービスキー確認[/bold]")
     console.print()
 
     is_valid, message = _check_jvlink_service_key()
@@ -367,7 +524,7 @@ def _interactive_setup_rich() -> dict:
     last_setup = _load_setup_history()
 
     # セットアップモードの選択
-    console.print("[bold]1. セットアップモード[/bold]")
+    console.print("[bold]2. セットアップモード[/bold]")
     console.print()
 
     mode_table = Table(show_header=True, box=box.SIMPLE, padding=(0, 1))
@@ -459,7 +616,7 @@ def _interactive_setup_rich() -> dict:
     console.print()
 
     # 時系列オッズ取得オプション
-    console.print("[bold]2. 時系列オッズ（オッズ変動履歴）[/bold]")
+    console.print("[bold]3. 時系列オッズ（オッズ変動履歴）[/bold]")
     console.print()
     console.print(Panel(
         "[bold]時系列オッズ（オッズ変動履歴）について[/bold]\n\n"
@@ -484,7 +641,7 @@ def _interactive_setup_rich() -> dict:
     console.print()
 
     # 速報系データの取得
-    console.print("[bold]3. 当日レース情報の取得[/bold]")
+    console.print("[bold]4. 当日レース情報の取得[/bold]")
     console.print("[dim]レース当日に更新される情報を取得します。[/dim]")
     console.print("[dim]含まれる情報: 馬体重、出走取消、騎手変更、天候・馬場状態など[/dim]")
     console.print()
@@ -492,7 +649,7 @@ def _interactive_setup_rich() -> dict:
     console.print()
 
     # バックグラウンド更新
-    console.print("[bold]4. 自動更新サービス[/bold]")
+    console.print("[bold]5. 自動更新サービス[/bold]")
     console.print("[dim]データを自動で最新に保つバックグラウンドサービスです。[/dim]")
     console.print("[dim]起動しておくと、新しいレース情報やオッズが自動的にDBに追加されます。[/dim]")
     console.print()
@@ -539,7 +696,7 @@ def _interactive_setup_rich() -> dict:
 
     # 自動起動設定（バックグラウンドが有効または継続の場合のみ）
     if settings.get('enable_background') or settings.get('keep_existing_background'):
-        console.print("[bold]5. Windows起動時の自動起動[/bold]")
+        console.print("[bold]6. Windows起動時の自動起動[/bold]")
         if auto_start_enabled:
             console.print("[dim]現在: [green]有効[/green] (Windowsスタートアップに登録済み)[/dim]")
         else:
@@ -585,6 +742,13 @@ def _interactive_setup_rich() -> dict:
     confirm_table.add_column("Key", style="dim")
     confirm_table.add_column("Value", style="white")
 
+    # データベース情報
+    if settings.get('db_type') == 'postgresql':
+        db_info = f"PostgreSQL ({settings['pg_user']}@{settings['pg_host']}:{settings['pg_port']}/{settings['pg_database']})"
+    else:
+        db_info = f"SQLite ({settings.get('db_path', 'data/keiba.db')})"
+    confirm_table.add_row("データベース", db_info)
+
     confirm_table.add_row("取得モード", settings['mode_name'])
     confirm_table.add_row("オッズ変動履歴", "[dim]自動更新で蓄積[/dim]")
     confirm_table.add_row("当日レース情報", "[green]取得する[/green]" if settings.get('include_realtime') else "[dim]取得しない[/dim]")
@@ -614,8 +778,71 @@ def _interactive_setup_simple() -> dict:
 
     settings = {}
 
+    # データベース選択
+    print("0. データベース選択")
+    print()
+    print("   1) SQLite (デフォルト) - ファイルベースのデータベース、設定不要")
+    print("   2) PostgreSQL - 高性能データベース、サーバー設定が必要")
+    print()
+
+    db_choice = input("選択 [1]: ").strip() or "1"
+
+    if db_choice == "2":
+        # PostgreSQL
+        settings['db_type'] = 'postgresql'
+        print()
+        print("PostgreSQL接続設定:")
+        print()
+
+        while True:
+            pg_host = input("ホスト [localhost]: ").strip() or "localhost"
+            pg_port = input("ポート [5432]: ").strip() or "5432"
+            pg_port = int(pg_port)
+            pg_database = input("データベース名 [keiba]: ").strip() or "keiba"
+            pg_user = input("ユーザー名 [postgres]: ").strip() or "postgres"
+
+            import getpass
+            pg_password = getpass.getpass("パスワード: ")
+
+            print()
+            print("接続テスト中...")
+
+            success, message = _test_postgresql_connection(
+                pg_host, pg_port, pg_database, pg_user, pg_password
+            )
+
+            if success:
+                print(f"[OK] {message}")
+                settings['pg_host'] = pg_host
+                settings['pg_port'] = pg_port
+                settings['pg_database'] = pg_database
+                settings['pg_user'] = pg_user
+                settings['pg_password'] = pg_password
+                break
+            else:
+                print(f"[NG] {message}")
+                print()
+                print("PostgreSQLのインストール・設定方法:")
+                print("  1. https://www.postgresql.org/download/")
+                print("  2. データベース作成: CREATE DATABASE keiba;")
+                print("  3. Pythonドライバ: pip install pg8000")
+                print()
+                retry = input("再試行しますか？ (y/n) [y]: ").strip().lower() or "y"
+                if retry != "y":
+                    print("SQLiteに切り替えます")
+                    settings['db_type'] = 'sqlite'
+                    settings['db_path'] = 'data/keiba.db'
+                    break
+    else:
+        # SQLite (デフォルト)
+        settings['db_type'] = 'sqlite'
+        settings['db_path'] = 'data/keiba.db'
+        print("SQLiteを使用します (data/keiba.db)")
+
+    print()
+
     # サービスキーの確認（JV-Link APIで実際にチェック）
-    print("0. JV-Link サービスキー確認")
+    print("1. JV-Link サービスキー確認")
     print()
 
     is_valid, message = _check_jvlink_service_key()
@@ -637,7 +864,7 @@ def _interactive_setup_simple() -> dict:
     last_setup = _load_setup_history()
 
     # セットアップモード
-    print("1. セットアップモードを選択してください:")
+    print("2. セットアップモードを選択してください:")
     print()
     print("   No  モード  対象データ                                期間")
     print("   ──────────────────────────────────────────────────────────────")
@@ -692,7 +919,7 @@ def _interactive_setup_simple() -> dict:
     print()
 
     # 時系列オッズ取得オプション
-    print("2. 時系列オッズ（オッズ変動履歴）")
+    print("3. 時系列オッズ（オッズ変動履歴）")
     print()
     print("   ┌────────────────────────────────────────────────────────┐")
     print("   │ 時系列オッズ（オッズ変動履歴）について                 │")
@@ -718,7 +945,7 @@ def _interactive_setup_simple() -> dict:
     print()
 
     # 速報系データ
-    print("3. 当日レース情報を取得しますか？")
+    print("4. 当日レース情報を取得しますか？")
     print("   レース当日に更新される情報（馬体重、出走取消、騎手変更など）")
     print("   [y/N]: ", end="")
     realtime_choice = input().strip().lower()
@@ -726,7 +953,7 @@ def _interactive_setup_simple() -> dict:
     print()
 
     # バックグラウンド更新
-    print("4. 自動更新サービスを起動しますか？")
+    print("5. 自動更新サービスを起動しますか？")
     print("   データを自動で最新に保つバックグラウンドサービスです。")
     print("   起動しておくと、新しいレース情報やオッズが自動的にDBに追加されます。")
     print()
@@ -770,7 +997,7 @@ def _interactive_setup_simple() -> dict:
 
     # 自動起動設定（バックグラウンドが有効または継続の場合のみ）
     if settings.get('enable_background') or settings.get('keep_existing_background'):
-        print("4. Windows起動時の自動起動")
+        print("6. Windows起動時の自動起動")
         if auto_start_enabled:
             print("   現在: 有効 (Windowsスタートアップに登録済み)")
             print("   自動起動を維持しますか？ [Y/n]: ", end="")
@@ -811,6 +1038,12 @@ def _interactive_setup_simple() -> dict:
     # 確認
     print("-" * 60)
     print("設定確認:")
+    # データベース情報
+    if settings.get('db_type') == 'postgresql':
+        db_info = f"PostgreSQL ({settings['pg_user']}@{settings['pg_host']}:{settings['pg_port']}/{settings['pg_database']})"
+    else:
+        db_info = f"SQLite ({settings.get('db_path', 'data/keiba.db')})"
+    print(f"  データベース:     {db_info}")
     print(f"  取得モード:       {settings['mode_name']}")
     print(f"  オッズ変動履歴:   自動更新で蓄積")
     print(f"  当日レース情報:   {'取得する' if settings.get('include_realtime') else '取得しない'}")
@@ -938,6 +1171,36 @@ class QuickstartRunner:
                 self.db_path = self.project_root / self.db_path
         else:
             self.db_path = self.project_root / "data" / "keiba.db"
+
+    def _create_database(self):
+        """設定に基づいてデータベースハンドラを作成
+
+        Returns:
+            BaseDatabase: SQLiteDatabaseまたはPostgreSQLDatabaseのインスタンス
+        """
+        from src.database.sqlite_handler import SQLiteDatabase
+        from src.database.postgresql_handler import PostgreSQLDatabase
+        from src.database.base import DatabaseError
+
+        db_type = self.settings.get('db_type', 'sqlite')
+
+        if db_type == 'postgresql':
+            # PostgreSQL設定
+            db_config = {
+                'host': self.settings.get('pg_host', 'localhost'),
+                'port': self.settings.get('pg_port', 5432),
+                'database': self.settings.get('pg_database', 'keiba'),
+                'user': self.settings.get('pg_user', 'postgres'),
+                'password': self.settings.get('pg_password', ''),
+            }
+            try:
+                return PostgreSQLDatabase(db_config)
+            except Exception as e:
+                raise DatabaseError(f"PostgreSQL接続に失敗しました: {e}")
+        else:
+            # SQLite設定（デフォルト）
+            db_config = {"path": str(self.db_path)}
+            return SQLiteDatabase(db_config)
 
     def run(self) -> int:
         """完全自動セットアップ実行"""
@@ -1097,31 +1360,65 @@ class QuickstartRunner:
             [(date, jyo_code, kaiji, nichiji, race_num), ...] のリスト
             時系列オッズ用の16桁キー生成に必要な情報を含む
         """
-        import sqlite3
         races = []
         try:
-            with sqlite3.connect(str(self.db_path)) as conn:
-                cursor = conn.cursor()
-
+            db = self._create_database()
+            with db:
                 # NL_RAテーブルから開催情報を取得（Kaiji/Nichiji含む）
                 # Year + MonthDay で日付を構成
-                query = """
-                    SELECT DISTINCT
-                        Year || printf('%04d', MonthDay) as race_date,
-                        JyoCD,
-                        Kaiji,
-                        Nichiji,
-                        RaceNum
-                    FROM NL_RA
-                    WHERE (Year || printf('%04d', MonthDay)) >= ?
-                      AND (Year || printf('%04d', MonthDay)) <= ?
-                    ORDER BY race_date, JyoCD, RaceNum
-                """
-                cursor.execute(query, (from_date, to_date))
-                races = [
-                    (row[0], row[1], int(row[2]) if row[2] else 1, int(row[3]) if row[3] else 1, int(row[4]))
-                    for row in cursor.fetchall()
-                ]
+                # PostgreSQLでは printf の代わりに lpad を使用
+                if db.get_db_type() == 'postgresql':
+                    query = """
+                        SELECT DISTINCT
+                            year || lpad(monthday::text, 4, '0') as race_date,
+                            jyocd,
+                            kaiji,
+                            nichiji,
+                            racenum
+                        FROM nl_ra
+                        WHERE (year || lpad(monthday::text, 4, '0')) >= ?
+                          AND (year || lpad(monthday::text, 4, '0')) <= ?
+                        ORDER BY race_date, jyocd, racenum
+                    """
+                else:
+                    query = """
+                        SELECT DISTINCT
+                            Year || printf('%04d', MonthDay) as race_date,
+                            JyoCD,
+                            Kaiji,
+                            Nichiji,
+                            RaceNum
+                        FROM NL_RA
+                        WHERE (Year || printf('%04d', MonthDay)) >= ?
+                          AND (Year || printf('%04d', MonthDay)) <= ?
+                        ORDER BY race_date, JyoCD, RaceNum
+                    """
+                results = db.fetch_all(query, (from_date, to_date))
+                # fetch_all returns a list of dictionaries with lowercase keys for PostgreSQL
+                # For consistency, we convert dict rows to tuple rows
+                if db.get_db_type() == 'postgresql':
+                    races = [
+                        (
+                            row.get('race_date'),
+                            row.get('jyocd'),
+                            int(row.get('kaiji')) if row.get('kaiji') else 1,
+                            int(row.get('nichiji')) if row.get('nichiji') else 1,
+                            int(row.get('racenum'))
+                        )
+                        for row in results
+                    ]
+                else:
+                    # SQLite: keys are case-sensitive as defined in query
+                    races = [
+                        (
+                            row.get('race_date'),
+                            row.get('JyoCD'),
+                            int(row.get('Kaiji')) if row.get('Kaiji') else 1,
+                            int(row.get('Nichiji')) if row.get('Nichiji') else 1,
+                            int(row.get('RaceNum'))
+                        )
+                        for row in results
+                    ]
         except Exception as e:
             pass  # 開催情報取得エラーは無視（NL_RAにデータがない場合など）
         return races
@@ -1193,11 +1490,10 @@ class QuickstartRunner:
 
         try:
             from src.fetcher.realtime import RealtimeFetcher
-            from src.database.sqlite_handler import SQLiteDatabase
             from src.realtime.updater import RealtimeUpdater
             from src.jvlink.constants import JYO_CODES, generate_time_series_full_key
 
-            db = SQLiteDatabase({"path": str(self.db_path)})
+            db = self._create_database()
 
             total_records = 0
             success_count = 0
@@ -1732,11 +2028,10 @@ class QuickstartRunner:
 
         try:
             from src.fetcher.realtime import RealtimeFetcher
-            from src.database.sqlite_handler import SQLiteDatabase
             from src.importer.importer import DataImporter
 
             # データベース接続
-            db = SQLiteDatabase({"path": str(self.db_path)})
+            db = self._create_database()
 
             # 過去1週間の開催日を取得
             race_dates = self._get_recent_race_dates(days=7)
@@ -1977,7 +2272,6 @@ class QuickstartRunner:
                 status: "success", "nodata", "skipped", "failed"
                 details: dict with progress info
         """
-        from src.database.sqlite_handler import SQLiteDatabase
         from src.database.schema import create_all_tables
         from src.importer.batch import BatchProcessor
         from src.jvlink.wrapper import JVLinkError
@@ -2000,10 +2294,8 @@ class QuickstartRunner:
             from src.utils.config import load_config
             config = load_config(str(self.project_root / "config" / "config.yaml"))
 
-            # データベース接続（コマンドライン引数で上書き可能）
-            db_config = {"path": str(self.db_path)}
-
-            database = SQLiteDatabase(db_config)
+            # データベース接続
+            database = self._create_database()
 
             with database:
                 # テーブル作成（必要に応じて）
@@ -2150,6 +2442,18 @@ def main():
     parser.add_argument("-i", "--interactive", action="store_true", help="対話モード（デフォルト）")
     parser.add_argument("--db-path", type=str, default=None,
                         help="データベースファイルパス（デフォルト: data/keiba.db）")
+    parser.add_argument("--db-type", type=str, choices=["sqlite", "postgresql"], default="sqlite",
+                        help="データベースタイプ (sqlite または postgresql、デフォルト: sqlite)")
+    parser.add_argument("--pg-host", type=str, default="localhost",
+                        help="PostgreSQLホスト（デフォルト: localhost）")
+    parser.add_argument("--pg-port", type=int, default=5432,
+                        help="PostgreSQLポート（デフォルト: 5432）")
+    parser.add_argument("--pg-database", type=str, default="keiba",
+                        help="PostgreSQLデータベース名（デフォルト: keiba）")
+    parser.add_argument("--pg-user", type=str, default="postgres",
+                        help="PostgreSQLユーザー名（デフォルト: postgres）")
+    parser.add_argument("--pg-password", type=str, default=None,
+                        help="PostgreSQLパスワード（デフォルト: PGPASSWORD環境変数またはプロンプト）")
     parser.add_argument("--from-date", type=str, default=None,
                         help="取得開始日 (YYYYMMDD形式、デフォルト: 19860101)")
     parser.add_argument("--to-date", type=str, default=None,
@@ -2218,8 +2522,26 @@ def main():
         # バックグラウンド更新
         settings['enable_background'] = args.background and not args.no_monitor
 
-        # データベースパス
+        # データベース設定
         settings['db_path'] = args.db_path
+        settings['db_type'] = args.db_type
+
+        # PostgreSQL設定
+        if args.db_type == 'postgresql':
+            settings['pg_host'] = args.pg_host
+            settings['pg_port'] = args.pg_port
+            settings['pg_database'] = args.pg_database
+            settings['pg_user'] = args.pg_user
+
+            # パスワードは引数 > 環境変数 > プロンプトの優先順位
+            if args.pg_password:
+                settings['pg_password'] = args.pg_password
+            elif 'PGPASSWORD' in os.environ:
+                settings['pg_password'] = os.environ['PGPASSWORD']
+            else:
+                # 非対話モードでパスワードが指定されていない場合は空文字列
+                # （実際の接続時にエラーになる可能性がある）
+                settings['pg_password'] = ''
 
         # オッズ除外
         settings['no_odds'] = args.no_odds
