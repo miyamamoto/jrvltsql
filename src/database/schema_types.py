@@ -44,8 +44,9 @@ def get_table_column_types(table_name: str) -> Dict[str, str]:
     #   JyoCD TEXT,
     #   Kyori INTEGER,
     #   Honsyokin1 REAL,
+    #   Vote BIGINT,
     # But excludes PRIMARY KEY constraints
-    pattern = r'^\s*(\w+)\s+(INTEGER|REAL|TEXT)\s*[,)]?\s*$'
+    pattern = r'^\s*(\w+)\s+(INTEGER|BIGINT|REAL|TEXT)\s*[,)]?\s*$'
 
     for line in create_statement.split('\n'):
         # Skip PRIMARY KEY constraints
@@ -86,14 +87,14 @@ def get_column_type(table_name: str, column_name: str) -> Optional[str]:
 
 
 def is_numeric_column(table_name: str, column_name: str) -> bool:
-    """Check if a column has a numeric type (INTEGER or REAL).
+    """Check if a column has a numeric type (INTEGER, BIGINT, or REAL).
 
     Args:
         table_name: Name of the table
         column_name: Name of the column
 
     Returns:
-        True if column type is INTEGER or REAL, False otherwise
+        True if column type is INTEGER, BIGINT, or REAL, False otherwise
 
     Examples:
         >>> is_numeric_column("NL_RA", "Year")
@@ -106,7 +107,7 @@ def is_numeric_column(table_name: str, column_name: str) -> bool:
         False
     """
     column_type = get_column_type(table_name, column_name)
-    return column_type in ("INTEGER", "REAL")
+    return column_type in ("INTEGER", "BIGINT", "REAL")
 
 
 def is_text_column(table_name: str, column_name: str) -> bool:

@@ -8,20 +8,89 @@ import time
 from contextlib import contextmanager
 from typing import Optional
 
-from rich.console import Console, RenderableType
+from rich.console import Console, Group, RenderableType
 from rich.live import Live
 from rich.panel import Panel
 from rich.progress import (
     BarColumn,
     Progress,
+    ProgressColumn,
     SpinnerColumn,
     TaskID,
     TextColumn,
     TimeElapsedColumn,
     TimeRemainingColumn,
 )
+from rich.style import Style
 from rich.table import Table
 from rich.text import Text
+
+
+# JV-Data スペック名の日本語説明
+SPEC_DESCRIPTIONS = {
+    # 蓄積系データ
+    "RACE": "レース詳細",
+    "DIFF": "差分データ",
+    "BLOD": "血統データ",
+    "SNAP": "スナップショット",
+    "SLOP": "坂路調教",
+    "WOOD": "ウッドチップ調教",
+    "YSCH": "開催スケジュール",
+    "HOSE": "馬マスタ",
+    "HOYU": "馬主マスタ",
+    "CHOK": "調教師マスタ",
+    "KISI": "騎手マスタ",
+    "BRDR": "生産者マスタ",
+    "TOKU": "特別レース名",
+    "COMM": "コメントデータ",
+    "PARA": "パラメータ",
+    "MING": "出馬表データ",
+    # 速報系データ
+    "0B12": "オッズ（単複枠）",
+    "0B13": "オッズ（馬連）",
+    "0B14": "オッズ（ワイド）",
+    "0B15": "オッズ（馬単）",
+    "0B16": "オッズ（3連複）",
+    "0B17": "オッズ（3連単）",
+    "0B11": "レース結果",
+    "0B20": "騎手変更",
+    "0B30": "天候馬場",
+    "0B31": "コース変更",
+    "0B32": "発走時刻変更",
+    "0B33": "出走取消競走除外",
+    "0B34": "重量変更",
+    "0B35": "騎手乗替",
+    "0B36": "枠順変更",
+    "0B41": "レース払戻（単複枠）",
+    "0B42": "レース払戻（馬連）",
+    "0B51": "票数（単複枠）",
+    "0B52": "票数（馬連）",
+}
+
+
+class CompactTimeColumn(ProgressColumn):
+    """Compact time display showing elapsed/remaining."""
+
+    def render(self, task) -> Text:
+        elapsed = task.elapsed
+        if elapsed is None:
+            return Text("-:--", style="dim")
+
+        # Format elapsed time
+        elapsed_mins = int(elapsed // 60)
+        elapsed_secs = int(elapsed % 60)
+        elapsed_str = f"{elapsed_mins}:{elapsed_secs:02d}"
+
+        # Calculate remaining time
+        if task.total and task.completed > 0:
+            speed = task.completed / elapsed
+            remaining = (task.total - task.completed) / speed if speed > 0 else 0
+            remaining_mins = int(remaining // 60)
+            remaining_secs = int(remaining % 60)
+            remaining_str = f"{remaining_mins}:{remaining_secs:02d}"
+            return Text(f"{elapsed_str}/{remaining_str}", style="cyan")
+
+        return Text(elapsed_str, style="cyan")
 
 
 class StatsDisplay:
@@ -45,32 +114,34 @@ class StatsDisplay:
             self.speed = speed
 
     def __rich__(self) -> RenderableType:
-        """Generate table dynamically when rendered."""
+        """Generate compact stats display."""
         with self._lock:
-            table = Table.grid(padding=(0, 2))
-            table.add_column(style="cyan", justify="right")
-            table.add_column(style="green")
-            table.add_row("取得レコード:", f"[bold green]{self.fetched:,}[/] 件")
-            table.add_row("パース成功:", f"[bold green]{self.parsed:,}[/] 件")
+            parts = []
+
+            # Build compact stats line
+            parts.append(f"[bold cyan]取得[/]: [green]{self.fetched:,}[/]")
+            parts.append(f"[bold cyan]成功[/]: [green]{self.parsed:,}[/]")
+
             if self.failed > 0:
-                table.add_row("パース失敗:", f"[bold red]{self.failed:,}[/] 件")
+                parts.append(f"[bold red]失敗[/]: [red]{self.failed:,}[/]")
+
             if self.inserted > 0:
-                table.add_row("DB挿入:", f"[bold cyan]{self.inserted:,}[/] 件")
+                parts.append(f"[bold cyan]挿入[/]: [cyan]{self.inserted:,}[/]")
+
             if self.speed is not None:
-                table.add_row("処理速度:", f"[bold yellow]{self.speed:.1f}[/] レコード/秒")
-            return table
+                parts.append(f"[bold yellow]速度[/]: [yellow]{self.speed:,.0f}/秒[/]")
+
+            return Text.from_markup("  ".join(parts))
 
 
 class JVLinkProgressDisplay:
     """Stylish progress display for JV-Link data operations.
 
     Features:
-    - Multiple concurrent progress bars
-    - Download progress with percentage
-    - Record fetching with speed metrics
-    - Database insertion progress
-    - Beautiful styling with colors
-    - ETA and elapsed time
+    - Clean, compact layout with Panel border
+    - Real-time progress bar with file count
+    - Compact statistics display
+    - Download progress section (when downloading)
     """
 
     def __init__(self, console: Optional[Console] = None):
@@ -87,72 +158,90 @@ class JVLinkProgressDisplay:
 
         # Rate limiting for updates (avoid screen flickering)
         self._last_update_time = 0.0
-        self._min_update_interval = 0.2  # 200ms minimum between updates (reduced flickering)
+        self._min_update_interval = 0.15  # 150ms minimum between updates
 
-        # Cache layout to avoid recreation
-        self._cached_layout = None
+        # Current spec being processed
+        self._current_spec = ""
+        self._current_status = ""
+        self._file_progress = ""
 
         # Create main progress bar for overall operations
         self.progress = Progress(
-            SpinnerColumn(style="cyan"),
-            TextColumn("[bold blue]{task.description}", justify="right"),
-            BarColumn(bar_width=40, complete_style="green", finished_style="bright_green"),
-            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-            TextColumn("|"),
-            TextColumn("[cyan]{task.fields[status]}"),
-            TimeElapsedColumn(),
-            TimeRemainingColumn(),
+            SpinnerColumn(style="green"),
+            TextColumn("{task.description}", style="bold white"),
+            BarColumn(
+                bar_width=35,
+                style="bar.back",
+                complete_style="green",
+                finished_style="bright_green",
+            ),
+            TextColumn("[bold]{task.percentage:>3.0f}%[/]"),
+            CompactTimeColumn(),
             console=self.console,
             expand=False,
         )
 
         # Create simple progress for downloads
         self.download_progress = Progress(
-            TextColumn("[bold magenta]{task.description}", justify="right"),
-            BarColumn(bar_width=40, complete_style="magenta", finished_style="bright_magenta"),
-            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-            TextColumn("[cyan]{task.fields[status]}"),
+            SpinnerColumn(style="magenta"),
+            TextColumn("{task.description}", style="bold magenta"),
+            BarColumn(
+                bar_width=35,
+                style="bar.back",
+                complete_style="magenta",
+                finished_style="bright_magenta",
+            ),
+            TextColumn("[bold]{task.percentage:>3.0f}%[/]"),
+            TextColumn("[cyan]{task.fields[status]}[/]"),
             console=self.console,
             expand=False,
         )
 
-        # Use StatsDisplay for dynamic updates without recreating layout
+        # Use StatsDisplay for dynamic updates
         self.stats_display = StatsDisplay()
 
-        # Create layout once and cache it
+        # State
         self._layout: Optional[Table] = None
-
+        self._has_download = False
         self.live: Optional[Live] = None
         self.tasks = {}
 
-    def _create_layout(self) -> Table:
-        """Create the display layout once and cache it.
+    def _create_layout(self) -> Panel:
+        """Create the display layout with Panel border.
 
-        The layout is created only once. Internal components (Progress, StatsDisplay)
-        update their own content dynamically via __rich__() method.
-
-        Uses simple section headers instead of Panel borders to reduce flickering
-        during screen refresh.
+        Returns a Panel containing the progress display.
         """
-        if self._layout is not None:
-            return self._layout
+        # Create main content table
+        content = Table.grid(expand=True, padding=(0, 1))
+        content.add_column()
 
-        layout = Table.grid(expand=False, padding=(0, 0))
-        # セクション1: ダウンロード
-        layout.add_row(Text(""))  # 空行
-        layout.add_row(Text("  データダウンロード", style="bold cyan"))
-        layout.add_row(self.download_progress)
-        # セクション2: 処理
-        layout.add_row(Text(""))  # 空行
-        layout.add_row(Text("  データ取得・処理", style="bold blue"))
-        layout.add_row(self.progress)
-        # セクション3: 統計
-        layout.add_row(Text(""))  # 空行
-        layout.add_row(Text("  統計情報", style="bold green"))
-        layout.add_row(self.stats_display)
-        layout.add_row(Text(""))  # 空行
-        self._layout = layout
-        return layout
+        # Download section (if active)
+        if self._has_download:
+            content.add_row(Text("📥 ダウンロード", style="bold magenta"))
+            content.add_row(self.download_progress)
+            content.add_row(Text(""))
+
+        # Processing section
+        content.add_row(Text("⚙️  処理中", style="bold green"))
+        content.add_row(self.progress)
+
+        # File progress info
+        if self._file_progress:
+            content.add_row(Text(f"   {self._file_progress}", style="dim"))
+
+        content.add_row(Text(""))
+
+        # Stats section
+        content.add_row(Text("📊 統計", style="bold cyan"))
+        content.add_row(self.stats_display)
+
+        # Wrap in Panel
+        return Panel(
+            content,
+            title="[bold blue]JLTSQL データ取得[/]",
+            border_style="blue",
+            padding=(0, 1),
+        )
 
     def _should_update(self) -> bool:
         """Check if enough time has passed for an update."""
@@ -170,9 +259,9 @@ class JVLinkProgressDisplay:
                 self.live = Live(
                     self._create_layout(),
                     console=self.console,
-                    refresh_per_second=2,  # Reduced refresh rate to minimize flickering
+                    refresh_per_second=4,
                     transient=False,
-                    vertical_overflow="visible",  # Don't crop content
+                    vertical_overflow="visible",
                 )
                 self.live.start()
 
@@ -182,6 +271,15 @@ class JVLinkProgressDisplay:
             if self.live:
                 self.live.stop()
                 self.live = None
+            # Reset state for next use
+            self._has_download = False
+            self._file_progress = ""
+            self._layout = None
+
+    def _refresh_layout(self):
+        """Refresh the layout in live display."""
+        if self.live:
+            self.live.update(self._create_layout())
 
     def add_download_task(
         self,
@@ -197,11 +295,13 @@ class JVLinkProgressDisplay:
         Returns:
             Task ID
         """
+        self._has_download = True
         task_id = self.download_progress.add_task(
             description,
             total=total or 100,
             status="待機中...",
         )
+        self._refresh_layout()
         return task_id
 
     def add_task(
@@ -218,10 +318,10 @@ class JVLinkProgressDisplay:
         Returns:
             Task ID
         """
+        self._current_spec = description
         task_id = self.progress.add_task(
             description,
             total=total or 100,
-            status="初期化中...",
         )
         self.tasks[description] = task_id
         return task_id
@@ -250,8 +350,6 @@ class JVLinkProgressDisplay:
             update_dict["status"] = status
 
         self.download_progress.update(task_id, **update_dict)
-        # Note: Don't call live.update() - Progress auto-updates within Live context
-        # This prevents frame flickering
 
     def update(
         self,
@@ -268,7 +366,7 @@ class JVLinkProgressDisplay:
             advance: Amount to advance
             completed: Set completed amount
             total: Set total amount
-            status: Status message
+            status: Status message (used for file progress display)
         """
         update_dict = {}
         if advance is not None:
@@ -277,12 +375,14 @@ class JVLinkProgressDisplay:
             update_dict["completed"] = completed
         if total is not None:
             update_dict["total"] = total
+
+        # Extract file progress from status if it contains file info
         if status is not None:
-            update_dict["status"] = status
+            self._file_progress = status
+            # Refresh layout to show file progress
+            self._refresh_layout()
 
         self.progress.update(task_id, **update_dict)
-        # Note: Don't call live.update() - Progress auto-updates within Live context
-        # This prevents frame flickering
 
     def update_stats(
         self,
@@ -301,7 +401,6 @@ class JVLinkProgressDisplay:
             inserted: Number of records inserted to database
             speed: Processing speed (records/sec)
         """
-        # Update StatsDisplay - it will generate new table on next render
         self.stats_display.update(
             fetched=fetched,
             parsed=parsed,
@@ -309,8 +408,6 @@ class JVLinkProgressDisplay:
             inserted=inserted,
             speed=speed,
         )
-        # Note: Don't call live.update() - Live auto-refreshes and StatsDisplay
-        # generates fresh content via __rich__() on each render
 
     def print_success(self, message: str):
         """Print success message.
@@ -318,7 +415,7 @@ class JVLinkProgressDisplay:
         Args:
             message: Success message
         """
-        self.console.print(f"[bold green][OK][/] {message}")
+        self.console.print(f"[bold green]✓[/] {message}")
 
     def print_error(self, message: str):
         """Print error message.
@@ -326,7 +423,7 @@ class JVLinkProgressDisplay:
         Args:
             message: Error message
         """
-        self.console.print(f"[bold red][ERROR][/] {message}")
+        self.console.print(f"[bold red]✗[/] {message}")
 
     def print_warning(self, message: str):
         """Print warning message.
@@ -334,7 +431,7 @@ class JVLinkProgressDisplay:
         Args:
             message: Warning message
         """
-        self.console.print(f"[bold yellow][WARNING][/] {message}")
+        self.console.print(f"[bold yellow]⚠[/] {message}")
 
     def print_info(self, message: str):
         """Print info message.
@@ -342,7 +439,26 @@ class JVLinkProgressDisplay:
         Args:
             message: Info message
         """
-        self.console.print(f"[bold cyan][INFO][/] {message}")
+        self.console.print(f"[bold cyan]ℹ[/] {message}")
+
+    def print_separator(self):
+        """Print a separator line between specs."""
+        self.console.print()
+
+    def print_spec_header(self, spec: str):
+        """Print a header for a new spec processing.
+
+        Args:
+            spec: The spec name being processed
+        """
+        # スペック名の日本語説明を取得
+        description = SPEC_DESCRIPTIONS.get(spec, "")
+
+        self.console.print()
+        if description:
+            self.console.print(f"[bold blue]━━━[/] [bold white]{spec}[/] [dim]({description})[/] [bold blue]━━━[/]")
+        else:
+            self.console.print(f"[bold blue]━━━[/] [bold white]{spec}[/] [bold blue]━━━[/]")
 
     @contextmanager
     def task_context(self, description: str, total: Optional[float] = None):
@@ -359,7 +475,7 @@ class JVLinkProgressDisplay:
         try:
             yield task_id
         finally:
-            self.update(task_id, status="完了")
+            pass
 
     def __enter__(self):
         """Enter context manager."""

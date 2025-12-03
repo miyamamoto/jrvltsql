@@ -274,23 +274,32 @@ class DataImporter:
 
             # Convert based on type
             try:
-                if col_type == "INTEGER":
-                    # Convert to integer
+                if col_type in ("INTEGER", "BIGINT"):
+                    # Convert to integer (or bigint)
                     str_value = str(value).strip()
                     if str_value:
-                        converted[field_name] = int(str_value)
+                        # Check for masked values (e.g., "***05011005")
+                        # JV-Data uses *** for masked/unavailable data
+                        if '*' in str_value:
+                            converted[field_name] = None
+                        else:
+                            converted[field_name] = int(str_value)
                     else:
                         converted[field_name] = None
 
                 elif col_type == "REAL":
                     str_value = str(value).strip()
                     if str_value:
-                        float_value = float(str_value)
-                        # Check if this field needs to be divided by 10
-                        if _should_divide_by_10(field_name):
-                            converted[field_name] = float_value / 10.0
+                        # Check for masked values (e.g., "****")
+                        if '*' in str_value:
+                            converted[field_name] = None
                         else:
-                            converted[field_name] = float_value
+                            float_value = float(str_value)
+                            # Check if this field needs to be divided by 10
+                            if _should_divide_by_10(field_name):
+                                converted[field_name] = float_value / 10.0
+                            else:
+                                converted[field_name] = float_value
                     else:
                         converted[field_name] = None
 

@@ -350,6 +350,152 @@ def _print_header_rich():
     console.print()
 
 
+def _check_postgresql_database(host: str, port: int, database: str, user: str, password: str):
+    """PostgreSQLデータベースの存在確認と作成
+
+    Args:
+        host: ホスト名
+        port: ポート番号
+        database: データベース名
+        user: ユーザー名
+        password: パスワード
+
+    Returns:
+        (ステータス, メッセージ)
+        ステータス: "exists" (既存), "created" (新規作成), "error" (エラー)
+    """
+    try:
+        # PostgreSQLドライバのインポート
+        try:
+            import pg8000.native
+            driver = "pg8000"
+        except ImportError:
+            try:
+                import psycopg
+                driver = "psycopg"
+            except ImportError:
+                return "error", "PostgreSQLドライバがインストールされていません。\npip install pg8000 または pip install psycopg を実行してください。"
+
+        # まずpostgresデータベースに接続してターゲットDBの存在確認
+        if driver == "pg8000":
+            conn = pg8000.native.Connection(
+                host=host,
+                port=port,
+                database="postgres",  # デフォルトDBに接続
+                user=user,
+                password=password,
+                timeout=10
+            )
+            # データベースの存在確認
+            rows = conn.run("SELECT datname FROM pg_database WHERE datname = :db", db=database)
+            db_exists = len(rows) > 0
+
+            if not db_exists:
+                # データベースを作成
+                conn.run(f'CREATE DATABASE "{database}"')
+                conn.close()
+                return "created", f"データベース '{database}' を作成しました"
+            else:
+                conn.close()
+                return "exists", f"データベース '{database}' は既に存在します"
+
+        else:  # psycopg
+            import psycopg
+            conn = psycopg.connect(
+                host=host,
+                port=port,
+                dbname="postgres",
+                user=user,
+                password=password,
+                connect_timeout=10,
+                autocommit=True
+            )
+            cur = conn.cursor()
+            cur.execute("SELECT datname FROM pg_database WHERE datname = %s", (database,))
+            db_exists = cur.fetchone() is not None
+
+            if not db_exists:
+                cur.execute(f'CREATE DATABASE "{database}"')
+                conn.close()
+                return "created", f"データベース '{database}' を作成しました"
+            else:
+                conn.close()
+                return "exists", f"データベース '{database}' は既に存在します"
+
+    except Exception as e:
+        return "error", str(e)
+
+
+def _drop_postgresql_database(host: str, port: int, database: str, user: str, password: str):
+    """PostgreSQLデータベースを削除して再作成
+
+    Args:
+        host: ホスト名
+        port: ポート番号
+        database: データベース名
+        user: ユーザー名
+        password: パスワード
+
+    Returns:
+        (成功/失敗, メッセージ)
+    """
+    try:
+        try:
+            import pg8000.native
+            driver = "pg8000"
+        except ImportError:
+            import psycopg
+            driver = "psycopg"
+
+        if driver == "pg8000":
+            conn = pg8000.native.Connection(
+                host=host,
+                port=port,
+                database="postgres",
+                user=user,
+                password=password,
+                timeout=10
+            )
+            # 既存の接続を強制切断
+            conn.run(f"""
+                SELECT pg_terminate_backend(pid)
+                FROM pg_stat_activity
+                WHERE datname = :db AND pid <> pg_backend_pid()
+            """, db=database)
+            # データベースを削除
+            conn.run(f'DROP DATABASE IF EXISTS "{database}"')
+            # データベースを再作成
+            conn.run(f'CREATE DATABASE "{database}"')
+            conn.close()
+        else:  # psycopg
+            import psycopg
+            conn = psycopg.connect(
+                host=host,
+                port=port,
+                dbname="postgres",
+                user=user,
+                password=password,
+                connect_timeout=10,
+                autocommit=True
+            )
+            cur = conn.cursor()
+            # 既存の接続を強制切断
+            cur.execute("""
+                SELECT pg_terminate_backend(pid)
+                FROM pg_stat_activity
+                WHERE datname = %s AND pid <> pg_backend_pid()
+            """, (database,))
+            # データベースを削除して再作成
+            cur.execute(f'DROP DATABASE IF EXISTS "{database}"')
+            cur.execute(f'CREATE DATABASE "{database}"')
+            conn.close()
+
+        return True, f"データベース '{database}' を再作成しました"
+
+    except Exception as e:
+        return False, str(e)
+
+
 def _test_postgresql_connection(host: str, port: int, database: str, user: str, password: str):
     """PostgreSQL接続をテスト
 
@@ -458,19 +604,20 @@ def _interactive_setup_rich() -> dict:
             pg_database = Prompt.ask("データベース名", default="keiba")
             pg_user = Prompt.ask("ユーザー名", default="postgres")
 
-            # パスワード入力（マスク表示）
+            # パスワード入力（マスク表示、デフォルトpostgres）
             from rich.prompt import Prompt as RichPrompt
-            pg_password = RichPrompt.ask("パスワード", password=True)
+            pg_password = RichPrompt.ask("パスワード", default="postgres", password=True)
 
             console.print()
-            console.print("[cyan]接続テスト中...[/cyan]")
+            console.print("[cyan]データベース確認中...[/cyan]")
 
-            # 接続テスト
-            success, message = _test_postgresql_connection(
+            # データベースの存在確認と作成
+            status, message = _check_postgresql_database(
                 pg_host, pg_port, pg_database, pg_user, pg_password
             )
 
-            if success:
+            if status == "created":
+                # 新規作成成功
                 console.print(f"[green]✓[/green] {message}")
                 settings['pg_host'] = pg_host
                 settings['pg_port'] = pg_port
@@ -478,16 +625,62 @@ def _interactive_setup_rich() -> dict:
                 settings['pg_user'] = pg_user
                 settings['pg_password'] = pg_password
                 break
-            else:
+
+            elif status == "exists":
+                # 既存DBがある場合は選択肢を表示
+                console.print(f"[yellow]![/yellow] {message}")
+                console.print()
+                console.print("  [cyan]1)[/cyan] 既存データを保持して更新（追加インポート）")
+                console.print("  [cyan]2)[/cyan] データベースを再作成（全データ削除）")
+                console.print("  [cyan]3)[/cyan] 別のデータベース名を指定")
+                console.print()
+
+                db_choice = Prompt.ask(
+                    "選択",
+                    choices=["1", "2", "3"],
+                    default="1"
+                )
+                console.print()
+
+                if db_choice == "1":
+                    # 既存DBをそのまま使用
+                    console.print("[dim]既存データベースを使用します[/dim]")
+                    settings['pg_host'] = pg_host
+                    settings['pg_port'] = pg_port
+                    settings['pg_database'] = pg_database
+                    settings['pg_user'] = pg_user
+                    settings['pg_password'] = pg_password
+                    break
+                elif db_choice == "2":
+                    # DROP & CREATE
+                    console.print("[cyan]データベースを再作成中...[/cyan]")
+                    success, drop_msg = _drop_postgresql_database(
+                        pg_host, pg_port, pg_database, pg_user, pg_password
+                    )
+                    if success:
+                        console.print(f"[green]✓[/green] {drop_msg}")
+                        settings['pg_host'] = pg_host
+                        settings['pg_port'] = pg_port
+                        settings['pg_database'] = pg_database
+                        settings['pg_user'] = pg_user
+                        settings['pg_password'] = pg_password
+                        break
+                    else:
+                        console.print(f"[red]✗[/red] 再作成失敗: {drop_msg}")
+                        # ループ継続して再入力
+                elif db_choice == "3":
+                    # 別のDB名を指定（ループ継続）
+                    continue
+
+            else:  # status == "error"
                 console.print(f"[red]✗[/red] {message}")
                 console.print()
                 console.print(Panel(
                     "[bold]PostgreSQLのインストール・設定方法[/bold]\n\n"
                     "[cyan]1. PostgreSQLのインストール:[/cyan]\n"
                     "   https://www.postgresql.org/download/\n\n"
-                    "[cyan]2. データベースの作成:[/cyan]\n"
-                    "   psql -U postgres\n"
-                    "   CREATE DATABASE keiba;\n\n"
+                    "[cyan]2. サービスの起動確認:[/cyan]\n"
+                    "   services.msc → postgresql-x64-XX を開始\n\n"
                     "[cyan]3. Pythonドライバのインストール:[/cyan]\n"
                     "   pip install pg8000",
                     border_style="yellow",
@@ -835,16 +1028,18 @@ def _interactive_setup_simple() -> dict:
             pg_user = input("ユーザー名 [postgres]: ").strip() or "postgres"
 
             import getpass
-            pg_password = getpass.getpass("パスワード: ")
+            pg_password = getpass.getpass("パスワード [postgres]: ") or "postgres"
 
             print()
-            print("接続テスト中...")
+            print("データベース確認中...")
 
-            success, message = _test_postgresql_connection(
+            # データベースの存在確認と作成
+            status, message = _check_postgresql_database(
                 pg_host, pg_port, pg_database, pg_user, pg_password
             )
 
-            if success:
+            if status == "created":
+                # 新規作成成功
                 print(f"[OK] {message}")
                 settings['pg_host'] = pg_host
                 settings['pg_port'] = pg_port
@@ -852,12 +1047,53 @@ def _interactive_setup_simple() -> dict:
                 settings['pg_user'] = pg_user
                 settings['pg_password'] = pg_password
                 break
-            else:
+
+            elif status == "exists":
+                # 既存DBがある場合は選択肢を表示
+                print(f"[!] {message}")
+                print()
+                print("  1) 既存データを保持して更新（追加インポート）")
+                print("  2) データベースを再作成（全データ削除）")
+                print("  3) 別のデータベース名を指定")
+                print()
+                db_action = input("選択 [1]: ").strip() or "1"
+
+                if db_action == "1":
+                    # 既存DBをそのまま使用
+                    print("既存データベースを使用します")
+                    settings['pg_host'] = pg_host
+                    settings['pg_port'] = pg_port
+                    settings['pg_database'] = pg_database
+                    settings['pg_user'] = pg_user
+                    settings['pg_password'] = pg_password
+                    break
+                elif db_action == "2":
+                    # DROP & CREATE
+                    print("データベースを再作成中...")
+                    success, drop_msg = _drop_postgresql_database(
+                        pg_host, pg_port, pg_database, pg_user, pg_password
+                    )
+                    if success:
+                        print(f"[OK] {drop_msg}")
+                        settings['pg_host'] = pg_host
+                        settings['pg_port'] = pg_port
+                        settings['pg_database'] = pg_database
+                        settings['pg_user'] = pg_user
+                        settings['pg_password'] = pg_password
+                        break
+                    else:
+                        print(f"[NG] 再作成失敗: {drop_msg}")
+                        # ループ継続して再入力
+                elif db_action == "3":
+                    # 別のDB名を指定（ループ継続）
+                    continue
+
+            else:  # status == "error"
                 print(f"[NG] {message}")
                 print()
                 print("PostgreSQLのインストール・設定方法:")
                 print("  1. https://www.postgresql.org/download/")
-                print("  2. データベース作成: CREATE DATABASE keiba;")
+                print("  2. サービス起動: services.msc -> postgresql-x64-XX")
                 print("  3. Pythonドライバ: pip install pg8000")
                 print()
                 retry = input("再試行しますか？ (y/n) [y]: ").strip().lower() or "y"
@@ -1695,7 +1931,7 @@ class QuickstartRunner:
             return False
 
     def _run_fetch_all_rich(self) -> bool:
-        """データ取得（Rich UI）- リアルタイム進捗表示"""
+        """データ取得（Rich UI）- チェックボックス形式の進捗表示"""
         specs_to_fetch = self._get_specs_for_mode()
 
         historical_specs = len(specs_to_fetch)
@@ -1709,12 +1945,19 @@ class QuickstartRunner:
             (f" + 時系列{timeseries_specs}スペック" if timeseries_specs > 0 else "") + ")",
             border_style="blue",
         ))
+        console.print()
 
-        # 各スペックを順番に処理（リアルタイム進捗表示）
+        # スペック一覧を□付きで表示（2列表示）
+        spec_status = {}  # spec -> status
+        for spec, description, option in specs_to_fetch:
+            spec_status[spec] = "pending"
+
+        # 最初にすべてのスペックを□で表示
+        self._print_spec_list(specs_to_fetch, spec_status)
+
+        # 各スペックを処理して結果を表示
+        results = []
         for idx, (spec, description, option) in enumerate(specs_to_fetch, 1):
-            # ヘッダー表示（全体の進捗を表示）
-            console.print(f"\n  [cyan]({idx}/{total_specs})[/cyan] [bold]{spec}[/bold]: {description}")
-
             start_time = time.time()
             status, details = self._fetch_single_spec_with_progress(spec, option)
             elapsed = time.time() - start_time
@@ -1722,27 +1965,73 @@ class QuickstartRunner:
             if status == "success":
                 self.stats['specs_success'] += 1
                 saved = details.get('records_saved', 0)
+                spec_status[spec] = "success"
                 if saved > 0:
-                    console.print(f"    [green]✓[/green] 完了: [bold]{saved:,}件[/bold]保存 [dim]({elapsed:.1f}秒)[/dim]")
+                    results.append(f"  [green]✓[/green] {spec}: {saved:,}件 ({elapsed:.1f}秒)")
                 else:
-                    console.print(f"    [green]✓[/green] 完了 [dim]({elapsed:.1f}秒)[/dim]")
+                    results.append(f"  [green]✓[/green] {spec}: 完了 ({elapsed:.1f}秒)")
             elif status == "nodata":
                 self.stats['specs_nodata'] += 1
-                console.print(f"    [dim]- データなし[/dim] [dim]({elapsed:.1f}秒)[/dim]")
+                spec_status[spec] = "nodata"
+                results.append(f"  [dim]-[/dim] {spec}: データなし")
             elif status == "skipped":
                 self.stats['specs_skipped'] += 1
-                console.print(f"    [yellow]⚠[/yellow] 契約外 [dim]({elapsed:.1f}秒)[/dim]")
+                spec_status[spec] = "skipped"
+                results.append(f"  [yellow]⚠[/yellow] {spec}: 契約外")
             else:
                 self.stats['specs_failed'] += 1
-                console.print(f"    [red]✗[/red] エラー [dim]({elapsed:.1f}秒)[/dim]")
-                # エラー詳細を表示
+                spec_status[spec] = "failed"
+                results.append(f"  [red]✗[/red] {spec}: エラー")
                 if details.get('error_message'):
                     error_type = details.get('error_type', 'unknown')
                     error_label = self._get_error_label(error_type)
-                    console.print(f"      [red]原因:[/red] [{error_label}] {details['error_message']}")
+                    results.append(f"      [red]原因:[/red] [{error_label}] {details['error_message']}")
+
+        # 更新されたチェックボックス一覧を表示
+        console.print()
+        self._print_spec_list(specs_to_fetch, spec_status)
+
+        # 結果詳細を表示
+        console.print()
+        console.print("[dim]取得結果:[/dim]")
+        for result in results:
+            console.print(result)
 
         # 成功またはデータなしがあれば成功とみなす
         return (self.stats['specs_success'] + self.stats['specs_nodata']) > 0
+
+    def _print_spec_list(self, specs: list, status_map: dict):
+        """スペック一覧をチェックボックス形式で2列表示"""
+        # ステータスに応じた記号
+        def get_checkbox(status):
+            if status == "success":
+                return "[green]☑[/green]"
+            elif status == "nodata":
+                return "[dim]☐[/dim]"
+            elif status == "skipped":
+                return "[yellow]☐[/yellow]"
+            elif status == "failed":
+                return "[red]☒[/red]"
+            else:  # pending
+                return "[dim]□[/dim]"
+
+        # 2列で表示
+        items = [(spec, desc) for spec, desc, _ in specs]
+        mid = (len(items) + 1) // 2
+
+        for i in range(mid):
+            left_spec, left_desc = items[i]
+            left_check = get_checkbox(status_map.get(left_spec, "pending"))
+            left_str = f"  {left_check} {left_spec:6} {left_desc[:12]:<12}"
+
+            if i + mid < len(items):
+                right_spec, right_desc = items[i + mid]
+                right_check = get_checkbox(status_map.get(right_spec, "pending"))
+                right_str = f"  {right_check} {right_spec:6} {right_desc[:12]:<12}"
+            else:
+                right_str = ""
+
+            console.print(f"{left_str}{right_str}")
 
     def _print_summary_rich(self, success: bool):
         """サマリー出力（Rich版）"""
@@ -2504,7 +2793,7 @@ def main():
     parser.add_argument("--pg-port", type=int, default=5432,
                         help="PostgreSQLポート（デフォルト: 5432）")
     parser.add_argument("--pg-database", type=str, default="keiba",
-                        help="PostgreSQLデータベース名（デフォルト: keiba）")
+                        help="PostgreSQLデータベース名（デフォルト: keiba、自動作成）")
     parser.add_argument("--pg-user", type=str, default="postgres",
                         help="PostgreSQLユーザー名（デフォルト: postgres）")
     parser.add_argument("--pg-password", type=str, default=None,
@@ -2588,15 +2877,28 @@ def main():
             settings['pg_database'] = args.pg_database
             settings['pg_user'] = args.pg_user
 
-            # パスワードは引数 > 環境変数 > プロンプトの優先順位
+            # パスワードは引数 > 環境変数 > デフォルト(postgres)の優先順位
             if args.pg_password:
                 settings['pg_password'] = args.pg_password
             elif 'PGPASSWORD' in os.environ:
                 settings['pg_password'] = os.environ['PGPASSWORD']
             else:
-                # 非対話モードでパスワードが指定されていない場合は空文字列
-                # （実際の接続時にエラーになる可能性がある）
-                settings['pg_password'] = ''
+                # デフォルトパスワード
+                settings['pg_password'] = 'postgres'
+
+            # CLIモードでもデータベース自動作成
+            print(f"PostgreSQLデータベース '{args.pg_database}' を確認中...")
+            status, message = _check_postgresql_database(
+                args.pg_host, args.pg_port, args.pg_database,
+                args.pg_user, settings['pg_password']
+            )
+            if status == "created":
+                print(f"[OK] {message}")
+            elif status == "exists":
+                print(f"[INFO] {message} - 既存データを使用します")
+            else:  # error
+                print(f"[ERROR] {message}")
+                sys.exit(1)
 
         # オッズ除外
         settings['no_odds'] = args.no_odds

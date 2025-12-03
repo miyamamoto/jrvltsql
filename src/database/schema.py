@@ -600,31 +600,31 @@ SCHEMAS = {
             HenkanDoWaku3 TEXT,
             HenkanDoWaku4 TEXT,
             TanUmaban TEXT,
-            TanPay INTEGER,
+            TanPay BIGINT,
             TanNinki INTEGER,
             FukuUmaban TEXT,
-            FukuPay INTEGER,
+            FukuPay BIGINT,
             FukuNinki INTEGER,
             WakuKumi TEXT,
-            WakuPay INTEGER,
+            WakuPay BIGINT,
             WakuNinki INTEGER,
             UmarenKumi TEXT,
-            UmarenPay INTEGER,
+            UmarenPay BIGINT,
             UmarenNinki INTEGER,
             WideKumi TEXT,
-            WidePay INTEGER,
+            WidePay BIGINT,
             WideNinki INTEGER,
             Yobi1 TEXT,
             Yobi2 TEXT,
             Yobi3 TEXT,
             UmatanKumi TEXT,
-            UmatanPay INTEGER,
+            UmatanPay BIGINT,
             UmatanNinki INTEGER,
             SanrenfukuKumi TEXT,
-            SanrenfukuPay INTEGER,
+            SanrenfukuPay BIGINT,
             SanrenfukuNinki INTEGER,
             SanrentanKumi TEXT,
-            SanrentanPay INTEGER,
+            SanrentanPay BIGINT,
             SanrentanNinki INTEGER,
             RecordDelimiter TEXT,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
@@ -809,9 +809,9 @@ SCHEMAS = {
             Kumi TEXT,
             WakurenOdds REAL,
             WakurenNinki INTEGER,
-            TanVote INTEGER,
-            FukuVote INTEGER,
-            WakurenVote INTEGER,
+            TanVote BIGINT,
+            FukuVote BIGINT,
+            WakurenVote BIGINT,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
         )
     """,
@@ -833,7 +833,7 @@ SCHEMAS = {
             Kumi TEXT,
             Odds REAL,
             Ninki INTEGER,
-            Vote INTEGER,
+            Vote BIGINT,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi)
         )
     """,
@@ -856,7 +856,7 @@ SCHEMAS = {
             OddsLow REAL,
             OddsHigh REAL,
             Ninki INTEGER,
-            Vote INTEGER,
+            Vote BIGINT,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi)
         )
     """,
@@ -878,7 +878,7 @@ SCHEMAS = {
             Kumi TEXT,
             Odds REAL,
             Ninki INTEGER,
-            Vote INTEGER,
+            Vote BIGINT,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi)
         )
     """,
@@ -900,7 +900,7 @@ SCHEMAS = {
             Kumi TEXT,
             Odds REAL,
             Ninki INTEGER,
-            Vote INTEGER,
+            Vote BIGINT,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi)
         )
     """,
@@ -922,7 +922,7 @@ SCHEMAS = {
             Kumi TEXT,
             Odds REAL,
             Ninki INTEGER,
-            Vote INTEGER,
+            Vote BIGINT,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi)
         )
     """,
@@ -1375,16 +1375,16 @@ SCHEMAS = {
             RaceInfo4 TEXT,
             RaceInfo5 TEXT,
             Yobi2 TEXT,
-            HatubaiHyosu INTEGER,
-            YukoHyosu INTEGER,
+            HatubaiHyosu BIGINT,
+            YukoHyosu BIGINT,
             HenkanFlag TEXT,
             FuseirituFlag TEXT,
             TekichuNasiFlag TEXT,
-            CarryOverStart INTEGER,
-            CarryOverBalance INTEGER,
+            CarryOverStart BIGINT,
+            CarryOverBalance BIGINT,
             Kumi TEXT,
-            PayJyushosiki INTEGER,
-            TekichuHyosu INTEGER,
+            PayJyushosiki BIGINT,
+            TekichuHyosu BIGINT,
             Yobi3 TEXT,
             RecordDelimiter TEXT,
             PRIMARY KEY (Year, MonthDay)
@@ -1639,31 +1639,31 @@ SCHEMAS = {
             HenkanDoWaku3 TEXT,
             HenkanDoWaku4 TEXT,
             TanUmaban TEXT,
-            TanPay INTEGER,
+            TanPay BIGINT,
             TanNinki INTEGER,
             FukuUmaban TEXT,
-            FukuPay INTEGER,
+            FukuPay BIGINT,
             FukuNinki INTEGER,
             WakuKumi TEXT,
-            WakuPay INTEGER,
+            WakuPay BIGINT,
             WakuNinki INTEGER,
             UmarenKumi TEXT,
-            UmarenPay INTEGER,
+            UmarenPay BIGINT,
             UmarenNinki INTEGER,
             WideKumi TEXT,
-            WidePay INTEGER,
+            WidePay BIGINT,
             WideNinki INTEGER,
             Yobi1 TEXT,
             Yobi2 TEXT,
             Yobi3 TEXT,
             UmatanKumi TEXT,
-            UmatanPay INTEGER,
+            UmatanPay BIGINT,
             UmatanNinki INTEGER,
             SanrenfukuKumi TEXT,
-            SanrenfukuPay INTEGER,
+            SanrenfukuPay BIGINT,
             SanrenfukuNinki INTEGER,
             SanrentanKumi TEXT,
-            SanrentanPay INTEGER,
+            SanrentanPay BIGINT,
             SanrentanNinki INTEGER,
             RecordDelimiter TEXT,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
@@ -1722,9 +1722,9 @@ SCHEMAS = {
             Kumi TEXT,
             WakurenOdds REAL,
             WakurenNinki INTEGER,
-            TanVote INTEGER,
-            FukuVote INTEGER,
-            WakurenVote INTEGER,
+            TanVote BIGINT,
+            FukuVote BIGINT,
+            WakurenVote BIGINT,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
         )
     """,
@@ -1746,7 +1746,7 @@ SCHEMAS = {
             Kumi TEXT,
             Odds REAL,
             Ninki INTEGER,
-            Vote INTEGER,
+            Vote BIGINT,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi)
         )
     """,
@@ -1769,7 +1769,7 @@ SCHEMAS = {
             OddsLow REAL,
             OddsHigh REAL,
             Ninki INTEGER,
-            Vote INTEGER,
+            Vote BIGINT,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi)
         )
     """,
@@ -1791,7 +1791,7 @@ SCHEMAS = {
             Kumi TEXT,
             Odds REAL,
             Ninki INTEGER,
-            Vote INTEGER,
+            Vote BIGINT,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi)
         )
     """,
@@ -1813,7 +1813,7 @@ SCHEMAS = {
             Kumi TEXT,
             Odds REAL,
             Ninki INTEGER,
-            Vote INTEGER,
+            Vote BIGINT,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi)
         )
     """,
@@ -1835,7 +1835,7 @@ SCHEMAS = {
             Kumi TEXT,
             Odds REAL,
             Ninki INTEGER,
-            Vote INTEGER,
+            Vote BIGINT,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi)
         )
     """,
@@ -2116,9 +2116,9 @@ SCHEMAS = {
             Kumi TEXT,
             WakurenOdds REAL,
             WakurenNinki INTEGER,
-            TanVote INTEGER,
-            FukuVote INTEGER,
-            WakurenVote INTEGER,
+            TanVote BIGINT,
+            FukuVote BIGINT,
+            WakurenVote BIGINT,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban, HassoTime)
         )
     """,
@@ -2140,7 +2140,7 @@ SCHEMAS = {
             Kumi TEXT,
             Odds REAL,
             Ninki INTEGER,
-            Vote INTEGER,
+            Vote BIGINT,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi, HassoTime)
         )
     """,
@@ -2163,7 +2163,7 @@ SCHEMAS = {
             OddsLow REAL,
             OddsHigh REAL,
             Ninki INTEGER,
-            Vote INTEGER,
+            Vote BIGINT,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi, HassoTime)
         )
     """,
@@ -2185,7 +2185,7 @@ SCHEMAS = {
             Kumi TEXT,
             Odds REAL,
             Ninki INTEGER,
-            Vote INTEGER,
+            Vote BIGINT,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi, HassoTime)
         )
     """,
@@ -2207,7 +2207,7 @@ SCHEMAS = {
             Kumi TEXT,
             Odds REAL,
             Ninki INTEGER,
-            Vote INTEGER,
+            Vote BIGINT,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi, HassoTime)
         )
     """,
@@ -2229,7 +2229,7 @@ SCHEMAS = {
             Kumi TEXT,
             Odds REAL,
             Ninki INTEGER,
-            Vote INTEGER,
+            Vote BIGINT,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi, HassoTime)
         )
     """
