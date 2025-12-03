@@ -14,4 +14,17 @@ if %errorlevel% equ 0 (
     python scripts/quickstart.py %*
 )
 
-pause
+echo.
+echo ============================================================
+echo   セットアップ完了
+echo ============================================================
+echo.
+echo   よく使うコマンド:
+echo     jltsql status     - データベースの状態を確認
+echo     jltsql fetch      - データ取得
+echo     jltsql export     - データをCSV/JSONにエクスポート
+echo.
+echo   詳細は jltsql --help を参照してください
+echo.
+echo   Enterキーを押すと終了します...
+set /p dummy=
