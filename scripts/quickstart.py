@@ -458,29 +458,28 @@ def _interactive_setup_rich() -> dict:
 
     console.print()
 
-    # 時系列オッズについての説明（過去データは取得不可）
-    # JVRTOpenの時系列オッズはレース開催中のみ取得可能
-    # レース確定後は削除されるため、過去データの一括取得は不可
-    console.print("[bold]2. オッズ変動履歴について[/bold]")
+    # 時系列オッズ取得オプション
+    console.print("[bold]2. 時系列オッズ（オッズ変動履歴）[/bold]")
     console.print()
     console.print(Panel(
-        "[bold]オッズ変動履歴（時系列オッズ）について[/bold]\n\n"
+        "[bold]時系列オッズ（オッズ変動履歴）について[/bold]\n\n"
         "発売開始から締切までのオッズ推移を記録するデータです。\n"
         "例: 発売開始時10倍 → 締切時3倍 のような変化を追跡できます。\n\n"
-        "[yellow]重要: 過去データの一括取得はできません[/yellow]\n"
-        "[dim]JRA-VANの仕様により、時系列オッズはレース開催中のみ取得可能です。\n"
-        "レース確定後はサーバーから削除されます。[/dim]\n\n"
-        "[cyan]オッズ変動履歴を蓄積するには:[/cyan]\n"
-        "  1. 自動更新サービス（バックグラウンド更新）を有効にする\n"
-        "  2. レース開催日に起動しておく\n"
-        "  → 開催中のオッズが自動的にTS_O1-O6テーブルに蓄積されます",
+        "[cyan]取得条件:[/cyan]\n"
+        "  - 提供期間: 過去1年間（公式サポート期間）\n"
+        "  - 必要な前提: 先にRACEデータが取得済みであること\n"
+        "  - TS_O1〜O6テーブルに保存されます\n\n"
+        "[dim]注: 時系列オッズの取得には、NL_RAテーブルから取得した\n"
+        "回次・日次情報が必要なため、蓄積系データ取得後に実行します。[/dim]",
         border_style="blue",
     ))
     console.print()
-
-    # 時系列オッズは初期セットアップでは取得しない
-    settings['include_timeseries'] = False
-    settings['timeseries_months'] = 0
+    settings['include_timeseries'] = Confirm.ask("時系列オッズを取得しますか？", default=False)
+    if settings['include_timeseries']:
+        console.print("[dim]取得期間: 過去12ヶ月間（蓄積系データの範囲に依存）[/dim]")
+        settings['timeseries_months'] = 12
+    else:
+        settings['timeseries_months'] = 0
 
     console.print()
 
@@ -692,29 +691,29 @@ def _interactive_setup_simple() -> dict:
 
     print()
 
-    # 時系列オッズについての説明（過去データは取得不可）
-    print("2. オッズ変動履歴について")
+    # 時系列オッズ取得オプション
+    print("2. 時系列オッズ（オッズ変動履歴）")
     print()
     print("   ┌────────────────────────────────────────────────────────┐")
-    print("   │ オッズ変動履歴（時系列オッズ）について                 │")
+    print("   │ 時系列オッズ（オッズ変動履歴）について                 │")
     print("   │                                                        │")
     print("   │ 発売開始から締切までのオッズ推移を記録するデータです。 │")
     print("   │ 例: 発売開始時10倍 → 締切時3倍 のような変化を追跡     │")
     print("   │                                                        │")
-    print("   │ [重要] 過去データの一括取得はできません                │")
-    print("   │ JRA-VANの仕様により、時系列オッズはレース開催中のみ    │")
-    print("   │ 取得可能です。レース確定後はサーバーから削除されます。 │")
-    print("   │                                                        │")
-    print("   │ オッズ変動履歴を蓄積するには:                          │")
-    print("   │   1. 自動更新サービス（バックグラウンド更新）を有効に  │")
-    print("   │   2. レース開催日に起動しておく                        │")
-    print("   │   → 開催中のオッズがTS_O1-O6テーブルに蓄積されます     │")
+    print("   │ 取得条件:                                              │")
+    print("   │   - 提供期間: 過去1年間                                │")
+    print("   │   - 前提: 先にRACEデータが取得済みであること           │")
+    print("   │   - TS_O1〜O6テーブルに保存されます                    │")
     print("   └────────────────────────────────────────────────────────┘")
     print()
-
-    # 時系列オッズは初期セットアップでは取得しない
-    settings['include_timeseries'] = False
-    settings['timeseries_months'] = 0
+    print("時系列オッズを取得しますか？ [y/N]: ", end="")
+    timeseries_choice = input().strip().lower()
+    settings['include_timeseries'] = timeseries_choice in ('y', 'yes')
+    if settings['include_timeseries']:
+        print("   -> 過去12ヶ月間の時系列オッズを取得します")
+        settings['timeseries_months'] = 12
+    else:
+        settings['timeseries_months'] = 0
 
     print()
 
@@ -1088,14 +1087,15 @@ class QuickstartRunner:
         return self.settings.get('include_timeseries', False)
 
     def _get_races_from_db(self, from_date: str, to_date: str) -> list:
-        """データベースから開催レース情報を取得
+        """データベースから開催レース情報を取得（Kaiji/Nichiji含む）
 
         Args:
             from_date: 開始日 (YYYYMMDD)
             to_date: 終了日 (YYYYMMDD)
 
         Returns:
-            [(date, jyo_code, race_num), ...] のリスト
+            [(date, jyo_code, kaiji, nichiji, race_num), ...] のリスト
+            時系列オッズ用の16桁キー生成に必要な情報を含む
         """
         import sqlite3
         races = []
@@ -1103,20 +1103,25 @@ class QuickstartRunner:
             conn = sqlite3.connect(str(self.db_path))
             cursor = conn.cursor()
 
-            # NL_RAテーブルから開催情報を取得
+            # NL_RAテーブルから開催情報を取得（Kaiji/Nichiji含む）
             # Year + MonthDay で日付を構成
             query = """
                 SELECT DISTINCT
-                    Year || MonthDay as race_date,
+                    Year || printf('%04d', MonthDay) as race_date,
                     JyoCD,
+                    Kaiji,
+                    Nichiji,
                     RaceNum
                 FROM NL_RA
-                WHERE Year || MonthDay >= ?
-                  AND Year || MonthDay <= ?
+                WHERE (Year || printf('%04d', MonthDay)) >= ?
+                  AND (Year || printf('%04d', MonthDay)) <= ?
                 ORDER BY race_date, JyoCD, RaceNum
             """
             cursor.execute(query, (from_date, to_date))
-            races = [(row[0], row[1], int(row[2])) for row in cursor.fetchall()]
+            races = [
+                (row[0], row[1], int(row[2]) if row[2] else 1, int(row[3]) if row[3] else 1, int(row[4]))
+                for row in cursor.fetchall()
+            ]
             conn.close()
         except Exception as e:
             pass  # 開催情報取得エラーは無視（NL_RAにデータがない場合など）
@@ -1159,37 +1164,25 @@ class QuickstartRunner:
             ("0B36", "3連単オッズ"),
         ]
 
-        # NL_RAから実際の開催レースを取得
+        # NL_RAから実際の開催レースを取得（Kaiji/Nichiji含む）
         races = self._get_races_from_db(from_date, to_date)
         fallback_mode = False
+        use_full_key = True  # 16桁フルキーを使用
 
         if not races:
-            # フォールバック: NL_RAにデータがない場合は過去1週間に制限して全競馬場をスキャン
-            fallback_mode = True
-            fallback_days = 7
-            fallback_start = today - timedelta(days=fallback_days)
-            from_date = fallback_start.strftime("%Y%m%d")
-            period_text = f"過去{fallback_days}日間（フォールバック）"
-
-            # 全競馬場・全レースの組み合わせを生成
-            from src.jvlink.constants import JYO_CODES
-            races = []
-            current = fallback_start
-            while current <= today:
-                date_str = current.strftime("%Y%m%d")
-                for jyo_code in JYO_CODES.keys():
-                    for race_num in range(1, 13):
-                        races.append((date_str, jyo_code, race_num))
-                current += timedelta(days=1)
-
+            # フォールバック: NL_RAにデータがない場合は時系列オッズ取得をスキップ
+            # 時系列オッズには Kaiji/Nichiji が必須なため、12桁キーでは取得不可
             console.print()
             console.print(Panel(
                 "[bold yellow]注意[/bold yellow]\n"
-                "NL_RAに開催情報がないため、フォールバックモードで動作します。\n"
-                f"期間を過去{fallback_days}日間に制限し、全競馬場をスキャンします。\n"
-                "[dim]※ 蓄積系データを取得すると最適化されます[/dim]",
+                "NL_RAに開催情報がないため、時系列オッズは取得できません。\n"
+                "[dim]先に蓄積系データ（RACE）を取得してから再実行してください。[/dim]\n\n"
+                "[cyan]技術的背景:[/cyan]\n"
+                "JVRTOpenの時系列オッズ取得には16桁のキー（回次・日次含む）が必要です。\n"
+                "Kaiji/NichijiはNL_RAテーブルから取得するため、先にRACEデータが必要です。",
                 border_style="yellow",
             ))
+            return True  # 警告のみで続行
 
         total_specs = len(timeseries_specs)
         total_races = len(races)
@@ -1205,7 +1198,7 @@ class QuickstartRunner:
             from src.fetcher.realtime import RealtimeFetcher
             from src.database.sqlite_handler import SQLiteDatabase
             from src.realtime.updater import RealtimeUpdater
-            from src.jvlink.constants import JYO_CODES
+            from src.jvlink.constants import JYO_CODES, generate_time_series_full_key
 
             db = SQLiteDatabase({"path": str(self.db_path)})
 
@@ -1232,7 +1225,9 @@ class QuickstartRunner:
 
                     try:
                         # 開催レースごとに取得（進捗表示付き）
-                        for race_idx, (race_date, jyo_code, race_num) in enumerate(races, 1):
+                        # races: [(date, jyo_code, kaiji, nichiji, race_num), ...]
+                        for race_idx, race_info in enumerate(races, 1):
+                            race_date, jyo_code, kaiji, nichiji, race_num = race_info
                             race_count += 1
                             # 進捗表示（同じ行を上書き）
                             track_name = JYO_CODES.get(jyo_code, jyo_code)
@@ -1243,11 +1238,14 @@ class QuickstartRunner:
                             )
 
                             try:
-                                for record in fetcher.fetch_time_series(
+                                # 16桁フルキーを生成して取得
+                                full_key = generate_time_series_full_key(
+                                    race_date, jyo_code, kaiji, nichiji, race_num
+                                )
+                                for record in fetcher.fetch(
                                     data_spec=spec,
-                                    jyo_code=jyo_code,
-                                    race_num=race_num,
-                                    date=race_date,
+                                    key=full_key,
+                                    continuous=False,
                                 ):
                                     raw_buff = record.get("_raw", "")
                                     if raw_buff:

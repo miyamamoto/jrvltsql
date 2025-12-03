@@ -13,6 +13,7 @@ from src.jvlink.constants import (
     is_valid_jvrtopen_spec,
     is_time_series_spec,
     generate_time_series_key,
+    generate_time_series_full_key,
     JYO_CODES,
 )
 from src.utils.logger import get_logger
@@ -321,6 +322,226 @@ class RealtimeFetcher(BaseFetcher):
         """
         return JYO_CODES.copy()
 
+    def fetch_time_series_batch_from_db(
+        self,
+        data_spec: str,
+        db_path: str,
+        from_date: Optional[str] = None,
+        to_date: Optional[str] = None,
+    ) -> Iterator[dict]:
+        """Fetch time series odds for races registered in the database.
+
+        Based on JVLinkToSQLite implementation: JVRTOpen requires a full key
+        with Kaiji (回次) and Nichiji (日次), which can only be obtained from
+        previously fetched race data in NL_RA table.
+
+        Key format: YYYYMMDD + JyoCD + Kaiji + Nichiji + RaceNum (16 digits)
+        Example: 2025113005050811
+
+        公式情報:
+        - 提供期間: 過去1年間
+        - データ提供開始: 2003年10月4日以降（保証外）
+
+        Args:
+            data_spec: Time series data spec code
+                      - 0B30: 単勝オッズ (O1)
+                      - 0B31: 複勝・枠連オッズ (O1, O2)
+                      - 0B32: 馬連オッズ (O2)
+                      - 0B33: ワイドオッズ (O3)
+                      - 0B34: 馬単オッズ (O4)
+                      - 0B35: 3連複オッズ (O5)
+                      - 0B36: 3連単オッズ (O6)
+            db_path: Path to SQLite database with NL_RA table
+            from_date: Start date in YYYYMMDD format (optional)
+            to_date: End date in YYYYMMDD format (optional)
+
+        Yields:
+            Dictionary of parsed record data
+
+        Raises:
+            FetcherError: If data_spec is not time series or db not accessible
+
+        Examples:
+            >>> # Fetch odds for all races in the database
+            >>> for record in fetcher.fetch_time_series_batch_from_db(
+            ...     "0B30", "data/keiba.db"
+            ... ):
+            ...     print(record)
+
+            >>> # Fetch for specific date range
+            >>> for record in fetcher.fetch_time_series_batch_from_db(
+            ...     "0B31", "data/keiba.db",
+            ...     from_date="20251101", to_date="20251130"
+            ... ):
+            ...     print(record)
+        """
+        import sqlite3
+        from pathlib import Path
+
+        # Validate data_spec
+        if not is_time_series_spec(data_spec):
+            raise FetcherError(
+                f"Data spec {data_spec} is not a time series spec. "
+                f"Time series specs: {', '.join(sorted(JVRTOPEN_TIME_SERIES_SPECS.keys()))}"
+            )
+
+        # Validate database path
+        db_file = Path(db_path)
+        if not db_file.exists():
+            raise FetcherError(f"Database not found: {db_path}")
+
+        # Build query for race keys from NL_RA
+        query = """
+            SELECT DISTINCT
+                Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum
+            FROM NL_RA
+            WHERE 1=1
+        """
+        params = []
+
+        if from_date:
+            # Convert YYYYMMDD to Year and MonthDay
+            year = from_date[:4]
+            monthday = from_date[4:]
+            query += " AND (Year > ? OR (Year = ? AND MonthDay >= ?))"
+            params.extend([year, year, monthday])
+
+        if to_date:
+            year = to_date[:4]
+            monthday = to_date[4:]
+            query += " AND (Year < ? OR (Year = ? AND MonthDay <= ?))"
+            params.extend([year, year, monthday])
+
+        query += " ORDER BY Year, MonthDay, JyoCD, RaceNum"
+
+        logger.info(
+            "Starting batch time series fetch from database",
+            data_spec=data_spec,
+            spec_name=JVRTOPEN_TIME_SERIES_SPECS.get(data_spec, "Unknown"),
+            db_path=db_path,
+            from_date=from_date,
+            to_date=to_date,
+        )
+
+        # Get race keys from database
+        try:
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            cursor.execute(query, params)
+            race_rows = cursor.fetchall()
+            conn.close()
+        except Exception as e:
+            raise FetcherError(f"Database query failed: {e}")
+
+        if not race_rows:
+            logger.warning("No races found in database for the specified criteria")
+            return
+
+        logger.info(f"Found {len(race_rows)} races in database")
+
+        # Initialize JV-Link
+        ret = self.jvlink.jv_init()
+        if ret != JV_RT_SUCCESS:
+            raise FetcherError(f"JV-Link initialization failed: {ret}")
+
+        # Statistics
+        total_keys = len(race_rows)
+        success_keys = 0
+        no_data_keys = 0
+        error_keys = 0
+        total_records = 0
+
+        try:
+            for row in race_rows:
+                year, monthday, jyo_cd, kaiji, nichiji, race_num = row
+
+                # Build date string: YYYYMMDD
+                date_str = f"{year}{monthday:04d}" if isinstance(monthday, int) else f"{year}{monthday}"
+
+                # Convert values to proper types
+                kaiji_int = int(kaiji) if kaiji else 1
+                nichiji_int = int(nichiji) if nichiji else 1
+                race_num_int = int(race_num) if race_num else 1
+
+                # Generate full 16-digit key
+                try:
+                    key = generate_time_series_full_key(
+                        date_str, jyo_cd, kaiji_int, nichiji_int, race_num_int
+                    )
+                except ValueError as e:
+                    logger.warning(f"Invalid key parameters: {e}")
+                    error_keys += 1
+                    continue
+
+                try:
+                    ret, read_count = self.jvlink.jv_rt_open(data_spec, key)
+
+                    if ret == -1:
+                        no_data_keys += 1
+                        logger.debug(
+                            "No data for key",
+                            key=key,
+                            track=JYO_CODES.get(jyo_cd, jyo_cd),
+                            race=race_num_int,
+                        )
+                        continue
+
+                    if ret != JV_RT_SUCCESS:
+                        error_keys += 1
+                        logger.warning(
+                            "JVRTOpen error",
+                            key=key,
+                            error_code=ret,
+                        )
+                        continue
+
+                    # Read all records for this key
+                    success_keys += 1
+                    records_for_key = 0
+
+                    for record in self._fetch_and_parse():
+                        records_for_key += 1
+                        total_records += 1
+                        yield record
+
+                    logger.debug(
+                        "Fetched records for key",
+                        key=key,
+                        track=JYO_CODES.get(jyo_cd, jyo_cd),
+                        race=race_num_int,
+                        records=records_for_key,
+                    )
+
+                    # Close stream before opening next
+                    self.jvlink.jv_close()
+
+                except Exception as e:
+                    error_keys += 1
+                    if '-114' in str(e):
+                        logger.debug("Not subscribed for key", key=key, error=str(e))
+                    else:
+                        logger.warning("Error fetching key", key=key, error=str(e))
+                    try:
+                        self.jvlink.jv_close()
+                    except:
+                        pass
+
+        finally:
+            try:
+                self.jvlink.jv_close()
+            except:
+                pass
+
+        logger.info(
+            "Batch time series fetch completed",
+            data_spec=data_spec,
+            total_keys=total_keys,
+            success_keys=success_keys,
+            no_data_keys=no_data_keys,
+            error_keys=error_keys,
+            total_records=total_records,
+        )
+
     def fetch_time_series_batch(
         self,
         data_spec: str,
@@ -330,6 +551,11 @@ class RealtimeFetcher(BaseFetcher):
         race_nums: Optional[List[int]] = None,
     ) -> Iterator[dict]:
         """Fetch time series data for multiple races in a date range.
+
+        NOTE: This method uses the simplified 12-digit key format (YYYYMMDDJJRR)
+        which may not work for batch retrieval. For reliable batch retrieval,
+        use fetch_time_series_batch_from_db() which uses the full 16-digit key
+        format with Kaiji and Nichiji from the database.
 
         Based on JVLinkToSQLite implementation pattern: JVRTOpen does NOT
         support date range queries, so this method loops through individual

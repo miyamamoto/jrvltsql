@@ -172,7 +172,11 @@ def is_valid_jvrtopen_spec(data_spec: str) -> bool:
 
 
 def generate_time_series_key(date: str, jyo_code: str, race_num: int) -> str:
-    """Generate YYYYMMDDJJRR format key for time series data.
+    """Generate YYYYMMDDJJRR format key for time series data (simplified format).
+
+    NOTE: This simplified format (12 digits) may not work for batch retrieval.
+    For batch retrieval of time series odds, use generate_time_series_full_key()
+    which includes Kaiji and Nichiji (16 digits).
 
     Args:
         date: Date in YYYYMMDD format (e.g., "20251130")
@@ -202,6 +206,61 @@ def generate_time_series_key(date: str, jyo_code: str, race_num: int) -> str:
         raise ValueError(f"Invalid race_num: {race_num}. Must be integer 1-12.")
 
     return f"{date}{jyo_code}{race_num:02d}"
+
+
+def generate_time_series_full_key(
+    date: str,
+    jyo_code: str,
+    kaiji: int,
+    nichiji: int,
+    race_num: int
+) -> str:
+    """Generate YYYYMMDDJJKKNNNRR format key for time series data (full format).
+
+    Based on JVLinkToSQLite implementation, this is the correct key format
+    for JVRTOpen batch retrieval of time series odds.
+
+    Format: YYYYMMDD + JyoCD + Kaiji + Nichiji + RaceNum
+    Example: 20251130 + 05 + 05 + 08 + 11 = 2025113005050811
+
+    Args:
+        date: Date in YYYYMMDD format (e.g., "20251130")
+        jyo_code: Track code (01-10)
+        kaiji: 回次 (meeting number, 01-99)
+        nichiji: 日次 (day number within meeting, 01-12)
+        race_num: Race number (1-12)
+
+    Returns:
+        Key in 16-digit format (e.g., "2025113005050811")
+
+    Raises:
+        ValueError: If parameters are invalid
+
+    Examples:
+        >>> generate_time_series_full_key("20251130", "05", 5, 8, 11)
+        '2025113005050811'
+    """
+    # Validate date format
+    if not isinstance(date, str) or len(date) != 8 or not date.isdigit():
+        raise ValueError(f"Invalid date format: {date}. Must be YYYYMMDD format.")
+
+    # Validate jyo_code
+    if jyo_code not in JYO_CODES:
+        raise ValueError(f"Invalid jyo_code: {jyo_code}. Must be 01-10.")
+
+    # Validate kaiji (typically 01-05 for most tracks)
+    if not isinstance(kaiji, int) or not (1 <= kaiji <= 99):
+        raise ValueError(f"Invalid kaiji: {kaiji}. Must be integer 1-99.")
+
+    # Validate nichiji (typically 01-12)
+    if not isinstance(nichiji, int) or not (1 <= nichiji <= 12):
+        raise ValueError(f"Invalid nichiji: {nichiji}. Must be integer 1-12.")
+
+    # Validate race_num
+    if not isinstance(race_num, int) or not (1 <= race_num <= 12):
+        raise ValueError(f"Invalid race_num: {race_num}. Must be integer 1-12.")
+
+    return f"{date}{jyo_code}{kaiji:02d}{nichiji:02d}{race_num:02d}"
 
 
 def get_all_race_keys_for_date(date: str) -> list:
