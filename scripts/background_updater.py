@@ -1033,9 +1033,36 @@ class BackgroundUpdater:
                 if RICH_AVAILABLE:
                     # Rich UIでステータス表示
                     status_parts = []
-                    status_parts.append(f"[cyan]{status}[/cyan]")
-                    if interval > 0:
-                        status_parts.append(f"速報間隔: [yellow]{interval}秒[/yellow]")
+
+                    if self.schedule_manager.is_race_day():
+                        # 開催日: 従来通り
+                        status_parts.append(f"[cyan]{status}[/cyan]")
+                        if interval > 0:
+                            status_parts.append(f"速報間隔: [yellow]{interval}秒[/yellow]")
+                    else:
+                        # 非開催日: もう少し情報を表示
+                        # 稼働時間
+                        start_time = self._stats.get("started_at", now)
+                        uptime = now - start_time
+                        uptime_str = f"{int(uptime.total_seconds() // 3600)}h{int((uptime.total_seconds() % 3600) // 60):02d}m"
+
+                        # 次回蓄積更新予定（60分間隔）
+                        last_hist = self._stats.get("last_historical_update")
+                        if last_hist:
+                            next_hist = last_hist + timedelta(minutes=60)
+                            mins_until = int((next_hist - now).total_seconds() // 60)
+                            if mins_until > 0:
+                                next_update_str = f"次回更新まで{mins_until}分"
+                            else:
+                                next_update_str = "まもなく更新"
+                        else:
+                            next_update_str = ""
+
+                        status_parts.append(f"[dim]💤 非開催日[/dim]")
+                        status_parts.append(f"稼働: [green]{uptime_str}[/green]")
+                        if next_update_str:
+                            status_parts.append(f"[dim]{next_update_str}[/dim]")
+
                     status_parts.append(f"蓄積=[green]{self._stats['historical_updates']}[/green]")
                     status_parts.append(f"速報=[green]{self._stats['realtime_updates']}[/green]")
                     console.print(f"[dim][{now.strftime('%H:%M:%S')}][/dim] {' | '.join(status_parts)}")
