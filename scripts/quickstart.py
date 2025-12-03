@@ -2077,9 +2077,17 @@ class QuickstartRunner:
             console.print()
             console.print("[dim]次のステップ:[/dim]")
             console.print("  [cyan]jltsql status[/cyan]    - ステータス確認")
-            console.print("  [cyan]jltsql export[/cyan]    - データエクスポート")
+            console.print("  [cyan]jltsql fetch[/cyan]     - 追加データ取得")
             if not self.settings.get('no_monitor', True):
                 console.print("  [cyan]jltsql monitor --stop[/cyan] - 監視停止")
+
+            # MCP Server案内（SQLite利用時のみ）
+            db_type = self.settings.get('db_type', 'sqlite')
+            if db_type == 'sqlite':
+                console.print()
+                console.print("[dim]Claude Code / Claude Desktop をお使いの方へ:[/dim]")
+                console.print("  MCP Server をインストールすると、AIから直接DBにアクセスできます")
+                console.print("  [link=https://github.com/miyamamoto/jvlink-mcp-server/releases]https://github.com/miyamamoto/jvlink-mcp-server/releases[/link]")
         else:
             console.print(Panel(
                 f"[bold red]{HORSE_EMOJI_SAD} セットアップ失敗[/bold red]\n"

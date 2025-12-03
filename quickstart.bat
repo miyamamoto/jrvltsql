@@ -30,5 +30,9 @@ echo     jltsql status   - データベースの状態を確認
 echo     jltsql fetch    - 追加データ取得
 echo     jltsql --help   - その他のコマンド
 echo.
+echo   Claude Code / Claude Desktop をお使いの方へ:
+echo     MCP Server をインストールすると、AIから直接DBにアクセスできます
+echo     https://github.com/miyamamoto/jvlink-mcp-server/releases
+echo.
 echo   Enterキーを押すと終了します...
 set /p dummy=
