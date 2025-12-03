@@ -91,6 +91,32 @@ class PostgreSQLDatabase(BaseDatabase):
         """
         return identifier.lower()
 
+    def _get_primary_key_columns(self, table_name: str) -> List[str]:
+        """Extract PRIMARY KEY columns from table schema.
+
+        Queries the information_schema to get primary key columns for a table.
+
+        Args:
+            table_name: Name of table
+
+        Returns:
+            List of primary key column names (lowercase)
+        """
+        try:
+            sql = """
+                SELECT a.attname
+                FROM pg_index i
+                JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+                WHERE i.indrelid = ?::regclass
+                AND i.indisprimary
+                ORDER BY array_position(i.indkey, a.attnum)
+            """
+            rows = self.fetch_all(sql, (table_name.lower(),))
+            return [row.get('attname', '').lower() for row in rows]
+        except Exception as e:
+            logger.warning(f"Could not get primary key for {table_name}: {e}")
+            return []
+
     def _convert_placeholders_and_params(self, sql: str, parameters: Optional[tuple] = None):
         """Convert ? placeholders and parameters for PostgreSQL driver compatibility.
 
@@ -516,7 +542,7 @@ class PostgreSQLDatabase(BaseDatabase):
             use_replace: If True, use ON CONFLICT DO UPDATE (default: True)
 
         Returns:
-            Number of rows inserted (1 on success)
+            Number of rows inserted/updated (1 on success)
 
         Raises:
             DatabaseError: If insert fails
@@ -531,10 +557,25 @@ class PostgreSQLDatabase(BaseDatabase):
         quoted_columns = [self._quote_identifier(col) for col in columns]
 
         if use_replace:
-            # Get primary key columns for this table from schema
-            # For simplicity, we'll use INSERT ... ON CONFLICT DO NOTHING for now
-            # to avoid constraint violations without needing to know the primary key
-            sql = f"INSERT INTO {table_name} ({', '.join(quoted_columns)}) VALUES ({placeholders}) ON CONFLICT DO NOTHING"
+            # Get primary key columns for this table
+            pk_columns = self._get_primary_key_columns(table_name)
+
+            if pk_columns:
+                # Build ON CONFLICT DO UPDATE clause
+                # UPDATE all columns except primary key columns
+                update_columns = [col for col in quoted_columns if col.lower() not in pk_columns]
+                if update_columns:
+                    update_set = ", ".join([f"{col} = EXCLUDED.{col}" for col in update_columns])
+                    pk_list = ", ".join(pk_columns)
+                    sql = f"INSERT INTO {table_name} ({', '.join(quoted_columns)}) VALUES ({placeholders}) ON CONFLICT ({pk_list}) DO UPDATE SET {update_set}"
+                else:
+                    # All columns are primary keys, just use DO NOTHING
+                    pk_list = ", ".join(pk_columns)
+                    sql = f"INSERT INTO {table_name} ({', '.join(quoted_columns)}) VALUES ({placeholders}) ON CONFLICT ({pk_list}) DO NOTHING"
+            else:
+                # No primary key found, fall back to DO NOTHING to avoid errors
+                logger.warning(f"No primary key found for {table_name}, using DO NOTHING")
+                sql = f"INSERT INTO {table_name} ({', '.join(quoted_columns)}) VALUES ({placeholders}) ON CONFLICT DO NOTHING"
         else:
             sql = f"INSERT INTO {table_name} ({', '.join(quoted_columns)}) VALUES ({placeholders})"
 
@@ -566,8 +607,25 @@ class PostgreSQLDatabase(BaseDatabase):
         quoted_columns = [self._quote_identifier(col) for col in columns]
 
         if use_replace:
-            # Use ON CONFLICT DO NOTHING to avoid constraint violations
-            sql = f"INSERT INTO {table_name} ({', '.join(quoted_columns)}) VALUES ({placeholders}) ON CONFLICT DO NOTHING"
+            # Get primary key columns for this table
+            pk_columns = self._get_primary_key_columns(table_name)
+
+            if pk_columns:
+                # Build ON CONFLICT DO UPDATE clause
+                # UPDATE all columns except primary key columns
+                update_columns = [col for col in quoted_columns if col.lower() not in pk_columns]
+                if update_columns:
+                    update_set = ", ".join([f"{col} = EXCLUDED.{col}" for col in update_columns])
+                    pk_list = ", ".join(pk_columns)
+                    sql = f"INSERT INTO {table_name} ({', '.join(quoted_columns)}) VALUES ({placeholders}) ON CONFLICT ({pk_list}) DO UPDATE SET {update_set}"
+                else:
+                    # All columns are primary keys, just use DO NOTHING
+                    pk_list = ", ".join(pk_columns)
+                    sql = f"INSERT INTO {table_name} ({', '.join(quoted_columns)}) VALUES ({placeholders}) ON CONFLICT ({pk_list}) DO NOTHING"
+            else:
+                # No primary key found, fall back to DO NOTHING to avoid errors
+                logger.warning(f"No primary key found for {table_name}, using DO NOTHING")
+                sql = f"INSERT INTO {table_name} ({', '.join(quoted_columns)}) VALUES ({placeholders}) ON CONFLICT DO NOTHING"
         else:
             sql = f"INSERT INTO {table_name} ({', '.join(quoted_columns)}) VALUES ({placeholders})"
 

@@ -279,8 +279,8 @@ class DataImporter:
                     str_value = str(value).strip()
                     if str_value:
                         # Check for masked values (e.g., "***05011005")
-                        # JV-Data uses *** for masked/unavailable data
-                        if '*' in str_value:
+                        # JV-Data uses *** prefix for masked/unavailable data
+                        if str_value.startswith('***'):
                             converted[field_name] = None
                         else:
                             converted[field_name] = int(str_value)
@@ -290,8 +290,9 @@ class DataImporter:
                 elif col_type == "REAL":
                     str_value = str(value).strip()
                     if str_value:
-                        # Check for masked values (e.g., "****")
-                        if '*' in str_value:
+                        # Check for masked values (e.g., "***", "****")
+                        # JV-Data uses *** or **** prefix for masked/unavailable data
+                        if str_value.startswith('***'):
                             converted[field_name] = None
                         else:
                             float_value = float(str_value)

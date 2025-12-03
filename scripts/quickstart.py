@@ -1879,7 +1879,10 @@ class QuickstartRunner:
                                         break
                                     # -1はデータなし（正常）
                                     elif '-1' not in error_str:
-                                        pass  # その他のエラーは無視
+                                        # その他のエラーを記録
+                                        status = "failed"
+                                        error_msg = error_str[:80] if len(error_str) > 80 else error_str
+                                        break
 
                         except Exception as e:
                             error_str = str(e)

@@ -369,7 +369,7 @@ def monitor(ctx, daemon, data_spec, interval, db):
                 database=database,
                 data_spec=data_spec,
                 polling_interval=interval,
-                sid=config.jvlink.get("sid", "JLTSQL") if config else "JLTSQL"
+                sid=config.get("jvlink.sid", "JLTSQL") if config else "JLTSQL"
             )
 
             console.print("[bold green]Monitoring started![/bold green]")
@@ -952,7 +952,7 @@ def start(ctx, specs, db, batch_size, no_create_tables):
         monitor = RealtimeMonitor(
             database=database,
             data_specs=data_specs,
-            sid=config.jvlink.get("sid", "JLTSQL") if config else "JLTSQL",
+            sid=config.get("jvlink.sid", "JLTSQL") if config else "JLTSQL",
             batch_size=batch_size,
             auto_create_tables=not no_create_tables
         )

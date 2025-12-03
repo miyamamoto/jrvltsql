@@ -157,7 +157,7 @@ class TestHRParser:
         """Test HR parser initialization."""
         parser = HRParser()
         assert parser.RECORD_TYPE == "HR"
-        assert parser.RECORD_LENGTH == 203
+        assert parser.RECORD_LENGTH == 240
 
     def test_parse_hr_record(self):
         """Test parsing HR record."""
@@ -172,7 +172,7 @@ class TestHRParser:
         record += b"03"  # idKaiji
         record += b"08"  # idNichiji
         record += b"11"  # idRaceNum
-        record += b" " * (203 - len(record))  # Pad to correct length
+        record += b" " * (240 - len(record))  # Pad to correct length
 
         data = parser.parse(record)
         assert data is not None
