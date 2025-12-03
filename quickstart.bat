@@ -19,12 +19,16 @@ echo ============================================================
 echo   セットアップ完了
 echo ============================================================
 echo.
-echo   よく使うコマンド:
-echo     jltsql status     - データベースの状態を確認
-echo     jltsql fetch      - データ取得
-echo     jltsql export     - データをCSV/JSONにエクスポート
+echo   データベースファイル: data\keiba.db (SQLite)
 echo.
-echo   詳細は jltsql --help を参照してください
+echo   データを確認するには:
+echo     - DB Browser for SQLite などで直接開く
+echo     - Python: sqlite3.connect('data/keiba.db')
+echo.
+echo   CLIコマンド:
+echo     jltsql status   - データベースの状態を確認
+echo     jltsql fetch    - 追加データ取得
+echo     jltsql --help   - その他のコマンド
 echo.
 echo   Enterキーを押すと終了します...
 set /p dummy=
