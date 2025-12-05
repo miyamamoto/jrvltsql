@@ -132,7 +132,7 @@ class CompactTimeColumn(ProgressColumn):
         elapsed_str = f"{elapsed_mins}:{elapsed_secs:02d}"
 
         # Calculate remaining time
-        if task.total and task.completed > 0:
+        if task.total and task.completed > 0 and elapsed > 0:
             speed = task.completed / elapsed
             remaining = (task.total - task.completed) / speed if speed > 0 else 0
             remaining_mins = int(remaining // 60)

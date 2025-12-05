@@ -16,15 +16,15 @@ class HRParser:
     HRレコードパーサー
 
     ４．払戻
-    レコード長: 655 bytes (JV-Data仕様による正確な長さ)
+    レコード長: 719 bytes (JV-Data仕様書 Ver.4.9.0.1による正確な長さ)
     VBテーブル名: HARAI
 
-    配列構造:
+    配列構造 (JV-Data仕様書より):
     - 単勝払戻: 3件 (馬番2 + 払戻9 + 人気2 = 13バイト × 3 = 39バイト)
     - 複勝払戻: 5件 (馬番2 + 払戻9 + 人気2 = 13バイト × 5 = 65バイト)
     - 枠連払戻: 3件 (組合せ2 + 払戻9 + 人気2 = 13バイト × 3 = 39バイト)
     - 馬連払戻: 3件 (組合せ4 + 払戻9 + 人気3 = 16バイト × 3 = 48バイト)
-    - ワイド払戻: 3件 (組合せ4 + 払戻9 + 人気3 = 16バイト × 3 = 48バイト)
+    - ワイド払戻: 7件 (組合せ4 + 払戻9 + 人気3 = 16バイト × 7 = 112バイト)
     - 予備: 3件 (16バイト × 3 = 48バイト)
     - 馬単払戻: 6件 (組合せ4 + 払戻9 + 人気3 = 16バイト × 6 = 96バイト)
     - 三連複払戻: 3件 (組合せ6 + 払戻9 + 人気3 = 18バイト × 3 = 54バイト)
@@ -32,7 +32,7 @@ class HRParser:
     """
 
     RECORD_TYPE = "HR"
-    RECORD_LENGTH = 655  # 正しいレコード長
+    RECORD_LENGTH = 719  # JV-Data仕様書 Ver.4.9.0.1による正確な長さ
 
     def __init__(self):
         self.logger = get_logger(__name__)
@@ -137,13 +137,13 @@ class HRParser:
                 result[f"HenkanWaku{i}"] = self.decode_field(data[pos:pos+1])
                 pos += 1
 
-            # 75-78. 返還同枠情報 (各1バイト × 4)
-            for i in range(1, 5):
+            # 75-82. 返還同枠情報 (各1バイト × 8) - JV-Data仕様書: 位置95, 8バイト
+            for i in range(1, 9):
                 result[f"HenkanDoWaku{i}"] = self.decode_field(data[pos:pos+1])
                 pos += 1
 
             # ここから配列データ
-            # pos = 98 at this point
+            # pos = 102 at this point (JV-Data仕様書: 単勝払戻は位置103から、0始まりで102)
 
             # 単勝払戻 (3件配列: 馬番2 + 払戻9 + 人気2 = 13バイト × 3 = 39バイト)
             # 最初の1件目のみ抽出
@@ -173,12 +173,12 @@ class HRParser:
             result["UmarenNinki"] = self.decode_field(data[pos+13:pos+16])
             pos += 48  # 3件分スキップ
 
-            # ワイド払戻 (3件配列: 組合せ4 + 払戻9 + 人気3 = 16バイト × 3 = 48バイト)
+            # ワイド払戻 (7件配列: 組合せ4 + 払戻9 + 人気3 = 16バイト × 7 = 112バイト)
             # 最初の1件目のみ抽出
             result["WideKumi"] = self.decode_field(data[pos:pos+4])
             result["WidePay"] = self.decode_field(data[pos+4:pos+13])
             result["WideNinki"] = self.decode_field(data[pos+13:pos+16])
-            pos += 48  # 3件分スキップ
+            pos += 112  # 7件分スキップ
 
             # 予備 (3件配列: 16バイト × 3 = 48バイト)
             result["Yobi1"] = self.decode_field(data[pos:pos+4])
