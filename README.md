@@ -55,6 +55,6 @@ jltsql monitor          # リアルタイム監視
 ## ライセンス
 
 - 非商用利用: Apache License 2.0
-- 商用利用: 事前にお問い合わせください → mitsuo.yamamoto+github@gmail.com
+- 商用利用: 事前にお問い合わせください → oracle.datascientist@gmail.com
 
 取得データは[JRA-VAN利用規約](https://jra-van.jp/info/rule.html)に従ってください。
