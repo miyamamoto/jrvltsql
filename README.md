@@ -18,14 +18,6 @@ pip install git+https://github.com/miyamamoto/jrvltsql.git
 
 **quickstart.bat をダブルクリック** で対話形式のセットアップが始まります。
 
-### DuckDB対応
-
-分析向け高速データベース **DuckDB** を使用する場合:
-
-```bash
-pip install jltsql[duckdb]
-```
-
 ## 使い方
 
 ### quickstartオプション
