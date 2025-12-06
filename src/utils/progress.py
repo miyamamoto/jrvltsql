@@ -183,7 +183,7 @@ class StatsDisplay:
                 parts.append(f"[bold red]失敗[/]: [red]{self.failed:,}[/]")
 
             if self.speed is not None:
-                parts.append(f"[bold yellow]速度[/]: [yellow]{self.speed:,.0f}件/秒[/]")
+                parts.append(f"[bold yellow]処理速度[/]: [yellow]{self.speed:,.0f}レコード/秒[/]")
 
             return Text.from_markup("  ".join(parts))
 
