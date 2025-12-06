@@ -354,10 +354,31 @@ class DuckDBDatabase(BaseDatabase):
 
         except DatabaseError:
             raise
+
+    def _get_primary_key_columns(self, table_name: str) -> List[str]:
+        """Get primary key column names for a table.
+
+        Args:
+            table_name: Name of table
+
+        Returns:
+            List of primary key column names, empty list if no PK
+        """
+        try:
+            # Use PRAGMA table_info to get pk columns
+            table_info = self.get_table_info(table_name)
+            pk_columns = [(col['name'], col.get('pk', 0)) for col in table_info if col.get('pk', 0) > 0]
+            # Sort by pk order and return names
+            pk_columns.sort(key=lambda x: x[1])
+            return [col[0] for col in pk_columns]
+        except Exception as e:
+            logger.warning(f"Failed to get primary key for {table_name}: {e}")
+            return []
+
     def insert(self, table_name: str, data: Dict[str, Any], use_replace: bool = True) -> int:
         """Insert a single row into a table.
 
-        DuckDB uses INSERT INTO ... ON CONFLICT DO UPDATE for UPSERT.
+        DuckDB uses INSERT INTO ... ON CONFLICT (pk_cols) DO UPDATE for UPSERT.
 
         Args:
             table_name: Target table name
@@ -379,17 +400,27 @@ class DuckDBDatabase(BaseDatabase):
         quoted_columns = [self._quote_identifier(col) for col in columns]
 
         if use_replace:
-            # DuckDB: INSERT OR REPLACE is supported in newer versions
-            # Use INSERT INTO ... ON CONFLICT DO UPDATE SET for compatibility
-            update_clause = ", ".join([f'{self._quote_identifier(col)} = EXCLUDED.{self._quote_identifier(col)}' for col in columns])
-            sql = f'INSERT INTO {table_name} ({", ".join(quoted_columns)}) VALUES ({placeholders}) ON CONFLICT DO UPDATE SET {update_clause}'
+            # Get primary key columns for conflict target
+            pk_columns = self._get_primary_key_columns(table_name)
+
+            if pk_columns:
+                # DuckDB requires explicit conflict target with primary key columns
+                conflict_target = ", ".join([self._quote_identifier(col) for col in pk_columns])
+                update_clause = ", ".join([
+                    f'{self._quote_identifier(col)} = EXCLUDED.{self._quote_identifier(col)}'
+                    for col in columns
+                ])
+                sql = f'INSERT INTO {table_name} ({", ".join(quoted_columns)}) VALUES ({placeholders}) ON CONFLICT ({conflict_target}) DO UPDATE SET {update_clause}'
+            else:
+                # No primary key - use INSERT OR REPLACE syntax
+                sql = f'INSERT OR REPLACE INTO {table_name} ({", ".join(quoted_columns)}) VALUES ({placeholders})'
         else:
             sql = f'INSERT INTO {table_name} ({", ".join(quoted_columns)}) VALUES ({placeholders})'
 
         try:
             return self.execute(sql, tuple(values))
         except DatabaseError:
-            # If ON CONFLICT fails (no PK defined), try simple INSERT
+            # If ON CONFLICT fails, try simple INSERT as fallback
             if use_replace:
                 sql = f'INSERT INTO {table_name} ({", ".join(quoted_columns)}) VALUES ({placeholders})'
                 try:
@@ -401,7 +432,7 @@ class DuckDBDatabase(BaseDatabase):
     def insert_many(self, table_name: str, data_list: List[Dict[str, Any]], use_replace: bool = True) -> int:
         """Insert multiple rows into a table.
 
-        DuckDB uses INSERT INTO ... ON CONFLICT DO UPDATE for UPSERT.
+        DuckDB uses INSERT INTO ... ON CONFLICT (pk_cols) DO UPDATE for UPSERT.
 
         Args:
             table_name: Target table name
@@ -422,8 +453,20 @@ class DuckDBDatabase(BaseDatabase):
         quoted_columns = [self._quote_identifier(col) for col in columns]
 
         if use_replace:
-            update_clause = ", ".join([f'{self._quote_identifier(col)} = EXCLUDED.{self._quote_identifier(col)}' for col in columns])
-            sql = f'INSERT INTO {table_name} ({", ".join(quoted_columns)}) VALUES ({placeholders}) ON CONFLICT DO UPDATE SET {update_clause}'
+            # Get primary key columns for conflict target
+            pk_columns = self._get_primary_key_columns(table_name)
+
+            if pk_columns:
+                # DuckDB requires explicit conflict target with primary key columns
+                conflict_target = ", ".join([self._quote_identifier(col) for col in pk_columns])
+                update_clause = ", ".join([
+                    f'{self._quote_identifier(col)} = EXCLUDED.{self._quote_identifier(col)}'
+                    for col in columns
+                ])
+                sql = f'INSERT INTO {table_name} ({", ".join(quoted_columns)}) VALUES ({placeholders}) ON CONFLICT ({conflict_target}) DO UPDATE SET {update_clause}'
+            else:
+                # No primary key - use INSERT OR REPLACE syntax
+                sql = f'INSERT OR REPLACE INTO {table_name} ({", ".join(quoted_columns)}) VALUES ({placeholders})'
         else:
             sql = f'INSERT INTO {table_name} ({", ".join(quoted_columns)}) VALUES ({placeholders})'
 
@@ -433,19 +476,19 @@ class DuckDBDatabase(BaseDatabase):
             return self.executemany(sql, values_list)
         except DatabaseError as e:
             # If ON CONFLICT fails, try simple INSERT or individual inserts
-            if use_replace and "ON CONFLICT" in str(e):
+            if use_replace and ("CONFLICT" in str(e).upper() or "CONSTRAINT" in str(e).upper()):
                 sql = f'INSERT INTO {table_name} ({", ".join(quoted_columns)}) VALUES ({placeholders})'
                 try:
                     return self.executemany(sql, values_list)
                 except DatabaseError:
                     pass
-            
+
             # Fallback to individual inserts
             logger.warning(f"Batch insert failed, trying individual inserts", table=table_name, error=str(e))
             success_count = 0
             for data in data_list:
                 try:
-                    success_count += self.insert(table_name, data, use_replace=False)
+                    success_count += self.insert(table_name, data, use_replace=use_replace)
                 except DatabaseError as insert_error:
                     logger.error(f"Failed to insert record", table=table_name, error=str(insert_error))
             return success_count
