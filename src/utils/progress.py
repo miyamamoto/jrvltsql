@@ -272,12 +272,12 @@ class JVLinkProgressDisplay:
 
         # Download section (if active)
         if self._has_download:
-            content.add_row(Text("📥 ダウンロード", style="bold magenta"))
+            content.add_row(Text("[DL] ダウンロード", style="bold magenta"))
             content.add_row(self.download_progress)
             content.add_row(Text(""))
 
         # Processing section
-        content.add_row(Text("⚙️  処理中", style="bold green"))
+        content.add_row(Text("[*] 処理中", style="bold green"))
         content.add_row(self.progress)
 
         # File progress info
@@ -287,7 +287,7 @@ class JVLinkProgressDisplay:
         content.add_row(Text(""))
 
         # Stats section
-        content.add_row(Text("📊 統計", style="bold cyan"))
+        content.add_row(Text("[=] 統計", style="bold cyan"))
         content.add_row(self.stats_display)
 
         # Wrap in Panel
@@ -314,7 +314,7 @@ class JVLinkProgressDisplay:
                 self.live = Live(
                     self._create_layout(),
                     console=self.console,
-                    refresh_per_second=4,
+                    refresh_per_second=1,  # 更新頻度を下げて高速化
                     transient=False,
                     vertical_overflow="visible",
                 )
@@ -434,8 +434,8 @@ class JVLinkProgressDisplay:
         # Extract file progress from status if it contains file info
         if status is not None:
             self._file_progress = status
-            # Refresh layout to show file progress
-            self._refresh_layout()
+            # Note: レイアウト再構築は重いので、ここでは行わない
+            # Rich Liveが自動的に更新する
 
         self.progress.update(task_id, **update_dict)
 
@@ -473,7 +473,7 @@ class JVLinkProgressDisplay:
         Args:
             message: Success message
         """
-        self.console.print(f"[bold green]✓[/] {message}")
+        self.console.print(f"[bold green][OK][/] {message}")
 
     def print_error(self, message: str):
         """Print error message.
@@ -481,7 +481,7 @@ class JVLinkProgressDisplay:
         Args:
             message: Error message
         """
-        self.console.print(f"[bold red]✗[/] {message}")
+        self.console.print(f"[bold red][NG][/] {message}")
 
     def print_warning(self, message: str):
         """Print warning message.
@@ -489,7 +489,7 @@ class JVLinkProgressDisplay:
         Args:
             message: Warning message
         """
-        self.console.print(f"[bold yellow]⚠[/] {message}")
+        self.console.print(f"[bold yellow][!][/] {message}")
 
     def print_info(self, message: str):
         """Print info message.
@@ -497,7 +497,7 @@ class JVLinkProgressDisplay:
         Args:
             message: Info message
         """
-        self.console.print(f"[bold cyan]ℹ[/] {message}")
+        self.console.print(f"[bold cyan][i][/] {message}")
 
     def print_separator(self):
         """Print a separator line between specs."""
@@ -517,10 +517,10 @@ class JVLinkProgressDisplay:
 
         self.console.print()
         # フォーマット: ━━━ SPEC (説明) ━━━ [カテゴリ: 期間]
-        parts = [f"[bold blue]━━━[/] [bold white]{spec}[/]"]
+        parts = [f"[bold blue]---[/] [bold white]{spec}[/]"]
         if description:
             parts.append(f"[dim]({description})[/]")
-        parts.append("[bold blue]━━━[/]")
+        parts.append("[bold blue]---[/]")
         if category and period:
             parts.append(f"[cyan][{category}: {period}][/]")
         self.console.print(" ".join(parts))
