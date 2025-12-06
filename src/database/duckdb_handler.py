@@ -47,6 +47,19 @@ class DuckDBDatabase(BaseDatabase):
         self.memory_limit = config.get("memory_limit", None)
         self.threads = config.get("threads", None)
 
+    def _quote_identifier(self, identifier: str) -> str:
+        """Quote SQL identifier (column/table name).
+
+        DuckDB uses double quotes for identifiers (SQL standard).
+
+        Args:
+            identifier: Column or table name to quote
+
+        Returns:
+            Quoted identifier string
+        """
+        return f'"{identifier}"'
+
     def get_db_type(self) -> str:
         """Get database type identifier.
 
@@ -341,3 +354,98 @@ class DuckDBDatabase(BaseDatabase):
 
         except DatabaseError:
             raise
+    def insert(self, table_name: str, data: Dict[str, Any], use_replace: bool = True) -> int:
+        """Insert a single row into a table.
+
+        DuckDB uses INSERT INTO ... ON CONFLICT DO UPDATE for UPSERT.
+
+        Args:
+            table_name: Target table name
+            data: Dictionary of column names to values
+            use_replace: If True, update on conflict (UPSERT)
+
+        Returns:
+            Number of inserted rows (1 on success, 0 on failure)
+
+        Raises:
+            DatabaseError: If insert fails
+        """
+        if not data:
+            return 0
+
+        columns = list(data.keys())
+        values = list(data.values())
+        placeholders = ", ".join(["?" for _ in columns])
+        quoted_columns = [self._quote_identifier(col) for col in columns]
+
+        if use_replace:
+            # DuckDB: INSERT OR REPLACE is supported in newer versions
+            # Use INSERT INTO ... ON CONFLICT DO UPDATE SET for compatibility
+            update_clause = ", ".join([f'{self._quote_identifier(col)} = EXCLUDED.{self._quote_identifier(col)}' for col in columns])
+            sql = f'INSERT INTO {table_name} ({", ".join(quoted_columns)}) VALUES ({placeholders}) ON CONFLICT DO UPDATE SET {update_clause}'
+        else:
+            sql = f'INSERT INTO {table_name} ({", ".join(quoted_columns)}) VALUES ({placeholders})'
+
+        try:
+            return self.execute(sql, tuple(values))
+        except DatabaseError:
+            # If ON CONFLICT fails (no PK defined), try simple INSERT
+            if use_replace:
+                sql = f'INSERT INTO {table_name} ({", ".join(quoted_columns)}) VALUES ({placeholders})'
+                try:
+                    return self.execute(sql, tuple(values))
+                except DatabaseError:
+                    pass
+            raise
+
+    def insert_many(self, table_name: str, data_list: List[Dict[str, Any]], use_replace: bool = True) -> int:
+        """Insert multiple rows into a table.
+
+        DuckDB uses INSERT INTO ... ON CONFLICT DO UPDATE for UPSERT.
+
+        Args:
+            table_name: Target table name
+            data_list: List of dictionaries
+            use_replace: If True, update on conflict (UPSERT)
+
+        Returns:
+            Number of inserted rows
+
+        Raises:
+            DatabaseError: If insert fails
+        """
+        if not data_list:
+            return 0
+
+        columns = list(data_list[0].keys())
+        placeholders = ", ".join(["?" for _ in columns])
+        quoted_columns = [self._quote_identifier(col) for col in columns]
+
+        if use_replace:
+            update_clause = ", ".join([f'{self._quote_identifier(col)} = EXCLUDED.{self._quote_identifier(col)}' for col in columns])
+            sql = f'INSERT INTO {table_name} ({", ".join(quoted_columns)}) VALUES ({placeholders}) ON CONFLICT DO UPDATE SET {update_clause}'
+        else:
+            sql = f'INSERT INTO {table_name} ({", ".join(quoted_columns)}) VALUES ({placeholders})'
+
+        values_list = [tuple(d.get(col) for col in columns) for d in data_list]
+
+        try:
+            return self.executemany(sql, values_list)
+        except DatabaseError as e:
+            # If ON CONFLICT fails, try simple INSERT or individual inserts
+            if use_replace and "ON CONFLICT" in str(e):
+                sql = f'INSERT INTO {table_name} ({", ".join(quoted_columns)}) VALUES ({placeholders})'
+                try:
+                    return self.executemany(sql, values_list)
+                except DatabaseError:
+                    pass
+            
+            # Fallback to individual inserts
+            logger.warning(f"Batch insert failed, trying individual inserts", table=table_name, error=str(e))
+            success_count = 0
+            for data in data_list:
+                try:
+                    success_count += self.insert(table_name, data, use_replace=False)
+                except DatabaseError as insert_error:
+                    logger.error(f"Failed to insert record", table=table_name, error=str(insert_error))
+            return success_count
