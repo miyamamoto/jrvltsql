@@ -503,26 +503,35 @@ class JVLinkProgressDisplay:
         """Print a separator line between specs."""
         self.console.print()
 
-    def print_spec_header(self, spec: str):
+    def print_spec_header(self, spec: str, from_date: str = None, to_date: str = None):
         """Print a header for a new spec processing.
 
         Args:
             spec: The spec name being processed
+            from_date: Start date (YYYYMMDD format, optional)
+            to_date: End date (YYYYMMDD format, optional)
         """
         # スペック名の日本語説明を取得
         description = SPEC_DESCRIPTIONS.get(spec, "")
-        # カテゴリと期間を取得
+        # カテゴリを取得（期間はfrom/toから表示するので不要）
         category = SPEC_CATEGORIES.get(spec, "")
-        period = CATEGORY_PERIODS.get(category, "") if category else ""
 
         self.console.print()
-        # フォーマット: ━━━ SPEC (説明) ━━━ [カテゴリ: 期間]
+        # フォーマット: ━━━ SPEC (説明) ━━━ [期間: YYYY/MM/DD - YYYY/MM/DD]
         parts = [f"[bold blue]---[/] [bold white]{spec}[/]"]
         if description:
             parts.append(f"[dim]({description})[/]")
         parts.append("[bold blue]---[/]")
-        if category and period:
-            parts.append(f"[cyan][{category}: {period}][/]")
+
+        # 日付範囲が指定されていれば表示
+        if from_date and to_date:
+            # YYYYMMDD -> YYYY/MM/DD 形式に変換
+            from_fmt = f"{from_date[:4]}/{from_date[4:6]}/{from_date[6:8]}"
+            to_fmt = f"{to_date[:4]}/{to_date[4:6]}/{to_date[6:8]}"
+            parts.append(f"[cyan][{from_fmt} - {to_fmt}][/]")
+        elif category:
+            # 日付なしの場合はカテゴリのみ表示
+            parts.append(f"[dim][{category}][/]")
         self.console.print(" ".join(parts))
 
     @contextmanager

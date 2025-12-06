@@ -85,22 +85,18 @@ class HistoricalFetcher(BaseFetcher):
         fetch_task_id = None
 
         try:
-            # Info for setup mode (option 3 or 4)
+            # Info for setup mode (option 3 or 4) - ログのみ、画面表示はしない
             if option in (3, 4):
                 logger.info(
                     "セットアップモード - 全データを取得します",
                     option=option,
                 )
-                if self.progress_display:
-                    self.progress_display.print_info(
-                        f"セットアップモード(option={option}): 全データを取得します"
-                    )
 
             # Initialize JV-Link
             logger.info("Initializing JV-Link", has_service_key=self._service_key is not None)
             if self.progress_display:
-                # スペックヘッダーを表示
-                self.progress_display.print_spec_header(data_spec)
+                # スペックヘッダーを表示（日付範囲付き）
+                self.progress_display.print_spec_header(data_spec, from_date, to_date)
 
             # Note: Service key must be pre-configured in Windows registry
             # jv_init() does not accept service_key parameter
