@@ -3061,11 +3061,21 @@ class QuickstartRunner:
             logger.warning(details['error_message'])
             return ("skipped", details)
 
+        # option=3/4（セットアップモード）は一部のスペックのみ対応
+        # RACE, DIFF, BLOD等の主要スペックはoption=4対応
+        # COMM, PARA等の補助スペックはoption=1のみ対応
+        OPTION_4_SUPPORTED_SPECS = {
+            "RACE", "DIFF", "BLOD", "SNAP", "SLOP", "WOOD",
+            "YSCH", "HOSE", "HOYU", "CHOK", "KISI", "BRDR",
+            "TOKU", "MING", "O1", "O2", "O3", "O4", "O5", "O6",
+        }
+
         # option=1（差分データ）はJV-Link側の「最終取得時刻」以降のデータのみ返す
         # 初回セットアップや全データ取得にはoption=4（セットアップモード）を使用
-        # option=2（今週データ）はそのまま維持
-        if option == 1:
+        # ただし、option=4非対応スペックはoption=1のまま維持
+        if option == 1 and spec in OPTION_4_SUPPORTED_SPECS:
             option = 4  # 分割セットアップモード（全データ取得）
+        # option=4非対応スペックはoption=1で実行（差分データ）
 
         try:
             # 設定読み込み
