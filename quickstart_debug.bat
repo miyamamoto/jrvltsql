@@ -11,19 +11,18 @@ echo   JLTSQL Quickstart - Debug Mode
 echo ============================================================
 echo.
 
-REM Python 32bit版の実行パスを取得（py launcherを経由せず直接実行 - 高速化のため）
-REM 環境変数 PYTHON32 が設定されていればそれを使用
-if defined PYTHON32 (
-    set PYTHON_EXE=%PYTHON32%
+REM 環境変数 PYTHON が設定されていればそれを使用
+if defined PYTHON (
+    set PYTHON_EXE=%PYTHON%
     goto :run_python
 )
 
-REM py launcherからPython 32bitのパスを取得
-for /f "delims=" %%i in ('py -3-32 -c "import sys; print(sys.executable)"') do set PYTHON_EXE=%%i
+REM py launcherからPythonのパスを取得
+for /f "delims=" %%i in ('py -c "import sys; print(sys.executable)"') do set PYTHON_EXE=%%i
 
 if not defined PYTHON_EXE (
-    echo ERROR: Python 32bit が見つかりません
-    echo py -3-32 を実行できることを確認してください
+    echo ERROR: Python が見つかりません
+    echo Python 3.10以上をインストールしてください
     pause
     exit /b 1
 )

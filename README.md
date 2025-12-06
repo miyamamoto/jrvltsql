@@ -1,13 +1,13 @@
 # JRVLTSQL
 
-JRA-VAN DataLabの競馬データをSQLite/PostgreSQLにインポートするツール
+JRA-VAN DataLabの競馬データをSQLite/PostgreSQL/DuckDBにインポートするツール
 
 ## インストール
 
 ### 必要要件
 
 - Windows 10/11
-- Python 3.10+ （32bit/64bit両対応）
+- Python 3.10+
 - JRA-VAN DataLab会員
 
 ### セットアップ
@@ -18,25 +18,12 @@ pip install git+https://github.com/miyamamoto/jrvltsql.git
 
 **quickstart.bat をダブルクリック** で対話形式のセットアップが始まります。
 
-### Python 32bit/64bit について
+### DuckDB対応
 
-JV-Link APIは32bit DLLですが、**64bit Pythonでも使用可能**です。
-
-#### 64bit Pythonを使う場合（推奨）
-
-`tools/enable_64bit_python.bat` を**管理者権限**で実行してください。
-WindowsのDLLサロゲート機能を有効化し、64bit Pythonから32bit JV-Linkを呼び出せるようになります。
-
-```batch
-# 管理者権限でコマンドプロンプトを開いて実行
-cd tools
-enable_64bit_python.bat
-```
-
-#### Pythonバージョン確認
+分析向け高速データベース **DuckDB** を使用する場合:
 
 ```bash
-python -c "import struct; print(struct.calcsize('P') * 8, 'bit')"
+pip install jltsql[duckdb]
 ```
 
 ## 使い方
@@ -56,6 +43,14 @@ python scripts/quickstart.py -y           # 確認スキップ
 jltsql status           # ステータス確認
 jltsql fetch --spec RA  # 個別データ取得
 jltsql monitor          # リアルタイム監視
+```
+
+### データベース選択
+
+```bash
+jltsql fetch --db sqlite   # SQLite（デフォルト）
+jltsql fetch --db duckdb   # DuckDB（分析向け高速）
+jltsql fetch --db postgres # PostgreSQL
 ```
 
 ## データ構造

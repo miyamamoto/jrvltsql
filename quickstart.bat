@@ -56,10 +56,6 @@ REM Third try: python in PATH
 for /f "delims=" %%i in ('python -c "import sys; print(sys.executable)" 2^>nul') do set PYTHON_EXE=%%i
 if defined PYTHON_EXE goto :check_python
 
-REM Fourth try: 32bit Python explicitly
-for /f "delims=" %%i in ('py -3-32 -c "import sys; print(sys.executable)" 2^>nul') do set PYTHON_EXE=%%i
-if defined PYTHON_EXE goto :check_python
-
 :check_python
 if not defined PYTHON_EXE (
     echo ERROR: Python not found

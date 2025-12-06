@@ -16,7 +16,7 @@ Comprehensive test suite for the JRVLTSQL project covering all parsers, database
 
 ### Prerequisites
 
-- Python 3.10+ (32-bit required for JV-Link compatibility)
+- Python 3.10+
 - pytest and dependencies installed:
   ```bash
   pip install -r requirements-dev.txt
@@ -25,36 +25,36 @@ Comprehensive test suite for the JRVLTSQL project covering all parsers, database
 ### Run All Tests
 
 ```bash
-py -3-32 -m pytest tests/ -v
+python -m pytest tests/ -v
 ```
 
 ### Run Specific Test Files
 
 ```bash
 # Parser unit tests only
-py -3-32 -m pytest tests/test_parsers.py -v
+python -m pytest tests/test_parsers.py -v
 
 # Integration tests only
-py -3-32 -m pytest tests/test_integration.py -v
+python -m pytest tests/test_integration.py -v
 ```
 
 ### Run Specific Test Classes or Methods
 
 ```bash
 # Run specific test class
-py -3-32 -m pytest tests/test_parsers.py::TestIndividualParsers -v
+python -m pytest tests/test_parsers.py::TestIndividualParsers -v
 
 # Run tests matching a pattern (e.g., all RA parser tests)
-py -3-32 -m pytest tests/test_parsers.py -k "RA" -v
+python -m pytest tests/test_parsers.py -k "RA" -v
 
 # Run a specific integration test
-py -3-32 -m pytest tests/test_integration.py::TestIntegration::test_parse_and_import_ra_record -v
+python -m pytest tests/test_integration.py::TestIntegration::test_parse_and_import_ra_record -v
 ```
 
 ### Run with Coverage Report
 
 ```bash
-py -3-32 -m pytest tests/ --cov=src --cov-report=html --cov-report=term
+python -m pytest tests/ --cov=src --cov-report=html --cov-report=term
 ```
 
 Coverage report will be generated in `htmlcov/index.html`.
@@ -221,7 +221,7 @@ Realistic test records with:
 
 ### Overall Coverage
 
-Run `py -3-32 -m pytest tests/ --cov=src --cov-report=term` to see current coverage.
+Run `python -m pytest tests/ --cov=src --cov-report=term` to see current coverage.
 
 ### Key Module Coverage
 
@@ -262,7 +262,7 @@ Ensure PYTHONPATH includes project root:
 ```bash
 # Windows
 set PYTHONPATH=%CD%
-py -3-32 -m pytest tests/ -v
+python -m pytest tests/ -v
 
 # Linux/Mac
 export PYTHONPATH=$(pwd)
@@ -286,13 +286,13 @@ chcp 65001
 View detailed error output:
 
 ```bash
-py -3-32 -m pytest tests/ -v --tb=long
+python -m pytest tests/ -v --tb=long
 ```
 
 View only failed tests:
 
 ```bash
-py -3-32 -m pytest tests/ --lf -v  # Last Failed
+python -m pytest tests/ --lf -v  # Last Failed
 ```
 
 ## Development Workflow
@@ -308,7 +308,7 @@ py -3-32 -m pytest tests/ --lf -v  # Last Failed
 
 3. **Run tests locally** before committing:
    ```bash
-   py -3-32 -m pytest tests/ -v
+   python -m pytest tests/ -v
    ```
 
 ### Test Conventions
