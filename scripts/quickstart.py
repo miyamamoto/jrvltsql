@@ -930,9 +930,11 @@ def _interactive_setup_rich() -> dict:
         "発売開始から締切までのオッズ推移を記録するデータです。\n"
         "例: 発売開始時10倍 → 締切時3倍 のような変化を追跡できます。\n\n"
         "[cyan]取得条件:[/cyan]\n"
-        "  - 提供期間: 過去1年間（公式サポート期間）\n"
+        "  - 公式サポート期間: 過去1年間\n"
         "  - TS_O1〜O6テーブルに保存されます\n\n"
-        "[dim]注: 時系列オッズ取得には回次・日次情報（NL_RA）が必要です。\n"
+        "[yellow]注: 1年以上前のデータも保存されている場合がありますが、\n"
+        "公式サポート外のため取得できない可能性があります。[/yellow]\n\n"
+        "[dim]時系列オッズ取得には回次・日次情報（NL_RA）が必要です。\n"
         "NL_RAが不足している場合は、必要な期間のRACEデータを自動取得します。[/dim]",
         border_style="blue",
     ))
@@ -945,28 +947,75 @@ def _interactive_setup_rich() -> dict:
 
         ts_period_table = Table(show_header=True, box=box.SIMPLE, padding=(0, 1))
         ts_period_table.add_column("No", style="cyan", width=3, justify="center")
-        ts_period_table.add_column("期間", width=12)
-        ts_period_table.add_column("説明", width=30)
+        ts_period_table.add_column("期間", width=15)
+        ts_period_table.add_column("説明", width=40)
 
         ts_period_table.add_row("1", "過去1ヶ月", "[dim]直近のオッズ変動のみ[/dim]")
-        ts_period_table.add_row("2", "過去3ヶ月", "[dim]短期分析向け[/dim]")
+        ts_period_table.add_row("2", "過去3ヶ月", "[green]短期分析向け（推奨）[/green]")
         ts_period_table.add_row("3", "過去6ヶ月", "[dim]中期分析向け[/dim]")
         ts_period_table.add_row("4", "過去12ヶ月", "[dim]1年分（公式サポート期間）[/dim]")
+        ts_period_table.add_row("5", "カスタム", "[yellow]任意の期間を指定（公式サポート外の可能性あり）[/yellow]")
 
         console.print(ts_period_table)
         console.print()
 
-        ts_choice = Prompt.ask("期間を選択", choices=["1", "2", "3", "4"], default="4")
-        ts_months_map = {"1": 1, "2": 3, "3": 6, "4": 12}
-        settings['timeseries_months'] = ts_months_map[ts_choice]
+        ts_choice = Prompt.ask("期間を選択", choices=["1", "2", "3", "4", "5"], default="2")
 
-        months = settings['timeseries_months']
-        if months == 1:
-            console.print(f"[dim]取得期間: 過去1ヶ月[/dim]")
+        if ts_choice == "5":
+            # カスタム期間入力
+            today = datetime.now()
+
+            console.print()
+            console.print("[yellow]カスタム期間を指定します[/yellow]")
+            console.print("[dim]注: 1年以上前のデータは公式サポート外です。取得できない場合があります。[/dim]")
+            console.print()
+
+            while True:
+                ts_from_input = Prompt.ask("開始日 (YYYY-MM-DD)", default=(today - timedelta(days=90)).strftime("%Y-%m-%d"))
+                ts_from_str = ts_from_input.replace("-", "").replace("/", "")
+                try:
+                    ts_from_date = datetime.strptime(ts_from_str, "%Y%m%d")
+                    if ts_from_date > today:
+                        console.print("[red]未来の日付は指定できません。[/red]")
+                        continue
+                    settings['timeseries_from_date'] = ts_from_str
+                    break
+                except ValueError:
+                    console.print("[red]無効な日付形式です。YYYY-MM-DD形式で入力してください。[/red]")
+
+            while True:
+                ts_to_input = Prompt.ask("終了日 (YYYY-MM-DD)", default=today.strftime("%Y-%m-%d"))
+                ts_to_str = ts_to_input.replace("-", "").replace("/", "")
+                try:
+                    ts_to_date = datetime.strptime(ts_to_str, "%Y%m%d")
+                    if ts_to_date > today:
+                        console.print("[yellow]終了日を今日に設定します。[/yellow]")
+                        ts_to_str = today.strftime("%Y%m%d")
+                    if ts_to_date < ts_from_date:
+                        console.print("[red]終了日は開始日より後にしてください。[/red]")
+                        continue
+                    settings['timeseries_to_date'] = ts_to_str
+                    break
+                except ValueError:
+                    console.print("[red]無効な日付形式です。YYYY-MM-DD形式で入力してください。[/red]")
+
+            # カスタム期間の場合はmonthsを0に設定（日付を直接使用）
+            settings['timeseries_months'] = 0
+            settings['timeseries_custom'] = True
+            console.print(f"[dim]取得期間: {settings['timeseries_from_date'][:4]}/{settings['timeseries_from_date'][4:6]}/{settings['timeseries_from_date'][6:]} 〜 {settings['timeseries_to_date'][:4]}/{settings['timeseries_to_date'][4:6]}/{settings['timeseries_to_date'][6:]}[/dim]")
         else:
-            console.print(f"[dim]取得期間: 過去{months}ヶ月[/dim]")
+            ts_months_map = {"1": 1, "2": 3, "3": 6, "4": 12}
+            settings['timeseries_months'] = ts_months_map[ts_choice]
+            settings['timeseries_custom'] = False
+
+            months = settings['timeseries_months']
+            if months == 1:
+                console.print(f"[dim]取得期間: 過去1ヶ月[/dim]")
+            else:
+                console.print(f"[dim]取得期間: 過去{months}ヶ月[/dim]")
     else:
         settings['timeseries_months'] = 0
+        settings['timeseries_custom'] = False
 
     console.print()
 
@@ -1392,9 +1441,12 @@ def _interactive_setup_simple() -> dict:
     print("   │ 例: 発売開始時10倍 → 締切時3倍 のような変化を追跡     │")
     print("   │                                                        │")
     print("   │ 取得条件:                                              │")
-    print("   │   - 提供期間: 過去1年間                                │")
+    print("   │   - 公式サポート期間: 過去1年間                        │")
     print("   │   - TS_O1〜O6テーブルに保存されます                    │")
     print("   │   - NL_RA不足時は自動でRACEデータを取得します          │")
+    print("   │                                                        │")
+    print("   │ 注: 1年以上前のデータも保存されている場合がありますが、│")
+    print("   │     公式サポート外のため取得できない可能性があります。 │")
     print("   └────────────────────────────────────────────────────────┘")
     print()
     print("時系列オッズを取得しますか？ [y/N]: ", end="")
@@ -1405,25 +1457,81 @@ def _interactive_setup_simple() -> dict:
         print()
         print("   取得期間を選択してください:")
         print("   1) 過去1ヶ月  - 直近のオッズ変動のみ")
-        print("   2) 過去3ヶ月  - 短期分析向け")
+        print("   2) 過去3ヶ月  - 短期分析向け（推奨）")
         print("   3) 過去6ヶ月  - 中期分析向け")
         print("   4) 過去12ヶ月 - 1年分（公式サポート期間）")
+        print("   5) カスタム   - 任意の期間を指定（公式サポート外の可能性あり）")
         print()
-        print("   期間を選択 [1-4] (デフォルト: 4): ", end="")
+        print("   期間を選択 [1-5] (デフォルト: 2): ", end="")
         ts_period_input = input().strip()
-        if ts_period_input in ('1', '2', '3', '4'):
+
+        if ts_period_input == "5":
+            # カスタム期間入力
+            today = datetime.now()
+
+            print()
+            print("   カスタム期間を指定します")
+            print("   注: 1年以上前のデータは公式サポート外です。取得できない場合があります。")
+            print()
+
+            while True:
+                default_from = (today - timedelta(days=90)).strftime("%Y-%m-%d")
+                print(f"   開始日 (YYYY-MM-DD) [{default_from}]: ", end="")
+                ts_from_input = input().strip()
+                if not ts_from_input:
+                    ts_from_input = default_from
+                ts_from_str = ts_from_input.replace("-", "").replace("/", "")
+                try:
+                    ts_from_date = datetime.strptime(ts_from_str, "%Y%m%d")
+                    if ts_from_date > today:
+                        print("   [エラー] 未来の日付は指定できません。")
+                        continue
+                    settings['timeseries_from_date'] = ts_from_str
+                    break
+                except ValueError:
+                    print("   [エラー] 無効な日付形式です。YYYY-MM-DD形式で入力してください。")
+
+            while True:
+                default_to = today.strftime("%Y-%m-%d")
+                print(f"   終了日 (YYYY-MM-DD) [{default_to}]: ", end="")
+                ts_to_input = input().strip()
+                if not ts_to_input:
+                    ts_to_input = default_to
+                ts_to_str = ts_to_input.replace("-", "").replace("/", "")
+                try:
+                    ts_to_date = datetime.strptime(ts_to_str, "%Y%m%d")
+                    if ts_to_date > today:
+                        print("   [注意] 終了日を今日に設定します。")
+                        ts_to_str = today.strftime("%Y%m%d")
+                    if ts_to_date < ts_from_date:
+                        print("   [エラー] 終了日は開始日より後にしてください。")
+                        continue
+                    settings['timeseries_to_date'] = ts_to_str
+                    break
+                except ValueError:
+                    print("   [エラー] 無効な日付形式です。YYYY-MM-DD形式で入力してください。")
+
+            settings['timeseries_months'] = 0
+            settings['timeseries_custom'] = True
+            print(f"   -> 取得期間: {settings['timeseries_from_date'][:4]}/{settings['timeseries_from_date'][4:6]}/{settings['timeseries_from_date'][6:]} 〜 {settings['timeseries_to_date'][:4]}/{settings['timeseries_to_date'][4:6]}/{settings['timeseries_to_date'][6:]}")
+        elif ts_period_input in ('1', '2', '3', '4'):
             ts_months_map = {"1": 1, "2": 3, "3": 6, "4": 12}
             settings['timeseries_months'] = ts_months_map[ts_period_input]
-        else:
-            settings['timeseries_months'] = 12
+            settings['timeseries_custom'] = False
 
-        months = settings['timeseries_months']
-        if months == 1:
-            print(f"   -> 過去1ヶ月の時系列オッズを取得します")
+            months = settings['timeseries_months']
+            if months == 1:
+                print(f"   -> 過去1ヶ月の時系列オッズを取得します")
+            else:
+                print(f"   -> 過去{months}ヶ月の時系列オッズを取得します")
         else:
-            print(f"   -> 過去{months}ヶ月の時系列オッズを取得します")
+            # デフォルト: 3ヶ月
+            settings['timeseries_months'] = 3
+            settings['timeseries_custom'] = False
+            print(f"   -> 過去3ヶ月の時系列オッズを取得します")
     else:
         settings['timeseries_months'] = 0
+        settings['timeseries_custom'] = False
 
     print()
 
@@ -1921,20 +2029,28 @@ class QuickstartRunner:
         from datetime import datetime, timedelta
         from src.utils.progress import JVLinkProgressDisplay
 
-        # 設定された期間を取得（デフォルト12ヶ月）
-        months = self.settings.get('timeseries_months', 12)
         today = datetime.now()
-        start_date = today - timedelta(days=months * 30)  # 概算
-        from_date = start_date.strftime("%Y%m%d")
-        to_date = today.strftime("%Y%m%d")
 
-        # 期間の表示用テキスト
-        if months == 1:
-            period_text = "過去1ヶ月"
-        elif months == 12:
-            period_text = "過去1年間"
+        # カスタム日付設定か月数設定かを判定
+        if self.settings.get('timeseries_custom', False):
+            # カスタム期間が設定されている場合
+            from_date = self.settings.get('timeseries_from_date')
+            to_date = self.settings.get('timeseries_to_date')
+            period_text = f"{from_date[:4]}/{from_date[4:6]}/{from_date[6:]} 〜 {to_date[:4]}/{to_date[4:6]}/{to_date[6:]}"
         else:
-            period_text = f"過去{months}ヶ月"
+            # 月数で期間を計算（デフォルト3ヶ月に変更）
+            months = self.settings.get('timeseries_months', 3)
+            start_date = today - timedelta(days=months * 30)  # 概算
+            from_date = start_date.strftime("%Y%m%d")
+            to_date = today.strftime("%Y%m%d")
+
+            # 期間の表示用テキスト
+            if months == 1:
+                period_text = "過去1ヶ月"
+            elif months == 12:
+                period_text = "過去1年間"
+            else:
+                period_text = f"過去{months}ヶ月"
 
         # 時系列オッズスペック（0B30-0B36）
         timeseries_specs = [

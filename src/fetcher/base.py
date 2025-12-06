@@ -95,7 +95,7 @@ class BaseFetcher(ABC):
         """
         self._start_time = time.time()
         last_update_time = self._start_time
-        update_interval = 0.5  # Update progress every 0.5 seconds (reduced to prevent flickering)
+        update_interval = 2.0  # 更新間隔を増やして高速化  # Update progress every 0.5 seconds (reduced to prevent flickering)
 
         while True:
             try:

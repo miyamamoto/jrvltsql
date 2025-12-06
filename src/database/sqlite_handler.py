@@ -69,6 +69,11 @@ class SQLiteDatabase(BaseDatabase):
             )
             # Enable foreign keys
             self._connection.execute("PRAGMA foreign_keys = ON")
+            # Performance optimizations for bulk import
+            self._connection.execute("PRAGMA journal_mode = WAL")  # WALモードで高速化
+            self._connection.execute("PRAGMA synchronous = NORMAL")  # 同期モードを緩和
+            self._connection.execute("PRAGMA cache_size = -64000")  # 64MBキャッシュ
+            self._connection.execute("PRAGMA temp_store = MEMORY")  # 一時テーブルをメモリに
             # Use Row factory for dict-like access
             self._connection.row_factory = sqlite3.Row
             self._cursor = self._connection.cursor()
