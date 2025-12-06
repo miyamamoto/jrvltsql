@@ -119,26 +119,17 @@ CATEGORY_PERIODS = {
 
 
 class CompactTimeColumn(ProgressColumn):
-    """Compact time display showing elapsed/remaining."""
+    """Compact time display showing elapsed time only."""
 
     def render(self, task) -> Text:
         elapsed = task.elapsed
         if elapsed is None:
             return Text("-:--", style="dim")
 
-        # Format elapsed time
+        # Format elapsed time only (remaining time is inaccurate for file-based progress)
         elapsed_mins = int(elapsed // 60)
         elapsed_secs = int(elapsed % 60)
         elapsed_str = f"{elapsed_mins}:{elapsed_secs:02d}"
-
-        # Calculate remaining time
-        if task.total and task.completed > 0 and elapsed > 0:
-            speed = task.completed / elapsed
-            remaining = (task.total - task.completed) / speed if speed > 0 else 0
-            remaining_mins = int(remaining // 60)
-            remaining_secs = int(remaining % 60)
-            remaining_str = f"{remaining_mins}:{remaining_secs:02d}"
-            return Text(f"{elapsed_str}/{remaining_str}", style="cyan")
 
         return Text(elapsed_str, style="cyan")
 
