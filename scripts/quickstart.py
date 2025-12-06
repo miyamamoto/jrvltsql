@@ -736,23 +736,19 @@ def _interactive_setup_rich() -> dict:
     mode_table = Table(show_header=True, box=box.SIMPLE, padding=(0, 1))
     mode_table.add_column("No", style="cyan", width=3, justify="center")
     mode_table.add_column("モード", width=6)
-    mode_table.add_column("対象データ", width=40)
-    mode_table.add_column("期間", width=18)
+    mode_table.add_column("対象データ", width=50)
 
     mode_table.add_row(
         "1", "簡易",
-        "RACE, DIFF\n[dim](レース結果・確定オッズ・馬情報)[/dim]",
-        "全期間\n[dim](1986年〜)[/dim]"
+        "RACE, DIFF\n[dim](レース結果・確定オッズ・馬情報)[/dim]"
     )
     mode_table.add_row(
         "2", "標準",
-        "簡易 + BLOD,YSCH,TOKU,SLOP,HOYU,HOSE等\n[dim](血統・調教・スケジュール等)[/dim]",
-        "全期間\n[dim](1986年〜)[/dim]"
+        "簡易 + BLOD,YSCH,TOKU,SLOP,HOYU,HOSE等\n[dim](血統・調教・スケジュール等)[/dim]"
     )
     mode_table.add_row(
         "3", "フル",
-        "標準 + MING,WOOD,COMM\n[dim](マイニング・調教詳細・解説)[/dim]",
-        "全期間\n[dim](1986年〜)[/dim]"
+        "標準 + MING,WOOD,COMM\n[dim](マイニング・調教詳細・解説)[/dim]"
     )
 
     # 更新モードは前回セットアップがある場合のみ表示
@@ -761,8 +757,7 @@ def _interactive_setup_rich() -> dict:
         last_date_str = last_date.strftime("%Y-%m-%d %H:%M")
         mode_table.add_row(
             "4", "更新",
-            f"前回と同じ ({last_setup.get('mode_name', '?')})\n[dim](差分データのみ)[/dim]",
-            f"前回以降\n[dim]({last_date_str}〜)[/dim]"
+            f"前回と同じ ({last_setup.get('mode_name', '?')}) [dim]差分のみ {last_date_str}〜[/dim]"
         )
         choices = ["1", "2", "3", "4"]
     else:
@@ -796,16 +791,32 @@ def _interactive_setup_rich() -> dict:
         console.print("[bold cyan]取得期間を選択してください[/bold cyan]")
         console.print()
 
+        # モードに応じた所要時間の見積もり（簡易=1.0, 標準=1.5, フル=2.5倍）
+        time_multiplier = {"1": 1.0, "2": 1.5, "3": 2.5}[choice]
+
+        def format_time(base_minutes: float) -> str:
+            """所要時間を見積もってフォーマット"""
+            minutes = base_minutes * time_multiplier
+            if minutes < 60:
+                return f"[green]約{int(minutes)}分[/green]"
+            elif minutes < 300:
+                hours = minutes / 60
+                return f"[yellow]約{hours:.0f}〜{hours*1.5:.0f}時間[/yellow]"
+            else:
+                hours = minutes / 60
+                return f"[bold red]約{hours:.0f}時間以上[/bold red]"
+
         period_table = Table(show_header=True, header_style="bold", box=None)
         period_table.add_column("No", width=4)
-        period_table.add_column("期間", width=20)
-        period_table.add_column("説明", width=40)
+        period_table.add_column("期間", width=14)
+        period_table.add_column("説明", width=20)
+        period_table.add_column("所要時間(税込)", width=20)
 
-        period_table.add_row("1", "直近1週間", "[dim]デバッグ・テスト用（高速）[/dim]")
-        period_table.add_row("2", "直近1ヶ月", "[dim]短期テスト用[/dim]")
-        period_table.add_row("3", "直近1年", "[dim]実用的な範囲[/dim]")
-        period_table.add_row("4", "直近5年", "[dim]中長期分析用[/dim]")
-        period_table.add_row("5", "全期間", "[dim]1986年〜（時間がかかります）[/dim]")
+        period_table.add_row("1", "直近1週間", "[dim]デバッグ・テスト用[/dim]", format_time(5))
+        period_table.add_row("2", "直近1ヶ月", "[dim]短期テスト用[/dim]", format_time(30))
+        period_table.add_row("3", "直近1年", "[dim]実用的な範囲[/dim]", format_time(120))
+        period_table.add_row("4", "直近5年", "[dim]中長期分析用[/dim]", format_time(360))
+        period_table.add_row("5", "全期間", "[dim]1986年〜[/dim]", format_time(720))
 
         console.print(period_table)
         console.print()
@@ -1173,9 +1184,9 @@ def _interactive_setup_simple() -> dict:
     print()
     print("   No  モード  対象データ                                期間")
     print("   ──────────────────────────────────────────────────────────────")
-    print("   1)  簡易    RACE,DIFF (レース結果・確定オッズ・馬情報)   全期間(1986年〜)")
-    print("   2)  標準    簡易+BLOD,YSCH,TOKU,SLOP等                   全期間(1986年〜)")
-    print("   3)  フル    標準+MING,WOOD,COMM (マイニング・解説等)     全期間(1986年〜)")
+    print("   1)  簡易    RACE,DIFF (レース結果・確定オッズ・馬情報)")
+    print("   2)  標準    簡易+BLOD,YSCH,TOKU,SLOP等 (血統・調教等)")
+    print("   3)  フル    標準+MING,WOOD,COMM (マイニング・解説等)")
     if last_setup:
         last_date = datetime.fromisoformat(last_setup['timestamp'])
         print(f"   4)  更新    前回({last_setup.get('mode_name', '?')})と同じ          前回({last_date.strftime('%Y-%m-%d')})以降")
@@ -1204,14 +1215,24 @@ def _interactive_setup_simple() -> dict:
 
     # 更新モード以外は期間選択
     if choice in ["1", "2", "3"]:
+        # モードに応じた所要時間の見積もり
+        time_mult = {"1": 1.0, "2": 1.5, "3": 2.5}[choice]
+
+        def fmt_time(base_min):
+            m = base_min * time_mult
+            if m < 60:
+                return f"約{int(m)}分"
+            else:
+                return f"約{m/60:.0f}〜{m/60*1.5:.0f}時間"
+
         print()
         print("取得期間を選択してください:")
         print()
-        print("   1)  直近1週間   デバッグ・テスト用（高速）")
-        print("   2)  直近1ヶ月   短期テスト用")
-        print("   3)  直近1年     実用的な範囲")
-        print("   4)  直近5年     中長期分析用")
-        print("   5)  全期間      1986年〜（時間がかかります）")
+        print(f"   1)  直近1週間   デバッグ用 ({fmt_time(5)})")
+        print(f"   2)  直近1ヶ月   短期テスト ({fmt_time(30)})")
+        print(f"   3)  直近1年     実用的 ({fmt_time(120)})")
+        print(f"   4)  直近5年     中長期分析 ({fmt_time(360)})")
+        print(f"   5)  全期間      1986年〜 ({fmt_time(720)})")
         print()
 
         period_choice = input("選択 [3]: ").strip() or "3"
