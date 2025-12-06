@@ -9,6 +9,12 @@ from typing import Dict, Optional
 
 from src.database.schema import SCHEMAS
 
+# キャッシュ（テーブル名 → カラム型マッピング）
+_table_column_types_cache: Dict[str, Dict[str, str]] = {}
+
+# コンパイル済み正規表現パターン
+_column_pattern = re.compile(r'^\s*(\w+)\s+(INTEGER|BIGINT|REAL|TEXT)\s*[,)]?\s*$', re.MULTILINE)
+
 
 def get_table_column_types(table_name: str) -> Dict[str, str]:
     """Get column name to type mapping for a specific table.
@@ -32,6 +38,10 @@ def get_table_column_types(table_name: str) -> Dict[str, str]:
         >>> types["Kyori"]
         'INTEGER'
     """
+    # キャッシュから取得
+    if table_name in _table_column_types_cache:
+        return _table_column_types_cache[table_name]
+
     if table_name not in SCHEMAS:
         return {}
 
@@ -46,19 +56,20 @@ def get_table_column_types(table_name: str) -> Dict[str, str]:
     #   Honsyokin1 REAL,
     #   Vote BIGINT,
     # But excludes PRIMARY KEY constraints
-    pattern = r'^\s*(\w+)\s+(INTEGER|BIGINT|REAL|TEXT)\s*[,)]?\s*$'
 
     for line in create_statement.split('\n'):
         # Skip PRIMARY KEY constraints
         if 'PRIMARY KEY' in line.upper():
             continue
 
-        match = re.match(pattern, line, re.MULTILINE)
+        match = _column_pattern.match(line)
         if match:
             column_name = match.group(1)
             column_type = match.group(2)
             column_types[column_name] = column_type
 
+    # キャッシュに保存
+    _table_column_types_cache[table_name] = column_types
     return column_types
 
 

@@ -3,7 +3,6 @@
 This module imports parsed JV-Data records into database.
 """
 
-import re
 from typing import Any, Dict, Iterator, List, Optional
 
 from src.database.base import BaseDatabase, DatabaseError
@@ -18,65 +17,46 @@ logger = get_logger(__name__)
 # JV-Dataでは一部の数値フィールドが10倍された状態で格納されている
 # ============================================================================
 
-# 10で割るべきフィールドパターン（小数点1桁のサンプリング値）
-DIVIDE_BY_10_PATTERNS = [
-    # オッズ系 (O1-O6, SE)
-    r"^TanOdds",         # 単勝オッズ
-    r"^FukuOdds",        # 複勝オッズ (Low/High両方マッチ)
-    r"^WakurenOdds",     # 枠連オッズ
-    r"^Odds$",           # 汎用オッズ (末尾の$で完全一致)
-    r"^OddsLow",         # オッズ最低値
-    r"^OddsHigh",        # オッズ最高値
+# 10で割るべきフィールド名のプレフィックス（高速ルックアップ用）
+# オッズ系、タイム系、重量系
+DIVIDE_BY_10_PREFIXES = frozenset([
+    "TanOdds", "FukuOdds", "WakurenOdds", "OddsLow", "OddsHigh",
+    "TimeDiff", "HaronTime", "Haron", "LapTime",
+    "Futan", "BaTaijyu", "ZogenSa",
+    "DMTime", "DMGosa",
+])
 
-    # タイム系（走破タイム）
-    r"^Time$",           # 走破タイム (4文字 HMMM形式)
-    r"^TimeDiff",        # タイム差
+# 完全一致で10で割るべきフィールド名
+DIVIDE_BY_10_EXACT = frozenset(["Odds", "Time"])
 
-    # タイム系（ハロン・ラップ）
-    r"^HaronTime",       # ハロンタイム (HaronTimeL3, HaronTimeL4など)
-    r"^Haron",           # ハロン系 (Haron3F, Haron4L等)
-    r"^LapTime",         # ラップタイム
-
-    # 重量系
-    r"^Futan",           # 負担重量/斤量 (3文字 ABC → AB.C kg)
-    r"^BaTaijyu",        # 馬体重 (3文字)
-    r"^ZogenSa",         # 増減差 (3文字)
-
-    # マイニング関連
-    r"^DMTime",          # マイニング予想走破タイム
-    r"^DMGosa",          # マイニング予想誤差
-]
-
-# そのまま使うREALフィールドパターン（小数点演算不要）
-NO_DIVIDE_PATTERNS = [
-    # 賞金系（千円単位 - DBに整数値で格納）
-    r"^Honsyokin",       # 本賞金 (全レコード共通)
-    r"^Fukasyokin",      # 付加賞金 (全レコード共通)
-
-    # 累計金額系（UM: 累計本賞金、累計付加賞金、累計収得賞金）
-    r"^RuikeiHonsyo",    # 累計本賞金
-    r"^RuikeiFuka",      # 累計付加賞金
-    r"^RuikeiSyutoku",   # 累計収得賞金
-
-    # 票数系
-    r"^HyoTotal",        # 票数合計
-    r"^Hyo$",            # 票数 (完全一致)
-]
+# キャッシュ（フィールド名 → 10で割るべきか）
+_divide_cache: dict = {}
 
 
 def _should_divide_by_10(field_name: str) -> bool:
-    """フィールドが10で割る必要があるかチェック"""
-    for pattern in DIVIDE_BY_10_PATTERNS:
-        if re.match(pattern, field_name):
+    """フィールドが10で割る必要があるかチェック（キャッシュ付き）"""
+    # キャッシュから取得
+    result = _divide_cache.get(field_name)
+    if result is not None:
+        return result
+
+    # 完全一致チェック
+    if field_name in DIVIDE_BY_10_EXACT:
+        _divide_cache[field_name] = True
+        return True
+
+    # プレフィックスチェック
+    for prefix in DIVIDE_BY_10_PREFIXES:
+        if field_name.startswith(prefix):
+            _divide_cache[field_name] = True
             return True
+
+    _divide_cache[field_name] = False
     return False
 
 
 def _should_not_divide(field_name: str) -> bool:
-    """フィールドがそのまま使うべきかチェック"""
-    for pattern in NO_DIVIDE_PATTERNS:
-        if re.match(pattern, field_name):
-            return True
+    """フィールドがそのまま使うべきかチェック（使用されていないが互換性のため残す）"""
     return False
 
 
@@ -312,14 +292,8 @@ class DataImporter:
                         converted[field_name] = str(value) if value is not None else None
 
             except (ValueError, TypeError) as e:
-                # Conversion failed, log and set to None
-                logger.debug(
-                    f"Type conversion failed for field {field_name}",
-                    table=table_name,
-                    original_value=value,
-                    target_type=col_type,
-                    error=str(e),
-                )
+                # Conversion failed, set to None
+                # Note: 詳細なログ出力は省略（Unicode文字でコンソール出力エラーになる場合があるため）
                 converted[field_name] = None
 
         return converted

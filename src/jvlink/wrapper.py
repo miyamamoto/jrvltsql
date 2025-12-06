@@ -443,25 +443,35 @@ class JVLinkWrapper:
                         0x0178: 0x9F,  # Ÿ
                     }
 
-                    # Build byte array, handling all cases
-                    result_bytes = bytearray()
-                    for c in buff_str:
-                        cp = ord(c)
-                        if cp <= 0xFF:
-                            # Direct byte value (latin-1 range)
-                            result_bytes.append(cp)
-                        elif cp in CP1252_TO_BYTE:
-                            # CP1252-converted character -> restore original byte
-                            result_bytes.append(CP1252_TO_BYTE[cp])
-                        else:
-                            # Other Unicode character - try to encode as cp932
-                            try:
-                                result_bytes.extend(c.encode('cp932'))
-                            except UnicodeEncodeError:
-                                # Can't encode - use replacement character
-                                result_bytes.append(0x3F)  # '?'
-
-                    data_bytes = bytes(result_bytes)
+                    # 高速変換: 3段階のエンコード戦略
+                    # 1. Latin-1（ASCII + 拡張ASCII）- 最速
+                    # 2. CP932（日本語）- 高速
+                    # 3. 個別処理（CP1252変換が必要な場合）- 低速だが稀
+                    try:
+                        data_bytes = buff_str.encode('latin-1')
+                    except UnicodeEncodeError:
+                        try:
+                            # 日本語を含む場合はcp932で一括変換
+                            data_bytes = buff_str.encode('cp932')
+                        except UnicodeEncodeError:
+                            # CP1252変換が必要な文字が含まれる場合のみ個別処理
+                            result_bytes = bytearray()
+                            for c in buff_str:
+                                cp = ord(c)
+                                if cp <= 0xFF:
+                                    result_bytes.append(cp)
+                                elif cp in CP1252_TO_BYTE:
+                                    result_bytes.append(CP1252_TO_BYTE[cp])
+                                elif cp == 0xFFFD:
+                                    # Unicode replacement character - データ破損
+                                    # 数値フィールドでエラーを避けるため'0'に置換
+                                    result_bytes.append(0x30)  # '0'
+                                else:
+                                    try:
+                                        result_bytes.extend(c.encode('cp932'))
+                                    except UnicodeEncodeError:
+                                        result_bytes.append(0x3F)  # '?'
+                            data_bytes = bytes(result_bytes)
                 else:
                     data_bytes = b""
 
