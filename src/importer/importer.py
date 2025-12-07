@@ -258,29 +258,53 @@ class DataImporter:
                     # Convert to integer (or bigint)
                     str_value = str(value).strip()
                     if str_value:
-                        # Check for masked values (e.g., "***05011005")
-                        # JV-Data uses *** prefix for masked/unavailable data
-                        if str_value.startswith('***'):
+                        # Check for invalid/masked values in JV-Data:
+                        # - "***" prefix: masked data (e.g., "***05011005")
+                        # - "****" anywhere: masked data
+                        # - "--", "----", "------": no data available
+                        # - Contains only '-' or '*': invalid
+                        # - Contains non-numeric chars (except leading '-' for negative)
+                        if (str_value.startswith('***') or
+                            '****' in str_value or
+                            all(c in '-*' for c in str_value) or
+                            '--' in str_value):
                             converted[field_name] = None
                         else:
-                            converted[field_name] = int(str_value)
+                            # Try to extract numeric value
+                            # Handle cases like "0103-------" by taking only valid digits
+                            numeric_part = ''.join(c for c in str_value if c.isdigit() or c == '-')
+                            if numeric_part and numeric_part != '-':
+                                converted[field_name] = int(numeric_part)
+                            else:
+                                converted[field_name] = None
                     else:
                         converted[field_name] = None
 
                 elif col_type == "REAL":
                     str_value = str(value).strip()
                     if str_value:
-                        # Check for masked values (e.g., "***", "****")
-                        # JV-Data uses *** or **** prefix for masked/unavailable data
-                        if str_value.startswith('***'):
+                        # Check for invalid/masked values in JV-Data:
+                        # - "***" prefix: masked data
+                        # - "****" anywhere: masked data
+                        # - "--", "----", "------": no data available
+                        # - Contains only '-' or '*': invalid
+                        if (str_value.startswith('***') or
+                            '****' in str_value or
+                            all(c in '-*' for c in str_value) or
+                            '--' in str_value):
                             converted[field_name] = None
                         else:
-                            float_value = float(str_value)
-                            # Check if this field needs to be divided by 10
-                            if _should_divide_by_10(field_name):
-                                converted[field_name] = float_value / 10.0
+                            # Try to extract numeric value
+                            numeric_part = ''.join(c for c in str_value if c.isdigit() or c in '.-')
+                            if numeric_part and numeric_part not in ('-', '.', '-.'):
+                                float_value = float(numeric_part)
+                                # Check if this field needs to be divided by 10
+                                if _should_divide_by_10(field_name):
+                                    converted[field_name] = float_value / 10.0
+                                else:
+                                    converted[field_name] = float_value
                             else:
-                                converted[field_name] = float_value
+                                converted[field_name] = None
                     else:
                         converted[field_name] = None
 
