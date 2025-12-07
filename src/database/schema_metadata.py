@@ -1608,6 +1608,140 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
         ],
         "primary_key": ["開催年月日", "競馬場コード", "レース番号"],
         "indexes": ["開催年月日"]
+    },
+    "RT_RC": {
+        "table_name": "RT_RC",
+        "record_type": "RC",
+        "description": "騎手変更情報（速報）",
+        "purpose": "リアルタイムでの騎手変更情報を格納",
+        "columns": [
+            {"name": "RecordSpec", "type": "TEXT", "description": "レコード種別識別子", "example": "RC", "nullable": False},
+            {"name": "Year", "type": "INTEGER", "description": "開催年", "example": "2024", "nullable": False},
+            {"name": "MonthDay", "type": "INTEGER", "description": "月日（MMDD形式）", "example": "601", "nullable": False},
+            {"name": "JyoCD", "type": "TEXT", "description": "競馬場コード", "example": "05", "nullable": False},
+            {"name": "RaceNum", "type": "INTEGER", "description": "レース番号", "example": "11", "nullable": False},
+            {"name": "Umaban", "type": "TEXT", "description": "馬番", "example": "01", "nullable": False},
+            {"name": "KisyuCode", "type": "TEXT", "description": "変更後騎手コード", "example": "01234", "nullable": True},
+            {"name": "KisyuName", "type": "TEXT", "description": "変更後騎手名", "example": "ルメール", "nullable": True},
+            {"name": "MaeKisyuCode", "type": "TEXT", "description": "変更前騎手コード", "example": "01235", "nullable": True},
+            {"name": "MaeKisyuName", "type": "TEXT", "description": "変更前騎手名", "example": "武豊", "nullable": True}
+        ],
+        "primary_key": ["Year", "MonthDay", "JyoCD", "RaceNum", "Umaban"],
+        "indexes": ["Year", "MonthDay"]
+    },
+    "TS_O1": {
+        "table_name": "TS_O1",
+        "record_type": "O1",
+        "description": "単勝・複勝・枠連オッズ（時系列）",
+        "purpose": "単勝・複勝・枠連オッズの時間推移を記録するテーブル。HassoTimeをキーに含め複数時点のデータを保持",
+        "columns": [
+            {"name": "RecordSpec", "type": "TEXT", "description": "レコード種別識別子", "example": "O1", "nullable": False},
+            {"name": "Year", "type": "INTEGER", "description": "開催年", "example": "2024", "nullable": False},
+            {"name": "MonthDay", "type": "INTEGER", "description": "月日（MMDD形式）", "example": "601", "nullable": False},
+            {"name": "JyoCD", "type": "TEXT", "description": "競馬場コード", "example": "05", "nullable": False},
+            {"name": "RaceNum", "type": "INTEGER", "description": "レース番号", "example": "11", "nullable": False},
+            {"name": "HassoTime", "type": "TEXT", "description": "発走時刻", "example": "1540", "nullable": False},
+            {"name": "Umaban", "type": "INTEGER", "description": "馬番", "example": "1", "nullable": False},
+            {"name": "TanOdds", "type": "REAL", "description": "単勝オッズ", "example": "3.5", "nullable": True},
+            {"name": "TanNinki", "type": "INTEGER", "description": "単勝人気順", "example": "1", "nullable": True}
+        ],
+        "primary_key": ["Year", "MonthDay", "JyoCD", "RaceNum", "Umaban", "HassoTime"],
+        "indexes": ["Year", "MonthDay", "HassoTime"]
+    },
+    "TS_O2": {
+        "table_name": "TS_O2",
+        "record_type": "O2",
+        "description": "馬連オッズ（時系列）",
+        "purpose": "馬連オッズの時間推移を記録するテーブル。HassoTimeをキーに含め複数時点のデータを保持",
+        "columns": [
+            {"name": "RecordSpec", "type": "TEXT", "description": "レコード種別識別子", "example": "O2", "nullable": False},
+            {"name": "Year", "type": "INTEGER", "description": "開催年", "example": "2024", "nullable": False},
+            {"name": "MonthDay", "type": "INTEGER", "description": "月日（MMDD形式）", "example": "601", "nullable": False},
+            {"name": "JyoCD", "type": "TEXT", "description": "競馬場コード", "example": "05", "nullable": False},
+            {"name": "RaceNum", "type": "INTEGER", "description": "レース番号", "example": "11", "nullable": False},
+            {"name": "HassoTime", "type": "TEXT", "description": "発走時刻", "example": "1540", "nullable": False},
+            {"name": "Kumi", "type": "TEXT", "description": "組み合わせ", "example": "0102", "nullable": False},
+            {"name": "Odds", "type": "REAL", "description": "馬連オッズ", "example": "12.5", "nullable": True},
+            {"name": "Ninki", "type": "INTEGER", "description": "人気順", "example": "3", "nullable": True}
+        ],
+        "primary_key": ["Year", "MonthDay", "JyoCD", "RaceNum", "Kumi", "HassoTime"],
+        "indexes": ["Year", "MonthDay", "HassoTime"]
+    },
+    "TS_O3": {
+        "table_name": "TS_O3",
+        "record_type": "O3",
+        "description": "ワイドオッズ（時系列）",
+        "purpose": "ワイドオッズの時間推移を記録するテーブル。HassoTimeをキーに含め複数時点のデータを保持",
+        "columns": [
+            {"name": "RecordSpec", "type": "TEXT", "description": "レコード種別識別子", "example": "O3", "nullable": False},
+            {"name": "Year", "type": "INTEGER", "description": "開催年", "example": "2024", "nullable": False},
+            {"name": "MonthDay", "type": "INTEGER", "description": "月日（MMDD形式）", "example": "601", "nullable": False},
+            {"name": "JyoCD", "type": "TEXT", "description": "競馬場コード", "example": "05", "nullable": False},
+            {"name": "RaceNum", "type": "INTEGER", "description": "レース番号", "example": "11", "nullable": False},
+            {"name": "HassoTime", "type": "TEXT", "description": "発走時刻", "example": "1540", "nullable": False},
+            {"name": "Kumi", "type": "TEXT", "description": "組み合わせ", "example": "0102", "nullable": False},
+            {"name": "OddsLow", "type": "REAL", "description": "ワイドオッズ下限", "example": "2.5", "nullable": True},
+            {"name": "OddsHigh", "type": "REAL", "description": "ワイドオッズ上限", "example": "4.5", "nullable": True}
+        ],
+        "primary_key": ["Year", "MonthDay", "JyoCD", "RaceNum", "Kumi", "HassoTime"],
+        "indexes": ["Year", "MonthDay", "HassoTime"]
+    },
+    "TS_O4": {
+        "table_name": "TS_O4",
+        "record_type": "O4",
+        "description": "馬単オッズ（時系列）",
+        "purpose": "馬単オッズの時間推移を記録するテーブル。HassoTimeをキーに含め複数時点のデータを保持",
+        "columns": [
+            {"name": "RecordSpec", "type": "TEXT", "description": "レコード種別識別子", "example": "O4", "nullable": False},
+            {"name": "Year", "type": "INTEGER", "description": "開催年", "example": "2024", "nullable": False},
+            {"name": "MonthDay", "type": "INTEGER", "description": "月日（MMDD形式）", "example": "601", "nullable": False},
+            {"name": "JyoCD", "type": "TEXT", "description": "競馬場コード", "example": "05", "nullable": False},
+            {"name": "RaceNum", "type": "INTEGER", "description": "レース番号", "example": "11", "nullable": False},
+            {"name": "HassoTime", "type": "TEXT", "description": "発走時刻", "example": "1540", "nullable": False},
+            {"name": "Kumi", "type": "TEXT", "description": "組み合わせ", "example": "0102", "nullable": False},
+            {"name": "Odds", "type": "REAL", "description": "馬単オッズ", "example": "25.0", "nullable": True},
+            {"name": "Ninki", "type": "INTEGER", "description": "人気順", "example": "5", "nullable": True}
+        ],
+        "primary_key": ["Year", "MonthDay", "JyoCD", "RaceNum", "Kumi", "HassoTime"],
+        "indexes": ["Year", "MonthDay", "HassoTime"]
+    },
+    "TS_O5": {
+        "table_name": "TS_O5",
+        "record_type": "O5",
+        "description": "三連複オッズ（時系列）",
+        "purpose": "三連複オッズの時間推移を記録するテーブル。HassoTimeをキーに含め複数時点のデータを保持",
+        "columns": [
+            {"name": "RecordSpec", "type": "TEXT", "description": "レコード種別識別子", "example": "O5", "nullable": False},
+            {"name": "Year", "type": "INTEGER", "description": "開催年", "example": "2024", "nullable": False},
+            {"name": "MonthDay", "type": "INTEGER", "description": "月日（MMDD形式）", "example": "601", "nullable": False},
+            {"name": "JyoCD", "type": "TEXT", "description": "競馬場コード", "example": "05", "nullable": False},
+            {"name": "RaceNum", "type": "INTEGER", "description": "レース番号", "example": "11", "nullable": False},
+            {"name": "HassoTime", "type": "TEXT", "description": "発走時刻", "example": "1540", "nullable": False},
+            {"name": "Kumi", "type": "TEXT", "description": "組み合わせ", "example": "010203", "nullable": False},
+            {"name": "Odds", "type": "REAL", "description": "三連複オッズ", "example": "45.0", "nullable": True},
+            {"name": "Ninki", "type": "INTEGER", "description": "人気順", "example": "8", "nullable": True}
+        ],
+        "primary_key": ["Year", "MonthDay", "JyoCD", "RaceNum", "Kumi", "HassoTime"],
+        "indexes": ["Year", "MonthDay", "HassoTime"]
+    },
+    "TS_O6": {
+        "table_name": "TS_O6",
+        "record_type": "O6",
+        "description": "三連単オッズ（時系列）",
+        "purpose": "三連単オッズの時間推移を記録するテーブル。HassoTimeをキーに含め複数時点のデータを保持",
+        "columns": [
+            {"name": "RecordSpec", "type": "TEXT", "description": "レコード種別識別子", "example": "O6", "nullable": False},
+            {"name": "Year", "type": "INTEGER", "description": "開催年", "example": "2024", "nullable": False},
+            {"name": "MonthDay", "type": "INTEGER", "description": "月日（MMDD形式）", "example": "601", "nullable": False},
+            {"name": "JyoCD", "type": "TEXT", "description": "競馬場コード", "example": "05", "nullable": False},
+            {"name": "RaceNum", "type": "INTEGER", "description": "レース番号", "example": "11", "nullable": False},
+            {"name": "HassoTime", "type": "TEXT", "description": "発走時刻", "example": "1540", "nullable": False},
+            {"name": "Kumi", "type": "TEXT", "description": "組み合わせ", "example": "010203", "nullable": False},
+            {"name": "Odds", "type": "REAL", "description": "三連単オッズ", "example": "150.0", "nullable": True},
+            {"name": "Ninki", "type": "INTEGER", "description": "人気順", "example": "15", "nullable": True}
+        ],
+        "primary_key": ["Year", "MonthDay", "JyoCD", "RaceNum", "Kumi", "HassoTime"],
+        "indexes": ["Year", "MonthDay", "HassoTime"]
     }
 }
 
