@@ -15,10 +15,12 @@ In SQLite, `INSERT OR REPLACE` behavior depends on PRIMARY KEY or UNIQUE constra
 ### With PRIMARY KEY (Recommended)
 ```sql
 CREATE TABLE NL_RA (
-    Year TEXT,
-    MonthDay TEXT,
+    Year INTEGER,
+    MonthDay INTEGER,
     JyoCD TEXT,
-    RaceNum TEXT,
+    Kaiji INTEGER,
+    Nichiji INTEGER,
+    RaceNum INTEGER,
     -- other columns...
     PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
 );
@@ -30,10 +32,12 @@ CREATE TABLE NL_RA (
 ### Without PRIMARY KEY (Current State)
 ```sql
 CREATE TABLE NL_RA (
-    Year TEXT,
-    MonthDay TEXT,
+    Year INTEGER,
+    MonthDay INTEGER,
     JyoCD TEXT,
-    RaceNum TEXT
+    Kaiji INTEGER,
+    Nichiji INTEGER,
+    RaceNum INTEGER
     -- No PRIMARY KEY defined
 );
 ```
@@ -68,12 +72,12 @@ Modify `src/database/schema.py` to add PRIMARY KEY constraints:
         RecordSpec TEXT,
         DataKubun TEXT,
         MakeDate TEXT,
-        Year TEXT NOT NULL,
-        MonthDay TEXT NOT NULL,
+        Year INTEGER NOT NULL,
+        MonthDay INTEGER NOT NULL,
         JyoCD TEXT NOT NULL,
-        Kaiji TEXT NOT NULL,
-        Nichiji TEXT NOT NULL,
-        RaceNum TEXT NOT NULL,
+        Kaiji INTEGER NOT NULL,
+        Nichiji INTEGER NOT NULL,
+        RaceNum INTEGER NOT NULL,
         -- other columns...
         PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
     )

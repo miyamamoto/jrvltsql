@@ -810,8 +810,9 @@ PRIMARY KEY (ChokyosiCode)
 ### データ型の最適化
 
 ```sql
--- 整数型: 年、回次、日次、レース番号、馬番、距離
+-- 整数型: 年、回次、日次、レース番号、馬番、距離、月日
 Year INTEGER
+MonthDay INTEGER
 Kaiji INTEGER
 Nichiji INTEGER
 RaceNum INTEGER
@@ -826,7 +827,6 @@ Honsyokin REAL
 
 -- テキスト型: コード（固定長）、日付（YYYYMMDD）、名前
 JyoCD TEXT          -- 競馬場コード
-MonthDay TEXT       -- MMDD形式
 KettoNum TEXT       -- 血統登録番号
 Bamei TEXT          -- 馬名
 ```
