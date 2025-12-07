@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jltsql"
-version = "2.1.0"
+version = "2.2.0"
 description = "JRA-VAN DataLab競馬データをSQLite/PostgreSQL/DuckDBにリアルタイムインポートするツール"
 readme = "README.md"
 license = {text = "Apache-2.0"}
@@ -35,6 +35,8 @@ dependencies = [
     "rich>=13.0",
     "structlog>=23.0",
     "tenacity>=8.2",
+    "duckdb>=1.0.0",
+    "pandas>=2.0.0",
 ]
 
 [project.optional-dependencies]
@@ -45,10 +47,6 @@ dev = [
     "ruff>=0.1",
     "mypy>=1.5",
     "pre-commit>=3.0",
-]
-duckdb = [
-    "duckdb>=1.0.0",
-    "pandas>=2.0.0",
 ]
 
 [project.scripts]

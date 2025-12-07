@@ -7,8 +7,5 @@ click>=8.1
 rich>=13.0
 structlog>=23.0
 tenacity>=8.2
-
-# Optional dependencies (DuckDB support)
-# Install with: pip install -r requirements.txt -e .[duckdb]
-# duckdb>=1.0.0
-# pandas>=2.0.0
+duckdb>=1.0.0
+pandas>=2.0.0
