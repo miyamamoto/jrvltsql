@@ -2012,14 +2012,14 @@ class QuickstartRunner:
                 else:
                     query = """
                         SELECT DISTINCT
-                            Year || printf('%04d', MonthDay) as race_date,
+                            Year || printf('%04d', CAST(MonthDay AS INTEGER)) as race_date,
                             JyoCD,
                             Kaiji,
                             Nichiji,
                             RaceNum
                         FROM NL_RA
-                        WHERE (Year || printf('%04d', MonthDay)) >= ?
-                          AND (Year || printf('%04d', MonthDay)) <= ?
+                        WHERE (Year || printf('%04d', CAST(MonthDay AS INTEGER))) >= ?
+                          AND (Year || printf('%04d', CAST(MonthDay AS INTEGER))) <= ?
                         ORDER BY race_date, JyoCD, RaceNum
                     """
                 # PostgreSQLでは辞書形式、SQLiteではタプル形式でパラメータを渡す

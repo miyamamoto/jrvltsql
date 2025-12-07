@@ -498,6 +498,112 @@ class JVLinkWrapper:
                 raise
             raise JVLinkError(f"JVRead failed: {e}")
 
+    def jv_gets(self) -> Tuple[int, Optional[bytes]]:
+        """Read one record from JV-Link data stream using JVGets (faster than JVRead).
+
+        JVGets returns Shift-JIS encoded byte array directly, which is faster than
+        JVRead that returns Unicode string. This method is recommended for high-performance
+        data fetching.
+
+        Must be called after jv_open() or jv_rt_open().
+
+        Returns:
+            Tuple of (return_code, buffer)
+            - return_code: >0=success with data length, 0=complete, -1=file switch, <-1=error
+            - buffer: Shift-JIS encoded data buffer (bytes) if success, None otherwise
+
+        Raises:
+            JVLinkError: If read operation fails
+
+        Examples:
+            >>> wrapper = JVLinkWrapper()
+            >>> wrapper.jv_init()
+            >>> wrapper.jv_open("RACE", "20240101000000", 1)
+            >>> while True:
+            ...     ret_code, buff = wrapper.jv_gets()
+            ...     if ret_code == 0:  # Complete
+            ...         break
+            ...     elif ret_code == -1:  # File switch
+            ...         continue
+            ...     elif ret_code < -1:  # Error
+            ...         raise Exception(f"Error: {ret_code}")
+            ...     else:  # ret_code > 0 (data length)
+            ...         data = buff.decode('cp932')
+            ...         print(data[:100])
+        """
+        if not self._is_open:
+            raise JVLinkError("JV-Link stream not open. Call jv_open() or jv_rt_open() first.")
+
+        try:
+            # JVGets signature: JVGets(String buff, Long buffsize)
+            # Call with empty string and buffer size
+            # pywin32 returns tuple: (return_code, buff_str, buffsize)
+            jv_result = self._jvlink.JVGets("", BUFFER_SIZE_JVREAD)
+
+            # Handle result - pywin32 returns (return_code, buff_str, buffsize)
+            if isinstance(jv_result, tuple) and len(jv_result) >= 2:
+                result = jv_result[0]
+                buff_str = jv_result[1]
+                # jv_result[2] is buffsize (int) - not needed
+            else:
+                # Unexpected return format
+                raise JVLinkError(f"Unexpected JVGets return format: {type(jv_result)}, length={len(jv_result) if isinstance(jv_result, tuple) else 'N/A'}")
+
+            # Return code meanings:
+            # > 0: Success, value is data length in bytes
+            # 0: Read complete (no more data)
+            # -1: File switch (continue reading)
+            # < -1: Error
+            if result > 0:
+                # Successfully read data (result is data length)
+                # JVGets returns Shift-JIS encoded byte array directly
+                # pywin32 may represent this as a string where each byte is a character
+                if buff_str:
+                    # Convert string to Shift-JIS bytes
+                    # JVGets stores Shift-JIS bytes in a BSTR, similar to JVRead
+                    # Use latin-1 encoding to extract raw bytes (1:1 mapping for 0x00-0xFF)
+                    try:
+                        data_bytes = buff_str.encode('latin-1')
+                    except UnicodeEncodeError:
+                        # If latin-1 fails, try cp932 encoding
+                        try:
+                            data_bytes = buff_str.encode('cp932')
+                        except UnicodeEncodeError:
+                            # Fallback: character-by-character conversion
+                            result_bytes = bytearray()
+                            for c in buff_str:
+                                cp = ord(c)
+                                if cp <= 0xFF:
+                                    result_bytes.append(cp)
+                                else:
+                                    try:
+                                        result_bytes.extend(c.encode('cp932'))
+                                    except UnicodeEncodeError:
+                                        result_bytes.append(0x3F)  # '?'
+                            data_bytes = bytes(result_bytes)
+                else:
+                    data_bytes = b""
+
+                return result, data_bytes
+
+            elif result == JV_READ_SUCCESS:
+                # Read complete (0)
+                return result, None
+
+            elif result == JV_READ_NO_MORE_DATA:
+                # File switch (-1)
+                return result, None
+
+            else:
+                # Error (< -1)
+                logger.error("JVGets failed", error_code=result)
+                raise JVLinkError("JVGets failed", error_code=result)
+
+        except Exception as e:
+            if isinstance(e, JVLinkError):
+                raise
+            raise JVLinkError(f"JVGets failed: {e}")
+
     def jv_close(self) -> int:
         """Close JV-Link data stream.
 
