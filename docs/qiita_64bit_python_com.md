@@ -102,7 +102,7 @@ python check_dll_surrogate.py --fix
 ```
 
 スクリプトは以下のGistからダウンロードできます：
-👉 [check_dll_surrogate.py](https://gist.github.com/your-username/xxxxx)
+👉 [check_dll_surrogate.py](https://gist.github.com/miyamamoto/d71445a0e992d7e34372fb5cf10c42fe)
 
 ## 動作確認
 
@@ -159,7 +159,7 @@ python remove_dll_surrogate.py --force
 ```
 
 スクリプトは以下のGistからダウンロードできます：
-👉 [remove_dll_surrogate.py](https://gist.github.com/your-username/xxxxx)
+👉 [remove_dll_surrogate.py](https://gist.github.com/miyamamoto/2ce62fdcb64567901ef7ef3b000be039)
 
 ### 手動で削除する場合
 

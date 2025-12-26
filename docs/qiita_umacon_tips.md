@@ -229,9 +229,9 @@ NAR（地方競馬）のレコード仕様は JRA とは異なります。同じ
 
 本記事で紹介したコードを含む完全なサンプルスクリプトは Gist で公開しています：
 
-- [check_dll_surrogate.py](https://gist.github.com/your-username/xxxxx) - DLL Surrogate 設定確認・修正
-- [remove_dll_surrogate.py](https://gist.github.com/your-username/xxxxx) - DLL Surrogate 設定削除
-- [nvlink_subprocess_fetch.py](https://gist.github.com/your-username/xxxxx) - サブプロセス方式でのデータ取得
+- [check_dll_surrogate.py](https://gist.github.com/miyamamoto/d71445a0e992d7e34372fb5cf10c42fe) - DLL Surrogate 設定確認・修正
+- [remove_dll_surrogate.py](https://gist.github.com/miyamamoto/2ce62fdcb64567901ef7ef3b000be039) - DLL Surrogate 設定削除
+- [nvlink_subprocess_fetch.py](https://gist.github.com/miyamamoto/cbe26d18173fce119a3f6ef56e31d9d5) - サブプロセス方式でのデータ取得
 
 ## まとめ
 
