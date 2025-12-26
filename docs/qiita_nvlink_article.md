@@ -4,7 +4,7 @@
 
 地方競馬のデータを取得するためのNV-Link（UmaConn）APIは、JRA（中央競馬）のJV-Linkと同様のCOM APIを提供しています。しかし、実際に大量のデータを取得しようとすると、**COMメモリ制限**という厄介な問題に直面します。
 
-本記事では、この問題の原因と、kmy-keibaプロジェクトを参考にした解決策を紹介します。
+本記事では、この問題の原因と解決策を紹介します。
 
 ## 環境
 
@@ -28,20 +28,6 @@ E_UNEXPECTED (-2147418113)
 ### 原因
 
 COMオブジェクトは内部でメモリを蓄積し、約**1,000〜2,500レコード**を処理すると限界に達します。これはNV-Link固有の問題ではなく、COMの仕様によるものです。
-
-### kmy-keibaでの対処法
-
-オープンソースの競馬ソフト[kmy-keiba](https://github.com/kmycode/kmy-keiba)では、この問題に対して「**プログラム再起動**」という方法で対処しています。
-
-```csharp
-// JVLinkLoader.cs より
-if (restartCount >= 16)
-{
-    logger.Error("再起動回数が16回を超えたため、ダウンロードを中止します");
-    break;
-}
-Program.RestartProgram(false);
-```
 
 ## 解決策：サブプロセス方式
 
@@ -129,7 +115,7 @@ def fetch_day(fromtime, skip_files=None):
             result["complete"] = True
             return result
 
-        # ダウンロード待機（80msポーリング、kmy-keiba標準）
+        # ダウンロード待機（80msポーリング）
         if download_count > 0:
             start = time.time()
             last_progress = 0
@@ -466,7 +452,6 @@ NV-LinkのCOMメモリ制限は、以下の方法で克服できます：
 
 ## 参考
 
-- [kmy-keiba](https://github.com/kmycode/kmy-keiba) - オープンソースの競馬ソフト
 - [UmaConn](https://chiho.k-ba.com/) - 地方競馬データサービス
 
 ## タグ
