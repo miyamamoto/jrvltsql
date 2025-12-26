@@ -1,7 +1,7 @@
 """Database compatibility helpers for cross-DB queries.
 
 This module provides helper functions for writing database-agnostic code
-that works across SQLite and PostgreSQL.
+that works across SQLite, PostgreSQL, and DuckDB.
 """
 
 from typing import Any, Dict, List, Union
@@ -232,6 +232,11 @@ def get_all_tables(db, schema: str = None) -> List[str]:
             sql = "SELECT tablename FROM pg_tables WHERE schemaname = 'public'"
             result = db.fetch_all(sql)
         return extract_column(result, 'tablename')
+
+    elif db_type in ('DuckDBDatabase', 'OptimizedDuckDBDatabase'):
+        sql = "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'"
+        result = db.fetch_all(sql)
+        return extract_column(result, 'table_name')
 
     else:
         raise ValueError(f"Unsupported database type: {db_type}")

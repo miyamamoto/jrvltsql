@@ -231,6 +231,297 @@ def version(source):
             console.print("  - 地方競馬DATA (UmaConn): [red]未インストール[/red]")
 
 
+@cli.command("setup-nar")
+@click.option(
+    "--verify",
+    is_flag=True,
+    help="セットアップ完了を確認のみ（ダイアログを開かない）",
+)
+@click.option(
+    "--service-key",
+    type=str,
+    default=None,
+    help="サービスキー（XXXX-XXXX-XXXX-XXXX-X形式）",
+)
+@click.pass_context
+def setup_nar(ctx, verify, service_key):
+    """地方競馬DATA (NV-Link/UmaConn) の初期セットアップ.
+
+    初回利用時に必要なセットアップを実行します。
+    サーバーから初期データをダウンロードし、以降のデータ取得が可能になります。
+
+    \b
+    Examples:
+      jltsql setup-nar                         # 初回セットアップを実行
+      jltsql setup-nar --verify                # セットアップ確認のみ
+      jltsql setup-nar --service-key XXXX-...  # サービスキーを指定
+
+    \b
+    Note:
+      地方競馬DATAのセットアップが完了していない場合、
+      fetch や monitor コマンドで -203 エラーが発生します。
+      その場合はこのコマンドでセットアップを完了してください。
+    """
+    import time
+
+    console.print("[bold cyan]地方競馬DATA (NV-Link/UmaConn) セットアップ[/bold cyan]")
+    console.print()
+
+    # Check if NVLink is available
+    try:
+        from src.nvlink import NVLinkWrapper
+    except ImportError as e:
+        console.print("[red]エラー:[/red] UmaConn (地方競馬DATA) がインストールされていません。")
+        console.print("地方競馬DATAのセットアップを先に完了してください。")
+        console.print("詳細: https://www.keiba-data.com/")
+        sys.exit(1)
+
+    try:
+        # Initialize NVLink
+        console.print("[bold]Step 1:[/bold] NV-Link 初期化...")
+        wrapper = NVLinkWrapper("JLTSQL-SETUP")
+
+        # Check current configuration
+        try:
+            current_key = wrapper.get_service_key()
+            version = wrapper.get_version()
+            console.print(f"  NVLink バージョン: {version}")
+            if current_key:
+                # Mask the key for display
+                masked_key = current_key[:4] + "-****-****-****-*"
+                console.print(f"  サービスキー: {masked_key} (設定済み)")
+            else:
+                console.print("  サービスキー: [yellow]未設定[/yellow]")
+        except Exception as e:
+            console.print(f"  [yellow]設定確認エラー: {e}[/yellow]")
+
+        console.print()
+
+        # Set service key if provided
+        if service_key:
+            console.print("[bold]Step 2:[/bold] サービスキー設定...")
+            result = wrapper.nv_set_service_key(service_key)
+            if result == 0:
+                console.print("  [green]✓[/green] サービスキーを設定しました")
+            else:
+                console.print(f"  [yellow]警告:[/yellow] サービスキー設定に失敗 (code: {result})")
+            console.print()
+
+        # Verify setup only (--verify flag)
+        if verify:
+            console.print("[bold]Step 3:[/bold] セットアップ確認...")
+            console.print()
+            success = _verify_nar_setup(wrapper, console, logger)
+            if not success:
+                sys.exit(1)
+        else:
+            # Run API-based initial setup with option=4 (Setup mode)
+            console.print("[bold]Step 3:[/bold] 初回セットアップ実行...")
+            console.print()
+            console.print("  サーバーから初期データをダウンロードします。")
+            console.print("  これには数分〜数十分かかる場合があります。")
+            console.print()
+
+            try:
+                # Initialize NV-Link first
+                result = wrapper.nv_init()
+                if result != 0:
+                    console.print(f"  [red]NG[/red] NV-Link 初期化失敗 (code: {result})")
+                    sys.exit(1)
+
+                # Open with option=4 (Setup mode) - downloads all data
+                console.print("  データストリームを開いています...")
+                result, read_count, download_count, timestamp = wrapper.nv_open(
+                    "RACE", "20200101000000", 4  # option=4 for setup mode
+                )
+                console.print(f"  結果: read={read_count}, download={download_count}")
+
+                if download_count > 0:
+                    console.print()
+                    console.print("  ダウンロード中...")
+                    max_wait = 3600  # 1 hour
+                    start_time = time.time()
+                    last_progress = -1
+
+                    while (time.time() - start_time) < max_wait:
+                        status = wrapper.nv_status()
+
+                        if status == 0:
+                            console.print()
+                            console.print("  [green]OK[/green] ダウンロード完了")
+                            break
+                        elif status > 0:
+                            progress = status / 100
+                            if int(progress) != last_progress:
+                                console.print(f"\r  進捗: {progress:.1f}%", end="")
+                                last_progress = int(progress)
+                        elif status < 0:
+                            console.print()
+                            console.print(f"  [red]NG[/red] ダウンロードエラー (code: {status})")
+                            wrapper.nv_close()
+                            sys.exit(1)
+
+                        time.sleep(1)
+                    else:
+                        console.print()
+                        console.print("  [red]NG[/red] ダウンロードタイムアウト（1時間）")
+                        wrapper.nv_close()
+                        sys.exit(1)
+                else:
+                    console.print("  [dim]ダウンロード不要（既にセットアップ済み）[/dim]")
+
+                wrapper.nv_close()
+                console.print()
+
+                # Verify setup after download
+                console.print("[bold]Step 4:[/bold] セットアップ確認...")
+                console.print()
+                success = _verify_nar_setup(wrapper, console, logger)
+                if not success:
+                    console.print()
+                    console.print("[yellow]セットアップが完了していません。[/yellow]")
+                    console.print("再度 setup-nar を実行してください。")
+                    sys.exit(1)
+
+            except Exception as e:
+                console.print(f"  [red]エラー:[/red] セットアップ失敗: {e}")
+                logger.error("Setup NAR failed", error=str(e), exc_info=True)
+                sys.exit(1)
+
+    except KeyboardInterrupt:
+        console.print("\n[yellow]中断されました[/yellow]")
+        sys.exit(1)
+    except Exception as e:
+        console.print(f"\n[red]エラー:[/red] {e}", style="bold")
+        logger.error("Setup NAR failed", error=str(e), exc_info=True)
+        sys.exit(1)
+
+
+def _verify_nar_setup(wrapper, console, logger) -> bool:
+    """Verify NAR setup by attempting to read data.
+
+    Args:
+        wrapper: NVLinkWrapper instance
+        console: Rich console for output
+        logger: Logger instance
+
+    Returns:
+        True if setup is verified, False otherwise
+    """
+    try:
+        # Initialize and try to open data
+        result = wrapper.nv_init()
+        if result != 0:
+            console.print(f"  [red]NG[/red] NV-Link 初期化失敗 (code: {result})")
+            console.print("  サービスキーが設定されていない可能性があります。")
+            console.print("  --service-key オプションでサービスキーを指定してください。")
+            return False
+
+        # Try to open with a recent date to check if setup is complete
+        result, read_count, download_count, timestamp = wrapper.nv_open(
+            "RACE", "20241201000000", 1  # option=1 for normal mode
+        )
+
+        console.print(f"  NVOpen結果: code={result}, read={read_count}, download={download_count}")
+
+        if result < 0 and result not in (-1, -2, -301, -302):
+            console.print(f"  [red]NG[/red] NVOpen失敗 (code: {result})")
+            console.print()
+            console.print("  対処法:")
+            console.print("  1. jltsql setup-nar を再実行してダイアログを開く")
+            console.print("  2. ダイアログ内で「データダウンロード」を実行")
+            wrapper.nv_close()
+            return False
+
+        # Check if download is pending
+        if download_count > 0:
+            console.print("  ダウンロード待機中...")
+            import time
+            time.sleep(0.5)
+            status = wrapper.nv_status()
+
+            if status == -203:
+                console.print()
+                console.print("  [red]NG[/red] セットアップが完了していません！ (code: -203)")
+                console.print()
+                console.print("  対処法:")
+                console.print("  1. jltsql setup-nar を再実行してダイアログを開く")
+                console.print("  2. ダイアログ内で「データダウンロード」タブを選択")
+                console.print("  3. 「セットアップ」ボタンをクリックして初回データをダウンロード")
+                console.print("  4. ダウンロード完了後、ダイアログを閉じる")
+                wrapper.nv_close()
+                return False
+            elif status < 0:
+                console.print(f"  [yellow]警告:[/yellow] ステータスエラー (code: {status})")
+            else:
+                # Wait a bit for download
+                console.print(f"  ダウンロード進捗: {status}%")
+
+        # Try to read a record
+        console.print("  データ読み込み確認...")
+        records_read = 0
+        max_attempts = 20
+
+        for _ in range(max_attempts):
+            ret_code, buff, filename = wrapper.nv_gets()
+
+            if ret_code == 0:
+                # No more data
+                break
+            elif ret_code == -1:
+                # File switch
+                continue
+            elif ret_code == -203:
+                console.print()
+                console.print("  [red]NG[/red] セットアップが完了していません！ (code: -203)")
+                console.print()
+                console.print("  対処法:")
+                console.print("  1. jltsql setup-nar を再実行してダイアログを開く")
+                console.print("  2. ダイアログ内で「データダウンロード」タブを選択")
+                console.print("  3. 「セットアップ」ボタンをクリックして初回データをダウンロード")
+                console.print("  4. ダウンロード完了後、ダイアログを閉じる")
+                wrapper.nv_close()
+                return False
+            elif ret_code in (-402, -403, -502, -503):
+                # Recoverable error
+                if filename:
+                    wrapper.nv_file_delete(filename)
+                continue
+            elif ret_code < -1:
+                console.print(f"  [yellow]警告:[/yellow] 読み込みエラー (code: {ret_code})")
+                break
+            else:
+                records_read += 1
+                if records_read >= 5:
+                    break
+
+        wrapper.nv_close()
+
+        if records_read > 0:
+            console.print()
+            console.print(f"  [green]OK[/green] セットアップ完了！ ({records_read} レコード読み込み確認)")
+            console.print()
+            console.print("次のステップ:")
+            console.print("  1. jltsql fetch --source nar --from 20240101 --to 20241231 --spec RACE")
+            console.print("  2. jltsql monitor --source nar")
+            return True
+        elif read_count == 0 and download_count == 0:
+            console.print()
+            console.print("  [yellow]情報:[/yellow] データがありません（サーバーに該当データなし）")
+            console.print("  これは正常な状態です。セットアップは完了しています。")
+            return True
+        else:
+            console.print()
+            console.print("  [yellow]警告:[/yellow] レコードが読み込めませんでした")
+            console.print("  セットアップが不完全な可能性があります。")
+            return False
+
+    except Exception as e:
+        console.print(f"  [red]エラー:[/red] {e}")
+        logger.error("NAR setup verification failed", error=str(e), exc_info=True)
+        return False
+
+
 @cli.command()
 @click.option("--from", "date_from", required=True, help="Start date (YYYYMMDD)")
 @click.option("--to", "date_to", required=True, help="End date (YYYYMMDD) - filters records up to this date")
@@ -242,7 +533,7 @@ def version(source):
     default=1,
     help="JVOpen option: 1=通常データ（差分）, 2=今週データ, 3=セットアップ（ダイアログ）, 4=分割セットアップ (default: 1)"
 )
-@click.option("--db", type=click.Choice(["sqlite", "postgresql"]), default=None, help="Database type (default: from config)")
+@click.option("--db", type=click.Choice(["sqlite", "postgresql", "duckdb"]), default=None, help="Database type (default: from config)")
 @click.option("--batch-size", default=1000, help="Batch size for imports (default: 1000)")
 @click.option("--progress/--no-progress", default=True, help="Show progress display (default: enabled)")
 @click.option(
@@ -481,7 +772,7 @@ def fetch(ctx, date_from, date_to, data_spec, jv_option, db, batch_size, progres
 @click.option("--daemon", is_flag=True, help="Run in background")
 @click.option("--spec", "data_spec", default="RACE", help="Data specification (default: RACE)")
 @click.option("--interval", default=60, help="Polling interval in seconds (default: 60)")
-@click.option("--db", type=click.Choice(["sqlite", "postgresql"]), default=None, help="Database type (default: from config)")
+@click.option("--db", type=click.Choice(["sqlite", "postgresql", "duckdb"]), default=None, help="Database type (default: from config)")
 @click.option(
     "--source",
     type=click.Choice(["jra", "nar", "all"]),
@@ -620,7 +911,7 @@ def stop(ctx):
 
 
 @cli.command()
-@click.option("--db", type=click.Choice(["sqlite", "postgresql"]), default=None, help="Database type (default: from config)")
+@click.option("--db", type=click.Choice(["sqlite", "postgresql", "duckdb"]), default=None, help="Database type (default: from config)")
 @click.option("--all", "create_all", is_flag=True, help="Create both NL_ and RT_ tables")
 @click.option("--nl-only", is_flag=True, help="Create only NL_ (Normal Load) tables")
 @click.option("--rt-only", is_flag=True, help="Create only RT_ (Real-Time) tables")
@@ -723,7 +1014,7 @@ def create_tables(ctx, db, create_all, nl_only, rt_only):
 
 
 @cli.command()
-@click.option("--db", type=click.Choice(["sqlite", "postgresql"]), default=None, help="Database type (default: from config)")
+@click.option("--db", type=click.Choice(["sqlite", "postgresql", "duckdb"]), default=None, help="Database type (default: from config)")
 @click.option("--table", help="Create indexes for specific table only")
 @click.pass_context
 def create_indexes(ctx, db, table):
@@ -829,7 +1120,7 @@ def create_indexes(ctx, db, table):
 @click.option("--format", "output_format", type=click.Choice(["csv", "json", "parquet"]), default="csv", help="Output format (default: csv)")
 @click.option("--output", "-o", required=True, type=click.Path(), help="Output file path")
 @click.option("--where", help="SQL WHERE clause (e.g., '開催年月日 >= 20240101')")
-@click.option("--db", type=click.Choice(["sqlite", "postgresql"]), default=None, help="Database type (default: from config)")
+@click.option("--db", type=click.Choice(["sqlite", "postgresql", "duckdb"]), default=None, help="Database type (default: from config)")
 @click.pass_context
 def export(ctx, table, output_format, output, where, db):
     """Export data from database to file.
@@ -1081,7 +1372,7 @@ def realtime():
 )
 @click.option(
     "--db",
-    type=click.Choice(["sqlite", "postgresql"]),
+    type=click.Choice(["sqlite", "postgresql", "duckdb"]),
     default=None,
     help="Database type (default: from config)"
 )
@@ -1275,7 +1566,7 @@ def stop(ctx):
 )
 @click.option(
     "--db",
-    type=click.Choice(["sqlite", "postgresql"]),
+    type=click.Choice(["sqlite", "postgresql", "duckdb"]),
     default=None,
     help="Database type (overrides config)",
 )
