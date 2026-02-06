@@ -1,10 +1,10 @@
-﻿# jrvltsql Development Guidelines
+# jrvltsql Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2025-12-15
+Auto-generated from all feature plans. Last updated: 2025-12-27
 
 ## Active Technologies
 
-- **Python 3.12+** (32-bit or 64-bit) + pywin32 (COM API), click (CLI), rich (UI), structlog (logging), SQLite/PostgreSQL/DuckDB (database)
+- **Python 3.12+ (32-bit)** + pywin32 (COM API), click (CLI), rich (UI), structlog (logging), SQLite/PostgreSQL (database)
 
 ## Project Structure
 
@@ -23,25 +23,27 @@ Python 3.12+: Follow standard conventions
 
 ## Architecture Constraints
 
-### Database: SQLite / PostgreSQL / DuckDB
+### Python Version: 32-bit (Required)
 
-- SQLite provides stable, lightweight database solution (default)
-- PostgreSQL supported via pg8000 driver (pure Python)
-- DuckDB supported (64-bit Python only, high-performance analytics)
-
-### Python Version: 32-bit or 64-bit
-
-- **32-bit Python**: Native COM access to JV-Link/NV-Link
-- **64-bit Python**: Requires DLL Surrogate registry settings (see `scripts/check_dll_surrogate.py`)
-- **NV-Link Note**: Must remove `RunAs` registry value that conflicts with DllSurrogate
+- **32-bit Python を使用すること** - JV-Link/NV-Link COM API へのネイティブアクセスに必要
+- 64-bit Python は DLL Surrogate が必要で、PC-keiba 等の他アプリに影響を与えるため非推奨
 - **Minimum Version**: Python 3.12
-- **Compatibility**: Works with both JV-Link (JRA) and UmaConn/NV-Link (NAR)
+
+### Database: SQLite / PostgreSQL
+
+- **SQLite** (default): 軽量、シングルユーザー向け
+- **PostgreSQL**: pg8000 ドライバ経由、マルチユーザー/サーバー向け
+
+### COM API
+
+- **JV-Link** (JRA): ProgID = `JVDTLab.JVLink`
+- **NV-Link** (NAR): ProgID = `NVDTLabLib.NVLink` (注: NVDTLab ではなく NVDTLabLib)
 
 ## Recent Changes
 
-- 64-bit Python support restored via DLL Surrogate (2025-12-26)
-- DuckDB support restored for 64-bit Python
-- SQLite (default), PostgreSQL, and DuckDB all supported
+- 32-bit Python を標準として採用 (2025-12-27)
+- 64-bit + DLL Surrogate は他アプリへの影響があるため非推奨に変更
+- SQLite/PostgreSQL をサポート
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->

@@ -7,10 +7,18 @@ jvlink:
   # Get from https://jra-van.jp/dlb/
   service_key: "${JVLINK_SERVICE_KEY}"
 
+# NV-Link (地方競馬DATA/UmaConn) Settings
+nvlink:
+  # Optional service key (if you want to set it programmatically)
+  # Format: XXXX-XXXX-XXXX-XXXX-X
+  service_key: "${NVLINK_SERVICE_KEY}"
+  # Initialization key (software ID) used by NVInit
+  # Example: "SA000000/SD000004" (your vendor-provided key)
+  initialization_key: "${NVLINK_INIT_KEY}"
+
 # Database Settings
 database:
   # Default database type (sqlite, postgresql)
-  # Note: DuckDB is not supported in 32-bit Python (required for NAR/UmaConn)
   type: "sqlite"
 
 databases:
@@ -34,13 +42,6 @@ databases:
     password: "${POSTGRES_PASSWORD}"
     pool_size: 5
     max_overflow: 10
-
-  # DuckDB Database (REMOVED - not compatible with 32-bit Python)
-  # DuckDB requires 64-bit Python, which is incompatible with UmaConn (NAR)
-  # Use SQLite for 32-bit Python or PostgreSQL for 64-bit environments
-  # duckdb:
-  #   enabled: false
-  #   path: "./data/keiba.duckdb"
 
 # Data Fetch Settings
 data_fetch:

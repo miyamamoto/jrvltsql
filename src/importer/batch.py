@@ -46,6 +46,7 @@ class BatchProcessor:
         batch_size: int = 1000,
         sid: str = "UNKNOWN",
         service_key: Optional[str] = None,
+        initialization_key: Optional[str] = None,
         show_progress: bool = True,
         data_source: DataSource = DataSource.JRA,
     ):
@@ -57,6 +58,8 @@ class BatchProcessor:
             sid: Session ID for JV-Link/NV-Link API (default: "UNKNOWN")
             service_key: Optional service key. If provided, it will be set
                         programmatically without requiring registry configuration.
+            initialization_key: Optional NV-Link initialization key (software ID)
+                        used for NVInit when data_source is NAR.
             show_progress: Show stylish progress display (default: True)
             data_source: Data source selection (JRA or NAR, default: JRA)
         """
@@ -64,6 +67,7 @@ class BatchProcessor:
         self.fetcher = HistoricalFetcher(
             sid,
             service_key=service_key,
+            initialization_key=initialization_key,
             show_progress=show_progress,
             data_source=data_source,
         )
@@ -74,6 +78,7 @@ class BatchProcessor:
             "BatchProcessor initialized",
             sid=sid,
             has_service_key=service_key is not None,
+            has_initialization_key=initialization_key is not None,
             show_progress=show_progress,
             data_source=data_source.value,
         )
@@ -251,6 +256,8 @@ class BatchProcessor:
             ... )
         """
         results = {}
+        successful_specs = []
+        failed_specs = []
 
         for data_spec in data_specs:
             logger.info(f"Processing data spec: {data_spec}")
@@ -264,6 +271,7 @@ class BatchProcessor:
                     ensure_tables=False,  # Only check once
                 )
                 results[data_spec] = stats
+                successful_specs.append(data_spec)
 
             except Exception as e:
                 logger.error(
@@ -272,6 +280,36 @@ class BatchProcessor:
                     error=str(e),
                 )
                 results[data_spec] = {"error": str(e)}
+                failed_specs.append(data_spec)
+
+        # Add partial success summary
+        total_specs = len(data_specs)
+        success_count = len(successful_specs)
+        failure_count = len(failed_specs)
+
+        results["_summary"] = {
+            "total_specs": total_specs,
+            "successful": success_count,
+            "failed": failure_count,
+            "success_rate": f"{success_count}/{total_specs}",
+            "successful_specs": successful_specs,
+            "failed_specs": failed_specs,
+        }
+
+        # Log partial success summary
+        if failure_count > 0:
+            logger.warning(
+                f"Partial success: {success_count}/{total_specs} specs completed successfully",
+                successful=success_count,
+                failed=failure_count,
+                successful_specs=successful_specs,
+                failed_specs=failed_specs,
+            )
+        else:
+            logger.info(
+                f"All specs completed successfully: {success_count}/{total_specs}",
+                successful_specs=successful_specs,
+            )
 
         return results
 

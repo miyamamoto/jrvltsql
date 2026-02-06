@@ -279,7 +279,10 @@ def setup_nar(ctx, verify, service_key):
     try:
         # Initialize NVLink
         console.print("[bold]Step 1:[/bold] NV-Link 初期化...")
-        wrapper = NVLinkWrapper("JLTSQL-SETUP")
+        init_key = None
+        if ctx and ctx.obj.get("config"):
+            init_key = ctx.obj["config"].get("nvlink.initialization_key")
+        wrapper = NVLinkWrapper("JLTSQL-SETUP", initialization_key=init_key)
 
         # Check current configuration
         try:
@@ -533,7 +536,7 @@ def _verify_nar_setup(wrapper, console, logger) -> bool:
     default=1,
     help="JVOpen option: 1=通常データ（差分）, 2=今週データ, 3=セットアップ（ダイアログ）, 4=分割セットアップ (default: 1)"
 )
-@click.option("--db", type=click.Choice(["sqlite", "postgresql", "duckdb"]), default=None, help="Database type (default: from config)")
+@click.option("--db", type=click.Choice(["sqlite", "postgresql"]), default=None, help="Database type (default: from config)")
 @click.option("--batch-size", default=1000, help="Batch size for imports (default: 1000)")
 @click.option("--progress/--no-progress", default=True, help="Show progress display (default: enabled)")
 @click.option(
@@ -663,6 +666,8 @@ def fetch(ctx, date_from, date_to, data_spec, jv_option, db, batch_size, progres
                 # Tables might already exist, that's OK
                 pass
 
+            init_key = config.get("nvlink.initialization_key") if config else None
+
             # Process data - handle ALL by running both JRA and NAR sequentially
             if data_source == DataSource.ALL:
                 # Process JRA first
@@ -672,6 +677,7 @@ def fetch(ctx, date_from, date_to, data_spec, jv_option, db, batch_size, progres
                     sid=config.get("jvlink.sid", "JLTSQL") if config else "JLTSQL",
                     batch_size=batch_size,
                     service_key=config.get("jvlink.service_key") if config else None,
+                    initialization_key=init_key,
                     show_progress=progress,
                     data_source=DataSource.JRA,
                 )
@@ -690,6 +696,7 @@ def fetch(ctx, date_from, date_to, data_spec, jv_option, db, batch_size, progres
                     sid=config.get("jvlink.sid", "JLTSQL") if config else "JLTSQL",
                     batch_size=batch_size,
                     service_key=config.get("jvlink.service_key") if config else None,
+                    initialization_key=init_key,
                     show_progress=progress,
                     data_source=DataSource.NAR,
                 )
@@ -734,6 +741,7 @@ def fetch(ctx, date_from, date_to, data_spec, jv_option, db, batch_size, progres
                     sid=config.get("jvlink.sid", "JLTSQL") if config else "JLTSQL",
                     batch_size=batch_size,
                     service_key=config.get("jvlink.service_key") if config else None,
+                    initialization_key=init_key,
                     show_progress=progress,
                     data_source=data_source,
                 )
@@ -772,7 +780,7 @@ def fetch(ctx, date_from, date_to, data_spec, jv_option, db, batch_size, progres
 @click.option("--daemon", is_flag=True, help="Run in background")
 @click.option("--spec", "data_spec", default="RACE", help="Data specification (default: RACE)")
 @click.option("--interval", default=60, help="Polling interval in seconds (default: 60)")
-@click.option("--db", type=click.Choice(["sqlite", "postgresql", "duckdb"]), default=None, help="Database type (default: from config)")
+@click.option("--db", type=click.Choice(["sqlite", "postgresql"]), default=None, help="Database type (default: from config)")
 @click.option(
     "--source",
     type=click.Choice(["jra", "nar", "all"]),
@@ -864,11 +872,13 @@ def monitor(ctx, daemon, data_spec, interval, db, source):
                 pass
 
             # Start monitoring
+            init_key = config.get("nvlink.initialization_key") if config else None
             monitor_obj = RealtimeMonitor(
                 database=database,
                 data_spec=data_spec,
                 polling_interval=interval,
                 sid=config.get("jvlink.sid", "JLTSQL") if config else "JLTSQL",
+                initialization_key=init_key,
                 data_source=data_source
             )
 
@@ -911,7 +921,7 @@ def stop(ctx):
 
 
 @cli.command()
-@click.option("--db", type=click.Choice(["sqlite", "postgresql", "duckdb"]), default=None, help="Database type (default: from config)")
+@click.option("--db", type=click.Choice(["sqlite", "postgresql"]), default=None, help="Database type (default: from config)")
 @click.option("--all", "create_all", is_flag=True, help="Create both NL_ and RT_ tables")
 @click.option("--nl-only", is_flag=True, help="Create only NL_ (Normal Load) tables")
 @click.option("--rt-only", is_flag=True, help="Create only RT_ (Real-Time) tables")
@@ -1014,7 +1024,7 @@ def create_tables(ctx, db, create_all, nl_only, rt_only):
 
 
 @cli.command()
-@click.option("--db", type=click.Choice(["sqlite", "postgresql", "duckdb"]), default=None, help="Database type (default: from config)")
+@click.option("--db", type=click.Choice(["sqlite", "postgresql"]), default=None, help="Database type (default: from config)")
 @click.option("--table", help="Create indexes for specific table only")
 @click.pass_context
 def create_indexes(ctx, db, table):
@@ -1120,7 +1130,7 @@ def create_indexes(ctx, db, table):
 @click.option("--format", "output_format", type=click.Choice(["csv", "json", "parquet"]), default="csv", help="Output format (default: csv)")
 @click.option("--output", "-o", required=True, type=click.Path(), help="Output file path")
 @click.option("--where", help="SQL WHERE clause (e.g., '開催年月日 >= 20240101')")
-@click.option("--db", type=click.Choice(["sqlite", "postgresql", "duckdb"]), default=None, help="Database type (default: from config)")
+@click.option("--db", type=click.Choice(["sqlite", "postgresql"]), default=None, help="Database type (default: from config)")
 @click.pass_context
 def export(ctx, table, output_format, output, where, db):
     """Export data from database to file.
@@ -1305,6 +1315,13 @@ def config(ctx, show, set_value, get_key):
         jvlink_tree.add(f"SID: {jvlink_config.get('sid', 'N/A')}")
         jvlink_tree.add(f"Service Key: {'*' * 20 if jvlink_config.get('service_key') else 'Not set'}")
 
+        # NV-Link section
+        nvlink_tree = tree.add("NV-Link (NAR)")
+        nvlink_config = config_dict.get("nvlink", {})
+        init_key = nvlink_config.get("initialization_key")
+        nvlink_tree.add(f"Service Key: {'*' * 20 if nvlink_config.get('service_key') else 'Not set'}")
+        nvlink_tree.add(f"Initialization Key: {'*' * 8 if init_key else 'Not set'}")
+
         # Database section
         db_tree = tree.add("Database")
         db_config = config_dict.get("database", {})
@@ -1372,7 +1389,7 @@ def realtime():
 )
 @click.option(
     "--db",
-    type=click.Choice(["sqlite", "postgresql", "duckdb"]),
+    type=click.Choice(["sqlite", "postgresql"]),
     default=None,
     help="Database type (default: from config)"
 )
@@ -1566,7 +1583,7 @@ def stop(ctx):
 )
 @click.option(
     "--db",
-    type=click.Choice(["sqlite", "postgresql", "duckdb"]),
+    type=click.Choice(["sqlite", "postgresql"]),
     default=None,
     help="Database type (overrides config)",
 )

@@ -93,7 +93,7 @@ class NVLinkWrapper:
         >>> wrapper.nv_close()
     """
 
-    def __init__(self, sid: str = "UNKNOWN"):
+    def __init__(self, sid: str = "UNKNOWN", initialization_key: Optional[str] = None):
         """Initialize NVLinkWrapper.
 
         Args:
@@ -101,11 +101,14 @@ class NVLinkWrapper:
                  Common values: "UNKNOWN", "Test"
                  Note: This is NOT the service key. Service key must be
                  configured separately in UmaConn (地方競馬DATA) application.
+            initialization_key: Optional NV-Link initialization key (software ID)
+                used for NVInit. If provided, this value is used instead of sid.
 
         Raises:
             NVLinkError: If COM object creation fails
         """
         self.sid = sid
+        self.initialization_key = initialization_key
         self._nvlink = None
         self._is_open = False
         self._com_initialized = False
@@ -129,11 +132,23 @@ class NVLinkWrapper:
                 # Already initialized in this thread - that's OK
                 pass
 
-            # Use dynamic dispatch (late binding) to avoid gen_py cache issues
-            # Early binding requires explicit output parameters, but late binding
-            # returns output parameters automatically as a tuple
-            self._nvlink = win32com.client.dynamic.Dispatch("NVDTLabLib.NVLink")
-            logger.info("NV-Link COM object created", sid=sid)
+            # Use CLSID directly instead of ProgID
+            # ProgID "NVDTLab.NVLink" may not be registered, but CLSID always works
+            # after regsvr32 NVDTLab.dll
+            NVLINK_CLSID = "{F726BBA6-5784-4529-8C67-26E152D49D73}"
+            try:
+                # Try NVDTLabLib.NVLink first (matches quickstart.py and seems correct for this environment)
+                self._nvlink = win32com.client.Dispatch("NVDTLabLib.NVLink")
+                logger.info("NV-Link COM object created using NVDTLabLib.NVLink", sid=sid)
+            except Exception:
+                try:
+                    # Try ProgID first (faster if registered)
+                    self._nvlink = win32com.client.Dispatch("NVDTLab.NVLink")
+                    logger.info("NV-Link COM object created using NVDTLab.NVLink", sid=sid)
+                except Exception:
+                    # Fallback to CLSID
+                    self._nvlink = win32com.client.Dispatch(NVLINK_CLSID)
+                    logger.info("NV-Link COM object created using CLSID", sid=sid)
         except Exception as e:
             raise NVLinkError(
                 f"UmaConn (地方競馬DATA) がインストールされていません。地方競馬DATAのセットアップを完了してください。詳細: {e}"
@@ -142,14 +157,8 @@ class NVLinkWrapper:
     def nv_set_service_key(self, service_key: str) -> int:
         """Set NV-Link service key.
 
-        Note:
-            Service key must be configured in UmaConn (地方競馬DATA) application
-            using the NVDTLab configuration tool. This method is provided for
-            API compatibility but does not perform any operation.
-
         Args:
             service_key: NV-Link service key (format: XXXX-XXXX-XXXX-XXXX-X)
-                        This parameter is ignored.
 
         Returns:
             Result code (0 = success)
@@ -163,11 +172,128 @@ class NVLinkWrapper:
             0
             >>> wrapper.nv_init()
         """
-        logger.warning(
-            "nv_set_service_key called but no operation performed. "
-            "Please configure service key using NVDTLab configuration tool."
-        )
-        return NV_RT_SUCCESS
+        try:
+            result = self._nvlink.NVSetServiceKey(service_key)
+            if result == NV_RT_SUCCESS:
+                logger.info("Service key set successfully")
+            else:
+                logger.warning("Failed to set service key", error_code=result)
+            return result
+        except Exception as e:
+            raise NVLinkError(f"NVSetServiceKey failed: {e}")
+
+    def nv_set_ui_properties(self) -> int:
+        """Open NV-Link UI configuration dialog.
+
+        Opens the NVDTLab configuration tool UI where users can configure
+        service key, data paths, and other settings.
+
+        Returns:
+            Result code (0 = success)
+
+        Raises:
+            NVLinkError: If opening UI fails
+
+        Examples:
+            >>> wrapper = NVLinkWrapper()
+            >>> wrapper.nv_set_ui_properties()  # Opens config dialog
+            0
+        """
+        try:
+            result = self._nvlink.NVSetUIProperties()
+            logger.info("NVSetUIProperties called", result=result)
+            return result
+        except Exception as e:
+            raise NVLinkError(f"NVSetUIProperties failed: {e}")
+
+    def nv_set_save_path(self, save_path: str) -> int:
+        """Set NV-Link data save path.
+
+        Args:
+            save_path: Directory path to save downloaded data
+
+        Returns:
+            Result code (0 = success)
+
+        Raises:
+            NVLinkError: If setting save path fails
+        """
+        try:
+            result = self._nvlink.NVSetSavePath(save_path)
+            if result == NV_RT_SUCCESS:
+                logger.info("Save path set successfully", save_path=save_path)
+            else:
+                logger.warning("Failed to set save path", error_code=result)
+            return result
+        except Exception as e:
+            raise NVLinkError(f"NVSetSavePath failed: {e}")
+
+    def nv_set_save_flag(self, save_flag: int) -> int:
+        """Set NV-Link save flag.
+
+        Args:
+            save_flag: Save flag (0=don't save, 1=save)
+
+        Returns:
+            Result code (0 = success)
+
+        Raises:
+            NVLinkError: If setting save flag fails
+        """
+        try:
+            result = self._nvlink.NVSetSaveFlag(save_flag)
+            if result == NV_RT_SUCCESS:
+                logger.info("Save flag set successfully", save_flag=save_flag)
+            else:
+                logger.warning("Failed to set save flag", error_code=result)
+            return result
+        except Exception as e:
+            raise NVLinkError(f"NVSetSaveFlag failed: {e}")
+
+    def nv_cancel(self) -> None:
+        """Cancel current NV-Link download operation.
+
+        Cancels any ongoing download operation.
+
+        Raises:
+            NVLinkError: If cancel fails
+        """
+        try:
+            self._nvlink.NVCancel()
+            logger.info("NVCancel called")
+        except Exception as e:
+            raise NVLinkError(f"NVCancel failed: {e}")
+
+    def get_version(self) -> str:
+        """Get NV-Link version.
+
+        Returns:
+            NV-Link version string
+
+        Raises:
+            NVLinkError: If getting version fails
+        """
+        try:
+            version = self._nvlink.m_NVLinkVersion
+            logger.debug("NVLink version", version=version)
+            return version
+        except Exception as e:
+            raise NVLinkError(f"Failed to get NVLink version: {e}")
+
+    def get_service_key(self) -> str:
+        """Get configured service key.
+
+        Returns:
+            Service key string (may be empty if not configured)
+
+        Raises:
+            NVLinkError: If getting service key fails
+        """
+        try:
+            service_key = self._nvlink.m_servicekey
+            return service_key if service_key else ""
+        except Exception as e:
+            raise NVLinkError(f"Failed to get service key: {e}")
 
     def nv_init(self) -> int:
         """Initialize NV-Link.
@@ -191,16 +317,21 @@ class NVLinkWrapper:
             >>> assert result == 0
         """
         try:
-            result = self._nvlink.NVInit(self.sid)
+            init_key = self.initialization_key or self.sid
+            result = self._nvlink.NVInit(init_key)
             if result == NV_RT_SUCCESS:
-                logger.info("NV-Link initialized successfully", sid=self.sid)
+                logger.info(
+                    "NV-Link initialized successfully",
+                    sid=self.sid,
+                    init_key=init_key if init_key != self.sid else None,
+                )
             else:
                 # エラーコード別の詳細メッセージ
                 if result == -100:
                     error_msg = "地方競馬DATAのサービスキーが設定されていません。NVDTLab設定ツールで設定してください。"
                 else:
                     error_msg = "NV-Link initialization failed"
-                logger.error(error_msg, error_code=result, sid=self.sid)
+                logger.error(error_msg, error_code=result, sid=self.sid, init_key=init_key)
                 raise NVLinkError(error_msg, error_code=result)
             return result
         except Exception as e:
@@ -246,9 +377,18 @@ class NVLinkWrapper:
         """
         try:
             # NVOpen signature: (dataspec, fromtime, option, ref readCount, ref downloadCount, out lastFileTimestamp)
-            # pywin32: COM methods with ref/out parameters return them as tuple
-            # Call with only IN parameters (dataspec, fromtime, option)
-            nv_result = self._nvlink.NVOpen(data_spec, fromtime, option)
+            # The COM interface requires all parameters including in/out parameters
+            # readcount and downloadcount are in/out ref parameters - must pass integer values
+            # gen_py wrapper with _ApplyTypes_ will handle byref conversion automatically
+            #
+            # Parameter types from gen_py:
+            # - dataspec: VT_BSTR (8, 1) - input string
+            # - fromdate: VT_BSTR (8, 1) - input string
+            # - option: VT_I4 (3, 1) - input integer
+            # - readcount: VT_I4|VT_BYREF (16387, 3) - in/out reference
+            # - downloadcount: VT_I4|VT_BYREF (16387, 3) - in/out reference
+            # - lastfiletimestamp: VT_BSTR|VT_BYREF (16392, 2) - out reference (optional)
+            nv_result = self._nvlink.NVOpen(data_spec, fromtime, option, 0, 0)
 
             # Handle return value
             if isinstance(nv_result, tuple):
@@ -260,41 +400,35 @@ class NVLinkWrapper:
                 # Unexpected single value
                 raise ValueError(f"Unexpected NVOpen return type: {type(nv_result)}, expected tuple")
 
-            # Handle result codes for NVOpen:
+            # Handle result codes for NVOpen (based on kmy-keiba JVLinkLoadResult):
             # 0 (NV_RT_SUCCESS): Success with data
             # -1: No data available (NOT an error - normal when no new data)
-            # -2: No data available (alternative code)
-            # -301: Download in progress (transient state - need to wait)
-            # -302: Download waiting (transient state - need to wait)
-            # < -100: Actual errors (e.g., -100=setup required, -101=auth error, etc.)
+            # -2: SetupCanceled (セットアップダイアログでキャンセル)
+            # -111/-114: Data spec not subscribed (契約外データ)
+            # -201: Not initialized (NVInitが呼ばれていない)
+            # -202: Already open (NVCloseが必要)
+            # -203: Not opened (接続が開かれていない)
+            # -301: Authentication error (認証エラー)
+            # -302: Licence key expired (利用キー不正)
+            # -303: Licence key not set (利用キー未設定)
+            # -5xx: Download/server errors
 
-            # Check for download status codes first (NOT errors, just status)
-            if result == -301 or result == -302:
-                # Download in progress - return normally, caller will wait
-                status_msg = "ダウンロード中です" if result == -301 else "ダウンロード待機中です"
-                logger.info(
-                    "NVOpen: Download in progress",
-                    data_spec=data_spec,
-                    fromtime=fromtime,
-                    status_code=result,
-                    status_message=status_msg,
-                )
-                self._is_open = True
-                # Return positive download_count to signal download needed
-                # Set download_count to 1 if it's 0 to trigger wait logic
-                if download_count == 0:
-                    download_count = 1
-                logger.info(
-                    "NVOpen successful (download pending)",
+            # Check for authentication errors first (-301, -302, -303)
+            if result in (-301, -302, -303):
+                if result == -301:
+                    error_msg = "認証エラー: サーバー認証に失敗しました。サービスキーを確認してください。"
+                elif result == -302:
+                    error_msg = "認証エラー: 利用キーが不正または有効期限切れです。"
+                else:
+                    error_msg = "認証エラー: 利用キーが設定されていません。地方競馬DATAセットアップツールで設定してください。"
+                logger.error(
+                    error_msg,
                     data_spec=data_spec,
                     fromtime=fromtime,
                     option=option,
-                    read_count=read_count,
-                    download_count=download_count,
-                    last_file_timestamp=last_file_timestamp,
-                    status="download_pending",
+                    error_code=result,
                 )
-                return result, read_count, download_count, last_file_timestamp
+                raise NVLinkError(error_msg, error_code=result)
 
             if result < -2:
                 # Real errors are typically -100 or below
@@ -547,7 +681,7 @@ class NVLinkWrapper:
                 raise
             raise NVLinkError(f"NVRead failed: {e}")
 
-    def nv_gets(self) -> Tuple[int, Optional[bytes]]:
+    def nv_gets(self) -> Tuple[int, Optional[bytes], Optional[str]]:
         """Read one record from NV-Link data stream using NVGets (faster than NVRead).
 
         NVGets returns Shift-JIS encoded byte array directly, which is faster than
@@ -557,9 +691,14 @@ class NVLinkWrapper:
         Must be called after nv_open() or nv_rt_open().
 
         Returns:
-            Tuple of (return_code, buffer)
+            Tuple of (return_code, buffer, filename)
             - return_code: >0=success with data length, 0=complete, -1=file switch, <-1=error
             - buffer: Shift-JIS encoded data buffer (bytes) if success, None otherwise
+            - filename: Current filename being read (useful for error recovery with nv_file_delete)
+
+        Note:
+            Based on kmy-keiba's error handling, when return_code is -203, -402, -403, -502, or -503,
+            call nv_file_delete(filename) and continue reading to skip corrupted files.
 
         Raises:
             NVLinkError: If read operation fails
@@ -569,12 +708,16 @@ class NVLinkWrapper:
             >>> wrapper.nv_init()
             >>> wrapper.nv_open("RACE", "20240101000000", 1)
             >>> while True:
-            ...     ret_code, buff = wrapper.nv_gets()
+            ...     ret_code, buff, filename = wrapper.nv_gets()
             ...     if ret_code == 0:  # Complete
             ...         break
             ...     elif ret_code == -1:  # File switch
             ...         continue
-            ...     elif ret_code < -1:  # Error
+            ...     elif ret_code in (-203, -402, -403, -502, -503):  # Recoverable error
+            ...         if filename:
+            ...             wrapper.nv_file_delete(filename)
+            ...         continue
+            ...     elif ret_code < -1:  # Fatal error
             ...         raise Exception(f"Error: {ret_code}")
             ...     else:  # ret_code > 0 (data length)
             ...         data = buff.decode('cp932')
@@ -584,16 +727,21 @@ class NVLinkWrapper:
             raise NVLinkError("NV-Link stream not open. Call nv_open() or nv_rt_open() first.")
 
         try:
-            # NVGets signature: NVGets(String buff, Long buffsize)
-            # Call with empty string and buffer size
-            # pywin32 returns tuple: (return_code, buff_str, buffsize)
-            nv_result = self._nvlink.NVGets("", BUFFER_SIZE_NVREAD)
+            # NVGets signature from gen_py: NVGets(buff, size, filename)
+            # - buff: VT_VARIANT|VT_BYREF (16396, 3) - in/out ref, required
+            # - size: VT_I4 (3, 1) - input integer, required
+            # - filename: VT_BSTR|VT_BYREF (16392, 2) - out ref, optional
+            #
+            # Pass empty byte array as initial buffer value for VARIANT ref
+            # The _ApplyTypes_ wrapper will handle byref conversion
+            nv_result = self._nvlink.NVGets(b"", BUFFER_SIZE_NVREAD)
 
-            # Handle result - pywin32 returns (return_code, buff_str, buffsize)
+            # Handle result - gen_py returns (return_code, buff, filename)
             if isinstance(nv_result, tuple) and len(nv_result) >= 2:
                 result = nv_result[0]
                 buff_str = nv_result[1]
-                # nv_result[2] is buffsize (int) - not needed
+                # nv_result[2] is filename (str) - needed for error recovery
+                filename = nv_result[2] if len(nv_result) > 2 else None
             else:
                 # Unexpected return format
                 raise NVLinkError(f"Unexpected NVGets return format: {type(nv_result)}, length={len(nv_result) if isinstance(nv_result, tuple) else 'N/A'}")
@@ -602,61 +750,78 @@ class NVLinkWrapper:
             # > 0: Success, value is data length in bytes
             # 0: Read complete (no more data)
             # -1: File switch (continue reading)
-            # < -1: Error
+            # -203, -402, -403, -502, -503: Recoverable errors (delete file and continue)
+            # < -1 (other): Fatal error
             if result > 0:
                 # Successfully read data (result is data length)
                 # NVGets returns Shift-JIS encoded byte array directly
-                # pywin32 may represent this as a string where each byte is a character
+                # pywin32 may represent this as:
+                # - bytes: direct byte data
+                # - memoryview: view of byte data (need to convert to bytes)
+                # - str: string where each byte is a character
                 if buff_str:
-                    # Convert string to Shift-JIS bytes
-                    # NVGets stores Shift-JIS bytes in a BSTR, similar to NVRead
-                    # Use latin-1 encoding to extract raw bytes (1:1 mapping for 0x00-0xFF)
-                    # 高速変換: 3段階のエンコード戦略
-                    # 1. Latin-1（ASCII + 拡張ASCII）- 最速
-                    # 2. CP932（日本語）- 高速
-                    # 3. 個別処理（CP1252変換が必要な場合）- 低速だが稀
-                    try:
-                        data_bytes = buff_str.encode('latin-1')
-                    except UnicodeEncodeError:
-                        # If latin-1 fails, try cp932 encoding
+                    # Handle bytes, memoryview, and string types
+                    if isinstance(buff_str, (bytes, bytearray)):
+                        data_bytes = bytes(buff_str)
+                    elif isinstance(buff_str, memoryview):
+                        # memoryview - convert to bytes
+                        data_bytes = bytes(buff_str)
+                    else:
+                        # Convert string to Shift-JIS bytes
+                        # NVGets stores Shift-JIS bytes in a BSTR, similar to NVRead
+                        # Use latin-1 encoding to extract raw bytes (1:1 mapping for 0x00-0xFF)
+                        # 高速変換: 3段階のエンコード戦略
+                        # 1. Latin-1（ASCII + 拡張ASCII）- 最速
+                        # 2. CP932（日本語）- 高速
+                        # 3. 個別処理（CP1252変換が必要な場合）- 低速だが稀
                         try:
-                            data_bytes = buff_str.encode('cp932')
+                            data_bytes = buff_str.encode('latin-1')
                         except UnicodeEncodeError:
-                            # Fallback: character-by-character conversion with CP1252 handling
-                            result_bytes = bytearray()
-                            for c in buff_str:
-                                cp = ord(c)
-                                if cp <= 0xFF:
-                                    result_bytes.append(cp)
-                                elif cp in CP1252_TO_BYTE:
-                                    result_bytes.append(CP1252_TO_BYTE[cp])
-                                elif cp == 0xFFFD:
-                                    # Unicode replacement character - データ破損
-                                    # 数値フィールドでエラーを避けるため'0'に置換
-                                    result_bytes.append(0x30)  # '0'
-                                else:
-                                    try:
-                                        result_bytes.extend(c.encode('cp932'))
-                                    except UnicodeEncodeError:
-                                        result_bytes.append(0x3F)  # '?'
-                            data_bytes = bytes(result_bytes)
+                            # If latin-1 fails, try cp932 encoding
+                            try:
+                                data_bytes = buff_str.encode('cp932')
+                            except UnicodeEncodeError:
+                                # Fallback: character-by-character conversion with CP1252 handling
+                                result_bytes = bytearray()
+                                for c in buff_str:
+                                    cp = ord(c)
+                                    if cp <= 0xFF:
+                                        result_bytes.append(cp)
+                                    elif cp in CP1252_TO_BYTE:
+                                        result_bytes.append(CP1252_TO_BYTE[cp])
+                                    elif cp == 0xFFFD:
+                                        # Unicode replacement character - データ破損
+                                        # 数値フィールドでエラーを避けるため'0'に置換
+                                        result_bytes.append(0x30)  # '0'
+                                    else:
+                                        try:
+                                            result_bytes.extend(c.encode('cp932'))
+                                        except UnicodeEncodeError:
+                                            result_bytes.append(0x3F)  # '?'
+                                data_bytes = bytes(result_bytes)
                 else:
                     data_bytes = b""
 
-                return result, data_bytes
+                return result, data_bytes, filename
 
             elif result == NV_READ_SUCCESS:
                 # Read complete (0)
-                return result, None
+                return result, None, filename
 
             elif result == NV_READ_NO_MORE_DATA:
                 # File switch (-1)
-                return result, None
+                return result, None, filename
+
+            elif result in (-203, -402, -403, -502, -503):
+                # Recoverable errors - caller should delete file and continue
+                # Based on kmy-keiba's JVLinkReader.cs error handling
+                logger.warning("NVGets recoverable error", error_code=result, filename=filename)
+                return result, None, filename
 
             else:
-                # Error (< -1)
-                logger.error("NVGets failed", error_code=result)
-                raise NVLinkError("NVGets failed", error_code=result)
+                # Fatal error (< -1, other codes)
+                logger.error("NVGets failed", error_code=result, filename=filename)
+                return result, None, filename
 
         except Exception as e:
             if isinstance(e, NVLinkError):
@@ -687,13 +852,23 @@ class NVLinkWrapper:
             raise NVLinkError(f"NVClose failed: {e}")
 
     def nv_status(self) -> int:
-        """Get NV-Link status.
+        """Get NV-Link download status.
 
         Returns:
-            Status code
+            Status code:
+            - > 0: Download in progress (percentage 1-100)
+            - 0: No download in progress (either before download starts, or after complete)
+            - < 0: Error (e.g., -502 = download failure)
+
+        Note:
+            Status 0 is ambiguous - it can mean either:
+            1. Download hasn't started yet (initial state)
+            2. Download has completed
+
+            To distinguish, use wait_for_download() which tracks state transitions.
 
         Examples:
-            >>> wrapper = NVLinkWrapper("YOUR_KEY")
+            >>> wrapper = NVLinkWrapper()
             >>> wrapper.nv_init()
             >>> status = wrapper.nv_status()
         """
@@ -703,6 +878,105 @@ class NVLinkWrapper:
             return result
         except Exception as e:
             raise NVLinkError(f"NVStatus failed: {e}")
+
+    def wait_for_download(self, timeout: float = 120.0, poll_interval: float = 0.5) -> bool:
+        """Wait for download to complete after nv_open().
+
+        This method properly handles the NVStatus return values:
+        - Waits for status to become > 0 (download started)
+        - Then waits for status to return to 0 (download complete)
+
+        Args:
+            timeout: Maximum time to wait in seconds (default: 120)
+            poll_interval: Time between status checks in seconds (default: 0.5)
+
+        Returns:
+            True if download completed successfully, False if timeout or error
+
+        Note:
+            If nv_open() returned download_count == 0, this method returns True immediately
+            since no download is needed.
+
+        Examples:
+            >>> wrapper = NVLinkWrapper()
+            >>> wrapper.nv_init()
+            >>> result, read_count, download_count, ts = wrapper.nv_open("RACE", "20241201000000", 1)
+            >>> if download_count > 0:
+            ...     if wrapper.wait_for_download():
+            ...         # Download complete, now read data
+            ...         ret_code, data, fname = wrapper.nv_read()
+        """
+        import time
+
+        start_time = time.time()
+        download_started = False
+        last_status = None
+
+        while time.time() - start_time < timeout:
+            try:
+                status = self.nv_status()
+            except Exception as e:
+                logger.error("Error checking download status", error=str(e))
+                return False
+
+            if status != last_status:
+                elapsed = time.time() - start_time
+                if status > 0:
+                    download_started = True
+                    logger.debug("Download in progress", progress=status, elapsed=f"{elapsed:.1f}s")
+                elif status == 0:
+                    if download_started:
+                        logger.info("Download completed", elapsed=f"{elapsed:.1f}s")
+                        return True
+                    # status == 0 before download started - keep waiting
+                    logger.debug("Waiting for download to start", elapsed=f"{elapsed:.1f}s")
+                else:
+                    # Error status (< 0)
+                    logger.error("Download error", status=status)
+                    return False
+                last_status = status
+
+            time.sleep(poll_interval)
+
+        logger.warning("Download timeout", timeout=timeout)
+        return False
+
+    def nv_file_delete(self, filename: str) -> int:
+        """Delete a cached file from NV-Link cache.
+
+        This method is used to handle recoverable errors (-203, -402, -403, -502, -503)
+        during data reading. When these errors occur, the corrupted file should be
+        deleted and the read operation retried.
+
+        Based on kmy-keiba's JVLinkReader.cs error handling pattern:
+        - -203: Setup not complete or file corruption
+        - -402, -403: Database errors
+        - -502, -503: File errors
+
+        Args:
+            filename: The filename to delete (as returned by NVGets/NVRead)
+
+        Returns:
+            Result code (0 = success)
+
+        Raises:
+            NVLinkError: If file deletion fails
+
+        Examples:
+            >>> wrapper = NVLinkWrapper()
+            >>> wrapper.nv_init()
+            >>> # During read loop, if NVGets returns -203:
+            >>> ret_code, buff, filename = wrapper.nv_gets()
+            >>> if ret_code == -203 and filename:
+            ...     wrapper.nv_file_delete(filename)
+            ...     # Continue reading
+        """
+        try:
+            result = self._nvlink.NVFiledelete(filename)
+            logger.info("NVFiledelete called", filename=filename, result=result)
+            return result
+        except Exception as e:
+            raise NVLinkError(f"NVFiledelete failed: {e}")
 
     def is_open(self) -> bool:
         """Check if NV-Link stream is open.
@@ -770,8 +1044,12 @@ class NVLinkWrapper:
             except Exception:
                 pass
 
-            # Recreate COM object
-            self._nvlink = win32com.client.Dispatch("NVDTLabLib.NVLink")
+            # Recreate COM object using CLSID
+            NVLINK_CLSID = "{F726BBA6-5784-4529-8C67-26E152D49D73}"
+            try:
+                self._nvlink = win32com.client.Dispatch("NVDTLab.NVLink")
+            except Exception:
+                self._nvlink = win32com.client.Dispatch(NVLINK_CLSID)
             self._is_open = False
 
             logger.info("COM component reinitialized successfully", sid=self.sid)
@@ -782,7 +1060,19 @@ class NVLinkWrapper:
 
     def cleanup(self):
         """Explicitly cleanup COM resources. Call this before the object goes out of scope."""
-        import gc
+        # Check if Python is shutting down
+        # During shutdown, imports may fail or sys.meta_path becomes None
+        try:
+            import sys
+            if sys.meta_path is None:
+                return
+        except (ImportError, ModuleNotFoundError):
+            return
+
+        try:
+            import gc
+        except (ImportError, ModuleNotFoundError):
+            gc = None
 
         # Close stream if still open
         if hasattr(self, '_is_open') and self._is_open:
@@ -800,7 +1090,8 @@ class NVLinkWrapper:
                 self._nvlink = None
                 # Force garbage collection while COM is still initialized
                 del nvlink_ref
-                gc.collect()
+                if gc is not None:
+                    gc.collect()
             except Exception:
                 pass
 
@@ -851,9 +1142,13 @@ class NVLinkWrapper:
         """Alias for nv_read() for JVLinkWrapper compatibility."""
         return self.nv_read()
 
-    def jv_gets(self) -> Tuple[int, Optional[bytes]]:
+    def jv_gets(self) -> Tuple[int, Optional[bytes], Optional[str]]:
         """Alias for nv_gets() for JVLinkWrapper compatibility."""
         return self.nv_gets()
+
+    def jv_file_delete(self, filename: str) -> int:
+        """Alias for nv_file_delete() for JVLinkWrapper compatibility."""
+        return self.nv_file_delete(filename)
 
     def jv_close(self) -> int:
         """Alias for nv_close() for JVLinkWrapper compatibility."""
@@ -862,3 +1157,7 @@ class NVLinkWrapper:
     def jv_status(self) -> int:
         """Alias for nv_status() for JVLinkWrapper compatibility."""
         return self.nv_status()
+
+    def jv_wait_for_download(self, timeout: float = 120.0, poll_interval: float = 0.5) -> bool:
+        """Alias for wait_for_download() for JVLinkWrapper compatibility."""
+        return self.wait_for_download(timeout, poll_interval)

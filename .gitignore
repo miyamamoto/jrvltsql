@@ -235,3 +235,6 @@ migrations/
 
 # Temporary files
 nul
+
+# Auto Claude data directory
+.auto-claude/

@@ -39,6 +39,7 @@ class RealtimeMonitor:
         data_spec: str = "RACE",
         polling_interval: int = 60,
         sid: str = "REALTIME",
+        initialization_key: Optional[str] = None,
         data_source: DataSource = DataSource.JRA,
     ):
         """Initialize real-time monitor.
@@ -48,18 +49,21 @@ class RealtimeMonitor:
             data_spec: Data specification code (default: "RACE")
             polling_interval: Polling interval in seconds (default: 60)
             sid: Session ID for JV-Link API (default: "REALTIME")
+            initialization_key: Optional NV-Link initialization key (software ID)
+                used for NVInit when data_source is NAR.
             data_source: Data source (DataSource.JRA or DataSource.NAR, default: JRA)
         """
         self.database = database
         self.data_spec = data_spec
         self.polling_interval = polling_interval
         self.sid = sid
+        self.initialization_key = initialization_key
         self.data_source = data_source
 
         # Select wrapper based on data source
         if data_source == DataSource.NAR:
             from src.nvlink.wrapper import NVLinkWrapper
-            self.jvlink = NVLinkWrapper(sid=sid)
+            self.jvlink = NVLinkWrapper(sid=sid, initialization_key=initialization_key)
         else:
             from src.jvlink.wrapper import JVLinkWrapper
             self.jvlink = JVLinkWrapper(sid=sid)

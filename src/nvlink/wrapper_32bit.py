@@ -104,16 +104,19 @@ class NVLinkWrapper:
         >>> wrapper.nv_close()
     """
 
-    def __init__(self, sid: str = "UNKNOWN"):
+    def __init__(self, sid: str = "UNKNOWN", initialization_key: Optional[str] = None):
         """Initialize NVLinkWrapper for 32-bit Python.
 
         Args:
             sid: Session ID for NV-Link API (default: "UNKNOWN")
+            initialization_key: Optional NV-Link initialization key (software ID)
+                used for NVInit. If provided, this value is used instead of sid.
 
         Raises:
             NVLinkError: If COM object creation fails
         """
         self.sid = sid
+        self.initialization_key = initialization_key
         self._nvlink = None
         self._is_open = False
 
@@ -177,15 +180,20 @@ class NVLinkWrapper:
             NVLinkError: If initialization fails
         """
         try:
-            result = self._nvlink.NVInit(self.sid)
+            init_key = self.initialization_key or self.sid
+            result = self._nvlink.NVInit(init_key)
             if result == NV_RT_SUCCESS:
-                logger.info("NV-Link initialized successfully", sid=self.sid)
+                logger.info(
+                    "NV-Link initialized successfully",
+                    sid=self.sid,
+                    init_key=init_key if init_key != self.sid else None,
+                )
             else:
                 if result == -100:
                     error_msg = "地方競馬DATAのサービスキーが設定されていません。"
                 else:
                     error_msg = "NV-Link initialization failed"
-                logger.error(error_msg, error_code=result, sid=self.sid)
+                logger.error(error_msg, error_code=result, sid=self.sid, init_key=init_key)
                 raise NVLinkError(error_msg, error_code=result)
             return result
         except Exception as e:

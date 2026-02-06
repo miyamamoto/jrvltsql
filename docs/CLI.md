@@ -580,8 +580,6 @@ databases:
     password: your_password
 ```
 
-**注意:** DuckDBは32-bit Python非対応のため、このプロジェクトでは削除されました。
-
 ---
 
 ## データ種別コード

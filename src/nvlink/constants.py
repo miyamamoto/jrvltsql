@@ -25,9 +25,10 @@ NV_RT_UNSUBSCRIBED_DATA_WARNING = -114  # 契約外データ種別（警告レ�
 # Stream State Error Codes
 NV_RT_STREAM_ALREADY_OPEN = -202  # ストリームが既にオープン中（前回のCloseが呼ばれていない）
 
-# Download Status Codes
-NV_RT_DOWNLOADING = -301  # ダウンロード中
-NV_RT_DOWNLOAD_WAITING = -302  # ダウンロード待機中
+# Authentication Error Codes (kmy-keiba JVLinkLoadResultに準拠)
+NV_RT_AUTHENTICATION_ERROR = -301  # 認証エラー（サーバー認証失敗）
+NV_RT_LICENCE_KEY_EXPIRED = -302  # 利用キーが不正（有効期限切れ等）
+NV_RT_LICENCE_KEY_NOT_SET = -303  # 利用キーが設定されていません
 
 # NVRead Return Codes
 NV_READ_SUCCESS = 0  # 読み込み成功（データあり）
@@ -110,13 +111,22 @@ ERROR_MESSAGES = {
     # Data Specification Errors
     -111: "契約外のデータ種別です",
     -114: "契約外のデータ種別です（警告）",
-    # System Error Codes
-    -201: "データベースエラー",
-    -202: "ファイルエラー（ストリームが既にオープン中、または前回のCloseが呼ばれていません）",
-    -203: "その他のエラー（NVDTLabのセットアップ不完全、またはキャッシュの問題）",
-    # Download Status
-    -301: "ダウンロード中です",
-    -302: "ダウンロード待機中です",
+    # System Error Codes (kmy-keiba JVLinkLoadResultに準拠)
+    -201: "初期化が行われていません（NVInitが呼ばれていない）",
+    -202: "すでに接続が開かれています（NVCloseを呼んでください）",
+    -203: "接続が開かれていません（NVOpenが呼ばれていない、または失敗）",
+    -211: "レジストリの値が不正です",
+    # Authentication Error Codes (kmy-keiba JVLinkLoadResultに準拠)
+    -301: "認証エラーです（サーバー認証失敗）",
+    -302: "利用キーが不正です（有効期限切れ等）",
+    -303: "利用キーが設定されていません",
+    # Server Error Codes
+    -401: "内部エラー",
+    -411: "サーバーエラー（404 Not Found）",
+    -412: "サーバーエラー（403 Forbidden）",
+    -413: "サーバーエラー",
+    -421: "サーバーの不正な応答",
+    -431: "サーバーアプリケーションの不正な応答",
 }
 
 

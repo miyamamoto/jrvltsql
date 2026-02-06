@@ -21,6 +21,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+
 # Set COM threading model to Apartment Threaded (STA)
 # This MUST be set before any other COM/win32com imports or usage
 # Required for 64-bit Python to communicate with 32-bit UmaConn (ActiveX/GUI)
@@ -393,6 +395,208 @@ except Exception as e:
 
     except Exception as e:
         return False, f"NV-Link検証実行エラー: {e}"
+
+
+def _check_nar_initial_setup() -> tuple[bool, str]:
+    """NV-Linkの初回セットアップが完了しているか確認
+
+    NVOpen後にNVStatusを確認し、-203エラーが出ないかチェックします。
+    -203エラーは初回セットアップが完了していないことを示します。
+
+    Returns:
+        (is_setup_complete, message): セットアップ完了かどうかとメッセージ
+    """
+    import subprocess
+    import sys
+
+    check_code = """
+import sys
+import time
+try:
+    sys.coinit_flags = 2  # STA mode
+except:
+    pass
+import win32com.client
+import pythoncom
+
+try:
+    pythoncom.CoInitialize()
+    nvlink = win32com.client.Dispatch("NVDTLabLib.NVLink")
+
+    # Initialize
+    init_result = nvlink.NVInit("JLTSQL_SETUP_CHECK")
+    if init_result != 0:
+        print(f"INIT_ERROR:{init_result}")
+        sys.exit(0)
+
+    # Try NVOpen with option=1 (normal mode)
+    result = nvlink.NVOpen("RACE", "20241201000000", 1)
+    read_count = nvlink.m_ReadCount
+    download_count = nvlink.m_DownloadCount
+
+    # Check status if download is pending
+    if download_count > 0:
+        time.sleep(0.5)
+        status = nvlink.NVStatus()
+        if status == -203:
+            print("SETUP_NEEDED:-203")
+        else:
+            print(f"STATUS:{status}")
+    elif read_count > 0:
+        # Try to read a record
+        ret_code = nvlink.NVGets()
+        filename = nvlink.m_FileName
+        if ret_code == -203:
+            print("SETUP_NEEDED:-203")
+        elif ret_code > 0 or ret_code == 0:
+            print("SETUP_COMPLETE")
+        elif ret_code == -1:
+            # File switch - check again
+            ret_code = nvlink.NVGets()
+            if ret_code == -203:
+                print("SETUP_NEEDED:-203")
+            else:
+                print("SETUP_COMPLETE")
+        else:
+            print(f"READ_ERROR:{ret_code}")
+    else:
+        # No data but that's OK - setup is complete
+        print("SETUP_COMPLETE:nodata")
+
+    nvlink.NVClose()
+
+except Exception as e:
+    print(f"ERROR:{e}")
+"""
+
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-c", check_code],
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            timeout=30,
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
+        )
+
+        output = proc.stdout.strip()
+
+        if "SETUP_COMPLETE" in output:
+            return True, "初回セットアップ完了"
+        elif "SETUP_NEEDED" in output:
+            return False, "初回セットアップが必要です"
+        elif "INIT_ERROR" in output:
+            return False, "NV-Link初期化エラー"
+        elif "READ_ERROR" in output:
+            error_code = output.split(":")[1] if ":" in output else "不明"
+            return False, f"データ読み込みエラー (code: {error_code})"
+        elif "ERROR:" in output:
+            error_msg = output.split("ERROR:")[1].strip()
+            return False, f"エラー: {error_msg}"
+        else:
+            return False, f"不明なレスポンス: {output}"
+
+    except subprocess.TimeoutExpired:
+        return False, "タイムアウト"
+    except Exception as e:
+        return False, f"チェックエラー: {e}"
+
+
+def _run_nar_initial_setup(console=None, show_progress: bool = True) -> tuple[bool, str]:
+    """NV-Linkの初回セットアップダイアログを開く
+
+    NVSetUIPropertiesを呼び出してサービスキー設定ダイアログを開きます。
+
+    Note:
+        UmaConn/NV-Linkの初回データダウンロードは、公式アプリケーションを
+        通じて手動で完了する必要があります。NV-Link APIだけでは初回セット
+        アップを完了できないため、以下の手順が必要です：
+        1. NVSetUIPropertiesでサービスキーを設定
+        2. 地方競馬DATAセットアップツールで「セットアップ」を実行
+
+    Args:
+        console: Rich console for output (optional)
+        show_progress: Whether to show progress updates
+
+    Returns:
+        (success, message): セットアップ成功かどうかとメッセージ
+    """
+    import subprocess
+    import sys
+
+    # Open NVSetUIProperties dialog for service key configuration
+    setup_code = """
+import sys
+try:
+    sys.coinit_flags = 2  # STA mode for UI
+except:
+    pass
+import win32com.client
+import pythoncom
+
+try:
+    pythoncom.CoInitialize()
+    nvlink = win32com.client.Dispatch("NVDTLabLib.NVLink")
+
+    # Open UI Properties dialog
+    result = nvlink.NVSetUIProperties()
+
+    if result == 0:
+        print("DIALOG_CLOSED")
+    else:
+        print(f"DIALOG_ERROR:{result}")
+
+except Exception as e:
+    print(f"ERROR:{e}")
+"""
+
+    if console:
+        console.print()
+        console.print("    [yellow]サービスキー設定ダイアログを開いています...[/yellow]")
+        console.print()
+        console.print("    [bold]手順:[/bold]")
+        console.print("    1. ダイアログでサービスキーを入力/確認")
+        console.print("    2. 「OK」をクリックしてダイアログを閉じる")
+        console.print()
+
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-c", setup_code],
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            timeout=300,  # 5 minutes for dialog interaction
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
+        )
+
+        output = proc.stdout.strip()
+
+        if "DIALOG_CLOSED" in output:
+            if console:
+                console.print()
+                console.print("    [yellow]⚠ 重要: 初回データダウンロードについて[/yellow]")
+                console.print()
+                console.print("    UmaConnの初回セットアップを完了するには、")
+                console.print("    [bold]地方競馬DATAセットアップツール[/bold]を実行してください:")
+                console.print()
+                console.print("    スタートメニュー → 地方競馬DATA → セットアップ")
+                console.print("    または: C:\\UmaConn\\chiho.k-ba\\data\\UmaConn設定.exe")
+                console.print()
+            return True, "サービスキー設定完了（初回データダウンロードは手動で実行してください）"
+        elif "DIALOG_ERROR" in output:
+            error_code = output.split(":")[1] if ":" in output else "不明"
+            return False, f"ダイアログエラー (code: {error_code})"
+        elif "ERROR:" in output:
+            error_msg = output.split("ERROR:")[1].strip()
+            return False, f"エラー: {error_msg}"
+        else:
+            return False, f"不明なレスポンス: {output}"
+
+    except subprocess.TimeoutExpired:
+        return False, "タイムアウト（5分）"
+    except Exception as e:
+        return False, f"セットアップ実行エラー: {e}"
+
 
 
 def _check_service_key_detailed(data_source: str = "jra") -> dict:
@@ -911,11 +1115,6 @@ def _interactive_setup_rich() -> dict:
                     settings['db_path'] = 'data/keiba.db'
                     break
                 # retry_choice == "1" の場合はループ継続
-    else:
-        # DuckDB は32-bit Python非対応のため削除されました
-        # PostgreSQLをデフォルトにフォールバック
-        settings['db_type'] = 'postgresql'
-        console.print("[dim]PostgreSQLを使用します[/dim]")
 
     console.print()
 
@@ -941,6 +1140,40 @@ def _interactive_setup_rich() -> dict:
 
         if check_result['nar_valid']:
             console.print(f"  [green]OK[/green] NAR: {check_result['nar_msg']}")
+            # NAR初回セットアップ確認
+            console.print("      初回セットアップ確認中...")
+            nar_setup_complete, nar_setup_msg = _check_nar_initial_setup()
+            if nar_setup_complete:
+                console.print(f"      [green]OK[/green] {nar_setup_msg}")
+            else:
+                console.print(f"      [yellow]⚠️[/yellow] {nar_setup_msg}")
+                console.print()
+                console.print("[bold]地方競馬DATAの初回セットアップが必要です。[/bold]")
+                console.print()
+                console.print("初回セットアップでは、地方競馬DATAサーバーから")
+                console.print("基本データをダウンロードします（数分〜数十分かかります）。")
+                console.print()
+
+                if Confirm.ask("初回セットアップを実行しますか？", default=True):
+                    console.print("[dim]初回セットアップを実行中...[/dim]")
+                    setup_success, setup_msg = _run_nar_initial_setup(console)
+                    console.print()
+
+                    if setup_success:
+                        console.print(f"      [green]OK[/green] {setup_msg}")
+                    else:
+                        # NARが使えない場合はavailable_sourcesから除外
+                        console.print(f"      [red]NG[/red] {setup_msg}")
+                        console.print("[yellow]NARの初回セットアップが失敗したため、NARは利用できません。[/yellow]")
+                        if 'nar' in check_result['available_sources']:
+                            check_result['available_sources'].remove('nar')
+                        check_result['nar_valid'] = False
+                else:
+                    # NARセットアップをスキップした場合はavailable_sourcesから除外
+                    console.print("[yellow]NARの初回セットアップをスキップしました。[/yellow]")
+                    if 'nar' in check_result['available_sources']:
+                        check_result['available_sources'].remove('nar')
+                    check_result['nar_valid'] = False
         else:
             console.print(f"  [red]NG[/red] NAR: {check_result['nar_msg']}")
 
@@ -982,6 +1215,43 @@ def _interactive_setup_rich() -> dict:
         if check_result['all_valid']:
             message = check_result['jra_msg'] if data_source == 'jra' else check_result['nar_msg']
             console.print(f"  [green]OK[/green] {message}")
+
+            # NARの場合は初回セットアップも確認
+            if data_source == 'nar':
+                console.print()
+                console.print("[bold]  初回セットアップ確認中...[/bold]")
+                setup_complete, setup_msg = _check_nar_initial_setup()
+
+                if setup_complete:
+                    console.print(f"  [green]OK[/green] {setup_msg}")
+                else:
+                    console.print(f"  [yellow]⚠️[/yellow] {setup_msg}")
+                    console.print()
+                    console.print("[bold]地方競馬DATAの初回セットアップが必要です。[/bold]")
+                    console.print()
+                    console.print("初回セットアップでは、地方競馬DATAサーバーから")
+                    console.print("基本データをダウンロードします（数分〜数十分かかります）。")
+                    console.print()
+
+                    if Confirm.ask("初回セットアップを実行しますか？", default=True):
+                        console.print("[dim]初回セットアップを実行中...[/dim]")
+                        setup_success, setup_result_msg = _run_nar_initial_setup(console)
+                        console.print()
+
+                        if setup_success:
+                            console.print(f"  [green]OK[/green] {setup_result_msg}")
+                        else:
+                            console.print(f"  [red]NG[/red] {setup_result_msg}")
+                            console.print()
+                            console.print("[red]初回セットアップが失敗しました。[/red]")
+                            console.print("再度 quickstart を実行してください。")
+                            sys.exit(1)
+                    else:
+                        console.print()
+                        console.print("[red]セットアップを中止します。[/red]")
+                        console.print("後で quickstart を再実行するか、jltsql setup-nar を実行してください。")
+                        sys.exit(1)
+
             console.print()
         else:
             message = check_result['jra_msg'] if data_source == 'jra' else check_result['nar_msg']
@@ -1190,9 +1460,6 @@ def _interactive_setup_rich() -> dict:
         # DB情報を表示
         if settings['db_type'] == 'postgresql':
             db_info = f"PostgreSQL ({settings['pg_user']}@{settings['pg_host']}:{settings['pg_port']}/{settings['pg_database']})"
-        elif settings['db_type'] == 'duckdb':
-            # DuckDB は削除されました
-            db_info = "DuckDB (非対応)"
         else:
             db_info = f"SQLite ({settings['db_path']})"
         update_info.add_row("データベース", db_info)
@@ -1421,9 +1688,6 @@ def _interactive_setup_rich() -> dict:
     # データベース情報
     if settings.get('db_type') == 'postgresql':
         db_info = f"PostgreSQL ({settings['pg_user']}@{settings['pg_host']}:{settings['pg_port']}/{settings['pg_database']})"
-    elif settings.get('db_type') == 'duckdb':
-        # DuckDB は削除されました
-        db_info = "DuckDB (非対応)"
     else:
         db_info = f"SQLite ({settings.get('db_path', 'data/keiba.db')})"
     confirm_table.add_row("データベース", db_info)
@@ -1812,9 +2076,6 @@ def _interactive_setup_simple() -> dict:
         # DB情報を表示
         if settings['db_type'] == 'postgresql':
             db_info = f"PostgreSQL ({settings['pg_user']}@{settings['pg_host']}:{settings['pg_port']}/{settings['pg_database']})"
-        elif settings['db_type'] == 'duckdb':
-            # DuckDB は削除されました
-            db_info = "DuckDB (非対応)"
         else:
             db_info = f"SQLite ({settings['db_path']})"
         print(f"  データベース: {db_info}")
@@ -2032,9 +2293,6 @@ def _interactive_setup_simple() -> dict:
     # データベース情報
     if settings.get('db_type') == 'postgresql':
         db_info = f"PostgreSQL ({settings['pg_user']}@{settings['pg_host']}:{settings['pg_port']}/{settings['pg_database']})"
-    elif settings.get('db_type') == 'duckdb':
-        # DuckDB は削除されました
-        db_info = "DuckDB (非対応)"
     else:
         db_info = f"SQLite ({settings.get('db_path', 'data/keiba.db')})"
     print(f"  データベース:     {db_info}")
@@ -2192,9 +2450,6 @@ class QuickstartRunner:
                 return PostgreSQLDatabase(db_config)
             except Exception as e:
                 raise DatabaseError(f"PostgreSQL接続に失敗しました: {e}")
-        elif db_type == 'duckdb':
-            # DuckDB は32-bit Python非対応のため削除されました
-            raise DatabaseError("DuckDBは非対応です。SQLiteまたはPostgreSQLを使用してください。")
         else:
             # SQLite設定（デフォルト）
             db_config = {"path": str(self.db_path)}
@@ -3540,45 +3795,71 @@ class QuickstartRunner:
                 from src.utils.data_source import DataSource
 
                 if data_source_str == 'all':
-                    # 両方のソースからデータ取得
-                    # JRAデータ取得
-                    jra_processor = BatchProcessor(
-                        database=database,
-                        sid=config.get("jvlink.sid", "JLTSQL"),
-                        batch_size=1000,
-                        service_key=config.get("jvlink.service_key"),
-                        show_progress=True,
-                        data_source=DataSource.JRA,
-                    )
-                    jra_result = jra_processor.process_date_range(
-                        data_spec=spec,
-                        from_date=self.settings['from_date'],
-                        to_date=self.settings['to_date'],
-                        option=option,
-                    )
+                    # 両方のソースからデータ取得（独立して処理、一方が失敗しても他方は続行）
+                    jra_result = {}
+                    nar_result = {}
+                    jra_error = None
+                    nar_error = None
 
-                    # NARデータ取得
-                    nar_processor = BatchProcessor(
-                        database=database,
-                        sid=config.get("jvlink.sid", "JLTSQL"),
-                        batch_size=1000,
-                        service_key=config.get("jvlink.service_key"),
-                        show_progress=True,
-                        data_source=DataSource.NAR,
-                    )
-                    nar_result = nar_processor.process_date_range(
-                        data_spec=spec,
-                        from_date=self.settings['from_date'],
-                        to_date=self.settings['to_date'],
-                        option=option,
-                    )
+                    # JRAデータ取得（エラーがあっても続行）
+                    try:
+                        jra_processor = BatchProcessor(
+                            database=database,
+                            sid=config.get("jvlink.sid", "JLTSQL"),
+                            batch_size=1000,
+                            service_key=config.get("jvlink.service_key"),
+                            show_progress=True,
+                            data_source=DataSource.JRA,
+                        )
+                        jra_result = jra_processor.process_date_range(
+                            data_spec=spec,
+                            from_date=self.settings['from_date'],
+                            to_date=self.settings['to_date'],
+                            option=option,
+                        )
+                    except Exception as e:
+                        jra_error = str(e)
+                        logger.warning(f"JRAデータ取得でエラーが発生しましたが、NARデータ取得を続行します: {jra_error}")
 
-                    # 結果を統合
-                    result = {
-                        'records_fetched': jra_result.get('records_fetched', 0) + nar_result.get('records_fetched', 0),
-                        'records_parsed': jra_result.get('records_parsed', 0) + nar_result.get('records_parsed', 0),
-                        'records_imported': jra_result.get('records_imported', 0) + nar_result.get('records_imported', 0),
-                    }
+                    # NARデータ取得（JRAの成否に関わらず実行）
+                    try:
+                        nar_processor = BatchProcessor(
+                            database=database,
+                            sid=config.get("jvlink.sid", "JLTSQL"),
+                            batch_size=1000,
+                            service_key=config.get("jvlink.service_key"),
+                            show_progress=True,
+                            data_source=DataSource.NAR,
+                        )
+                        nar_result = nar_processor.process_date_range(
+                            data_spec=spec,
+                            from_date=self.settings['from_date'],
+                            to_date=self.settings['to_date'],
+                            option=option,
+                        )
+                    except Exception as e:
+                        nar_error = str(e)
+                        logger.warning(f"NARデータ取得でエラーが発生しました: {nar_error}")
+
+                    # 結果を統合（両方失敗した場合のみエラー）
+                    if jra_error and nar_error:
+                        # 両方失敗 - エラーを報告
+                        raise FetcherError(f"JRAとNAR両方のデータ取得に失敗しました。JRA: {jra_error[:50]}, NAR: {nar_error[:50]}")
+                    elif jra_error:
+                        # JRAのみ失敗 - 警告を追加してNARのみ使用
+                        self.warnings.append(f"{spec}(JRA): データ取得失敗 - {jra_error[:50]}")
+                        result = nar_result
+                    elif nar_error:
+                        # NARのみ失敗 - 警告を追加してJRAのみ使用
+                        self.warnings.append(f"{spec}(NAR): データ取得失敗 - {nar_error[:50]}")
+                        result = jra_result
+                    else:
+                        # 両方成功 - 結果を統合
+                        result = {
+                            'records_fetched': jra_result.get('records_fetched', 0) + nar_result.get('records_fetched', 0),
+                            'records_parsed': jra_result.get('records_parsed', 0) + nar_result.get('records_parsed', 0),
+                            'records_imported': jra_result.get('records_imported', 0) + nar_result.get('records_imported', 0),
+                        }
                 else:
                     data_source = DataSource.NAR if data_source_str == 'nar' else DataSource.JRA
 
@@ -3774,7 +4055,7 @@ def main():
     parser.add_argument("--db-path", type=str, default=None,
                         help="データベースファイルパス（デフォルト: data/keiba.db）")
     parser.add_argument("--db-type", type=str, choices=["sqlite", "postgresql"], default="sqlite",
-                        help="データベースタイプ (sqlite または postgresql、デフォルト: sqlite)")
+                        help="データベースタイプ (sqlite, postgresql、デフォルト: sqlite)")
     parser.add_argument("--pg-host", type=str, default="localhost",
                         help="PostgreSQLホスト（デフォルト: localhost）")
     parser.add_argument("--pg-port", type=int, default=5432,

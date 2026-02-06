@@ -48,15 +48,18 @@ class RealtimeFetcher(BaseFetcher):
     def __init__(
         self,
         sid: str = "JLTSQL",
+        initialization_key: Optional[str] = None,
         data_source: DataSource = DataSource.JRA,
     ):
         """Initialize realtime fetcher.
 
         Args:
             sid: Session ID for JV-Link API (default: "JLTSQL")
+            initialization_key: Optional NV-Link initialization key (software ID)
+                used for NVInit when data_source is NAR.
             data_source: Data source (DataSource.JRA or DataSource.NAR, default: JRA)
         """
-        super().__init__(sid, data_source=data_source)
+        super().__init__(sid, initialization_key=initialization_key, data_source=data_source)
         self._stream_open = False
 
     def fetch(

@@ -209,8 +209,6 @@ CREATE USER keiba_user WITH PASSWORD 'your_password';
 GRANT ALL PRIVILEGES ON DATABASE keiba TO keiba_user;
 ```
 
-**注意**: DuckDB は32-bit Python非対応のため、このプロジェクトでは削除されました。分析用途にはSQLiteまたはPostgreSQLをご利用ください。
-
 ---
 
 ## データ取得設定

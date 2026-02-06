@@ -21,8 +21,6 @@ JRVLTSQLは、JV-Data（JRA-VAN競馬データ）をSQLite、PostgreSQLに格納
 - **SQLite**: 軽量、ファイルベース、組み込みデータベース
 - **PostgreSQL**: 本格的なリレーショナルデータベース（pg8000/psycopg対応）
 
-**注意**: DuckDBは32-bit Python非対応のため、このプロジェクトでは削除されました。
-
 ### 主な機能
 
 - 統一されたデータベースAPI（BaseDatabase抽象クラス）
@@ -576,8 +574,6 @@ with db:
     # クエリ実行
     horses = db.fetch_all("SELECT * FROM NL_UM WHERE BirthDate > ?", ("20200101",))
 ```
-
-**注意**: DuckDBは32-bit Python非対応のため、このプロジェクトでは削除されました。
 
 ---
 

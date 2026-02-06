@@ -108,13 +108,23 @@ class JVLinkWrapper:
         self.sid = sid
         self._jvlink = None
         self._is_open = False
+        self._com_initialized = False
 
         try:
             import sys
             # Set COM threading model to Apartment Threaded (STA)
             sys.coinit_flags = 2
-            
+
+            import pythoncom
             import win32com.client
+
+            # Initialize COM
+            try:
+                pythoncom.CoInitialize()
+                self._com_initialized = True
+            except Exception:
+                # COM may already be initialized in this thread
+                pass
 
             self._jvlink = win32com.client.Dispatch("JVDTLab.JVLink")
             logger.info("JV-Link COM object created", sid=sid)
@@ -643,6 +653,31 @@ class JVLinkWrapper:
         except Exception as e:
             raise JVLinkError(f"JVClose failed: {e}")
 
+    def jv_file_delete(self, filename: str) -> int:
+        """Delete a cached file from JV-Link cache.
+
+        This method is used to handle recoverable errors (-203, -402, -403, -502, -503)
+        during data reading. When these errors occur, the corrupted file should be
+        deleted and the read operation retried.
+
+        Based on kmy-keiba's JVLinkReader.cs error handling pattern.
+
+        Args:
+            filename: The filename to delete (as returned by JVRead)
+
+        Returns:
+            Result code (0 = success)
+
+        Raises:
+            JVLinkError: If file deletion fails
+        """
+        try:
+            result = self._jvlink.JVFiledelete(filename)
+            logger.info("JVFiledelete called", filename=filename, result=result)
+            return result
+        except Exception as e:
+            raise JVLinkError(f"JVFiledelete failed: {e}")
+
     def jv_status(self) -> int:
         """Get JV-Link status.
 
@@ -678,6 +713,133 @@ class JVLinkWrapper:
         """Context manager exit."""
         if self._is_open:
             self.jv_close()
+
+    def reinitialize_com(self):
+        """Reinitialize COM component to recover from catastrophic errors.
+
+        This method should be called when encountering error -2147418113 (E_UNEXPECTED)
+        or other catastrophic COM failures during JV-Link operations.
+
+        Examples:
+            >>> wrapper = JVLinkWrapper()
+            >>> wrapper.jv_init()
+            >>> try:
+            ...     wrapper.jv_open("RACE", "20240101000000", 1)
+            ... except Exception as e:
+            ...     if "E_UNEXPECTED" in str(e):
+            ...         wrapper.reinitialize_com()
+            ...         wrapper.jv_init()  # Re-initialize after recovery
+        """
+        try:
+            import sys
+            sys.coinit_flags = 2
+
+            import pythoncom
+            import win32com.client
+            import time
+
+            logger.warning("Reinitializing COM component due to error...")
+
+            # Close any open streams
+            if self._is_open:
+                try:
+                    self.jv_close()
+                except Exception:
+                    pass
+
+            # Uninitialize and reinitialize COM
+            if self._com_initialized:
+                try:
+                    pythoncom.CoUninitialize()
+                except Exception:
+                    pass
+
+            # Wait for COM cleanup
+            time.sleep(1)
+
+            # Reinitialize COM
+            try:
+                pythoncom.CoInitialize()
+                self._com_initialized = True
+            except Exception:
+                pass
+
+            # Recreate COM object
+            # JV-Link ProgID: JVDTLab.JVLink
+            try:
+                self._jvlink = win32com.client.Dispatch("JVDTLab.JVLink")
+            except Exception as e:
+                # If ProgID fails, try with CLSID (if known)
+                logger.error("Failed to recreate JV-Link COM object", error=str(e))
+                raise
+
+            self._is_open = False
+
+            logger.info("COM component reinitialized successfully", sid=self.sid)
+
+        except Exception as e:
+            logger.error("Failed to reinitialize COM component", error=str(e))
+            raise JVLinkError(f"COM reinitialization failed: {e}")
+
+    def cleanup(self):
+        """Explicitly cleanup COM resources. Call this before the object goes out of scope.
+
+        This prevents "Win32 exception occurred releasing IUnknown" warnings
+        that occur when COM objects are released during Python shutdown.
+
+        Examples:
+            >>> wrapper = JVLinkWrapper()
+            >>> wrapper.jv_init()
+            >>> # ... use wrapper ...
+            >>> wrapper.cleanup()  # Explicit cleanup before deletion
+        """
+        # Check if Python is shutting down
+        # During shutdown, imports may fail or sys.meta_path becomes None
+        try:
+            import sys
+            if sys.meta_path is None:
+                return
+        except (ImportError, ModuleNotFoundError):
+            return
+
+        try:
+            import gc
+        except (ImportError, ModuleNotFoundError):
+            gc = None
+
+        # Close stream if still open
+        if hasattr(self, '_is_open') and self._is_open:
+            try:
+                self.jv_close()
+            except Exception:
+                pass
+
+        # Release COM object reference BEFORE CoUninitialize
+        # This prevents "Win32 exception occurred releasing IUnknown" warnings
+        if hasattr(self, '_jvlink') and self._jvlink is not None:
+            try:
+                # Set to None first to break reference
+                jvlink_ref = self._jvlink
+                self._jvlink = None
+                # Force garbage collection while COM is still initialized
+                del jvlink_ref
+                if gc is not None:
+                    gc.collect()
+            except Exception:
+                pass
+
+        # Uninitialize COM if we initialized it
+        if hasattr(self, '_com_initialized') and self._com_initialized:
+            try:
+                import pythoncom
+                pythoncom.CoUninitialize()
+                self._com_initialized = False
+            except Exception:
+                pass
+
+    def __del__(self):
+        """Destructor to ensure proper cleanup."""
+        self.cleanup()
 
     def __repr__(self) -> str:
         """String representation."""

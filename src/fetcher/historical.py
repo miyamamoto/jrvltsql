@@ -7,6 +7,8 @@ import time
 from datetime import datetime
 from typing import Iterator, Optional
 
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+
 from src.fetcher.base import BaseFetcher, FetcherError
 from src.utils.logger import get_logger
 from src.utils.progress import JVLinkProgressDisplay
@@ -266,13 +268,13 @@ class HistoricalFetcher(BaseFetcher):
         yield from self.fetch(data_spec, from_date, to_date, option)
 
     def _wait_for_download(
-        self, download_task_id: Optional[int] = None, timeout: int = 600, interval: float = 0.5
+        self, download_task_id: Optional[int] = None, timeout: int = 1800, interval: float = 0.5
     ):
         """Wait for JV-Link download to complete.
 
         Args:
             download_task_id: Progress task ID for download (optional)
-            timeout: Maximum wait time in seconds (default: 600 = 10 minutes)
+            timeout: Maximum wait time in seconds (default: 1800 = 30 minutes, increased for large data specs)
             interval: Status check interval in seconds (default: 0.5)
 
         Raises:
@@ -381,4 +383,27 @@ class HistoricalFetcher(BaseFetcher):
             except Exception as e:
                 if isinstance(e, FetcherError):
                     raise
+
+                # Check for COM catastrophic errors that require reinitialization
+                # E_UNEXPECTED: -2147418113 (0x8000FFFF)
+                error_code = getattr(e, 'error_code', None)
+                error_str = str(e)
+
+                # COM catastrophic errors or "catastrophic failure" in message
+                if (error_code == -2147418113 or
+                    'E_UNEXPECTED' in error_str or
+                    'catastrophic' in error_str.lower() or
+                    '0x8000FFFF' in error_str):
+
+                    logger.warning("COM catastrophic error detected, attempting reinitialization", error=error_str)
+
+                    # Attempt COM reinitialization if method exists
+                    if hasattr(self.jvlink, 'reinitialize_com'):
+                        try:
+                            self.jvlink.reinitialize_com()
+                            # After reinitialization, may need to restart download
+                            logger.info("COM reinitialized successfully, you may need to retry the download")
+                        except Exception as reinit_error:
+                            logger.error("COM reinitialization failed", error=str(reinit_error))
+
                 raise FetcherError(f"Failed to check download status: {e}")
