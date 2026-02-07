@@ -201,10 +201,9 @@ test_*.log
 MIGRATION_COMPLETE.md
 TEST_RESULTS_*.md
 
-# Test and debug scripts (except official test suite)
-test_*.py
-!tests/test_parsers.py
-!tests/test_integration.py
+# Test and debug scripts (except official test suite in tests/)
+/test_*.py
+!tests/test_*.py
 debug_*.py
 demo_*.py
 scripts/test_*.py
