@@ -137,19 +137,37 @@ class NVLinkWrapper:
             # ProgID "NVDTLab.NVLink" may not be registered, but CLSID always works
             # after regsvr32 NVDTLab.dll
             NVLINK_CLSID = "{F726BBA6-5784-4529-8C67-26E152D49D73}"
-            try:
-                # Try NVDTLabLib.NVLink first (matches quickstart.py and seems correct for this environment)
-                self._nvlink = win32com.client.Dispatch("NVDTLabLib.NVLink")
-                logger.info("NV-Link COM object created using NVDTLabLib.NVLink", sid=sid)
-            except Exception:
+            is_64bit = sys.maxsize > 2**32
+            self._is_64bit = is_64bit
+
+            if is_64bit:
+                # 64-bit Python: Use CLSID for DLL Surrogate (out-of-process COM)
+                # DLL Surrogate must be configured in registry for this to work
+                # Note: option=3/4 may hang via DLL Surrogate; use option=2 only
                 try:
-                    # Try ProgID first (faster if registered)
-                    self._nvlink = win32com.client.Dispatch("NVDTLab.NVLink")
-                    logger.info("NV-Link COM object created using NVDTLab.NVLink", sid=sid)
-                except Exception:
-                    # Fallback to CLSID
                     self._nvlink = win32com.client.Dispatch(NVLINK_CLSID)
-                    logger.info("NV-Link COM object created using CLSID", sid=sid)
+                    logger.info("NV-Link COM object created via DLL Surrogate (64-bit)", sid=sid)
+                except Exception:
+                    try:
+                        self._nvlink = win32com.client.Dispatch("NVDTLabLib.NVLink")
+                        logger.info("NV-Link COM object created using ProgID (64-bit)", sid=sid)
+                    except Exception:
+                        raise NVLinkError(
+                            "64-bit Python環境でNV-Link COMオブジェクトを作成できません。"
+                            "DLL Surrogateの設定を確認してください: docs/gists/check_dll_surrogate.py --fix"
+                        )
+            else:
+                # 32-bit Python: Direct in-process COM, ProgID preferred
+                try:
+                    self._nvlink = win32com.client.Dispatch("NVDTLabLib.NVLink")
+                    logger.info("NV-Link COM object created using NVDTLabLib.NVLink (32-bit)", sid=sid)
+                except Exception:
+                    try:
+                        self._nvlink = win32com.client.Dispatch("NVDTLab.NVLink")
+                        logger.info("NV-Link COM object created using NVDTLab.NVLink (32-bit)", sid=sid)
+                    except Exception:
+                        self._nvlink = win32com.client.Dispatch(NVLINK_CLSID)
+                        logger.info("NV-Link COM object created using CLSID (32-bit)", sid=sid)
         except Exception as e:
             raise NVLinkError(
                 f"UmaConn (地方競馬DATA) がインストールされていません。地方競馬DATAのセットアップを完了してください。詳細: {e}"
@@ -389,6 +407,15 @@ class NVLinkWrapper:
             # - readcount: VT_I4|VT_BYREF (16387, 3) - in/out reference
             # - downloadcount: VT_I4|VT_BYREF (16387, 3) - in/out reference
             # - lastfiletimestamp: VT_BSTR|VT_BYREF (16392, 2) - out reference (optional)
+            # 64-bit Python + DLL Surrogate: option=3/4 may hang due to out-of-process COM
+            if getattr(self, '_is_64bit', False) and option >= 3:
+                logger.warning(
+                    "64-bit Python環境でoption>=3は非推奨です。"
+                    "DLL Surrogate経由ではハングする可能性があります。option=2を推奨。",
+                    option=option,
+                    data_spec=data_spec,
+                )
+
             nv_result = self._nvlink.NVOpen(data_spec, fromtime, option, 0, 0)
 
             # Handle return value
