@@ -13,7 +13,7 @@ JRA-VAN DataLab / 地方競馬DATA の競馬データをSQLite・PostgreSQLに�
 ## 必要要件
 
 - Windows 10/11
-- Python 3.12以上（64-bit推奨）
+- Python 3.12以上（32-bit必須 ※JV-Link/NV-LinkのCOM DLLが32-bitのため）
 
 ## 中央競馬 (JRA) セットアップ
 
@@ -100,7 +100,7 @@ jltsql fetch --db postgresql  # PostgreSQL（pg8000ドライバ使用）
 
 ## ドキュメント
 
-- [技術詳細](docs/TECHNICAL.md) - DLL Surrogate、NV-Link設定、トラブルシューティング
+- [技術詳細](docs/TECHNICAL.md) - NV-Link設定、NVDファイル構造、トラブルシューティング
 - [アーキテクチャ](docs/ARCHITECTURE_DESIGN.md) - 設計ドキュメント
 - [CLI リファレンス](docs/CLI.md) - コマンド詳細
 - [設定](docs/CONFIGURATION.md) - 設定ファイルの詳細
