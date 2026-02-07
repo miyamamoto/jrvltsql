@@ -300,6 +300,9 @@ def _check_jvlink_service_key() -> tuple[bool, str]:
     Returns:
         (is_valid, message): サービスキーが有効かどうかとメッセージ
     """
+    import struct
+    is_64bit = struct.calcsize("P") * 8 == 64
+    
     try:
         import win32com.client
         jvlink = win32com.client.Dispatch("JVDTLab.JVLink")
@@ -320,7 +323,20 @@ def _check_jvlink_service_key() -> tuple[bool, str]:
         else:
             return False, f"JV-Link初期化エラー (code: {result})"
     except Exception as e:
-        return False, f"JV-Link未インストール: {e}"
+        error_msg = str(e).lower()
+        # 64-bit Python + 32-bit DLL の問題を検出
+        if is_64bit and ("class not registered" in error_msg or 
+                         "クラスが登録されていません" in error_msg or
+                         "-2147221164" in error_msg):
+            return False, (
+                "JV-Link検出不可 (64-bit Python使用中)\n"
+                "    → JV-Linkは32-bit DLLのため、32-bit Pythonが必要です\n"
+                "    → py -3.12-32 でインストール: python.org から Windows installer (32-bit) をダウンロード"
+            )
+        elif "no module named 'win32com'" in error_msg:
+            return False, "pywin32未インストール: pip install pywin32"
+        else:
+            return False, f"JV-Link未インストールまたはアクセス不可: {e}"
 
 
 def _check_nvlink_service_key() -> tuple[bool, str]:
