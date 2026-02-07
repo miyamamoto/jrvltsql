@@ -15,25 +15,42 @@ JRA-VAN DataLab / 地方競馬DATA の競馬データをSQLite・PostgreSQLに�
 - Windows 10/11
 - Python 3.12以上（32-bit必須 ※JV-Link/NV-LinkのCOM DLLが32-bitのため）
 
+## インストール
+
+```bash
+pip install git+https://github.com/miyamamoto/jrvltsql.git
+```
+
 ## 中央競馬 (JRA) セットアップ
 
 ### 1. JRA-VAN DataLab会員登録
 
 1. [JRA-VAN DataLab](https://jra-van.jp/) にアクセス
-2. 会員登録を行い、サービスキーを取得
+2. 会員登録を行い、サービスキーを取得（月額制）
 3. JV-Linkソフトウェアをダウンロード・インストール
 
 ### 2. JV-Link初期設定
 
 1. JV-Link設定ツールを起動（スタートメニュー → JRA-VAN → JV-Link設定）
-2. サービスキーを入力
-3. 初回データダウンロードを実行（全データ取得に時間がかかります）
+2. サービスキーを入力（形式: `XXXX-XXXX-XXXX-XXXX-X`）
+3. 初回データダウンロードを実行（全データ取得に数時間かかります）
 
-### 3. インストールと実行
+### 3. 設定ファイル
+
+`config/config.yaml` にサービスキーを設定：
+
+```yaml
+jvlink:
+  service_key: "XXXX-XXXX-XXXX-XXXX-X"  # JRA-VANから取得したキー
+```
+
+または環境変数で設定：
 
 ```bash
-pip install git+https://github.com/miyamamoto/jrvltsql.git
+set JVLINK_SERVICE_KEY=XXXX-XXXX-XXXX-XXXX-X
 ```
+
+### 4. データ取得
 
 **quickstart.bat をダブルクリック** で対話形式のセットアップが始まります。
 
@@ -49,21 +66,29 @@ python scripts/quickstart.py -y           # 確認スキップ
 ### 1. 地方競馬DATA会員登録
 
 1. [地方競馬DATA](https://www.keiba-data.com/) にアクセス
-2. 会員登録を行い、サービスキーを取得
+2. 会員登録を行い、サービスキーを取得（月額制）
 3. UmaConnソフトウェアをダウンロード・インストール
 
-### 2. NV-Link初期設定
+### 2. UmaConn初期設定
 
-1. NVDTLab設定ツールを起動
-2. サービスキーを入力
-3. 初回データダウンロードを実行
-4. `config/config.yaml` に初期化キーを設定：
-   ```yaml
-   nvlink:
-     initialization_key: "UNKNOWN"
-   ```
+1. UmaConn設定ツールを起動（`C:\UmaConn\chiho.k-ba\data\UmaConn設定.exe`）
+2. サービスキーを入力（形式: `XXXX-XXXX-XXXX-XXXX-X`）
+3. 「全データダウンロード」を実行（初回のみ、数時間かかります）
+4. ダウンロード完了後、NVDファイルが `C:\UmaConn\chiho.k-ba\data\` 以下に保存されます
 
-### 3. データ取得
+### 3. 設定ファイル
+
+`config/config.yaml` に以下を設定：
+
+```yaml
+nvlink:
+  service_key: "XXXX-XXXX-XXXX-XXXX-X"  # 地方競馬DATAから取得したキー
+  initialization_key: "UNKNOWN"           # 必ず "UNKNOWN" を指定
+```
+
+**重要**: `initialization_key` は必ず `"UNKNOWN"` にしてください。他の値では認証エラー（-301）が発生します。
+
+### 4. データ取得
 
 ```bash
 jltsql fetch --source nar --from 20240101 --to 20241231 --spec RACE
