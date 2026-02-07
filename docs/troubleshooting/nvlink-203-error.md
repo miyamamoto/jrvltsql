@@ -90,7 +90,7 @@ if status == -203:
         "1. NVDTLab設定ツールを起動し、「データダウンロード」タブで初回セットアップを実行\n"
         "2. セットアップ完了後も問題が続く場合は、キャッシュをクリアして再試行\n"
         "3. アプリケーション(UmaConn/地方競馬DATA)を再起動\n"
-        "注: NAR データ取得には option=4 (セットアップモード) の使用が推奨されます"
+        "注: NAR データ取得には option=2 (セットアップモード) の使用が推奨されます"
     )
 ```
 
@@ -107,7 +107,7 @@ if status == -203:
 #       1. Initial NVDTLab setup not completed
 #       2. Cache corruption
 #       3. option=1 (differential mode) not working properly
-#       Best practice: Use option=4 (setup mode) for NAR data
+#       Best practice: Use option=2 (setup mode) for NAR data
 retryable_errors = {-201, -202, -203}
 ```
 
@@ -151,7 +151,7 @@ NVLink -203 エラー専用のセクションを追加：
 ### 手順2: データ取得コマンドの実行
 
 ```bash
-# quickstart.py は自動的に option=4 を使用（推奨）
+# quickstart.py は自動的に option=2 を使用（推奨）
 python scripts/quickstart.py
 
 # または CLI で明示的に NAR を指定
@@ -171,7 +171,7 @@ jltsql fetch --source nar --spec RACE --from 20240101 --to 20241231
 
 ```
 [正常な流れ]
-NVOpen("RACE", "20241201000000", option=4)
+NVOpen("RACE", "20241201000000", option=2)
   -> result=-301 (ダウンロード中), download_count=1
 
 NVStatus() (0.5秒ごとにポーリング)
@@ -204,14 +204,14 @@ NVRead() (呼び出されない)
 | 3 | セットアップ (ダイアログあり) | 動作確認中 |
 | 4 | セットアップ (ダイアログなし) | **推奨** (安定動作) |
 
-**推奨設定**: NAR データ取得には常に `option=4` を使用
+**推奨設定**: NAR データ取得には常に `option=2` を使用
 
 ### 既存の回避策
 
 `quickstart.py` では既に以下の回避策が実装されています：
 
 ```python
-# NAR の場合、option=1/2 を自動的に option=4 に変換
+# NAR の場合、option=1/2 を自動的に option=2 に変換
 if data_source_str == 'nar':
     if option == 1 or option == 2:
         option = 4

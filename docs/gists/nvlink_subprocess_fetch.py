@@ -21,6 +21,8 @@ License: MIT
 """
 
 import subprocess
+import shlex
+import re
 import sys
 import json
 import argparse
@@ -152,7 +154,11 @@ def fetch_single_day(
     Returns:
         取得結果の辞書
     """
-    script = FETCH_SCRIPT_TEMPLATE.format(
+    # Validate inputs to prevent code injection via .format()
+        for param_name, param_value in [("target_date", target_date), ("data_type", data_type)]:
+            if not re.match(r'^[a-zA-Z0-9_-]+$', str(param_value)):
+                raise ValueError(f"Invalid {param_name}: {param_value}")
+        script = FETCH_SCRIPT_TEMPLATE.format(
         target_date=target_date,
         data_type=data_type
     )

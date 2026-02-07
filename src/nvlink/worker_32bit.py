@@ -65,17 +65,18 @@ class NVLinkWorker:
             return True
 
         start_time = time.time()
+        download_started = False
         while True:
             try:
                 status = self.nvlink.NVStatus()
                 if status < 0:
-                    # Error
                     return False
-                if status >= download_count:
-                    # Download complete
+                if status > 0:
+                    download_started = True
+                elif status == 0 and download_started:
                     return True
-            except:
-                pass
+            except Exception:
+                return False
 
             if time.time() - start_time > timeout:
                 return False
@@ -293,7 +294,7 @@ def main():
             else:
                 dataspec = sys.argv[2]
                 fromtime = int(sys.argv[3])
-                option = int(sys.argv[4]) if len(sys.argv) > 4 else 3
+                option = int(sys.argv[4]) if len(sys.argv) > 4 else 2
 
                 # First init, then open
                 init_result = worker.init()
@@ -367,7 +368,7 @@ def main():
         # Always try to close
         try:
             worker.close()
-        except:
+        except Exception:
             pass
 
     print(json.dumps(result, ensure_ascii=False))

@@ -179,7 +179,7 @@ def status(source):
         try:
             from src.jvlink import JVLinkWrapper
             console.print("  状態: [green]利用可能[/green]")
-        except:
+        except ImportError:
             console.print("  状態: [red]利用不可[/red]")
 
         console.print()
@@ -187,7 +187,7 @@ def status(source):
         try:
             from src.nvlink import NVLinkWrapper
             console.print("  状態: [green]利用可能[/green]")
-        except:
+        except ImportError:
             console.print("  状態: [red]利用不可[/red]")
     else:
         source_name = data_source.display_name
@@ -215,7 +215,7 @@ def version(source):
         try:
             from src.jvlink import JVLinkWrapper
             console.print("  - JRA-VAN DataLab (JV-Link): [green]利用可能[/green]")
-        except:
+        except ImportError:
             console.print("  - JRA-VAN DataLab (JV-Link): [red]未インストール[/red]")
 
     if source in ["nar", "all"]:
@@ -227,7 +227,7 @@ def version(source):
         try:
             from src.nvlink import NVLinkWrapper
             console.print("  - 地方競馬DATA (UmaConn): [green]利用可能[/green]")
-        except:
+        except ImportError:
             console.print("  - 地方競馬DATA (UmaConn): [red]未インストール[/red]")
 
 
@@ -736,12 +736,20 @@ def fetch(ctx, date_from, date_to, data_spec, jv_option, db, batch_size, progres
                 console.print(f"  Imported: {result['records_imported']}")
             else:
                 # Single source processing (JRA or NAR)
+                if data_source == DataSource.NAR:
+                    sid = config.get("nvlink.sid", "JLTSQL") if config else "JLTSQL"
+                    service_key = config.get("nvlink.service_key") if config else None
+                    _init_key = config.get("nvlink.initialization_key") if config else None
+                else:
+                    sid = config.get("jvlink.sid", "JLTSQL") if config else "JLTSQL"
+                    service_key = config.get("jvlink.service_key") if config else None
+                    _init_key = None
                 processor = BatchProcessor(
                     database=database,
-                    sid=config.get("jvlink.sid", "JLTSQL") if config else "JLTSQL",
+                    sid=sid,
                     batch_size=batch_size,
-                    service_key=config.get("jvlink.service_key") if config else None,
-                    initialization_key=init_key,
+                    service_key=service_key,
+                    initialization_key=_init_key,
                     show_progress=progress,
                     data_source=data_source,
                 )

@@ -146,6 +146,9 @@ class NVLinkWrapper:
         Raises:
             NVLinkError: If service key setting fails
         """
+        import re as _re
+        if not _re.match(r'^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]$', service_key):
+            raise NVLinkError(f"Invalid service key format: {service_key}")
         try:
             import subprocess
             import time

@@ -64,7 +64,7 @@ class BaseFetcher(ABC):
         # Select wrapper based on data source
         if data_source == DataSource.NAR:
             from src.nvlink.wrapper import NVLinkWrapper
-            self.jvlink = NVLinkWrapper(sid, initialization_key=initialization_key)
+            self.jvlink: Union[JVLinkWrapper, NVLinkWrapper] = NVLinkWrapper(sid, initialization_key=initialization_key)
         else:
             self.jvlink = JVLinkWrapper(sid)
 

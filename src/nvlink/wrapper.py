@@ -128,9 +128,10 @@ class NVLinkWrapper:
             try:
                 pythoncom.CoInitialize()
                 self._com_initialized = True
-            except Exception:
-                # Already initialized in this thread - that's OK
-                pass
+            except Exception as e:
+                # S_FALSE (already initialized) is safe; log other errors
+                if "already" not in str(e).lower():
+                    logger.warning("COM initialization issue", error=str(e))
 
             # Use CLSID directly instead of ProgID
             # ProgID "NVDTLab.NVLink" may not be registered, but CLSID always works

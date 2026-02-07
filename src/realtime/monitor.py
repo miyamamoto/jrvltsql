@@ -61,7 +61,12 @@ class RealtimeMonitor:
         self.data_source = data_source
 
         # Select wrapper based on data source
-        if data_source == DataSource.NAR:
+        if data_source == DataSource.ALL:
+            raise ValueError(
+                "DataSource.ALL is not supported for realtime monitoring. "
+                "Please run separate monitors for JRA and NAR (--source jra / --source nar)."
+            )
+        elif data_source == DataSource.NAR:
             from src.nvlink.wrapper import NVLinkWrapper
             self.jvlink = NVLinkWrapper(sid=sid, initialization_key=initialization_key)
         else:

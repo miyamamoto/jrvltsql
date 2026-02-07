@@ -3748,7 +3748,7 @@ class QuickstartRunner:
             return ("skipped", details)
 
         # option=3/4（セットアップモード）は一部のスペックのみ対応
-        # RACE, DIFF, BLOD等の主要スペックはoption=4対応
+        # RACE, DIFF, BLOD等の主要スペックはoption=2対応
         # COMM, PARA等の補助スペックはoption=1のみ対応
         OPTION_4_SUPPORTED_SPECS = {
             "RACE", "DIFF", "BLOD", "SNAP", "SLOP", "WOOD",
@@ -3757,8 +3757,8 @@ class QuickstartRunner:
         }
 
         # option=1（差分データ）はJV-Link側の「最終取得時刻」以降のデータのみ返す
-        # 初回セットアップや全データ取得にはoption=4（セットアップモード）を使用
-        # ただし、option=4非対応スペックはoption=1のまま維持
+        # 初回セットアップや全データ取得にはoption=2（セットアップモード）を使用
+        # ただし、option=2非対応スペックはoption=1のまま維持
         data_source_str = self.settings.get('data_source', 'jra')
 
         # NAR (NV-Link) では option 1 が正常動作しない（NVStatusが-203を返す既知の問題）
@@ -3767,10 +3767,10 @@ class QuickstartRunner:
         # 参考: docs/reference/error-codes.md#nvlink--203-エラー-地方競馬data
         if data_source_str == 'nar':
             if option == 1 or option == 2:
-                option = 2  # NAR: ローカルデータのみ取得（option=4はファイルエラーになるため）
+                option = 2  # NAR: ローカルデータのみ取得（option=2はファイルエラーになるため）
         elif option == 1 and spec in OPTION_4_SUPPORTED_SPECS:
             option = 4  # JRA: 分割セットアップモード（全データ取得）
-        # option=4非対応スペックはoption=1で実行（差分データ）
+        # option=2非対応スペックはoption=1で実行（差分データ）
 
         try:
             # 設定読み込み

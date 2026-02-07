@@ -139,11 +139,11 @@ FetcherError: NV-Linkダウンロードエラー (code: -203)
    - 「データダウンロード」タブを選択
    - 初回セットアップを実行（全データのダウンロード）
 
-2. **option=4 (セットアップモード) の使用**:
+2. **option=2 (セットアップモード) の使用**:
    ```bash
-   # NAR データは option=4 を推奨
+   # NAR データは option=2 を推奨
    jltsql fetch --source nar --spec RACE --from 20240101 --to 20241231
-   # quickstart.py は自動的に option=4 を使用
+   # quickstart.py は自動的に option=2 を使用
    ```
 
 3. **キャッシュのクリア**（上記で解決しない場合）:

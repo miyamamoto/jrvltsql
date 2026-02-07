@@ -34,6 +34,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+postgres = ["pg8000"]
 dev = [
     "pytest>=7.4",
     "pytest-cov>=4.1",

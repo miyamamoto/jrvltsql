@@ -15,7 +15,7 @@ tests/
 
 ## Commands
 
-cd src; pytest; ruff check .
+pytest; ruff check src/
 
 ## Code Style
 
@@ -23,9 +23,9 @@ Python 3.12+: Follow standard conventions
 
 ## Architecture Constraints
 
-### Python Version: 32-bit (Required)
+### Python Version: 32-bit (Recommended)
 
-- **32-bit Python を使用すること** - JV-Link/NV-Link COM API へのネイティブアクセスに必要
+- **32-bit Python を推奨** - JV-Link/NV-Link COM API へのネイティブアクセスに必要
 - 64-bit Python は DLL Surrogate が必要で、PC-keiba 等の他アプリに影響を与えるため非推奨
 - **Minimum Version**: Python 3.12
 
