@@ -24,7 +24,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
-    "pywin32>=305",
+    "pywin32>=305; sys_platform == 'win32'",
     "pyyaml>=6.0",
     "python-dateutil>=2.8",
     "click>=8.1",

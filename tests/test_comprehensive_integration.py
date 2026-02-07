@@ -25,7 +25,10 @@ from unittest.mock import MagicMock, patch
 from pathlib import Path
 
 from src.database.sqlite_handler import SQLiteDatabase
-from src.database.postgresql_handler import PostgreSQLDatabase
+try:
+    from src.database.postgresql_handler import PostgreSQLDatabase
+except ImportError:
+    PostgreSQLDatabase = None  # type: ignore[misc,assignment]
 from src.database.schema import SchemaManager, SCHEMAS
 from src.parser.factory import ParserFactory, ALL_RECORD_TYPES
 from src.importer.importer import DataImporter
