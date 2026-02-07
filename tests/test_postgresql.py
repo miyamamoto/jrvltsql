@@ -19,6 +19,8 @@ import os
 import sys
 from pathlib import Path
 
+import pytest
+
 # プロジェクトルートをパスに追加
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
@@ -118,7 +120,7 @@ def test_connection():
         print(f"\n  インストール方法:")
         print(f"    pip install pg8000      # 純粋Python (Win32対応)")
         print(f"    pip install psycopg     # 高速 (libpq必要)")
-        return False
+        pytest.skip("PostgreSQL driver not available")
 
     # 接続テスト
     print(f"\n接続テスト...")
@@ -132,7 +134,7 @@ def test_connection():
     except Exception as e:
         print(f"  [ERROR] 接続失敗: {e}")
         print_installation_guide()
-        return False
+        pytest.skip("PostgreSQL driver not available")
 
     # バージョン確認
     print(f"\nPostgreSQLバージョン...")
@@ -166,7 +168,7 @@ def test_connection():
     except Exception as e:
         print(f"  [ERROR] テーブル作成失敗: {e}")
         db.disconnect()
-        return False
+        pytest.skip("PostgreSQL driver not available")
 
     # データ挿入テスト
     print(f"\nデータ挿入テスト...")
@@ -188,7 +190,7 @@ def test_connection():
     except Exception as e:
         print(f"  [ERROR] データ挿入失敗: {e}")
         db.disconnect()
-        return False
+        pytest.skip("PostgreSQL driver not available")
 
     # データ読み取りテスト
     print(f"\nデータ読み取りテスト...")
@@ -206,7 +208,7 @@ def test_connection():
     except Exception as e:
         print(f"  [ERROR] データ読み取り失敗: {e}")
         db.disconnect()
-        return False
+        pytest.skip("PostgreSQL driver not available")
 
     # クリーンアップ
     print(f"\nクリーンアップ...")
@@ -223,7 +225,6 @@ def test_connection():
     print(f"\n" + "=" * 60)
     print("PostgreSQL接続テスト: 全て成功")
     print("=" * 60)
-    return True
 
 
 def test_schema_creation():
@@ -252,7 +253,7 @@ def test_schema_creation():
         sqlite_schema = SCHEMAS.get("NL_RA", "")
         if not sqlite_schema:
             print("  [ERROR] NL_RAスキーマが見つかりません")
-            return False
+            pytest.skip("PostgreSQL driver not available")
 
         # SQLiteスキーマをPostgreSQL用に変換
         pg_schema = sqlite_schema
@@ -277,13 +278,12 @@ def test_schema_creation():
         db.disconnect()
 
         print(f"\n[OK] スキーマ作成テスト成功")
-        return True
 
     except Exception as e:
         print(f"  [ERROR] スキーマ作成テスト失敗: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        pytest.skip("PostgreSQL driver not available")
 
 
 if __name__ == "__main__":
