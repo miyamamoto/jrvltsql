@@ -3,7 +3,7 @@
 """
 全パーサーの単体テストスイート
 
-このモジュールは全39パーサー（38 JRA + 1 NAR: NU）に対する包括的なテストを提供します。
+このモジュールは全40パーサー（38 JRA + 2 NAR: HA, NU）に対する包括的なテストを提供します。
 各パーサーで以下をテスト:
 - パーサーインスタンスの作成
 - RECORD_TYPE, RECORD_LENGTHの定義確認
@@ -32,7 +32,7 @@ class TestParserFactory:
     def test_supported_types(self, parser_factory):
         """サポートされているレコードタイプの確認"""
         supported = parser_factory.supported_types()
-        assert len(supported) == 39  # 38 JRA + 1 NAR (NU)
+        assert len(supported) == 40  # 38 JRA + 2 NAR (HA, NU)
         assert supported == ALL_RECORD_TYPES
 
     def test_get_parser_invalid_type(self, parser_factory):

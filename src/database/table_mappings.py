@@ -149,6 +149,7 @@ NAR_RECORD_TYPE_TO_TABLE: Dict[str, str] = {
     "RA": "NL_RA_NAR",  # レース詳細 (Race Details)
     "SE": "NL_SE_NAR",  # 馬毎レース情報 (Horse Race Results)
     "HR": "NL_HR_NAR",  # 払戻 (Refund)
+    "HA": "NL_HA_NAR",  # 地方競馬 払戻 (NAR Payout)
     "JG": "NL_JG_NAR",  # 重量変更 (Weight Change)
     "H1": "NL_H1_NAR",  # 単複票数 (Win/Place Votes)
     "H6": "NL_H6_NAR",  # 三連単票数 (Trifecta Votes)
