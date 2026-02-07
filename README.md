@@ -27,9 +27,9 @@ JRA-VAN DataLab / 地方競馬DATA の競馬データをSQLite・PostgreSQLに�
 DLL Surrogateを使うことで、64-bit Pythonから32-bit COM DLL（JV-Link / NV-Link）を利用できます。
 
 ```bash
-# DLL Surrogateのセットアップ（管理者権限で実行）
-python docs/gists/check_dll_surrogate.py   # 設定確認
-# レジストリ設定は docs/gists/ を参照
+# DLL Surrogateのセットアップ（管理者権限のPowerShell/コマンドプロンプトで実行）
+python docs/gists/check_dll_surrogate.py --fix
+# 詳細は docs/qiita_64bit_python_com.md を参照
 ```
 
 **32-bit Pythonでも動作します**（COM DLLと直接通信）。
@@ -103,8 +103,8 @@ jltsql status --source all
 | H6 | 票数情報(6) |
 | O1-O6 | オッズ |
 | HA | 払戻情報(NAR独自) |
-| WF | 重量情報 |
-| BN | 速報情報 |
+| WF | 重勝式(WIN5) |
+| BN | 馬主マスタ |
 
 ### データベーステーブル
 
