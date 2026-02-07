@@ -270,7 +270,7 @@ def setup_nar(ctx, verify, service_key):
     # Check if NVLink is available
     try:
         from src.nvlink import NVLinkWrapper
-    except ImportError as e:
+    except ImportError:
         console.print("[red]エラー:[/red] UmaConn (地方競馬DATA) がインストールされていません。")
         console.print("地方競馬DATAのセットアップを先に完了してください。")
         console.print("詳細: https://www.keiba-data.com/")
@@ -580,13 +580,12 @@ def fetch(ctx, date_from, date_to, data_spec, jv_option, db, batch_size, progres
     data_source = DataSource.from_string(source)
 
     # Check if NAR/UmaConn is available
-    nar_available = False
     if data_source in (DataSource.NAR, DataSource.ALL):
         try:
             # Try to import NVLinkWrapper to check if UmaConn is available
             from src.nvlink import NVLinkWrapper
-            nar_available = True
-        except Exception as e:
+            pass  # NVLinkWrapper imported successfully
+        except Exception:
             if data_source == DataSource.NAR:
                 console.print("[red]エラー:[/red] UmaConn (地方競馬DATA) がインストールされていません。")
                 console.print("地方競馬DATAのセットアップを完了してください。")
@@ -821,7 +820,7 @@ def monitor(ctx, daemon, data_spec, interval, db, source):
         try:
             # Try to import NVLinkWrapper to check if UmaConn is available
             from src.nvlink import NVLinkWrapper
-        except Exception as e:
+        except Exception:
             console.print("[red]エラー:[/red] UmaConn (地方競馬DATA) がインストールされていません。")
             console.print("地方競馬DATAのセットアップを完了してください。")
             console.print("詳細: https://www.keiba-data.com/")
@@ -1267,7 +1266,7 @@ def export(ctx, table, output_format, output, where, db):
 
             # Show results
             console.print()
-            console.print(f"[bold green][OK] Export complete![/bold green]")
+            console.print("[bold green][OK] Export complete![/bold green]")
             console.print()
             console.print(f"  Records exported: {len(rows):,}")
             console.print(f"  Output file:      {output_path.absolute()}")
@@ -1497,7 +1496,7 @@ def start(ctx, specs, db, batch_size, no_create_tables):
 
             status = monitor.get_status()
             console.print("[bold]Status:[/bold]")
-            console.print(f"  Running:        Yes")
+            console.print("  Running:        Yes")
             console.print(f"  Started at:     {status['started_at']}")
             console.print(f"  Monitored specs: {', '.join(status['monitored_specs'])}")
             console.print()
@@ -1536,9 +1535,9 @@ def start(ctx, specs, db, batch_size, no_create_tables):
         sys.exit(1)
 
 
-@realtime.command()
+@realtime.command("status")
 @click.pass_context
-def status(ctx):
+def realtime_status(ctx):
     """Show realtime monitoring status.
 
     Displays current status of the monitoring service including:
@@ -1557,9 +1556,9 @@ def status(ctx):
     console.print("For now, check the logs at: logs/jltsql.log")
 
 
-@realtime.command()
+@realtime.command("stop")
 @click.pass_context
-def stop(ctx):
+def realtime_stop(ctx):
     """Stop realtime monitoring service.
 
     Gracefully stops all monitoring threads and closes database connections.
@@ -1740,7 +1739,7 @@ def timeseries(ctx, spec, from_date, to_date, db, db_path):
                     logger.error(f"Error processing {spec_code}", error=str(e), exc_info=True)
 
             console.print()
-            console.print(f"[bold green]Complete![/bold green]")
+            console.print("[bold green]Complete![/bold green]")
             console.print(f"  Total records:  {total_records:,}")
             console.print(f"  Saved:          {total_success:,}")
             console.print(f"  Errors:         {total_errors:,}")
