@@ -56,7 +56,7 @@ def test_parsers():
         print(f"\n✗ ロード失敗: {len(failed)}")
         print(f"  {', '.join(failed)}")
 
-    return len(failed) == 0
+    assert len(failed) == 0, f"Failed parsers: {failed}"
 
 def test_schemas():
     """全58スキーマの作成テスト (NL_38 + RT_20)"""
@@ -101,7 +101,7 @@ def test_schemas():
         if db_path.exists():
             db_path.unlink()
 
-    return success
+    assert success, "Schema test failed"
 
 @pytest.mark.skipif(sys.platform != 'win32', reason="Requires Windows + JV-Link COM")
 def test_data_import():
@@ -229,7 +229,7 @@ def test_data_import():
         print(f"\n総レコード数: {total_records:,} 件")
         print(f"データが入ったテーブル: {len(table_stats)}/{len(SCHEMAS)}")
 
-        return True
+        pass  # All assertions passed
 
     except Exception as e:
         print(f"\n✗ エラー: {e}")
@@ -291,7 +291,7 @@ def test_importer_mappings():
     else:
         print(f"  ✓ 全テーブルマッピング済み")
 
-    return True
+
 
 def main():
     """メインテスト"""
