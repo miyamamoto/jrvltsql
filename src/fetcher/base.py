@@ -221,7 +221,7 @@ class BaseFetcher(ABC):
                             )
                         last_update_time = current_time
 
-                elif ret_code in (-201, -202, -203, -402, -403, -502, -503):
+                elif ret_code in (-3, -201, -202, -203, -402, -403, -502, -503):
                     # Recoverable errors - delete corrupted file and continue
                     # Based on kmy-keiba's JVLinkReader.cs error handling:
                     # -201: Database busy (リトライ可能)
@@ -250,7 +250,7 @@ class BaseFetcher(ABC):
                     )
 
                     # Delete corrupted file for file-related errors
-                    if ret_code in (-203, -402, -403, -502, -503) and filename and hasattr(self.jvlink, 'jv_file_delete'):
+                    if ret_code in (-3, -203, -402, -403, -502, -503) and filename and hasattr(self.jvlink, 'jv_file_delete'):
                         try:
                             self.jvlink.jv_file_delete(filename)
                             logger.info(f"Deleted corrupted file: {filename}")

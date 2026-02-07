@@ -679,6 +679,16 @@ class NVLinkWrapper:
         except Exception as e:
             if isinstance(e, NVLinkError):
                 raise
+            # Check for E_UNEXPECTED COM error (-2147418113)
+            # This happens due to NV-Link memory leak / dialog popups
+            # COM object is broken - cannot continue reading
+            error_str = str(e)
+            if "-2147418113" in error_str or "E_UNEXPECTED" in error_str:
+                logger.error("COM E_UNEXPECTED error in NVRead - COM object is broken, stopping read", error=error_str)
+                # Return 0 (read complete) to stop the read loop gracefully
+                # The data read so far will be saved
+                self._is_open = False
+                return 0, None, None
             raise NVLinkError(f"NVRead failed: {e}")
 
     def nv_gets(self) -> Tuple[int, Optional[bytes], Optional[str]]:

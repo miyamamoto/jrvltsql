@@ -3767,7 +3767,7 @@ class QuickstartRunner:
         # 参考: docs/reference/error-codes.md#nvlink--203-エラー-地方競馬data
         if data_source_str == 'nar':
             if option == 1 or option == 2:
-                option = 4  # NAR: 強制的にセットアップモード（-203エラー回避）
+                option = 2  # NAR: ローカルデータのみ取得（option=4はファイルエラーになるため）
         elif option == 1 and spec in OPTION_4_SUPPORTED_SPECS:
             option = 4  # JRA: 分割セットアップモード（全データ取得）
         # option=4非対応スペックはoption=1で実行（差分データ）
@@ -3845,6 +3845,7 @@ class QuickstartRunner:
                             sid=config.get("jvlink.sid", "JLTSQL"),
                             batch_size=1000,
                             service_key=config.get("jvlink.service_key"),
+                            initialization_key=config.get("nvlink.initialization_key", "UNKNOWN"),
                             show_progress=True,
                             data_source=DataSource.NAR,
                         )
@@ -3886,6 +3887,7 @@ class QuickstartRunner:
                         sid=config.get("jvlink.sid", "JLTSQL"),
                         batch_size=1000,
                         service_key=config.get("jvlink.service_key"),
+                        initialization_key=config.get("nvlink.initialization_key", "UNKNOWN") if data_source == DataSource.NAR else None,
                         show_progress=True,  # JVLinkProgressDisplayを有効化
                         data_source=data_source,
                     )
