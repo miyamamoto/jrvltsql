@@ -43,7 +43,7 @@ def is_admin():
     """管理者権限で実行されているか確認"""
     try:
         return ctypes.windll.shell32.IsUserAnAdmin()
-    except:
+    except Exception:
         return False
 
 

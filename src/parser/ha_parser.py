@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 """
 HAレコードパーサー: 地方競馬 払戻
 
@@ -19,7 +18,7 @@ HAレコードはJRA HR（中央競馬 払戻）に相当するが、フォー�
 レコード長: 1032バイト
 """
 
-from typing import Dict, List, Optional, Tuple
+
 from src.utils.logger import get_logger
 
 
@@ -49,7 +48,7 @@ class HAParser:
         except Exception:
             return ""
 
-    def _parse_payout_entries(self, data: bytes, start: int) -> List[Tuple[str, int]]:
+    def _parse_payout_entries(self, data: bytes, start: int) -> list[tuple[str, int]]:
         """払戻エントリーをパースする。
 
         Args:
@@ -86,7 +85,7 @@ class HAParser:
 
         return entries
 
-    def parse(self, data: bytes) -> Optional[Dict]:
+    def parse(self, data: bytes) -> dict | None:
         """
         HAレコードをパースしてフィールド辞書を返す
 
@@ -177,13 +176,13 @@ class HAParser:
 
             # 先頭の払戻エントリーをフラットフィールドとして格納
             # （DBテーブル互換のため）- デフォルト値を設定
+            result.setdefault("TotalPay", "0")
             result["PayKumi1"] = ""
             result["PayAmount1"] = "0"
             result["PayKumi2"] = ""
             result["PayAmount2"] = "0"
             result["PayKumi3"] = ""
             result["PayAmount3"] = "0"
-            result["TotalPay"] = "0"
 
             if payout_entries:
                 result["PayKumi1"] = payout_entries[0]["Kumi"]
@@ -201,5 +200,5 @@ class HAParser:
             return result
 
         except Exception as e:
-            self.logger.error(f"HAレコードパース中にエラー: {e}")
+            self.logger.exception(f"HAレコードパース中にエラー: {e}")
             return None

@@ -81,7 +81,7 @@ def test_data_availability():
                     # Close stream
                     try:
                         jv.jv_close()
-                    except:
+                    except Exception:
                         pass
 
                 except Exception as e:

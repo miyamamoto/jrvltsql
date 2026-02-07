@@ -40,7 +40,7 @@ def is_admin():
     """管理者権限で実行されているか確認"""
     try:
         return ctypes.windll.shell32.IsUserAnAdmin()
-    except:
+    except Exception:
         return False
 
 
@@ -133,7 +133,7 @@ def check_dll_surrogate(name, clsid, fix=False):
                     winreg.CloseKey(key)
                     key = winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, path, 0, winreg.KEY_SET_VALUE)
                     winreg.DeleteValue(key, "RunAs")
-                    print(f"       -> RunAs を削除しました")
+                    print("       -> RunAs を削除しました")
             except FileNotFoundError:
                 pass  # RunAs doesn't exist, which is good
             winreg.CloseKey(key)
@@ -157,7 +157,7 @@ def check_dll_surrogate(name, clsid, fix=False):
                 print(f"  [NG] {check['desc']}: 未設定")
 
             if fix:
-                print(f"       -> 修正中...")
+                print("       -> 修正中...")
                 success = set_registry_value(
                     winreg.HKEY_CLASSES_ROOT,
                     check["path"],
@@ -166,9 +166,9 @@ def check_dll_surrogate(name, clsid, fix=False):
                     winreg.REG_SZ
                 )
                 if success:
-                    print(f"       -> 修正完了")
+                    print("       -> 修正完了")
                 else:
-                    print(f"       -> 修正失敗（管理者権限が必要）")
+                    print("       -> 修正失敗（管理者権限が必要）")
 
     return all_ok
 

@@ -206,7 +206,7 @@ class TestPostgreSQLAllTables(unittest.TestCase):
             for table_name in SCHEMAS.keys():
                 try:
                     self.db.execute(f'DROP TABLE IF EXISTS {table_name} CASCADE')
-                except:
+                except Exception:
                     pass
             self.db.disconnect()
 

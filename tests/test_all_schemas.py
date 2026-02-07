@@ -209,7 +209,7 @@ def test_data_import():
                         nl_with_data.append(table_name)
                     else:
                         rt_with_data.append(table_name)
-            except:
+            except Exception:
                 pass
 
         print(f"\n蓄積系 (NL_*): {len(nl_with_data)}/38 テーブルにデータ")
@@ -238,7 +238,7 @@ def test_data_import():
     finally:
         try:
             jv.jv_close()
-        except:
+        except Exception:
             pass
         database.disconnect()
 

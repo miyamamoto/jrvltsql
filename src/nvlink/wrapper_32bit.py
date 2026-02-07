@@ -11,15 +11,11 @@ Key optimizations for 32-bit:
 - Maintained full compatibility with BaseFetcher interface
 """
 
-from typing import Optional, Tuple
 
 from src.nvlink.constants import (
     BUFFER_SIZE_NVREAD,
-    ENCODING_NVDATA,
-    NV_READ_ERROR,
     NV_READ_NO_MORE_DATA,
     NV_READ_SUCCESS,
-    NV_RT_ERROR,
     NV_RT_SUCCESS,
     get_error_message,
 )
@@ -63,7 +59,7 @@ CP1252_TO_BYTE = {
 class NVLinkError(Exception):
     """NV-Link related error."""
 
-    def __init__(self, message: str, error_code: Optional[int] = None):
+    def __init__(self, message: str, error_code: int | None = None):
         """Initialize NVLinkError.
 
         Args:
@@ -104,7 +100,7 @@ class NVLinkWrapper:
         >>> wrapper.nv_close()
     """
 
-    def __init__(self, sid: str = "UNKNOWN", initialization_key: Optional[str] = None):
+    def __init__(self, sid: str = "UNKNOWN", initialization_key: str | None = None):
         """Initialize NVLinkWrapper for 32-bit Python.
 
         Args:
@@ -133,7 +129,7 @@ class NVLinkWrapper:
             raise NVLinkError(
                 f"UmaConn (地方競馬DATA) がインストールされていません。"
                 f"32-bit環境でNVDTLab.dllにアクセスできません。詳細: {e}"
-            )
+            ) from e
 
     def nv_set_service_key(self, service_key: str) -> int:
         """Set NV-Link service key via Windows registry.
@@ -173,7 +169,7 @@ class NVLinkWrapper:
         except Exception as e:
             if isinstance(e, NVLinkError):
                 raise
-            raise NVLinkError(f"NVSetServiceKey failed: {e}")
+            raise NVLinkError(f"NVSetServiceKey failed: {e}") from e
 
     def nv_init(self) -> int:
         """Initialize NV-Link.
@@ -204,14 +200,14 @@ class NVLinkWrapper:
         except Exception as e:
             if isinstance(e, NVLinkError):
                 raise
-            raise NVLinkError(f"NVInit failed: {e}")
+            raise NVLinkError(f"NVInit failed: {e}") from e
 
     def nv_open(
         self,
         data_spec: str,
         fromtime: str,
         option: int = 1,
-    ) -> Tuple[int, int, int, str]:
+    ) -> tuple[int, int, int, str]:
         """Open NV-Link data stream for historical data.
 
         Args:
@@ -272,9 +268,9 @@ class NVLinkWrapper:
         except Exception as e:
             if isinstance(e, NVLinkError):
                 raise
-            raise NVLinkError(f"NVOpen failed: {e}")
+            raise NVLinkError(f"NVOpen failed: {e}") from e
 
-    def nv_rt_open(self, data_spec: str, key: str = "") -> Tuple[int, int]:
+    def nv_rt_open(self, data_spec: str, key: str = "") -> tuple[int, int]:
         """Open NV-Link data stream for real-time data.
 
         Args:
@@ -318,9 +314,9 @@ class NVLinkWrapper:
         except Exception as e:
             if isinstance(e, NVLinkError):
                 raise
-            raise NVLinkError(f"NVRTOpen failed: {e}")
+            raise NVLinkError(f"NVRTOpen failed: {e}") from e
 
-    def nv_read(self) -> Tuple[int, Optional[bytes], Optional[str]]:
+    def nv_read(self) -> tuple[int, bytes | None, str | None]:
         """Read one record from NV-Link data stream using NVRead.
 
         Returns:
@@ -367,9 +363,9 @@ class NVLinkWrapper:
         except Exception as e:
             if isinstance(e, NVLinkError):
                 raise
-            raise NVLinkError(f"NVRead failed: {e}")
+            raise NVLinkError(f"NVRead failed: {e}") from e
 
-    def nv_gets(self) -> Tuple[int, Optional[bytes]]:
+    def nv_gets(self) -> tuple[int, bytes | None]:
         """Read one record from NV-Link data stream using NVGets (faster).
 
         NVGets returns data directly as bytes, which is faster than NVRead.
@@ -416,7 +412,7 @@ class NVLinkWrapper:
         except Exception as e:
             if isinstance(e, NVLinkError):
                 raise
-            raise NVLinkError(f"NVGets failed: {e}")
+            raise NVLinkError(f"NVGets failed: {e}") from e
 
     def _convert_com_string_to_bytes(self, buff_str: str) -> bytes:
         """Convert COM BSTR string to Shift-JIS bytes.
@@ -467,7 +463,7 @@ class NVLinkWrapper:
             logger.info("NV-Link stream closed")
             return result
         except Exception as e:
-            raise NVLinkError(f"NVClose failed: {e}")
+            raise NVLinkError(f"NVClose failed: {e}") from e
 
     def nv_status(self) -> int:
         """Get NV-Link status.
@@ -480,7 +476,7 @@ class NVLinkWrapper:
             logger.debug("NVStatus", status=result)
             return result
         except Exception as e:
-            raise NVLinkError(f"NVStatus failed: {e}")
+            raise NVLinkError(f"NVStatus failed: {e}") from e
 
     def is_open(self) -> bool:
         """Check if NV-Link stream is open.
@@ -562,19 +558,19 @@ class NVLinkWrapper:
         data_spec: str,
         fromtime: str,
         option: int = 1,
-    ) -> Tuple[int, int, int, str]:
+    ) -> tuple[int, int, int, str]:
         """Alias for nv_open() for JVLinkWrapper compatibility."""
         return self.nv_open(data_spec, fromtime, option)
 
-    def jv_rt_open(self, data_spec: str, key: str = "") -> Tuple[int, int]:
+    def jv_rt_open(self, data_spec: str, key: str = "") -> tuple[int, int]:
         """Alias for nv_rt_open() for JVLinkWrapper compatibility."""
         return self.nv_rt_open(data_spec, key)
 
-    def jv_read(self) -> Tuple[int, Optional[bytes], Optional[str]]:
+    def jv_read(self) -> tuple[int, bytes | None, str | None]:
         """Alias for nv_read() for JVLinkWrapper compatibility."""
         return self.nv_read()
 
-    def jv_gets(self) -> Tuple[int, Optional[bytes]]:
+    def jv_gets(self) -> tuple[int, bytes | None]:
         """Alias for nv_gets() for JVLinkWrapper compatibility."""
         return self.nv_gets()
 
