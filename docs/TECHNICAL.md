@@ -1,29 +1,20 @@
 # 技術詳細
 
-## DLL Surrogate (64-bit Python対応)
+## Python環境
 
-JV-Link / NV-Link のCOM DLLは32-bitですが、DLL Surrogateを設定することで64-bit Pythonから利用可能です。
+**32-bit Pythonが必須です。**
 
-### セットアップ
+JV-Link / NV-Link のCOM DLLは32-bitのため、32-bit Pythonから直接呼び出す必要があります。
 
-管理者権限のPowerShell/コマンドプロンプトで実行：
+### なぜ64-bitを採用しないか
 
-```bash
-python docs/gists/check_dll_surrogate.py --fix
-```
+DLL Surrogateを設定すれば64-bit Pythonからも利用可能ですが、以下の問題があります：
 
-### CLSID
+- `option=3/4`（セットアップモード）がアウトプロセス通信でハングする
+- 取得できるデータに差はない（32-bitと同一）
+- 追加のレジストリ設定が必要で運用が複雑になる
 
-| API | CLSID | DLL |
-|-----|-------|-----|
-| JV-Link | `{2AB1774D-0C41-11D7-916F-0003479BEB3F}` | `C:\Windows\SysWow64\JVDTLAB\JVDTLab.dll` |
-| NV-Link | `{F726BBA6-5784-4529-8C67-26E152D49D73}` | `C:\Windows\SysWow64\NVDTLab.dll` |
-
-### 注意事項
-
-- DLL Surrogate経由では `option=2`（未読データ取得）を推奨
-- `option=3/4` はアウトプロセス通信でハングする場合があります
-- 詳細は [docs/qiita_64bit_python_com.md](qiita_64bit_python_com.md) を参照
+**32-bitで全機能が利用可能**なため、64-bit対応は不要です。
 
 ## NV-Link (地方競馬DATA)
 
@@ -55,10 +46,43 @@ nvlink:
 
 ### NVDファイル構造
 
-- NVDファイルはZIPアーカイブ
-- ファイル内: H1/BN/CH/KS/NC のみ
-- HA/HR/SE等はライブCOMストリームから取得
-- パス: `C:\UmaConn\chiho.k-ba\data\{data,cache}\YYYY\`
+NVDファイルはZIPアーカイブで、以下のパスに保存されます：
+
+- セットアップデータ: `C:\UmaConn\chiho.k-ba\data\data\YYYY\`
+- キャッシュデータ: `C:\UmaConn\chiho.k-ba\data\cache\YYYY\`
+
+#### ファイルプレフィックスとレコードタイプ
+
+| プレフィックス | レコードタイプ | 内容 |
+|---------------|---------------|------|
+| `RANV` | RA | レース情報 |
+| `SENV` | SE | 出走馬情報 |
+| `HRNV` | HR | 払戻情報 |
+| `HANV` | HA | 払戻情報（NAR独自） |
+| `H1NV` | H1 | 票数情報 |
+| `H6NV` | H6 | 票数情報（3連単） |
+| `O1NV`〜`O6NV` | O1〜O6 | オッズ |
+| `OANV` | OA | オッズ（NAR独自） |
+| `WFNV` | WF | 重勝式 |
+| `BNWV` | BN | 馬主マスタ |
+| `CHWV` | CH | 調教師マスタ |
+| `KSWV` | KS | 騎手マスタ |
+| `NCWV` | NC | 競馬場マスタ |
+
+各NVDファイルはZIP内に `DD.txt`（日付）というテキストファイルを含み、Shift-JIS (CP932) でエンコードされています。
+
+#### リアルタイムデータ
+
+速報データ（0B15等）は `.rtd` 拡張子でキャッシュに保存されます。
+
+### NVOpen option パラメータ
+
+| option | 動作 | 備考 |
+|--------|------|------|
+| 1 | 差分データ取得 | 通常使用 |
+| 2 | 未読データ取得 | 既読データは返さない |
+| 3 | セットアップ（ダイアログあり） | 初回のみ |
+| 4 | 分割セットアップ | 初回のみ |
 
 ## トラブルシューティング
 
@@ -72,7 +96,7 @@ NVDTLab設定ツールを起動し、初回セットアップ（全データダ�
 
 ### -116 エラー（未提供データスペック）
 
-NV-Linkで未対応のデータスペック（例: DIFF）を指定した場合に発生します。
+NV-Linkで未対応のデータスペック（例: DIFN option=2）を指定した場合に発生します。
 
 ### COM E_UNEXPECTED
 
