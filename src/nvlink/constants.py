@@ -21,6 +21,7 @@ NV_RT_SERVICE_UNAVAILABLE = -103  # サービス利用不可
 # Data Specification Error Codes
 NV_RT_UNSUBSCRIBED_DATA = -111  # 契約外データ種別
 NV_RT_UNSUBSCRIBED_DATA_WARNING = -114  # 契約外データ種別（警告レベル）
+NV_RT_UNSUPPORTED_DATA_SPEC = -116  # 未提供データ種別（NV-Linkでサポートされていない）
 
 # Stream State Error Codes
 NV_RT_STREAM_ALREADY_OPEN = -202  # ストリームが既にオープン中（前回のCloseが呼ばれていない）
@@ -111,6 +112,7 @@ ERROR_MESSAGES = {
     # Data Specification Errors
     -111: "契約外のデータ種別です",
     -114: "契約外のデータ種別です（警告）",
+    -116: "未提供のデータ種別です（NV-Linkでサポートされていません）",
     # System Error Codes (kmy-keiba JVLinkLoadResultに準拠)
     -201: "初期化が行われていません（NVInitが呼ばれていない）",
     -202: "すでに接続が開かれています（NVCloseを呼んでください）",
