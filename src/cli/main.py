@@ -585,7 +585,7 @@ def fetch(ctx, date_from, date_to, data_spec, jv_option, db, batch_size, progres
             # Try to import NVLinkWrapper to check if UmaConn is available
             from src.nvlink import NVLinkWrapper
             pass  # NVLinkWrapper imported successfully
-        except Exception:
+        except ImportError:
             if data_source == DataSource.NAR:
                 console.print("[red]エラー:[/red] UmaConn (地方競馬DATA) がインストールされていません。")
                 console.print("地方競馬DATAのセットアップを完了してください。")
@@ -820,7 +820,7 @@ def monitor(ctx, daemon, data_spec, interval, db, source):
         try:
             # Try to import NVLinkWrapper to check if UmaConn is available
             from src.nvlink import NVLinkWrapper
-        except Exception:
+        except ImportError:
             console.print("[red]エラー:[/red] UmaConn (地方競馬DATA) がインストールされていません。")
             console.print("地方競馬DATAのセットアップを完了してください。")
             console.print("詳細: https://www.keiba-data.com/")
