@@ -217,7 +217,7 @@ class OptimizedDataImporter:
                 self.database.commit()
 
             logger.debug(
-                f"Batch inserted",
+                "Batch inserted",
                 table=table_name,
                 records=rows,
                 batch_num=self._batches_processed,
@@ -226,7 +226,7 @@ class OptimizedDataImporter:
         except DatabaseError as e:
             # Try inserting one by one on batch failure
             logger.warning(
-                f"Batch insert failed, trying individual inserts",
+                "Batch insert failed, trying individual inserts",
                 table=table_name,
                 error=str(e),
             )

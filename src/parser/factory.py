@@ -161,7 +161,7 @@ class ParserFactory:
             logger.error("Failed to decode record type")
             return None
         except Exception as e:
-            logger.error(f"Failed to parse record", error=str(e))
+            logger.error("Failed to parse record", error=str(e))
             return None
 
     def __repr__(self) -> str:

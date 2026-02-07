@@ -335,7 +335,7 @@ class DataImporter:
                     else:
                         converted[field_name] = str(value) if value is not None else None
 
-            except (ValueError, TypeError) as e:
+            except (ValueError, TypeError):
                 # Conversion failed, set to None
                 # Note: 詳細なログ出力は省略（Unicode文字でコンソール出力エラーになる場合があるため）
                 converted[field_name] = None
@@ -462,7 +462,7 @@ class DataImporter:
                 self.database.commit()
 
             logger.debug(
-                f"Batch inserted",
+                "Batch inserted",
                 table=table_name,
                 records=rows,
                 batch_num=self._batches_processed,
@@ -471,7 +471,7 @@ class DataImporter:
         except DatabaseError as e:
             # Rollback failed batch transaction
             logger.warning(
-                f"Batch insert failed, trying individual inserts",
+                "Batch insert failed, trying individual inserts",
                 table=table_name,
                 error=str(e),
             )
