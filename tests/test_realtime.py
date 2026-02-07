@@ -623,10 +623,10 @@ class TestRealtimeUpdater(unittest.TestCase):
     @patch('src.realtime.updater.ParserFactory')
     def test_process_record_delete_no_primary_key(self, mock_factory_class):
         """Test deleting record from table without primary key."""
-        # Setup mock parser for WH (no primary key)
+        # Setup mock parser for DM (no primary key)
         mock_parser = MagicMock()
         mock_parser.parse.return_value = {
-            "RecordSpec": "WH",
+            "RecordSpec": "DM",
             "headDataKubun": DATA_KUBUN_DELETE,
             "Year": "2024",
             "MonthDay": "0101",
@@ -640,12 +640,12 @@ class TestRealtimeUpdater(unittest.TestCase):
         updater.parser_factory = mock_factory_instance
 
         # Process record
-        result = updater.process_record("WH20240101...")
+        result = updater.process_record("DM20240101...")
 
         # Verify result
         self.assertIsNotNone(result)
         self.assertEqual(result["operation"], "delete")
-        self.assertEqual(result["table"], "RT_WH")
+        self.assertEqual(result["table"], "RT_DM")
         self.assertFalse(result["success"])
         self.assertIn("No primary key", result["error"])
 
@@ -665,9 +665,15 @@ class TestRealtimeUpdater(unittest.TestCase):
             ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "Umaban"],
         )
 
-        # Test tables without primary keys
-        self.assertEqual(self.updater._get_primary_keys("RT_WH"), [])
-        self.assertEqual(self.updater._get_primary_keys("RT_WE"), [])
+        # Test tables with primary keys (weather/track)
+        self.assertEqual(
+            self.updater._get_primary_keys("RT_WH"),
+            ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "HappyoTime", "HenkoID"],
+        )
+        self.assertEqual(
+            self.updater._get_primary_keys("RT_WE"),
+            ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "HenkoID"],
+        )
         self.assertEqual(self.updater._get_primary_keys("RT_DM"), [])
 
         # Test unknown table
