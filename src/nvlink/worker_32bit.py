@@ -40,7 +40,7 @@ class NVLinkWorker:
         self.nvlink = None
         self.initialized = False
 
-    def init(self):
+    def init(self) -> dict:
         """Initialize COM and NV-Link"""
         try:
             pythoncom.CoInitialize()
@@ -59,7 +59,7 @@ class NVLinkWorker:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    def wait_for_download(self, download_count, timeout=300):
+    def wait_for_download(self, download_count: int, timeout: int = 300) -> bool:
         """Wait for download to complete using NVStatus"""
         if not self.initialized or download_count == 0:
             return True
@@ -83,7 +83,7 @@ class NVLinkWorker:
 
             time.sleep(0.5)
 
-    def open(self, dataspec, fromtime, option=2, wait_download=True):
+    def open(self, dataspec: str, fromtime, option: int = 2, wait_download: bool = True) -> dict:
         """Open data stream
         
         Args:
@@ -136,7 +136,7 @@ class NVLinkWorker:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    def read(self, max_records=100):
+    def read(self, max_records: int = 100) -> dict:
         """Read records from opened stream using NVGets"""
         if not self.initialized:
             return {"success": False, "error": "Not initialized"}
@@ -206,10 +206,10 @@ class NVLinkWorker:
                                 # Decode data
                                 try:
                                     data_str = data_bytes[:ret_code].decode('shift-jis', errors='replace')
-                                except:
+                                except Exception:
                                     try:
                                         data_str = data_bytes[:ret_code].decode('cp932', errors='replace')
-                                    except:
+                                    except Exception:
                                         data_str = data_bytes[:ret_code].hex()
 
                                 # Get record ID (first 2 chars)
@@ -247,7 +247,7 @@ class NVLinkWorker:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    def status(self):
+    def status(self) -> dict:
         """Get connection status"""
         if not self.initialized:
             return {"success": False, "status": -999, "error": "Not initialized"}
@@ -258,7 +258,7 @@ class NVLinkWorker:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    def close(self):
+    def close(self) -> dict:
         """Close NV-Link connection"""
         try:
             if self.nvlink is not None:
@@ -266,7 +266,10 @@ class NVLinkWorker:
                 self.nvlink = None
 
             self.initialized = False
-            pythoncom.CoUninitialize()
+            try:
+                pythoncom.CoUninitialize()
+            except Exception:
+                pass  # May not have been initialized
 
             return {"success": True}
         except Exception as e:

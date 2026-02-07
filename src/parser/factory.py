@@ -1,7 +1,7 @@
 """Parser factory for JV-Data records.
 
 This module provides a factory for creating appropriate parser instances
-based on record type. Supports 38 auto-generated record types from official JV-Data spec.
+based on record type. Supports 39 record types (38 JRA + 1 NAR: NU).
 
 Auto-generated parsers based on: 公式JV-Data仕様書 Ver.4.9.0.1
 """
@@ -13,7 +13,7 @@ from src.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-# All supported record types (39 parsers: 38 official JRA + 1 NAR)
+# All supported record types (39 parsers: 38 official JRA + 1 NAR: NU)
 ALL_RECORD_TYPES = [
     'AV', 'BN', 'BR', 'BT', 'CC', 'CH', 'CK', 'CS', 'DM',
     'H1', 'H6', 'HC', 'HN', 'HR', 'HS', 'HY',

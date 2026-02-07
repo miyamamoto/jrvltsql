@@ -222,9 +222,11 @@ def _get_startup_folder() -> Optional[Path]:
             winreg.HKEY_CURRENT_USER,
             r"Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders"
         )
-        startup_path, _ = winreg.QueryValueEx(key, "Startup")
-        winreg.CloseKey(key)
-        return Path(startup_path)
+        try:
+            startup_path, _ = winreg.QueryValueEx(key, "Startup")
+            return Path(startup_path)
+        finally:
+            winreg.CloseKey(key)
     except Exception:
         # フォールバック: 標準的なパス
         appdata = os.environ.get("APPDATA")
@@ -358,7 +360,7 @@ def _check_nvlink_service_key() -> tuple[bool, str]:
 import sys
 try:
     sys.coinit_flags = 2  # STA mode
-except:
+except Exception:
     pass
 import win32com.client
 import pythoncom
@@ -379,6 +381,7 @@ except Exception as e:
             capture_output=True,
             text=True,
             encoding='utf-8', # Force UTF-8 for communication
+            timeout=30,
             creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
         )
         
@@ -401,7 +404,7 @@ except Exception as e:
                     return False, "サービス利用不可"
                 else:
                     return False, f"NV-Link初期化エラー (code: {result_code})"
-            except:
+            except Exception:
                 return False, f"予期しないレスポンス: {output}"
         else:
             # エラーメッセージが含まれている場合
@@ -431,7 +434,7 @@ import sys
 import time
 try:
     sys.coinit_flags = 2  # STA mode
-except:
+except Exception:
     pass
 import win32com.client
 import pythoncom
@@ -546,7 +549,7 @@ def _run_nar_initial_setup(console=None, show_progress: bool = True) -> tuple[bo
 import sys
 try:
     sys.coinit_flags = 2  # STA mode for UI
-except:
+except Exception:
     pass
 import win32com.client
 import pythoncom
@@ -3763,7 +3766,7 @@ class QuickstartRunner:
 
         # NAR (NV-Link) では option 1 が正常動作しない（NVStatusが-203を返す既知の問題）
         # 原因: NVDTLabのセットアップ不完全、またはキャッシュの問題
-        # 対策: NAR では常に option 4 (セットアップモード) を使用することで回避
+        # 対策: NAR では常に option 2 を使用することで回避
         # 参考: docs/reference/error-codes.md#nvlink--203-エラー-地方競馬data
         if data_source_str == 'nar':
             if option == 1 or option == 2:

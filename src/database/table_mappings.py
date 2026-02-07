@@ -21,7 +21,7 @@ Helper Functions:
 - is_nar_table(): Check if a table is a NAR table
 """
 
-from typing import Dict
+from typing import Dict, Optional
 
 
 # JRA-VAN標準名 → jrvltsqlテーブル名
@@ -253,7 +253,7 @@ NAR_TABLE_TO_RECORD_TYPE: Dict[str, str] = {
 
 # Helper functions for source-specific table name resolution
 
-def get_table_name_for_source(record_type: str, source: str = "jra") -> str:
+def get_table_name_for_source(record_type: str, source: str = "jra") -> Optional[str]:
     """Get table name for record type and data source.
 
     Args:
@@ -275,7 +275,7 @@ def get_table_name_for_source(record_type: str, source: str = "jra") -> str:
         return RECORD_TYPE_TO_TABLE.get(record_type)
 
 
-def get_jravan_table_name(standard_name: str, source: str = "jra") -> str:
+def get_jravan_table_name(standard_name: str, source: str = "jra") -> Optional[str]:
     """Get jrvltsql table name from JRA-VAN standard name.
 
     Args:
@@ -297,7 +297,7 @@ def get_jravan_table_name(standard_name: str, source: str = "jra") -> str:
         return JRAVAN_TO_JLTSQL.get(standard_name)
 
 
-def get_record_type_from_table(table_name: str) -> str:
+def get_record_type_from_table(table_name: str) -> Optional[str]:
     """Get record type code from table name (supports both JRA and NAR).
 
     Args:

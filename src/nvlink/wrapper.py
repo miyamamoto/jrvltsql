@@ -174,7 +174,7 @@ class NVLinkWrapper:
             >>> wrapper.nv_init()
         """
         try:
-            result = self._nvlink.NVSetServiceKey(service_key)
+            result = int(self._nvlink.NVSetServiceKey(service_key))
             if result == NV_RT_SUCCESS:
                 logger.info("Service key set successfully")
             else:
@@ -201,7 +201,7 @@ class NVLinkWrapper:
             0
         """
         try:
-            result = self._nvlink.NVSetUIProperties()
+            result = int(self._nvlink.NVSetUIProperties())
             logger.info("NVSetUIProperties called", result=result)
             return result
         except Exception as e:
@@ -220,7 +220,7 @@ class NVLinkWrapper:
             NVLinkError: If setting save path fails
         """
         try:
-            result = self._nvlink.NVSetSavePath(save_path)
+            result = int(self._nvlink.NVSetSavePath(save_path))
             if result == NV_RT_SUCCESS:
                 logger.info("Save path set successfully", save_path=save_path)
             else:
@@ -242,7 +242,7 @@ class NVLinkWrapper:
             NVLinkError: If setting save flag fails
         """
         try:
-            result = self._nvlink.NVSetSaveFlag(save_flag)
+            result = int(self._nvlink.NVSetSaveFlag(save_flag))
             if result == NV_RT_SUCCESS:
                 logger.info("Save flag set successfully", save_flag=save_flag)
             else:
@@ -319,7 +319,7 @@ class NVLinkWrapper:
         """
         try:
             init_key = self.initialization_key or self.sid
-            result = self._nvlink.NVInit(init_key)
+            result = int(self._nvlink.NVInit(init_key))
             if result == NV_RT_SUCCESS:
                 logger.info(
                     "NV-Link initialized successfully",
@@ -855,7 +855,7 @@ class NVLinkWrapper:
             >>> wrapper.nv_close()
         """
         try:
-            result = self._nvlink.NVClose()
+            result = int(self._nvlink.NVClose())
             self._is_open = False
             logger.info("NV-Link stream closed")
             return result
@@ -884,7 +884,7 @@ class NVLinkWrapper:
             >>> status = wrapper.nv_status()
         """
         try:
-            result = self._nvlink.NVStatus()
+            result = int(self._nvlink.NVStatus())
             logger.debug("NVStatus", status=result)
             return result
         except Exception as e:
@@ -983,7 +983,7 @@ class NVLinkWrapper:
             ...     # Continue reading
         """
         try:
-            result = self._nvlink.NVFiledelete(filename)
+            result = int(self._nvlink.NVFiledelete(filename))
             logger.info("NVFiledelete called", filename=filename, result=result)
             return result
         except Exception as e:

@@ -533,13 +533,13 @@ class RealtimeFetcher(BaseFetcher):
                         logger.warning("Error fetching key", key=key, error=str(e))
                     try:
                         self.jvlink.jv_close()
-                    except:
+                    except Exception:
                         pass
 
         finally:
             try:
                 self.jvlink.jv_close()
-            except:
+            except Exception:
                 pass
 
         logger.info(
@@ -755,7 +755,7 @@ class RealtimeFetcher(BaseFetcher):
                                 logger.warning("Error fetching key", key=key, error=str(e))
                             try:
                                 self.jvlink.jv_close()
-                            except:
+                            except Exception:
                                 pass
 
                 # Move to next date
@@ -765,7 +765,7 @@ class RealtimeFetcher(BaseFetcher):
             # Ensure stream is closed
             try:
                 self.jvlink.jv_close()
-            except:
+            except Exception:
                 pass
 
         logger.info(

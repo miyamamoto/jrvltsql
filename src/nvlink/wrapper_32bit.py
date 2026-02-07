@@ -119,6 +119,7 @@ class NVLinkWrapper:
         self.initialization_key = initialization_key
         self._nvlink = None
         self._is_open = False
+        self._com_initialized = False
 
         try:
             import win32com.client

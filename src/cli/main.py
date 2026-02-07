@@ -610,7 +610,7 @@ def fetch(ctx, date_from, date_to, data_spec, jv_option, db, batch_size, progres
 
     option_names = {1: "通常データ", 2: "今週データ", 3: "セットアップ", 4: "分割セットアップ"}
     source_display = data_source.display_name
-    console.print(f"[bold cyan]Fetching historical data from JRA-VAN...[/bold cyan]\n")
+    console.print(f"[bold cyan]Fetching historical data from {source_display}...[/bold cyan]\n")
     console.print(f"  Data source: {source_display}")
     console.print(f"  Date range: {date_from} -- {date_to}")
     console.print(f"  Data spec:  {data_spec}")
@@ -622,14 +622,15 @@ def fetch(ctx, date_from, date_to, data_spec, jv_option, db, batch_size, progres
         console.print()
         console.print("[yellow]Note:[/yellow] セットアップモード - 全データ取得（ダイアログが表示されます）")
 
-    # Validate data_spec and option combination
-    from src.jvlink.constants import is_valid_jvopen_combination, JVOPEN_VALID_COMBINATIONS
-    if not is_valid_jvopen_combination(data_spec, jv_option):
-        console.print()
-        console.print(f"[red]Error:[/red] データ種別 '{data_spec}' は option={jv_option} では取得できません")
-        valid_specs = JVOPEN_VALID_COMBINATIONS.get(jv_option, [])
-        console.print(f"       option={jv_option} で取得可能: {', '.join(valid_specs)}")
-        sys.exit(1)
+    # Validate data_spec and option combination (JRA only - NAR uses different validation)
+    if data_source != DataSource.NAR:
+        from src.jvlink.constants import is_valid_jvopen_combination, JVOPEN_VALID_COMBINATIONS
+        if not is_valid_jvopen_combination(data_spec, jv_option):
+            console.print()
+            console.print(f"[red]Error:[/red] データ種別 '{data_spec}' は option={jv_option} では取得できません")
+            valid_specs = JVOPEN_VALID_COMBINATIONS.get(jv_option, [])
+            console.print(f"       option={jv_option} で取得可能: {', '.join(valid_specs)}")
+            sys.exit(1)
 
     console.print()
 
@@ -881,11 +882,15 @@ def monitor(ctx, daemon, data_spec, interval, db, source):
 
             # Start monitoring
             init_key = config.get("nvlink.initialization_key") if config else None
+            if data_source == DataSource.NAR:
+                sid = config.get("nvlink.sid", "JLTSQL") if config else "JLTSQL"
+            else:
+                sid = config.get("jvlink.sid", "JLTSQL") if config else "JLTSQL"
             monitor_obj = RealtimeMonitor(
                 database=database,
                 data_spec=data_spec,
                 polling_interval=interval,
-                sid=config.get("jvlink.sid", "JLTSQL") if config else "JLTSQL",
+                sid=sid,
                 initialization_key=init_key,
                 data_source=data_source
             )
@@ -1675,8 +1680,8 @@ def timeseries(ctx, spec, from_date, to_date, db, db_path):
 
         with database:
             # Ensure TS_O* tables exist
-            from src.database.schema import get_schema_registry
-            schema_registry = get_schema_registry()
+            from src.database.schema import SCHEMAS
+            schema_registry = SCHEMAS
             for spec_code in specs_list:
                 # Map spec to table name
                 table_map = {

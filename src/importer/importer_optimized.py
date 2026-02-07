@@ -7,7 +7,7 @@ Key optimizations:
 - Adaptive batch sizing based on performance
 """
 
-from typing import Dict, Iterator, List, Optional
+from typing import Dict, Iterator, List, Optional, Union
 from src.database.base import BaseDatabase, DatabaseError
 from src.utils.logger import get_logger
 
@@ -184,7 +184,7 @@ class OptimizedDataImporter:
                 try:
                     self.database.rollback()
                     logger.info("Rolled back transaction due to error")
-                except:
+                except Exception:
                     pass
 
             from src.importer.importer import ImporterError
@@ -247,7 +247,7 @@ class OptimizedDataImporter:
                         error=str(e),
                     )
 
-    def get_statistics(self) -> Dict[str, int]:
+    def get_statistics(self) -> Dict[str, Union[int, float]]:
         """Get import statistics."""
         return {
             "records_imported": self._records_imported,

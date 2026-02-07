@@ -115,7 +115,12 @@ class RealtimeMonitor:
         self.jvlink.jv_init()
 
         # Open real-time stream
-        ret_code = self.jvlink.jv_rt_open(self.data_spec)
+        rt_result = self.jvlink.jv_rt_open(self.data_spec)
+        # NVLink returns tuple (result_code, read_count), JVLink returns int
+        if isinstance(rt_result, tuple):
+            ret_code = int(rt_result[0])
+        else:
+            ret_code = int(rt_result)
         if ret_code != JV_RT_SUCCESS:
             logger.error(f"Failed to open real-time stream: {ret_code}")
             raise RuntimeError(f"JVRTOpen failed with code {ret_code}")

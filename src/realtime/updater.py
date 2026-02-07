@@ -280,6 +280,11 @@ class RealtimeUpdater:
             Primary key definitions are based on schema.py table definitions.
             Tables without explicit primary keys return empty list.
         """
+        # Strip _NAR suffix for lookup since NAR tables use the same key structure
+        lookup_name = table_name
+        if lookup_name.endswith("_NAR"):
+            lookup_name = lookup_name[:-4]
+
         PRIMARY_KEY_MAP = {
             # Race data - standard race identifier
             "RT_RA": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum"],
@@ -323,7 +328,7 @@ class RealtimeUpdater:
             "RT_CC": [],  # Horse results - no primary key
         }
 
-        return PRIMARY_KEY_MAP.get(table_name, [])
+        return PRIMARY_KEY_MAP.get(lookup_name, [])
 
     def _handle_delete_record(self, table_name: str, data: Dict) -> Dict:
         """Handle record deletion.
