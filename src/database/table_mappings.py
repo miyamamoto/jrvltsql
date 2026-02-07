@@ -159,6 +159,7 @@ NAR_RECORD_TYPE_TO_TABLE: Dict[str, str] = {
     "O4": "NL_O4_NAR",  # 馬単オッズ (Exacta Odds)
     "O5": "NL_O5_NAR",  # 三連複オッズ (Trio Odds)
     "O6": "NL_O6_NAR",  # 三連単オッズ (Trifecta Odds)
+    "OA": "NL_OA_NAR",  # 地方競馬オッズ (NAR-specific Odds)
     "YS": "NL_YS_NAR",
     "NU": "NL_NU_NAR",  # 馬基本データ (Horse Master)  # 開催スケジュール (Race Schedule)
     "UM": "NL_UM_NAR",  # 競走馬マスタ (Horse Master)

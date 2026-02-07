@@ -14,7 +14,8 @@ nvlink:
   service_key: "${NVLINK_SERVICE_KEY}"
   # Initialization key (software ID) used by NVInit
   # Example: "SA000000/SD000004" (your vendor-provided key)
-  initialization_key: "${NVLINK_INIT_KEY}"
+    # Must be "UNKNOWN" - other values cause -301 auth error
+  initialization_key: "UNKNOWN"
 
 # Database Settings
 database:

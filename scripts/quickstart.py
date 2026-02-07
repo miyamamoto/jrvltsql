@@ -368,7 +368,7 @@ import pythoncom
 try:
     pythoncom.CoInitialize()
     nvlink = win32com.client.Dispatch("NVDTLabLib.NVLink")
-    result = nvlink.NVInit("JLTSQL_CHECK")
+    result = nvlink.NVInit("UNKNOWN")
     print(f"RESULT:{result}")
 except Exception as e:
     print(f"ERROR:{e}")
@@ -444,7 +444,7 @@ try:
     nvlink = win32com.client.Dispatch("NVDTLabLib.NVLink")
 
     # Initialize
-    init_result = nvlink.NVInit("JLTSQL_SETUP_CHECK")
+    init_result = nvlink.NVInit("UNKNOWN")
     if init_result != 0:
         print(f"INIT_ERROR:{init_result}")
         sys.exit(0)
