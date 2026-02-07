@@ -116,11 +116,10 @@ def read_nvd_file(filepath: Path) -> list[bytes]:
     with zipfile.ZipFile(filepath) as zf:
         for entry_name in zf.namelist():
             with zf.open(entry_name) as ef:
-                content = ef.read()
-                # Split by CRLF (standard NVD line separator)
-                for line in content.split(b"\r\n"):
-                    if line.strip():
-                        records.append(line)
+                for line in ef:
+                    stripped_line = line.strip()
+                    if stripped_line:
+                        records.append(stripped_line)
     return records
 
 
@@ -163,23 +162,20 @@ def list_nvd_files(
 
     files = []
     search_dirs = []
+    base_dirs = []
     if use_data and data_dir.exists():
-        if year:
-            d = data_dir / str(year)
-            if d.exists():
-                search_dirs.append(d)
-        else:
-            search_dirs.extend(
-                d for d in sorted(data_dir.iterdir()) if d.is_dir()
-            )
+        base_dirs.append(data_dir)
     if use_cache and cache_dir.exists():
+        base_dirs.append(cache_dir)
+
+    for base_dir in base_dirs:
         if year:
-            d = cache_dir / str(year)
+            d = base_dir / str(year)
             if d.exists():
                 search_dirs.append(d)
         else:
             search_dirs.extend(
-                d for d in sorted(cache_dir.iterdir()) if d.is_dir()
+                d for d in sorted(base_dir.iterdir()) if d.is_dir()
             )
 
     for directory in search_dirs:
@@ -188,12 +184,14 @@ def list_nvd_files(
                 continue
             prefix = get_nvd_prefix(fp.name)
             if prefix and prefix in prefixes:
-                # Check from_date filter
-                if from_date and len(fp.name) >= 12:
-                    # Extract race date from filename (after prefix, 8 digits)
-                    file_date = fp.name[4:12]
-                    if file_date < from_date:
-                        continue
+                # Check from_date filter using prefix length for robust date extraction
+                if from_date:
+                    prefix_len = len(prefix)
+                    date_end_index = prefix_len + 8
+                    if len(fp.name) >= date_end_index:
+                        file_date = fp.name[prefix_len:date_end_index]
+                        if file_date < from_date:
+                            continue
                 files.append(fp)
 
     return files
