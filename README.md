@@ -59,7 +59,7 @@ python scripts/quickstart.py -y           # 確認スキップ
 3. 初回データダウンロードを実行
 4. `config/config.yaml` に初期化キーを設定：
    ```yaml
-   nar:
+   nvlink:
      initialization_key: "UNKNOWN"
    ```
 
@@ -94,7 +94,7 @@ jltsql fetch --db postgresql  # PostgreSQL（pg8000ドライバ使用）
 
 ### 地方競馬 (NAR)
 
-レース情報(RA)、馬情報(SE)、払戻(HR/HA)、票数(H1/H6)、オッズ(O1-O6)、重量(WF)、速報(BN)
+レース情報(RA)、馬情報(SE)、払戻(HR/HA)、票数(H1/H6)、オッズ(O1-O6)、重勝式(WF)、馬主(BN)
 
 地方競馬データは `_NAR` サフィックス付きのテーブルに保存されます（例: `NL_RA_NAR`）。
 

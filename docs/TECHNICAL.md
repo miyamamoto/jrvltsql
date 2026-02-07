@@ -34,7 +34,7 @@ NV-Linkの初期化キーは `"UNKNOWN"` を使用してください。他のキ
 `config/config.yaml` に設定：
 
 ```yaml
-nar:
+nvlink:
   initialization_key: "UNKNOWN"
 ```
 
