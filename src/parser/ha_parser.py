@@ -85,7 +85,7 @@ class HAParser:
 
         return entries
 
-    def parse(self, data: bytes) -> dict | None:
+    def parse(self, data: bytes) -> "dict | None":
         """
         HAレコードをパースしてフィールド辞書を返す
 

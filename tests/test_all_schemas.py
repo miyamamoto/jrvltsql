@@ -7,6 +7,7 @@
 
 import sys
 import os
+import pytest
 from pathlib import Path
 
 # Windowsコンソールでのエンコーディング問題を回避
@@ -102,6 +103,7 @@ def test_schemas():
 
     return success
 
+@pytest.mark.skipif(sys.platform != 'win32', reason="Requires Windows + JV-Link COM")
 def test_data_import():
     """実際のデータインポートテスト（複数data_spec）"""
     print("\n" + "=" * 70)

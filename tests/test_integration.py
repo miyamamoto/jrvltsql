@@ -92,7 +92,7 @@ class TestIntegration:
                 "NL_SE": 70,   # Horse race results table
                 "NL_UM": 61,   # Horse master table
                 "NL_KS": 68,   # Jockey master table
-                "NL_HR": 106,  # Refund table
+                "NL_HR": 110,  # Refund table
                 "NL_O1": 29,   # Odds table
             }
 
