@@ -3,7 +3,10 @@
 """Test data availability for various periods and specs."""
 
 import sys
+import pytest
 from pathlib import Path
+
+pytestmark = pytest.mark.skipif(sys.platform != 'win32', reason="Requires Windows COM")
 sys.path.insert(0, str(Path(__file__).parent))
 
 from src.jvlink.wrapper import JVLinkWrapper

@@ -3,8 +3,11 @@
 """Test setup download to get initial data."""
 
 import sys
+import pytest
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
+
+pytestmark = pytest.mark.skipif(sys.platform != 'win32', reason="Requires Windows COM")
 
 from src.jvlink.wrapper import JVLinkWrapper
 from dotenv import load_dotenv

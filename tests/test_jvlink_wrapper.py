@@ -1,7 +1,10 @@
 """Unit tests for JV-Link wrapper."""
 
+import sys
 import pytest
 from unittest.mock import MagicMock, Mock, patch
+
+pytestmark = pytest.mark.skipif(sys.platform != 'win32', reason="Requires Windows COM")
 
 from src.jvlink.constants import (
     DATA_SPEC_DIFN,

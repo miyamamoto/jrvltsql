@@ -16,9 +16,14 @@ DuckDB is not supported (32-bit Python required for JV-Link, DuckDB doesn't supp
 """
 
 import os
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+
+import pytest
+
+pytestmark = pytest.mark.skipif(sys.platform != 'win32', reason="Requires Windows COM")
 
 from src.database.schema import SCHEMAS, SchemaManager
 from src.database.sqlite_handler import SQLiteDatabase

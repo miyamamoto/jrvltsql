@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+from __future__ import annotations
+
 """
 HAレコードパーサー: 地方競馬 払戻
 
