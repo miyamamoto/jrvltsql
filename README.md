@@ -1,26 +1,38 @@
 # JRVLTSQL
 
-JRA-VAN DataLabの競馬データをSQLiteにインポートするツール
+JRA-VAN DataLab / 地方競馬DATA の競馬データをSQLite・PostgreSQLにインポートするツール
+
+## 特徴
+
+- **中央競馬 (JRA)**: JRA-VAN DataLab (JV-Link) 対応
+- **地方競馬 (NAR)**: 地方競馬DATA UmaConn (NV-Link) 対応
+- **41種のパーサー**: 38 JRA + 3 NAR (HA, NU, BN) に対応
+- **データベース**: SQLite（セットアップ不要）/ PostgreSQL 対応
+- **リアルタイム監視**: オッズ・速報データの自動取得
+- **64-bit Python対応**: DLL Surrogateによる64-bit環境サポート
 
 ## インストール
 
 ### 必要要件
 
 - Windows 10/11
-- **Python 3.12 (32-bit)** - 地方競馬DATA対応のため必須
-- JRA-VAN DataLab会員
+- Python 3.12以上
+- JRA-VAN DataLab会員（中央競馬を使う場合）
+- 地方競馬DATA会員（地方競馬を使う場合）
 
-### Python 3.12 (32-bit) のインストール
+### Python環境
 
-地方競馬DATA (UmaConn) APIは32-bit Pythonでのみ動作するため、32-bit版のインストールが必要です：
+**推奨: 64-bit Python 3.12+**
 
-1. [Python 3.12 公式サイト](https://www.python.org/downloads/)から **Windows installer (32-bit)** をダウンロード
-2. インストール時に「Add Python to PATH」にチェック
-3. インストール後、コマンドプロンプトで確認：
-   ```bash
-   python --version  # Python 3.12.x と表示されることを確認
-   python -c "import struct; print(struct.calcsize('P') * 8)"  # 32 と表示されることを確認
-   ```
+DLL Surrogateを使うことで、64-bit Pythonから32-bit COM DLL（JV-Link / NV-Link）を利用できます。
+
+```bash
+# DLL Surrogateのセットアップ（管理者権限で実行）
+python docs/gists/check_dll_surrogate.py   # 設定確認
+# レジストリ設定は docs/gists/ を参照
+```
+
+**32-bit Pythonでも動作します**（COM DLLと直接通信）。
 
 ### セットアップ
 
@@ -28,11 +40,11 @@ JRA-VAN DataLabの競馬データをSQLiteにインポートするツール
 pip install git+https://github.com/miyamamoto/jrvltsql.git
 ```
 
-**quickstart.bat をダブルクリック** で対話形式のセットアップが始まります。
-
 ## 使い方
 
-### quickstartオプション
+### クイックスタート
+
+**quickstart.bat をダブルクリック** で対話形式のセットアップが始まります。
 
 ```bash
 python scripts/quickstart.py              # 対話形式
@@ -51,24 +63,21 @@ jltsql monitor          # リアルタイム監視
 
 ### データベース
 
-JRVLTSQLは32-bit Python環境でSQLiteまたはPostgreSQLデータベースを使用します。
+SQLiteまたはPostgreSQLを選択できます。
 
 ```bash
 jltsql fetch --db sqlite      # SQLite（デフォルト、セットアップ不要）
 jltsql fetch --db postgresql  # PostgreSQL（pg8000ドライバ使用）
 ```
 
-**注意**: 32-bit Python環境ではpg8000（純Python製PostgreSQLドライバ）を使用します。
-
-## 地方競馬DATA対応 (NAR Support)
-
-JRVLTSQLは地方競馬DATA（UmaConn）にも対応しています。
+## 地方競馬DATA対応 (NAR)
 
 ### 必要条件
 
-- 地方競馬DATA会員登録（https://www.keiba-data.com/）
+- [地方競馬DATA](https://www.keiba-data.com/) 会員登録
 - UmaConnソフトウェアのインストール
 - サービスキーの設定
+- `config/config.yaml` に `initialization_key: "UNKNOWN"` を設定
 
 ### 使用方法
 
@@ -83,22 +92,19 @@ jltsql monitor --source nar
 jltsql status --source all
 ```
 
-### トラブルシューティング
+### NAR対応レコード
 
-**-203 エラーが発生する場合**:
-
-```
-FetcherError: NV-Linkダウンロードエラー (code: -203)
-```
-
-このエラーは NVDTLab の初回セットアップが未完了の場合に発生します：
-
-1. **NVDTLab設定ツールを起動**
-2. **「データダウンロード」タブを選択**
-3. **初回セットアップを実行**（全データのダウンロード）
-4. **セットアップ完了後、再度データ取得を実行**
-
-詳細は [エラーコードリファレンス](docs/reference/error-codes.md#nvlink--203-エラー-地方競馬data) を参照してください。
+| レコード | 内容 |
+|---------|------|
+| RA | レース情報 |
+| SE | 馬情報 |
+| HR | 払戻情報 |
+| H1 | 票数情報 |
+| H6 | 票数情報(6) |
+| O1-O6 | オッズ |
+| HA | 払戻情報(NAR独自) |
+| WF | 重量情報 |
+| BN | 速報情報 |
 
 ### データベーステーブル
 
@@ -126,16 +132,37 @@ WHERE Year = 2024;
 - **RT_テーブル**: 速報系データ（リアルタイムオッズなど）
 - **TS_テーブル**: 時系列オッズ
 
-## 技術的な制約
+## 技術的な詳細
 
-### なぜ32-bit Pythonが必要か
+### DLL Surrogate (64-bit Python対応)
 
-地方競馬DATA (UmaConn) のCOM APIは32-bit DLLとして提供されており、以下の理由から32-bit Python環境が必須です：
+JV-Link / NV-Link のCOM DLLは32-bitですが、DLL Surrogateを設定することで64-bit Pythonから利用可能です。
 
-- **64-bit Python + DllSurrogate**: 理論上は可能だが、実際には`DAX Error`など不安定な動作が発生
-- **32-bit Python**: UmaConn APIと直接通信でき、安定動作を確認済み
+```
+# レジストリに以下を設定（AppID + DllSurrogate=""）
+# JV-Link CLSID: {2AB1774D-0C41-11D7-916F-0003479BEB3F}
+# NV-Link CLSID: {F726BBA6-5784-4529-8C67-26E152D49D73}
+```
 
-JRA-VAN (JV-Link) のみを使用する場合は64-bit Pythonでも動作可能ですが、将来的な地方競馬対応を考慮し、32-bit環境での開発を推奨します。
+**注意**: DLL Surrogate経由では `option=2`（未読データ取得）を推奨。`option=3/4` はアウトプロセス通信でハングする場合があります。
+
+### NV-Link 初期化
+
+NV-Linkの初期化キーは `"UNKNOWN"` を使用してください。他のキーでは `-301` 認証エラーが発生します。
+
+### トラブルシューティング
+
+**-203 エラー（初回セットアップ未完了）**:
+
+NVDTLab設定ツールを起動し、初回セットアップ（全データダウンロード）を実行してください。
+
+**-3 エラー（ファイル未検出）**:
+
+`option=2` で既読データを再取得しようとした場合に発生します。`fromtime` を新しいタイムスタンプに更新してください。
+
+**-116 エラー（未提供データスペック）**:
+
+NV-Linkで未対応のデータスペック（例: DIFF）を指定した場合に発生します。
 
 ## ライセンス
 
