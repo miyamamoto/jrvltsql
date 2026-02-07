@@ -113,7 +113,7 @@ class JVLinkWrapper:
         try:
             import sys
             # Set COM threading model to Apartment Threaded (STA)
-            sys.coinit_flags = 2
+            sys.coinit_flags = 2  # type: ignore[attr-defined]
 
             import pythoncom
             import win32com.client
@@ -732,7 +732,7 @@ class JVLinkWrapper:
         """
         try:
             import sys
-            sys.coinit_flags = 2
+            sys.coinit_flags = 2  # type: ignore[attr-defined]
 
             import pythoncom
             import win32com.client

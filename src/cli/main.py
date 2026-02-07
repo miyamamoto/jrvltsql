@@ -693,10 +693,10 @@ def fetch(ctx, date_from, date_to, data_spec, jv_option, db, batch_size, progres
                 console.print("[bold cyan]>> NAR（地方競馬）データ取得中...[/bold cyan]")
                 nar_processor = BatchProcessor(
                     database=database,
-                    sid=config.get("jvlink.sid", "JLTSQL") if config else "JLTSQL",
+                    sid=config.get("nvlink.sid", "JLTSQL") if config else "JLTSQL",
                     batch_size=batch_size,
-                    service_key=config.get("jvlink.service_key") if config else None,
-                    initialization_key=init_key,
+                    service_key=config.get("nvlink.service_key") if config else None,
+                    initialization_key=config.get("nvlink.initialization_key") if config else None,
                     show_progress=progress,
                     data_source=DataSource.NAR,
                 )
@@ -1658,8 +1658,12 @@ def timeseries(ctx, spec, from_date, to_date, db, db_path):
 
     try:
         # Initialize database for saving
-        db_config = {"path": database_path}
-        database = SQLiteDatabase(db_config)
+        if db_type == "postgresql":
+            from src.database.postgresql_handler import PostgreSQLDatabase
+            database = PostgreSQLDatabase(config.get("databases.postgresql"))
+        else:
+            db_config = {"path": database_path}
+            database = SQLiteDatabase(db_config)
 
         with database:
             # Ensure TS_O* tables exist

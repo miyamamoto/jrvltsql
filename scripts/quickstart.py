@@ -44,9 +44,10 @@ sys.path.insert(0, str(project_root))
 # ログ設定: 自動設定を無効化（進捗表示を邪魔しないため）
 # 環境変数でモジュールインポート時の自動ログ設定をスキップ
 os.environ['JLTSQL_SKIP_AUTO_LOGGING'] = '1'
-from src.utils.logger import setup_logging
+from src.utils.logger import setup_logging, get_logger
 # 初期設定: ログファイル出力は無効（main()で引数に基づいて再設定）
 setup_logging(level="DEBUG", console_level="CRITICAL", log_to_file=False, log_to_console=False)
+logger = get_logger(__name__)
 
 try:
     from rich.console import Console

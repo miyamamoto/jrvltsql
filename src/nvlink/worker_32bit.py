@@ -82,8 +82,18 @@ class NVLinkWorker:
 
             time.sleep(0.5)
 
-    def open(self, dataspec, fromtime, option=3, wait_download=True):
-        """Open data stream"""
+    def open(self, dataspec, fromtime, option=2, wait_download=True):
+        """Open data stream
+        
+        Args:
+            dataspec: Data specification (e.g., "RACE", "0B15")
+            fromtime: Start timestamp (YYYYMMDDHHmmss as int or str)
+            option: Download option (default=2 for stable operation)
+                    1=Differential (has timing issues)
+                    2=Full download (recommended)
+                    3=Cache only
+            wait_download: Whether to wait for download to complete
+        """
         if not self.initialized:
             return {"success": False, "error": "Not initialized"}
 
@@ -329,8 +339,8 @@ def main():
             result["steps"].append({"init": init_result})
 
             if init_result["success"]:
-                # Open
-                open_result = worker.open("RACE", 20241201000000, 3)
+                # Open with option=2 (stable full download)
+                open_result = worker.open("RACE", 20241201000000, 2)
                 result["steps"].append({"open": open_result})
 
                 if open_result["success"]:

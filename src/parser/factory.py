@@ -7,7 +7,7 @@ Auto-generated parsers based on: 公式JV-Data仕様書 Ver.4.9.0.1
 """
 
 import importlib
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -41,8 +41,8 @@ class ParserFactory:
 
     def __init__(self):
         """Initialize parser factory with dynamic parser loading."""
-        self._parsers: Dict[str, any] = {}
-        self._parser_classes: Dict[str, any] = {}
+        self._parsers: Dict[str, Any] = {}
+        self._parser_classes: Dict[str, Any] = {}
 
         logger.info("ParserFactory initialized", total_types=len(ALL_RECORD_TYPES))
 

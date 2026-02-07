@@ -122,11 +122,11 @@ class RealtimeUpdater:
 
         logger.info("RealtimeUpdater initialized", data_source=data_source.value)
 
-    def process_record(self, buff: str, timeseries: bool = False) -> Optional[Dict]:
+    def process_record(self, buff: bytes, timeseries: bool = False) -> Optional[Dict]:
         """Process real-time data record.
 
         Args:
-            buff: Raw JV-Data record buffer
+            buff: Raw JV-Data record buffer (bytes)
             timeseries: If True, save odds data to TS_O* tables (time series)
                        instead of RT_O* tables. This preserves odds history
                        with HassoTime as part of the primary key.

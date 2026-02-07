@@ -47,10 +47,10 @@ dev = [
 jltsql = "src.cli.main:cli"
 
 [project.urls]
-Homepage = "https://github.com/yourusername/jltsql"
-Documentation = "https://github.com/yourusername/jltsql/docs"
-Repository = "https://github.com/yourusername/jltsql"
-Issues = "https://github.com/yourusername/jltsql/issues"
+Homepage = "https://github.com/miyamamoto/jrvltsql"
+Documentation = "https://github.com/miyamamoto/jrvltsql/docs"
+Repository = "https://github.com/miyamamoto/jrvltsql"
+Issues = "https://github.com/miyamamoto/jrvltsql/issues"
 
 [tool.setuptools]
 packages = ["src"]
@@ -104,6 +104,11 @@ addopts = [
     "--cov=src",
     "--cov-report=term-missing",
     "--cov-report=html",
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "windows_only: marks tests that require Windows",
 ]
 
 [tool.mypy]

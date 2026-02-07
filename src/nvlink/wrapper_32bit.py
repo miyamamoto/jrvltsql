@@ -155,7 +155,8 @@ class NVLinkWrapper:
             result = subprocess.run(
                 ['reg', 'add', reg_key, '/v', 'ServiceKey', '/t', 'REG_SZ', '/d', service_key, '/f'],
                 capture_output=True,
-                text=True
+                text=True,
+                timeout=30  # 30 second timeout for registry operations
             )
 
             if result.returncode == 0:

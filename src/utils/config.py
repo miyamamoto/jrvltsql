@@ -3,7 +3,7 @@
 import os
 import re
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
 import yaml
 
@@ -154,7 +154,7 @@ def _validate_config(config: Dict[str, Any]) -> None:
         raise ConfigError("Invalid NV-Link service key")
 
 
-def load_config(config_path: Optional[str] = None) -> Config:
+def load_config(config_path: Optional[Union[str, Path]] = None) -> Config:
     """Load configuration from YAML file.
 
     Args:
@@ -171,18 +171,19 @@ def load_config(config_path: Optional[str] = None) -> Config:
         >>> config = load_config()
         >>> service_key = config.get("jvlink.service_key")
     """
+    resolved_path: Path
     if config_path is None:
         # Default config path
         project_root = Path(__file__).parent.parent.parent
-        config_path = project_root / "config" / "config.yaml"
+        resolved_path = project_root / "config" / "config.yaml"
     else:
-        config_path = Path(config_path)
+        resolved_path = Path(config_path)
 
-    if not config_path.exists():
-        raise ConfigError(f"Configuration file not found: {config_path}")
+    if not resolved_path.exists():
+        raise ConfigError(f"Configuration file not found: {resolved_path}")
 
     try:
-        with open(config_path, "r", encoding="utf-8") as f:
+        with open(resolved_path, "r", encoding="utf-8") as f:
             config_dict = yaml.safe_load(f)
     except yaml.YAMLError as e:
         raise ConfigError(f"Invalid YAML in configuration file: {e}")
