@@ -437,7 +437,7 @@ class TestAllParsersComprehensive:
             else:
                 failed_parsers.append(record_type)
 
-        assert loaded_count == 39, \
+        assert loaded_count == 40, \
             f"ロードできなかったパーサー: {failed_parsers}"  # 38 JRA + 1 NAR (NU)
         assert len(failed_parsers) == 0
 
