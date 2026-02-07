@@ -32,7 +32,7 @@ class TestParserFactory:
     def test_supported_types(self, parser_factory):
         """サポートされているレコードタイプの確認"""
         supported = parser_factory.supported_types()
-        assert len(supported) == 38
+        assert len(supported) == 39  # 38 JRA + 1 NAR (NU)
         assert supported == ALL_RECORD_TYPES
 
     def test_get_parser_invalid_type(self, parser_factory):
@@ -142,9 +142,11 @@ class TestIndividualParsers:
         result = parser.parse(data)
         assert result is not None
 
-        # 共通フィールドの確認（すべてのパーサーにRecordSpecとDataKubunがあるはず）
+        # 共通フィールドの確認（すべてのパーサーにRecordSpecがあるはず）
         assert 'RecordSpec' in result, f"{record_type}パーサーの出力にRecordSpecがない"
-        assert 'DataKubun' in result, f"{record_type}パーサーの出力にDataKubunがない"
+        # DataKubunはNAR (NU)パーサー以外にあるはず
+        if record_type != "NU":
+            assert 'DataKubun' in result, f"{record_type}パーサーの出力にDataKubunがない"
         # MakeDateはほとんどのパーサーにあるが、一部（AV等）にはないので省略
 
     @pytest.mark.parametrize("record_type", ALL_RECORD_TYPES)
@@ -435,8 +437,8 @@ class TestAllParsersComprehensive:
             else:
                 failed_parsers.append(record_type)
 
-        assert loaded_count == 38, \
-            f"ロードできなかったパーサー: {failed_parsers}"
+        assert loaded_count == 39, \
+            f"ロードできなかったパーサー: {failed_parsers}"  # 38 JRA + 1 NAR (NU)
         assert len(failed_parsers) == 0
 
     def test_all_parsers_have_consistent_interface(self, parser_factory):
