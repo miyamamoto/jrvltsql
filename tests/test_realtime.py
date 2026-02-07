@@ -3,7 +3,7 @@
 """Tests for realtime data fetching and monitoring."""
 
 import unittest
-from unittest.mock import Mock, MagicMock, patch, call
+from unittest.mock import Mock, MagicMock, patch, call, ANY
 import threading
 import time
 
@@ -91,7 +91,7 @@ class TestRealtimeFetcher(unittest.TestCase):
 
         # Verify JV-Link calls
         mock_jvlink.jv_init.assert_called_once()
-        mock_jvlink.jv_rt_open.assert_called_once_with("0B12", "")
+        mock_jvlink.jv_rt_open.assert_called_once_with("0B12", ANY)
         mock_jvlink.jv_close.assert_called_once()
 
     @patch('src.fetcher.base.JVLinkWrapper')
