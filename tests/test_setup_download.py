@@ -104,7 +104,7 @@ def test_setup_download():
                 # Close stream
                 try:
                     jv.jv_close()
-                except:
+                except Exception:
                     pass
 
             except Exception as e:

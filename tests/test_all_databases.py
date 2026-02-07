@@ -183,7 +183,7 @@ class DatabaseTester:
                         count = rows[0]['cnt'] if rows else 0
                         if count > 0:
                             tables_with_data.append(f"{table_name}({count})")
-                    except:
+                    except Exception:
                         pass
 
                 print(f"\n  データが入ったテーブル: {len(tables_with_data)}")
