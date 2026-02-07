@@ -12,7 +12,7 @@ python scripts/quickstart.py
 
 ### セットアップの流れ
 
-1. **データベース選択**: SQLite / DuckDB / PostgreSQL
+1. **データベース選択**: SQLite / PostgreSQL
 2. **データ範囲指定**: 過去何年分のデータを取得するか
 3. **データ種別選択**: 取得するデータの種類
 4. **確認と実行**: 設定を確認してインポート開始
@@ -59,9 +59,6 @@ python scripts/quickstart.py --no-odds
 
 # 確認プロンプトをスキップ
 python scripts/quickstart.py -y
-
-# DuckDBを使用
-python scripts/quickstart.py --db duckdb
 ```
 
 ## データ取得後の確認

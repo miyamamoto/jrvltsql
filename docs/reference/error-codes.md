@@ -14,9 +14,9 @@ JRVLTSQLで発生するエラーとその対処法について説明します。
 | -101 | サービスキー無効 | サービスキーを確認 |
 | -102 | サービスキー期限切れ | 会員契約を更新 |
 | -111 | 未契約データ | 該当データの契約が必要 |
-| -201 | JV-Link初期化失敗 | DataLabを再インストール |
-| -202 | JV-Link接続失敗 | PCを再起動 |
-| -203 | サーバー接続失敗 | ネットワークを確認 |
+| -201 | データベースエラー | DataLabを再起動 |
+| -202 | ファイルエラー/ストリーム重複 | 前回のCloseを確認 |
+| -203 | その他エラー | 詳細は下記トラブルシューティング参照 |
 
 ### 読み取り関連
 
@@ -40,14 +40,6 @@ JRVLTSQLで発生するエラーとその対処法について説明します。
 | `disk I/O error` | ディスクエラー | ディスク空き容量を確認 |
 | `no such table` | テーブルなし | `jltsql create-tables`を実行 |
 | `UNIQUE constraint failed` | 重複キー | 通常はINSERT OR REPLACEで解決 |
-
-### DuckDB
-
-| エラー | 説明 | 対処法 |
-|--------|------|--------|
-| `Out of Memory` | メモリ不足 | `memory_limit`を調整 |
-| `Connection refused` | 接続拒否 | ファイルのロックを確認 |
-| `IO Error` | I/Oエラー | ディスクを確認 |
 
 ### PostgreSQL
 
@@ -130,24 +122,41 @@ MemoryError: Unable to allocate
 jltsql fetch --batch-size 200
 ```
 
-2. DuckDBのメモリ制限
-
-```yaml
-databases:
-  duckdb:
-    memory_limit: "1GB"
-```
-
-### ネットワークエラー
+### NVLink -203 エラー (地方競馬DATA)
 
 ```
-JVLinkError: Server connection failed (-203)
+FetcherError: NV-Linkダウンロードエラー (code: -203)
 ```
+
+**原因**:
+- NVDTLabの初回セットアップが未完了
+- データキャッシュの破損
+- option=1（差分データ）モードでの既知の問題
 
 **対処法**:
-1. インターネット接続を確認
-2. ファイアウォール設定を確認
-3. しばらく待って再試行
+1. **初回セットアップの実行**:
+   - NVDTLab設定ツールを起動
+   - 「データダウンロード」タブを選択
+   - 初回セットアップを実行（全データのダウンロード）
+
+2. **option=2 (セットアップモード) の使用**:
+   ```bash
+   # NAR データは option=2 を推奨
+   jltsql fetch --source nar --spec RACE --from 20240101 --to 20241231
+   # quickstart.py は自動的に option=2 を使用
+   ```
+
+3. **キャッシュのクリア**（上記で解決しない場合）:
+   - NVDTLab設定ツールを起動
+   - キャッシュクリアを実行
+   - アプリケーション再起動
+
+4. **リトライ**:
+   - -203 エラーは自動的に5回までリトライされます
+   - リトライ失敗後は上記の対処法を実施してください
+
+**注意**: JRA-VAN (JV-Link) では -203 はネットワークエラーを意味しますが、
+地方競馬DATA (NV-Link) では主にセットアップ不完全を意味します。
 
 ## ログの確認
 

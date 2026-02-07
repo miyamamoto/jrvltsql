@@ -7,6 +7,7 @@ from typing import Any, Dict, Iterator, List, Optional
 
 from src.database.base import BaseDatabase, DatabaseError
 from src.database.schema_types import get_table_column_types
+from src.utils.data_source import DataSource
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -94,6 +95,7 @@ class DataImporter:
         database: BaseDatabase,
         batch_size: int = 1000,
         use_jravan_schema: bool = False,
+        data_source: DataSource = DataSource.JRA,
     ):
         """Initialize data importer.
 
@@ -102,10 +104,12 @@ class DataImporter:
             batch_size: Records per batch (default: 1000)
             use_jravan_schema: Use JRA-VAN standard table names (RACE, UMA_RACE, etc.)
                                instead of jltsql names (NL_RA, NL_SE, etc.)
+            data_source: Data source (DataSource.JRA or DataSource.NAR)
         """
         self.database = database
         self.batch_size = batch_size
         self.use_jravan_schema = use_jravan_schema
+        self.data_source = data_source
 
         self._records_imported = 0
         self._records_failed = 0
@@ -180,10 +184,11 @@ class DataImporter:
             "DataImporter initialized",
             batch_size=batch_size,
             use_jravan_schema=use_jravan_schema,
+            data_source=data_source.value,
         )
 
     def _get_table_name(self, record_type: str) -> Optional[str]:
-        """Get table name for record type.
+        """Get table name for record type based on data source.
 
         Args:
             record_type: Record type code (e.g., "RA", "SE")
@@ -191,6 +196,21 @@ class DataImporter:
         Returns:
             Table name or None if not mapped
         """
+        # For NAR data source, use NAR table mappings
+        if self.data_source == DataSource.NAR:
+            from src.database.table_mappings import NAR_RECORD_TYPE_TO_TABLE
+            table_name = NAR_RECORD_TYPE_TO_TABLE.get(record_type)
+            if not table_name:
+                return None
+
+            # Convert to JRA-VAN standard name if requested
+            if self.use_jravan_schema:
+                from src.database.table_mappings import JLTSQL_NAR_TO_JRAVAN
+                return JLTSQL_NAR_TO_JRAVAN.get(table_name, table_name)
+
+            return table_name
+
+        # For JRA data source, use existing logic
         # Get base table name from mapping
         table_name = self._table_map.get(record_type)
         if not table_name:

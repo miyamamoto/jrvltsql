@@ -297,7 +297,7 @@ class BaseDatabase(ABC):
         """Get database type identifier.
 
         Returns:
-            Database type string ('sqlite', 'postgresql', 'duckdb', etc.)
+            Database type string ('sqlite', 'postgresql')
         """
         pass
 

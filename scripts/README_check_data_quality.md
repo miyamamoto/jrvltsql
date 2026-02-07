@@ -219,7 +219,7 @@ python scripts/test_quality_check.py
 
 ## 制限事項
 
-- SQLiteデータベースのみ対応（PostgreSQL, DuckDBは未対応）
+- SQLiteデータベースのみ対応（PostgreSQLは未対応）
 - 一部のコード値の有効性チェックは代表的な値のみ
 - 大規模データベース（1億レコード以上）では実行時間が長くなる可能性
 
@@ -242,7 +242,7 @@ Permission denied: data/keiba.db
 
 ## 今後の拡張予定
 
-- [ ] PostgreSQL/DuckDB対応
+- [ ] PostgreSQL対応
 - [ ] カスタム検証ルールの追加
 - [ ] HTML レポート出力
 - [ ] 経時的な品質モニタリング

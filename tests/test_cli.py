@@ -447,7 +447,7 @@ database:
   type: sqlite
 """)
 
-            result = self.runner.invoke(cli, ['config', '--set', 'database.type=duckdb'])
+            result = self.runner.invoke(cli, ['config', '--set', 'database.type=sqlite'])
 
             # Should show not implemented message
             self.assertIn('not yet implemented', result.output)

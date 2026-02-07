@@ -2401,8 +2401,8 @@ class SchemaManager:
                             (table_name, col_name, col_desc)
                         )
 
-            elif db_type in ("postgresql", "duckdb"):
-                # PostgreSQL/DuckDB: Use COMMENT ON
+            elif db_type == "postgresql":
+                # PostgreSQL: Use COMMENT ON
                 # Table comment
                 table_desc = metadata.get("description", "").replace("'", "''")
                 self.db.execute(f"COMMENT ON TABLE {table_name} IS '{table_desc}'")
@@ -2456,7 +2456,7 @@ class SchemaManager:
                 for row in rows:
                     result["columns"][row["column_name"]] = row["description"]
 
-            elif db_type in ("postgresql", "duckdb"):
+            elif db_type == "postgresql":
                 # Query information_schema or pg_description
                 # Implementation depends on specific database
                 # For now, return empty (can be enhanced later)

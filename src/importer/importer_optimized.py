@@ -7,7 +7,7 @@ Key optimizations:
 - Adaptive batch sizing based on performance
 """
 
-from typing import Dict, Iterator, List, Optional
+from typing import Dict, Iterator, List, Optional, Union
 from src.database.base import BaseDatabase, DatabaseError
 from src.utils.logger import get_logger
 
@@ -69,9 +69,7 @@ class OptimizedDataImporter:
     def _detect_database_type(self) -> str:
         """Detect database type from handler class."""
         class_name = self.database.__class__.__name__
-        if "DuckDB" in class_name:
-            return "duckdb"
-        elif "PostgreSQL" in class_name:
+        if "PostgreSQL" in class_name:
             return "postgresql"
         elif "SQLite" in class_name:
             return "sqlite"
@@ -97,13 +95,12 @@ class OptimizedDataImporter:
     ) -> Dict[str, int]:
         """Import records with database-specific optimizations.
 
-        For DuckDB: Uses single transaction for entire import
         For PostgreSQL: Already optimized with autocommit
         For SQLite: Uses transaction batching
 
         Args:
             records: Iterator of parsed record dictionaries
-            auto_commit: Whether to auto-commit (entire import for DuckDB)
+            auto_commit: Whether to auto-commit
 
         Returns:
             Dictionary with import statistics
@@ -116,19 +113,8 @@ class OptimizedDataImporter:
         # Group records by type for batch insertion
         batch_buffers: Dict[str, List[dict]] = {}
 
-        # Start transaction for entire import (DuckDB optimization)
+        # Start transaction for entire import
         transaction_started = False
-        if self.db_type == "duckdb" and auto_commit:
-            try:
-                # Check if database has begin_transaction method
-                if hasattr(self.database, 'begin_transaction'):
-                    self.database.begin_transaction()
-                else:
-                    self.database.execute("BEGIN TRANSACTION")
-                transaction_started = True
-                logger.info("Started single transaction for entire DuckDB import")
-            except Exception as e:
-                logger.warning(f"Could not start transaction: {e}")
 
         try:
             for record in records:
@@ -179,10 +165,10 @@ class OptimizedDataImporter:
                         commit_batch=(not transaction_started)
                     )
 
-            # Single commit for entire import (DuckDB optimization)
+            # Commit if in transaction
             if transaction_started and auto_commit:
                 self.database.commit()
-                logger.info("Committed single transaction for entire import")
+                logger.info("Committed transaction for entire import")
 
             # Log summary
             stats = self.get_statistics()
@@ -198,7 +184,7 @@ class OptimizedDataImporter:
                 try:
                     self.database.rollback()
                     logger.info("Rolled back transaction due to error")
-                except:
+                except Exception:
                     pass
 
             from src.importer.importer import ImporterError
@@ -217,7 +203,7 @@ class OptimizedDataImporter:
         try:
             # Use optimized insert if available
             if hasattr(self.database, 'insert_many_optimized'):
-                # DuckDB optimized path
+                # Optimized path
                 rows = self.database.insert_many_optimized(table_name, batch)
             else:
                 # Standard insert_many
@@ -261,7 +247,7 @@ class OptimizedDataImporter:
                         error=str(e),
                     )
 
-    def get_statistics(self) -> Dict[str, int]:
+    def get_statistics(self) -> Dict[str, Union[int, float]]:
         """Get import statistics."""
         return {
             "records_imported": self._records_imported,

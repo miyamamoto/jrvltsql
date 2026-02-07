@@ -10,6 +10,7 @@ from src.database.base import BaseDatabase
 from src.database.schema import create_all_tables
 from src.fetcher.historical import HistoricalFetcher
 from src.importer.importer import DataImporter
+from src.utils.data_source import DataSource
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -45,24 +46,42 @@ class BatchProcessor:
         batch_size: int = 1000,
         sid: str = "UNKNOWN",
         service_key: Optional[str] = None,
+        initialization_key: Optional[str] = None,
         show_progress: bool = True,
+        data_source: DataSource = DataSource.JRA,
     ):
         """Initialize batch processor.
 
         Args:
             database: Database handler instance
             batch_size: Records per batch
-            sid: Session ID for JV-Link API (default: "UNKNOWN")
-            service_key: Optional JV-Link service key. If provided, it will be set
+            sid: Session ID for JV-Link/NV-Link API (default: "UNKNOWN")
+            service_key: Optional service key. If provided, it will be set
                         programmatically without requiring registry configuration.
+            initialization_key: Optional NV-Link initialization key (software ID)
+                        used for NVInit when data_source is NAR.
             show_progress: Show stylish progress display (default: True)
+            data_source: Data source selection (JRA or NAR, default: JRA)
         """
-        self.fetcher = HistoricalFetcher(sid, service_key=service_key, show_progress=show_progress)
-        self.importer = DataImporter(database, batch_size)
+        self.data_source = data_source
+        self.fetcher = HistoricalFetcher(
+            sid,
+            service_key=service_key,
+            initialization_key=initialization_key,
+            show_progress=show_progress,
+            data_source=data_source,
+        )
+        self.importer = DataImporter(database, batch_size, data_source=data_source)
         self.database = database
 
-        logger.info("BatchProcessor initialized", sid=sid,
-                   has_service_key=service_key is not None, show_progress=show_progress)
+        logger.info(
+            "BatchProcessor initialized",
+            sid=sid,
+            has_service_key=service_key is not None,
+            has_initialization_key=initialization_key is not None,
+            show_progress=show_progress,
+            data_source=data_source.value,
+        )
 
     def process_date_range(
         self,
@@ -109,9 +128,20 @@ class BatchProcessor:
 
         # Ensure tables exist
         if ensure_tables:
-            logger.info("Ensuring all tables exist")
+            logger.info("Ensuring all tables exist", data_source=self.data_source.value)
             try:
-                create_all_tables(self.database)
+                if self.data_source == DataSource.NAR:
+                    # Create NAR tables
+                    from src.database.schema_nar import get_nar_schemas
+                    nar_schemas = get_nar_schemas()
+                    for table_name, schema_sql in nar_schemas.items():
+                        try:
+                            self.database.execute(schema_sql)
+                        except Exception:
+                            pass  # Table might already exist
+                else:
+                    # Create JRA tables (default)
+                    create_all_tables(self.database)
             except Exception as e:
                 logger.debug(f"Tables might already exist: {e}")
 
@@ -226,6 +256,8 @@ class BatchProcessor:
             ... )
         """
         results = {}
+        successful_specs = []
+        failed_specs = []
 
         for data_spec in data_specs:
             logger.info(f"Processing data spec: {data_spec}")
@@ -239,6 +271,7 @@ class BatchProcessor:
                     ensure_tables=False,  # Only check once
                 )
                 results[data_spec] = stats
+                successful_specs.append(data_spec)
 
             except Exception as e:
                 logger.error(
@@ -247,6 +280,36 @@ class BatchProcessor:
                     error=str(e),
                 )
                 results[data_spec] = {"error": str(e)}
+                failed_specs.append(data_spec)
+
+        # Add partial success summary
+        total_specs = len(data_specs)
+        success_count = len(successful_specs)
+        failure_count = len(failed_specs)
+
+        results["_summary"] = {
+            "total_specs": total_specs,
+            "successful": success_count,
+            "failed": failure_count,
+            "success_rate": f"{success_count}/{total_specs}",
+            "successful_specs": successful_specs,
+            "failed_specs": failed_specs,
+        }
+
+        # Log partial success summary
+        if failure_count > 0:
+            logger.warning(
+                f"Partial success: {success_count}/{total_specs} specs completed successfully",
+                successful=success_count,
+                failed=failure_count,
+                successful_specs=successful_specs,
+                failed_specs=failed_specs,
+            )
+        else:
+            logger.info(
+                f"All specs completed successfully: {success_count}/{total_specs}",
+                successful_specs=successful_specs,
+            )
 
         return results
 

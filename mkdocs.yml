@@ -1,5 +1,5 @@
 site_name: JRVLTSQL Documentation
-site_description: JRA-VAN DataLab競馬データをSQLite/PostgreSQL/DuckDBにインポートするツール
+site_description: JRA-VAN DataLab競馬データをSQLite/PostgreSQLにインポートするツール
 site_author: JRVLTSQL Contributors
 site_url: https://miyamamoto.github.io/jrvltsql/
 

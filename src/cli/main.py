@@ -36,8 +36,8 @@ logger = get_logger(__name__)
 def cli(ctx, config, verbose):
     """JRVLTSQL - JRA-VAN Link To SQL
 
-    JRA-VAN DataLabの競馬データをSQLite/PostgreSQL/DuckDBに
-    リアルタイムインポートするツール
+    JRA-VAN DataLabの競馬データをSQLite/PostgreSQLに
+    リアルタイムインポートするツール（32-bit Python対応）
 
     \b
     使用例:
@@ -149,18 +149,380 @@ def init(ctx, force):
 
 
 @cli.command()
-def status():
-    """Show JLTSQL status."""
+@click.option(
+    "--source",
+    type=click.Choice(["jra", "nar", "all"]),
+    default="jra",
+    help="データソース選択（jra=中央競馬, nar=地方競馬, all=両方）",
+)
+def status(source):
+    """Show JLTSQL status.
+
+    \b
+    Examples:
+      jltsql status                         # 中央競馬のみ
+      jltsql status --source nar            # 地方競馬のみ
+      jltsql status --source all            # 両方表示
+    """
+    from src.utils.data_source import DataSource
+
+    data_source = DataSource.from_string(source)
+
     console.print("[bold cyan]JLTSQL Status[/bold cyan]")
     console.print(f"Version: {__version__}")
-    console.print("Status: [green]Ready[/green]")
+
+    if data_source == DataSource.ALL:
+        # Show both JRA and NAR status
+        console.print()
+        console.print("[bold]JRA-VAN DataLab:[/bold]")
+        # Try to check JRA availability
+        try:
+            from src.jvlink import JVLinkWrapper
+            console.print("  状態: [green]利用可能[/green]")
+        except ImportError:
+            console.print("  状態: [red]利用不可[/red]")
+
+        console.print()
+        console.print("[bold]地方競馬DATA (UmaConn):[/bold]")
+        try:
+            from src.nvlink import NVLinkWrapper
+            console.print("  状態: [green]利用可能[/green]")
+        except ImportError:
+            console.print("  状態: [red]利用不可[/red]")
+    else:
+        source_name = data_source.display_name
+        console.print(f"Data Source: {source_name}")
+        console.print("Status: [green]Ready[/green]")
 
 
 @cli.command()
-def version():
+@click.option(
+    "--source",
+    type=click.Choice(["jra", "nar", "all"]),
+    default="all",
+    help="表示するデータソース",
+)
+def version(source):
     """Show version information."""
     console.print(f"JLTSQL version {__version__}")
     console.print("Python version: " + sys.version.split()[0])
+
+    if source in ["jra", "all"]:
+        console.print()
+        console.print("[bold]対応データソース:[/bold]")
+
+        # Check JRA availability
+        try:
+            from src.jvlink import JVLinkWrapper
+            console.print("  - JRA-VAN DataLab (JV-Link): [green]利用可能[/green]")
+        except ImportError:
+            console.print("  - JRA-VAN DataLab (JV-Link): [red]未インストール[/red]")
+
+    if source in ["nar", "all"]:
+        if source != "all":
+            console.print()
+            console.print("[bold]対応データソース:[/bold]")
+
+        # Check NAR availability
+        try:
+            from src.nvlink import NVLinkWrapper
+            console.print("  - 地方競馬DATA (UmaConn): [green]利用可能[/green]")
+        except ImportError:
+            console.print("  - 地方競馬DATA (UmaConn): [red]未インストール[/red]")
+
+
+@cli.command("setup-nar")
+@click.option(
+    "--verify",
+    is_flag=True,
+    help="セットアップ完了を確認のみ（ダイアログを開かない）",
+)
+@click.option(
+    "--service-key",
+    type=str,
+    default=None,
+    help="サービスキー（XXXX-XXXX-XXXX-XXXX-X形式）",
+)
+@click.pass_context
+def setup_nar(ctx, verify, service_key):
+    """地方競馬DATA (NV-Link/UmaConn) の初期セットアップ.
+
+    初回利用時に必要なセットアップを実行します。
+    サーバーから初期データをダウンロードし、以降のデータ取得が可能になります。
+
+    \b
+    Examples:
+      jltsql setup-nar                         # 初回セットアップを実行
+      jltsql setup-nar --verify                # セットアップ確認のみ
+      jltsql setup-nar --service-key XXXX-...  # サービスキーを指定
+
+    \b
+    Note:
+      地方競馬DATAのセットアップが完了していない場合、
+      fetch や monitor コマンドで -203 エラーが発生します。
+      その場合はこのコマンドでセットアップを完了してください。
+    """
+    import time
+
+    console.print("[bold cyan]地方競馬DATA (NV-Link/UmaConn) セットアップ[/bold cyan]")
+    console.print()
+
+    # Check if NVLink is available
+    try:
+        from src.nvlink import NVLinkWrapper
+    except ImportError as e:
+        console.print("[red]エラー:[/red] UmaConn (地方競馬DATA) がインストールされていません。")
+        console.print("地方競馬DATAのセットアップを先に完了してください。")
+        console.print("詳細: https://www.keiba-data.com/")
+        sys.exit(1)
+
+    try:
+        # Initialize NVLink
+        console.print("[bold]Step 1:[/bold] NV-Link 初期化...")
+        init_key = None
+        if ctx and ctx.obj.get("config"):
+            init_key = ctx.obj["config"].get("nvlink.initialization_key")
+        wrapper = NVLinkWrapper("JLTSQL-SETUP", initialization_key=init_key)
+
+        # Check current configuration
+        try:
+            current_key = wrapper.get_service_key()
+            version = wrapper.get_version()
+            console.print(f"  NVLink バージョン: {version}")
+            if current_key:
+                # Mask the key for display
+                masked_key = current_key[:4] + "-****-****-****-*"
+                console.print(f"  サービスキー: {masked_key} (設定済み)")
+            else:
+                console.print("  サービスキー: [yellow]未設定[/yellow]")
+        except Exception as e:
+            console.print(f"  [yellow]設定確認エラー: {e}[/yellow]")
+
+        console.print()
+
+        # Set service key if provided
+        if service_key:
+            console.print("[bold]Step 2:[/bold] サービスキー設定...")
+            result = wrapper.nv_set_service_key(service_key)
+            if result == 0:
+                console.print("  [green]✓[/green] サービスキーを設定しました")
+            else:
+                console.print(f"  [yellow]警告:[/yellow] サービスキー設定に失敗 (code: {result})")
+            console.print()
+
+        # Verify setup only (--verify flag)
+        if verify:
+            console.print("[bold]Step 3:[/bold] セットアップ確認...")
+            console.print()
+            success = _verify_nar_setup(wrapper, console, logger)
+            if not success:
+                sys.exit(1)
+        else:
+            # Run API-based initial setup with option=4 (Setup mode)
+            console.print("[bold]Step 3:[/bold] 初回セットアップ実行...")
+            console.print()
+            console.print("  サーバーから初期データをダウンロードします。")
+            console.print("  これには数分〜数十分かかる場合があります。")
+            console.print()
+
+            try:
+                # Initialize NV-Link first
+                result = wrapper.nv_init()
+                if result != 0:
+                    console.print(f"  [red]NG[/red] NV-Link 初期化失敗 (code: {result})")
+                    sys.exit(1)
+
+                # Open with option=4 (Setup mode) - downloads all data
+                console.print("  データストリームを開いています...")
+                result, read_count, download_count, timestamp = wrapper.nv_open(
+                    "RACE", "20200101000000", 4  # option=4 for setup mode
+                )
+                console.print(f"  結果: read={read_count}, download={download_count}")
+
+                if download_count > 0:
+                    console.print()
+                    console.print("  ダウンロード中...")
+                    max_wait = 3600  # 1 hour
+                    start_time = time.time()
+                    last_progress = -1
+
+                    while (time.time() - start_time) < max_wait:
+                        status = wrapper.nv_status()
+
+                        if status == 0:
+                            console.print()
+                            console.print("  [green]OK[/green] ダウンロード完了")
+                            break
+                        elif status > 0:
+                            progress = status / 100
+                            if int(progress) != last_progress:
+                                console.print(f"\r  進捗: {progress:.1f}%", end="")
+                                last_progress = int(progress)
+                        elif status < 0:
+                            console.print()
+                            console.print(f"  [red]NG[/red] ダウンロードエラー (code: {status})")
+                            wrapper.nv_close()
+                            sys.exit(1)
+
+                        time.sleep(1)
+                    else:
+                        console.print()
+                        console.print("  [red]NG[/red] ダウンロードタイムアウト（1時間）")
+                        wrapper.nv_close()
+                        sys.exit(1)
+                else:
+                    console.print("  [dim]ダウンロード不要（既にセットアップ済み）[/dim]")
+
+                wrapper.nv_close()
+                console.print()
+
+                # Verify setup after download
+                console.print("[bold]Step 4:[/bold] セットアップ確認...")
+                console.print()
+                success = _verify_nar_setup(wrapper, console, logger)
+                if not success:
+                    console.print()
+                    console.print("[yellow]セットアップが完了していません。[/yellow]")
+                    console.print("再度 setup-nar を実行してください。")
+                    sys.exit(1)
+
+            except Exception as e:
+                console.print(f"  [red]エラー:[/red] セットアップ失敗: {e}")
+                logger.error("Setup NAR failed", error=str(e), exc_info=True)
+                sys.exit(1)
+
+    except KeyboardInterrupt:
+        console.print("\n[yellow]中断されました[/yellow]")
+        sys.exit(1)
+    except Exception as e:
+        console.print(f"\n[red]エラー:[/red] {e}", style="bold")
+        logger.error("Setup NAR failed", error=str(e), exc_info=True)
+        sys.exit(1)
+
+
+def _verify_nar_setup(wrapper, console, logger) -> bool:
+    """Verify NAR setup by attempting to read data.
+
+    Args:
+        wrapper: NVLinkWrapper instance
+        console: Rich console for output
+        logger: Logger instance
+
+    Returns:
+        True if setup is verified, False otherwise
+    """
+    try:
+        # Initialize and try to open data
+        result = wrapper.nv_init()
+        if result != 0:
+            console.print(f"  [red]NG[/red] NV-Link 初期化失敗 (code: {result})")
+            console.print("  サービスキーが設定されていない可能性があります。")
+            console.print("  --service-key オプションでサービスキーを指定してください。")
+            return False
+
+        # Try to open with a recent date to check if setup is complete
+        result, read_count, download_count, timestamp = wrapper.nv_open(
+            "RACE", "20241201000000", 1  # option=1 for normal mode
+        )
+
+        console.print(f"  NVOpen結果: code={result}, read={read_count}, download={download_count}")
+
+        if result < 0 and result not in (-1, -2, -301, -302):
+            console.print(f"  [red]NG[/red] NVOpen失敗 (code: {result})")
+            console.print()
+            console.print("  対処法:")
+            console.print("  1. jltsql setup-nar を再実行してダイアログを開く")
+            console.print("  2. ダイアログ内で「データダウンロード」を実行")
+            wrapper.nv_close()
+            return False
+
+        # Check if download is pending
+        if download_count > 0:
+            console.print("  ダウンロード待機中...")
+            import time
+            time.sleep(0.5)
+            status = wrapper.nv_status()
+
+            if status == -203:
+                console.print()
+                console.print("  [red]NG[/red] セットアップが完了していません！ (code: -203)")
+                console.print()
+                console.print("  対処法:")
+                console.print("  1. jltsql setup-nar を再実行してダイアログを開く")
+                console.print("  2. ダイアログ内で「データダウンロード」タブを選択")
+                console.print("  3. 「セットアップ」ボタンをクリックして初回データをダウンロード")
+                console.print("  4. ダウンロード完了後、ダイアログを閉じる")
+                wrapper.nv_close()
+                return False
+            elif status < 0:
+                console.print(f"  [yellow]警告:[/yellow] ステータスエラー (code: {status})")
+            else:
+                # Wait a bit for download
+                console.print(f"  ダウンロード進捗: {status}%")
+
+        # Try to read a record
+        console.print("  データ読み込み確認...")
+        records_read = 0
+        max_attempts = 20
+
+        for _ in range(max_attempts):
+            ret_code, buff, filename = wrapper.nv_gets()
+
+            if ret_code == 0:
+                # No more data
+                break
+            elif ret_code == -1:
+                # File switch
+                continue
+            elif ret_code == -203:
+                console.print()
+                console.print("  [red]NG[/red] セットアップが完了していません！ (code: -203)")
+                console.print()
+                console.print("  対処法:")
+                console.print("  1. jltsql setup-nar を再実行してダイアログを開く")
+                console.print("  2. ダイアログ内で「データダウンロード」タブを選択")
+                console.print("  3. 「セットアップ」ボタンをクリックして初回データをダウンロード")
+                console.print("  4. ダウンロード完了後、ダイアログを閉じる")
+                wrapper.nv_close()
+                return False
+            elif ret_code in (-402, -403, -502, -503):
+                # Recoverable error
+                if filename:
+                    wrapper.nv_file_delete(filename)
+                continue
+            elif ret_code < -1:
+                console.print(f"  [yellow]警告:[/yellow] 読み込みエラー (code: {ret_code})")
+                break
+            else:
+                records_read += 1
+                if records_read >= 5:
+                    break
+
+        wrapper.nv_close()
+
+        if records_read > 0:
+            console.print()
+            console.print(f"  [green]OK[/green] セットアップ完了！ ({records_read} レコード読み込み確認)")
+            console.print()
+            console.print("次のステップ:")
+            console.print("  1. jltsql fetch --source nar --from 20240101 --to 20241231 --spec RACE")
+            console.print("  2. jltsql monitor --source nar")
+            return True
+        elif read_count == 0 and download_count == 0:
+            console.print()
+            console.print("  [yellow]情報:[/yellow] データがありません（サーバーに該当データなし）")
+            console.print("  これは正常な状態です。セットアップは完了しています。")
+            return True
+        else:
+            console.print()
+            console.print("  [yellow]警告:[/yellow] レコードが読み込めませんでした")
+            console.print("  セットアップが不完全な可能性があります。")
+            return False
+
+    except Exception as e:
+        console.print(f"  [red]エラー:[/red] {e}")
+        logger.error("NAR setup verification failed", error=str(e), exc_info=True)
+        return False
 
 
 @cli.command()
@@ -174,14 +536,18 @@ def version():
     default=1,
     help="JVOpen option: 1=通常データ（差分）, 2=今週データ, 3=セットアップ（ダイアログ）, 4=分割セットアップ (default: 1)"
 )
-@click.option("--db", type=click.Choice(["sqlite", "postgresql", "duckdb"]), default=None, help="Database type (default: from config)")
-@click.option("--duckdb-memory-limit", default=None, help="DuckDB memory limit (e.g., '2GB', '512MB')")
-@click.option("--duckdb-threads", type=int, default=None, help="DuckDB thread count")
+@click.option("--db", type=click.Choice(["sqlite", "postgresql"]), default=None, help="Database type (default: from config)")
 @click.option("--batch-size", default=1000, help="Batch size for imports (default: 1000)")
 @click.option("--progress/--no-progress", default=True, help="Show progress display (default: enabled)")
+@click.option(
+    "--source",
+    type=click.Choice(["jra", "nar", "all"]),
+    default="jra",
+    help="データソース選択（jra=中央競馬, nar=地方競馬, all=両方）",
+)
 @click.pass_context
-def fetch(ctx, date_from, date_to, data_spec, jv_option, db, duckdb_memory_limit, duckdb_threads, batch_size, progress):
-    """Fetch historical data from JRA-VAN DataLab.
+def fetch(ctx, date_from, date_to, data_spec, jv_option, db, batch_size, progress, source):
+    """Fetch historical data from JRA-VAN/UmaConn DataLab.
 
     JVOpen option meanings:
       - option=1 (通常データ): 差分データ取得（蓄積系メンテナンス用）
@@ -189,26 +555,47 @@ def fetch(ctx, date_from, date_to, data_spec, jv_option, db, duckdb_memory_limit
       - option=3 (セットアップ): 全データ取得（ダイアログ表示あり）
       - option=4 (分割セットアップ): 全データ取得（初回のみダイアログ）
 
-    The --to parameter filters records client-side to only import
-    records with dates up to and including the --to date.
-
     \b
     Examples:
-      # 通常データ取得（差分データ）
-      jltsql fetch --from 20240101 --to 20241231 --spec RACE --option 1
+      # 中央競馬データ取得（デフォルト）
+      jltsql fetch --from 20240101 --to 20241231 --spec RACE
 
-      # 今週データ取得（直近のレースのみ）
-      jltsql fetch --from 20240101 --to 20241231 --spec RACE --option 2
+      # 地方競馬データ取得
+      jltsql fetch --source nar --from 20240101 --to 20241231 --spec RACE
 
-      # セットアップ（全データ取得）
+      # 中央・地方両方のデータ取得
+      jltsql fetch --source all --from 20240101 --to 20241231 --spec RACE
+
+      # セットアップモード
       jltsql fetch --from 20240101 --to 20241231 --spec DIFF --option 3
     """
     from rich.progress import Progress, BarColumn, TextColumn, TimeRemainingColumn
     from src.database.sqlite_handler import SQLiteDatabase
     from src.database.postgresql_handler import PostgreSQLDatabase
-    from src.database.duckdb_handler import DuckDBDatabase
     from src.database.schema import create_all_tables
     from src.importer.batch import BatchProcessor
+    from src.utils.data_source import DataSource
+
+    # Convert source to DataSource enum
+    data_source = DataSource.from_string(source)
+
+    # Check if NAR/UmaConn is available
+    nar_available = False
+    if data_source in (DataSource.NAR, DataSource.ALL):
+        try:
+            # Try to import NVLinkWrapper to check if UmaConn is available
+            from src.nvlink import NVLinkWrapper
+            nar_available = True
+        except Exception as e:
+            if data_source == DataSource.NAR:
+                console.print("[red]エラー:[/red] UmaConn (地方競馬DATA) がインストールされていません。")
+                console.print("地方競馬DATAのセットアップを完了してください。")
+                console.print("詳細: https://www.keiba-data.com/")
+                sys.exit(1)
+            else:
+                # source=all but NAR not available - warn and continue with JRA only
+                console.print("[yellow]警告:[/yellow] UmaConn (地方競馬DATA) が利用できません。JRAのみ取得します。")
+                data_source = DataSource.JRA
 
     config = ctx.obj.get("config")
     if not config and not db:
@@ -222,7 +609,9 @@ def fetch(ctx, date_from, date_to, data_spec, jv_option, db, duckdb_memory_limit
         db_type = config.get("database.type", "sqlite")
 
     option_names = {1: "通常データ", 2: "今週データ", 3: "セットアップ", 4: "分割セットアップ"}
-    console.print(f"[bold cyan]Fetching historical data from JRA-VAN...[/bold cyan]\n")
+    source_display = data_source.display_name
+    console.print(f"[bold cyan]Fetching historical data from {source_display}...[/bold cyan]\n")
+    console.print(f"  Data source: {source_display}")
     console.print(f"  Date range: {date_from} -- {date_to}")
     console.print(f"  Data spec:  {data_spec}")
     console.print(f"  Option:     {jv_option} ({option_names.get(jv_option, '不明')})")
@@ -233,14 +622,15 @@ def fetch(ctx, date_from, date_to, data_spec, jv_option, db, duckdb_memory_limit
         console.print()
         console.print("[yellow]Note:[/yellow] セットアップモード - 全データ取得（ダイアログが表示されます）")
 
-    # Validate data_spec and option combination
-    from src.jvlink.constants import is_valid_jvopen_combination, JVOPEN_VALID_COMBINATIONS
-    if not is_valid_jvopen_combination(data_spec, jv_option):
-        console.print()
-        console.print(f"[red]Error:[/red] データ種別 '{data_spec}' は option={jv_option} では取得できません")
-        valid_specs = JVOPEN_VALID_COMBINATIONS.get(jv_option, [])
-        console.print(f"       option={jv_option} で取得可能: {', '.join(valid_specs)}")
-        sys.exit(1)
+    # Validate data_spec and option combination (JRA only - NAR uses different validation)
+    if data_source != DataSource.NAR:
+        from src.jvlink.constants import is_valid_jvopen_combination, JVOPEN_VALID_COMBINATIONS
+        if not is_valid_jvopen_combination(data_spec, jv_option):
+            console.print()
+            console.print(f"[red]Error:[/red] データ種別 '{data_spec}' は option={jv_option} では取得できません")
+            valid_specs = JVOPEN_VALID_COMBINATIONS.get(jv_option, [])
+            console.print(f"       option={jv_option} で取得可能: {', '.join(valid_specs)}")
+            sys.exit(1)
 
     console.print()
 
@@ -254,56 +644,137 @@ def fetch(ctx, date_from, date_to, data_spec, jv_option, db, duckdb_memory_limit
                 console.print("[red]Error:[/red] PostgreSQL requires configuration file.")
                 sys.exit(1)
             database = PostgreSQLDatabase(config.get("databases.postgresql"))
-        elif db_type == "duckdb":
-            db_config = config.get("databases.duckdb") if config else {"path": "data/keiba.duckdb"}
-            # Apply DuckDB-specific options if provided
-            if duckdb_memory_limit is not None:
-                db_config["memory_limit"] = duckdb_memory_limit
-            if duckdb_threads is not None:
-                db_config["threads"] = duckdb_threads
-            database = DuckDBDatabase(db_config)
         else:
             console.print(f"[red]Error:[/red] Unsupported database type: {db_type}")
+            console.print("[yellow]Note:[/yellow] Supported types: sqlite, postgresql")
             sys.exit(1)
 
         # Connect to database
         with database:
-            # Ensure tables exist
+            # Ensure tables exist (both JRA and NAR if source=all)
             try:
-                create_all_tables(database)
+                create_all_tables(database)  # JRA tables
+                if data_source == DataSource.ALL:
+                    # Also create NAR tables
+                    from src.database.schema_nar import get_nar_schemas
+                    nar_schemas = get_nar_schemas()
+                    for table_name, schema_sql in nar_schemas.items():
+                        try:
+                            database.execute(schema_sql)
+                        except Exception:
+                            pass
             except Exception:
                 # Tables might already exist, that's OK
                 pass
 
-            # Process data
-            processor = BatchProcessor(
-                database=database,
-                sid=config.get("jvlink.sid", "JLTSQL") if config else "JLTSQL",
-                batch_size=batch_size,
-                service_key=config.get("jvlink.service_key") if config else None,
-                show_progress=progress,
-            )
+            init_key = config.get("nvlink.initialization_key") if config else None
 
-            if not progress:
-                console.print("[bold]Processing data...[/bold]")
+            # Process data - handle ALL by running both JRA and NAR sequentially
+            if data_source == DataSource.ALL:
+                # Process JRA first
+                console.print("[bold cyan]>> JRA（中央競馬）データ取得中...[/bold cyan]")
+                jra_processor = BatchProcessor(
+                    database=database,
+                    sid=config.get("jvlink.sid", "JLTSQL") if config else "JLTSQL",
+                    batch_size=batch_size,
+                    service_key=config.get("jvlink.service_key") if config else None,
+                    initialization_key=init_key,
+                    show_progress=progress,
+                    data_source=DataSource.JRA,
+                )
 
-            result = processor.process_date_range(
-                data_spec=data_spec,
-                from_date=date_from,
-                to_date=date_to,
-                option=jv_option
-            )
+                jra_result = jra_processor.process_date_range(
+                    data_spec=data_spec,
+                    from_date=date_from,
+                    to_date=date_to,
+                    option=jv_option
+                )
 
-            # Show results
-            console.print()
-            console.print("[bold green][OK] Fetch complete![/bold green]")
-            console.print()
-            console.print("[bold]Statistics:[/bold]")
-            console.print(f"  Fetched:  {result['records_fetched']}")
-            console.print(f"  Parsed:   {result['records_parsed']}")
-            console.print(f"  Imported: {result['records_imported']}")
-            console.print(f"  Failed:   {result['records_failed']}")
-            console.print(f"  Batches:  {result.get('batches_processed', 0)}")
+                console.print()
+                console.print("[bold cyan]>> NAR（地方競馬）データ取得中...[/bold cyan]")
+                nar_processor = BatchProcessor(
+                    database=database,
+                    sid=config.get("nvlink.sid", "JLTSQL") if config else "JLTSQL",
+                    batch_size=batch_size,
+                    service_key=config.get("nvlink.service_key") if config else None,
+                    initialization_key=config.get("nvlink.initialization_key") if config else None,
+                    show_progress=progress,
+                    data_source=DataSource.NAR,
+                )
+
+                nar_result = nar_processor.process_date_range(
+                    data_spec=data_spec,
+                    from_date=date_from,
+                    to_date=date_to,
+                    option=jv_option
+                )
+
+                # Combine results
+                result = {
+                    'records_fetched': jra_result.get('records_fetched', 0) + nar_result.get('records_fetched', 0),
+                    'records_parsed': jra_result.get('records_parsed', 0) + nar_result.get('records_parsed', 0),
+                    'records_imported': jra_result.get('records_imported', 0) + nar_result.get('records_imported', 0),
+                    'records_failed': jra_result.get('records_failed', 0) + nar_result.get('records_failed', 0),
+                    'batches_processed': jra_result.get('batches_processed', 0) + nar_result.get('batches_processed', 0),
+                    'jra': jra_result,
+                    'nar': nar_result,
+                }
+
+                # Show combined results
+                console.print()
+                console.print("[bold green][OK] Fetch complete (JRA + NAR)![/bold green]")
+                console.print()
+                console.print("[bold]JRA Statistics:[/bold]")
+                console.print(f"  Fetched:  {jra_result['records_fetched']}")
+                console.print(f"  Imported: {jra_result['records_imported']}")
+                console.print()
+                console.print("[bold]NAR Statistics:[/bold]")
+                console.print(f"  Fetched:  {nar_result['records_fetched']}")
+                console.print(f"  Imported: {nar_result['records_imported']}")
+                console.print()
+                console.print("[bold]Total:[/bold]")
+                console.print(f"  Fetched:  {result['records_fetched']}")
+                console.print(f"  Imported: {result['records_imported']}")
+            else:
+                # Single source processing (JRA or NAR)
+                if data_source == DataSource.NAR:
+                    sid = config.get("nvlink.sid", "JLTSQL") if config else "JLTSQL"
+                    service_key = config.get("nvlink.service_key") if config else None
+                    _init_key = config.get("nvlink.initialization_key") if config else None
+                else:
+                    sid = config.get("jvlink.sid", "JLTSQL") if config else "JLTSQL"
+                    service_key = config.get("jvlink.service_key") if config else None
+                    _init_key = None
+                processor = BatchProcessor(
+                    database=database,
+                    sid=sid,
+                    batch_size=batch_size,
+                    service_key=service_key,
+                    initialization_key=_init_key,
+                    show_progress=progress,
+                    data_source=data_source,
+                )
+
+                if not progress:
+                    console.print("[bold]Processing data...[/bold]")
+
+                result = processor.process_date_range(
+                    data_spec=data_spec,
+                    from_date=date_from,
+                    to_date=date_to,
+                    option=jv_option
+                )
+
+                # Show results
+                console.print()
+                console.print("[bold green][OK] Fetch complete![/bold green]")
+                console.print()
+                console.print("[bold]Statistics:[/bold]")
+                console.print(f"  Fetched:  {result['records_fetched']}")
+                console.print(f"  Parsed:   {result['records_parsed']}")
+                console.print(f"  Imported: {result['records_imported']}")
+                console.print(f"  Failed:   {result['records_failed']}")
+                console.print(f"  Batches:  {result.get('batches_processed', 0)}")
 
     except KeyboardInterrupt:
         console.print("\n[yellow]Interrupted by user[/yellow]")
@@ -318,24 +789,43 @@ def fetch(ctx, date_from, date_to, data_spec, jv_option, db, duckdb_memory_limit
 @click.option("--daemon", is_flag=True, help="Run in background")
 @click.option("--spec", "data_spec", default="RACE", help="Data specification (default: RACE)")
 @click.option("--interval", default=60, help="Polling interval in seconds (default: 60)")
-@click.option("--db", type=click.Choice(["sqlite", "postgresql", "duckdb"]), default=None, help="Database type (default: from config)")
-@click.option("--duckdb-memory-limit", default=None, help="DuckDB memory limit (e.g., '2GB', '512MB')")
-@click.option("--duckdb-threads", type=int, default=None, help="DuckDB thread count")
+@click.option("--db", type=click.Choice(["sqlite", "postgresql"]), default=None, help="Database type (default: from config)")
+@click.option(
+    "--source",
+    type=click.Choice(["jra", "nar", "all"]),
+    default="jra",
+    help="データソース選択（jra=中央競馬, nar=地方競馬, all=両方）",
+)
 @click.pass_context
-def monitor(ctx, daemon, data_spec, interval, db, duckdb_memory_limit, duckdb_threads):
+def monitor(ctx, daemon, data_spec, interval, db, source):
     """Start real-time monitoring.
 
     \b
     Examples:
-      jltsql monitor                        # Run in foreground
-      jltsql monitor --daemon               # Run in background
-      jltsql monitor --spec RACE --interval 30
+      jltsql monitor                        # 中央競馬監視
+      jltsql monitor --source nar           # 地方競馬監視
+      jltsql monitor --source all           # 両方監視
+      jltsql monitor --daemon               # バックグラウンド実行
     """
     from src.database.sqlite_handler import SQLiteDatabase
     from src.database.postgresql_handler import PostgreSQLDatabase
-    from src.database.duckdb_handler import DuckDBDatabase
     from src.database.schema import create_all_tables
     from src.realtime.monitor import RealtimeMonitor
+    from src.utils.data_source import DataSource
+
+    # Convert source to DataSource enum
+    data_source = DataSource.from_string(source)
+
+    # Check if NAR/UmaConn is available
+    if data_source == DataSource.NAR:
+        try:
+            # Try to import NVLinkWrapper to check if UmaConn is available
+            from src.nvlink import NVLinkWrapper
+        except Exception as e:
+            console.print("[red]エラー:[/red] UmaConn (地方競馬DATA) がインストールされていません。")
+            console.print("地方競馬DATAのセットアップを完了してください。")
+            console.print("詳細: https://www.keiba-data.com/")
+            sys.exit(1)
 
     config = ctx.obj.get("config")
     if not config and not db:
@@ -348,7 +838,9 @@ def monitor(ctx, daemon, data_spec, interval, db, duckdb_memory_limit, duckdb_th
     else:
         db_type = config.get("database.type", "sqlite")
 
-    console.print(f"[bold cyan]Starting real-time monitoring...[/bold cyan]\n")
+    source_display = data_source.display_name
+    console.print(f"[bold cyan]Starting real-time monitoring ({source_display})...[/bold cyan]\n")
+    console.print(f"  Data source: {source_display}")
     console.print(f"  Data spec:  {data_spec}")
     console.print(f"  Interval:   {interval}s")
     console.print(f"  Database:   {db_type}")
@@ -365,33 +857,42 @@ def monitor(ctx, daemon, data_spec, interval, db, duckdb_memory_limit, duckdb_th
                 console.print("[red]Error:[/red] PostgreSQL requires configuration file.")
                 sys.exit(1)
             database = PostgreSQLDatabase(config.get("databases.postgresql"))
-        elif db_type == "duckdb":
-            db_config = config.get("databases.duckdb") if config else {"path": "data/keiba.duckdb"}
-            # Apply DuckDB-specific options if provided
-            if duckdb_memory_limit is not None:
-                db_config["memory_limit"] = duckdb_memory_limit
-            if duckdb_threads is not None:
-                db_config["threads"] = duckdb_threads
-            database = DuckDBDatabase(db_config)
         else:
             console.print(f"[red]Error:[/red] Unsupported database type: {db_type}")
+            console.print("[yellow]Note:[/yellow] Supported types: sqlite, postgresql")
             sys.exit(1)
 
         # Connect to database
         with database:
-            # Ensure tables exist
+            # Ensure tables exist (both JRA and NAR if needed)
             try:
-                create_all_tables(database)
+                create_all_tables(database)  # JRA tables
+                if data_source in (DataSource.NAR, DataSource.ALL):
+                    # Also create NAR tables
+                    from src.database.schema_nar import get_nar_schemas
+                    nar_schemas = get_nar_schemas()
+                    for table_name, schema_sql in nar_schemas.items():
+                        try:
+                            database.execute(schema_sql)
+                        except Exception:
+                            pass
             except Exception:
                 # Tables might already exist, that's OK
                 pass
 
             # Start monitoring
+            init_key = config.get("nvlink.initialization_key") if config else None
+            if data_source == DataSource.NAR:
+                sid = config.get("nvlink.sid", "JLTSQL") if config else "JLTSQL"
+            else:
+                sid = config.get("jvlink.sid", "JLTSQL") if config else "JLTSQL"
             monitor_obj = RealtimeMonitor(
                 database=database,
                 data_spec=data_spec,
                 polling_interval=interval,
-                sid=config.get("jvlink.sid", "JLTSQL") if config else "JLTSQL"
+                sid=sid,
+                initialization_key=init_key,
+                data_source=data_source
             )
 
             console.print("[bold green]Monitoring started![/bold green]")
@@ -433,14 +934,12 @@ def stop(ctx):
 
 
 @cli.command()
-@click.option("--db", type=click.Choice(["sqlite", "postgresql", "duckdb"]), default=None, help="Database type (default: from config)")
-@click.option("--duckdb-memory-limit", default=None, help="DuckDB memory limit (e.g., '2GB', '512MB')")
-@click.option("--duckdb-threads", type=int, default=None, help="DuckDB thread count")
+@click.option("--db", type=click.Choice(["sqlite", "postgresql"]), default=None, help="Database type (default: from config)")
 @click.option("--all", "create_all", is_flag=True, help="Create both NL_ and RT_ tables")
 @click.option("--nl-only", is_flag=True, help="Create only NL_ (Normal Load) tables")
 @click.option("--rt-only", is_flag=True, help="Create only RT_ (Real-Time) tables")
 @click.pass_context
-def create_tables(ctx, db, duckdb_memory_limit, duckdb_threads, create_all, nl_only, rt_only):
+def create_tables(ctx, db, create_all, nl_only, rt_only):
     """Create database tables.
 
     \b
@@ -454,7 +953,6 @@ def create_tables(ctx, db, duckdb_memory_limit, duckdb_threads, create_all, nl_o
     from src.database.schema import SCHEMAS, create_all_tables
     from src.database.sqlite_handler import SQLiteDatabase
     from src.database.postgresql_handler import PostgreSQLDatabase
-    from src.database.duckdb_handler import DuckDBDatabase
 
     config = ctx.obj.get("config")
     if not config and not db:
@@ -479,16 +977,9 @@ def create_tables(ctx, db, duckdb_memory_limit, duckdb_threads, create_all, nl_o
                 console.print("[red]Error:[/red] PostgreSQL requires configuration file.")
                 sys.exit(1)
             database = PostgreSQLDatabase(config.get("databases.postgresql"))
-        elif db_type == "duckdb":
-            db_config = config.get("databases.duckdb") if config else {"path": "data/keiba.duckdb"}
-            # Apply DuckDB-specific options if provided
-            if duckdb_memory_limit is not None:
-                db_config["memory_limit"] = duckdb_memory_limit
-            if duckdb_threads is not None:
-                db_config["threads"] = duckdb_threads
-            database = DuckDBDatabase(db_config)
         else:
             console.print(f"[red]Error:[/red] Unsupported database type: {db_type}")
+            console.print("[yellow]Note:[/yellow] Supported types: sqlite, postgresql")
             sys.exit(1)
 
         # Connect to database
@@ -546,12 +1037,10 @@ def create_tables(ctx, db, duckdb_memory_limit, duckdb_threads, create_all, nl_o
 
 
 @cli.command()
-@click.option("--db", type=click.Choice(["sqlite", "postgresql", "duckdb"]), default=None, help="Database type (default: from config)")
-@click.option("--duckdb-memory-limit", default=None, help="DuckDB memory limit (e.g., '2GB', '512MB')")
-@click.option("--duckdb-threads", type=int, default=None, help="DuckDB thread count")
+@click.option("--db", type=click.Choice(["sqlite", "postgresql"]), default=None, help="Database type (default: from config)")
 @click.option("--table", help="Create indexes for specific table only")
 @click.pass_context
-def create_indexes(ctx, db, duckdb_memory_limit, duckdb_threads, table):
+def create_indexes(ctx, db, table):
     """Create database indexes for improved query performance.
 
     \b
@@ -570,7 +1059,6 @@ def create_indexes(ctx, db, duckdb_memory_limit, duckdb_threads, table):
     from src.database.indexes import IndexManager
     from src.database.sqlite_handler import SQLiteDatabase
     from src.database.postgresql_handler import PostgreSQLDatabase
-    from src.database.duckdb_handler import DuckDBDatabase
 
     config = ctx.obj.get("config")
     if not config and not db:
@@ -595,16 +1083,9 @@ def create_indexes(ctx, db, duckdb_memory_limit, duckdb_threads, table):
                 console.print("[red]Error:[/red] PostgreSQL requires configuration file.")
                 sys.exit(1)
             database = PostgreSQLDatabase(config.get("databases.postgresql"))
-        elif db_type == "duckdb":
-            db_config = config.get("databases.duckdb") if config else {"path": "data/keiba.duckdb"}
-            # Apply DuckDB-specific options if provided
-            if duckdb_memory_limit is not None:
-                db_config["memory_limit"] = duckdb_memory_limit
-            if duckdb_threads is not None:
-                db_config["threads"] = duckdb_threads
-            database = DuckDBDatabase(db_config)
         else:
             console.print(f"[red]Error:[/red] Unsupported database type: {db_type}")
+            console.print("[yellow]Note:[/yellow] Supported types: sqlite, postgresql")
             sys.exit(1)
 
         # Connect to database
@@ -662,11 +1143,9 @@ def create_indexes(ctx, db, duckdb_memory_limit, duckdb_threads, table):
 @click.option("--format", "output_format", type=click.Choice(["csv", "json", "parquet"]), default="csv", help="Output format (default: csv)")
 @click.option("--output", "-o", required=True, type=click.Path(), help="Output file path")
 @click.option("--where", help="SQL WHERE clause (e.g., '開催年月日 >= 20240101')")
-@click.option("--db", type=click.Choice(["sqlite", "postgresql", "duckdb"]), default=None, help="Database type (default: from config)")
-@click.option("--duckdb-memory-limit", default=None, help="DuckDB memory limit (e.g., '2GB', '512MB')")
-@click.option("--duckdb-threads", type=int, default=None, help="DuckDB thread count")
+@click.option("--db", type=click.Choice(["sqlite", "postgresql"]), default=None, help="Database type (default: from config)")
 @click.pass_context
-def export(ctx, table, output_format, output, where, db, duckdb_memory_limit, duckdb_threads):
+def export(ctx, table, output_format, output, where, db):
     """Export data from database to file.
 
     \b
@@ -685,7 +1164,6 @@ def export(ctx, table, output_format, output, where, db, duckdb_memory_limit, du
     from pathlib import Path
     from src.database.sqlite_handler import SQLiteDatabase
     from src.database.postgresql_handler import PostgreSQLDatabase
-    from src.database.duckdb_handler import DuckDBDatabase
 
     config = ctx.obj.get("config")
     if not config and not db:
@@ -716,16 +1194,9 @@ def export(ctx, table, output_format, output, where, db, duckdb_memory_limit, du
                 console.print("[red]Error:[/red] PostgreSQL requires configuration file.")
                 sys.exit(1)
             database = PostgreSQLDatabase(config.get("databases.postgresql"))
-        elif db_type == "duckdb":
-            db_config = config.get("databases.duckdb") if config else {"path": "data/keiba.duckdb"}
-            # Apply DuckDB-specific options if provided
-            if duckdb_memory_limit is not None:
-                db_config["memory_limit"] = duckdb_memory_limit
-            if duckdb_threads is not None:
-                db_config["threads"] = duckdb_threads
-            database = DuckDBDatabase(db_config)
         else:
             console.print(f"[red]Error:[/red] Unsupported database type: {db_type}")
+            console.print("[yellow]Note:[/yellow] Supported types: sqlite, postgresql")
             sys.exit(1)
 
         # Connect and export
@@ -857,6 +1328,13 @@ def config(ctx, show, set_value, get_key):
         jvlink_tree.add(f"SID: {jvlink_config.get('sid', 'N/A')}")
         jvlink_tree.add(f"Service Key: {'*' * 20 if jvlink_config.get('service_key') else 'Not set'}")
 
+        # NV-Link section
+        nvlink_tree = tree.add("NV-Link (NAR)")
+        nvlink_config = config_dict.get("nvlink", {})
+        init_key = nvlink_config.get("initialization_key")
+        nvlink_tree.add(f"Service Key: {'*' * 20 if nvlink_config.get('service_key') else 'Not set'}")
+        nvlink_tree.add(f"Initialization Key: {'*' * 8 if init_key else 'Not set'}")
+
         # Database section
         db_tree = tree.add("Database")
         db_config = config_dict.get("database", {})
@@ -924,12 +1402,10 @@ def realtime():
 )
 @click.option(
     "--db",
-    type=click.Choice(["sqlite", "postgresql", "duckdb"]),
+    type=click.Choice(["sqlite", "postgresql"]),
     default=None,
     help="Database type (default: from config)"
 )
-@click.option("--duckdb-memory-limit", default=None, help="DuckDB memory limit (e.g., '2GB', '512MB')")
-@click.option("--duckdb-threads", type=int, default=None, help="DuckDB thread count")
 @click.option(
     "--batch-size",
     default=100,
@@ -941,7 +1417,7 @@ def realtime():
     help="Don't auto-create missing tables"
 )
 @click.pass_context
-def start(ctx, specs, db, duckdb_memory_limit, duckdb_threads, batch_size, no_create_tables):
+def start(ctx, specs, db, batch_size, no_create_tables):
     """Start realtime monitoring service.
 
     \b
@@ -959,13 +1435,12 @@ def start(ctx, specs, db, duckdb_memory_limit, duckdb_threads, batch_size, no_cr
 
     \b
     Examples:
-      jltsql realtime start
-      jltsql realtime start --specs 0B12,0B15
-      jltsql realtime start --specs 0B12 --db sqlite
+      jltsql realtime start                     # 中央競馬監視
+      jltsql realtime start --specs 0B12,0B15   # 複数データ種別
+      jltsql realtime start --db sqlite         # データベース指定
     """
     from src.database.sqlite_handler import SQLiteDatabase
     from src.database.postgresql_handler import PostgreSQLDatabase
-    from src.database.duckdb_handler import DuckDBDatabase
     from src.services.realtime_monitor import RealtimeMonitor
 
     config = ctx.obj.get("config")
@@ -1002,16 +1477,9 @@ def start(ctx, specs, db, duckdb_memory_limit, duckdb_threads, batch_size, no_cr
                 console.print("[red]Error:[/red] PostgreSQL requires configuration file.")
                 sys.exit(1)
             database = PostgreSQLDatabase(config.get("databases.postgresql"))
-        elif db_type == "duckdb":
-            db_config = config.get("databases.duckdb") if config else {"path": "data/keiba.duckdb"}
-            # Apply DuckDB-specific options if provided
-            if duckdb_memory_limit is not None:
-                db_config["memory_limit"] = duckdb_memory_limit
-            if duckdb_threads is not None:
-                db_config["threads"] = duckdb_threads
-            database = DuckDBDatabase(db_config)
         else:
             console.print(f"[red]Error:[/red] Unsupported database type: {db_type}")
+            console.print("[yellow]Note:[/yellow] Supported types: sqlite, postgresql")
             sys.exit(1)
 
         # Create monitor
@@ -1128,12 +1596,10 @@ def stop(ctx):
 )
 @click.option(
     "--db",
-    type=click.Choice(["sqlite", "postgresql", "duckdb"]),
+    type=click.Choice(["sqlite", "postgresql"]),
     default=None,
     help="Database type (overrides config)",
 )
-@click.option("--duckdb-memory-limit", default=None, help="DuckDB memory limit (e.g., '2GB', '512MB')")
-@click.option("--duckdb-threads", type=int, default=None, help="DuckDB thread count")
 @click.option(
     "--db-path",
     type=str,
@@ -1141,7 +1607,7 @@ def stop(ctx):
     help="SQLite database path (overrides config)",
 )
 @click.pass_context
-def timeseries(ctx, spec, from_date, to_date, db, duckdb_memory_limit, duckdb_threads, db_path):
+def timeseries(ctx, spec, from_date, to_date, db, db_path):
     """Fetch time series odds data from JV-Link.
 
     Fetches historical time series odds data for races already in the database.
@@ -1165,7 +1631,6 @@ def timeseries(ctx, spec, from_date, to_date, db, duckdb_memory_limit, duckdb_th
     """
     from datetime import datetime, timedelta
     from src.database.sqlite_handler import SQLiteDatabase
-    from src.database.duckdb_handler import DuckDBDatabase
     from src.fetcher.realtime import RealtimeFetcher
     from src.realtime.updater import RealtimeUpdater
 
@@ -1181,15 +1646,9 @@ def timeseries(ctx, spec, from_date, to_date, db, duckdb_memory_limit, duckdb_th
     if db_path:
         database_path = db_path
     elif config:
-        if db_type == "duckdb":
-            database_path = config.get("databases.duckdb.path", "data/keiba.duckdb")
-        else:
-            database_path = config.get("databases.sqlite.path", "data/keiba.db")
+        database_path = config.get("databases.sqlite.path", "data/keiba.db")
     else:
-        if db_type == "duckdb":
-            database_path = "data/keiba.duckdb"
-        else:
-            database_path = "data/keiba.db"
+        database_path = "data/keiba.db"
 
     # Resolve path
     database_path = str(Path(database_path).resolve())
@@ -1212,21 +1671,17 @@ def timeseries(ctx, spec, from_date, to_date, db, duckdb_memory_limit, duckdb_th
 
     try:
         # Initialize database for saving
-        db_config = {"path": database_path}
-        if db_type == "duckdb":
-            # Apply DuckDB-specific options if provided
-            if duckdb_memory_limit is not None:
-                db_config["memory_limit"] = duckdb_memory_limit
-            if duckdb_threads is not None:
-                db_config["threads"] = duckdb_threads
-            database = DuckDBDatabase(db_config)
+        if db_type == "postgresql":
+            from src.database.postgresql_handler import PostgreSQLDatabase
+            database = PostgreSQLDatabase(config.get("databases.postgresql"))
         else:
+            db_config = {"path": database_path}
             database = SQLiteDatabase(db_config)
 
         with database:
             # Ensure TS_O* tables exist
-            from src.database.schema import get_schema_registry
-            schema_registry = get_schema_registry()
+            from src.database.schema import SCHEMAS
+            schema_registry = SCHEMAS
             for spec_code in specs_list:
                 # Map spec to table name
                 table_map = {

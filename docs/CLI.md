@@ -15,7 +15,7 @@ JRVLTSQLコマンドラインインターフェース（CLI）の完全なリフ
 
 ## 概要
 
-JRVLTSQLは、JRA-VAN DataLabの競馬データをSQLite/PostgreSQL/DuckDBにリアルタイムインポートするためのコマンドラインツールです。
+JRVLTSQLは、JRA-VAN DataLabの競馬データをSQLite/PostgreSQLにリアルタイムインポートするためのコマンドラインツールです。
 
 ### 基本的な使い方
 
@@ -140,7 +140,7 @@ jltsql fetch --from YYYYMMDD --to YYYYMMDD --spec DATA_SPEC [OPTIONS]
   - `2`: 今週データ（直近のレースのみ）
   - `3`: セットアップ（全データ取得、ダイアログ表示あり）
   - `4`: 分割セットアップ（全データ取得、初回のみダイアログ）
-- `--db`: データベースタイプ（sqlite/postgresql/duckdb）
+- `--db`: データベースタイプ（sqlite/postgresql）
 - `--batch-size`: バッチサイズ（デフォルト: 1000）
 - `--progress/--no-progress`: プログレス表示の有無（デフォルト: 有効）
 
@@ -162,8 +162,8 @@ jltsql fetch --from 20240101 --to 20241231 --spec DIFF
 # オッズデータを取得
 jltsql fetch --from 20240101 --to 20241231 --spec O1
 
-# DuckDBに保存
-jltsql fetch --from 20240101 --to 20241231 --spec RACE --db duckdb
+# PostgreSQLに保存
+jltsql fetch --from 20240101 --to 20241231 --spec RACE --db postgresql
 
 # バッチサイズを変更
 jltsql fetch --from 20240101 --to 20241231 --spec RACE --batch-size 500
@@ -198,7 +198,7 @@ jltsql monitor [OPTIONS]
 - `--daemon`: バックグラウンドで実行
 - `--spec`: データ種別（デフォルト: RACE）
 - `--interval`: ポーリング間隔（秒、デフォルト: 60）
-- `--db`: データベースタイプ（sqlite/postgresql/duckdb）
+- `--db`: データベースタイプ（sqlite/postgresql）
 
 **使用例:**
 
@@ -238,7 +238,7 @@ jltsql realtime start [OPTIONS]
 **オプション:**
 
 - `--specs`: 監視するデータ種別（カンマ区切り、デフォルト: 0B12）
-- `--db`: データベースタイプ（sqlite/postgresql/duckdb）
+- `--db`: データベースタイプ（sqlite/postgresql）
 - `--batch-size`: バッチサイズ（デフォルト: 100）
 - `--no-create-tables`: テーブル自動作成を無効化
 
@@ -347,7 +347,7 @@ jltsql create-tables [OPTIONS]
 
 **オプション:**
 
-- `--db`: データベースタイプ（sqlite/postgresql/duckdb）
+- `--db`: データベースタイプ（sqlite/postgresql）
 - `--all`: すべてのテーブルを作成（NL_とRT_）
 - `--nl-only`: NL_（Normal Load）テーブルのみ作成
 - `--rt-only`: RT_（Real-Time）テーブルのみ作成
@@ -386,7 +386,7 @@ jltsql create-indexes [OPTIONS]
 
 **オプション:**
 
-- `--db`: データベースタイプ（sqlite/postgresql/duckdb）
+- `--db`: データベースタイプ（sqlite/postgresql）
 - `--table`: 特定のテーブルのみインデックスを作成
 
 **使用例:**
@@ -428,7 +428,7 @@ jltsql export --table TABLE_NAME --output FILE_PATH [OPTIONS]
 
 - `--format`: 出力形式（csv/json/parquet、デフォルト: csv）
 - `--where`: SQL WHERE句（例: '開催年月日 >= 20240101'）
-- `--db`: データベースタイプ（sqlite/postgresql/duckdb）
+- `--db`: データベースタイプ（sqlite/postgresql）
 
 **使用例:**
 
@@ -491,7 +491,7 @@ jltsql config --set database.type=sqlite
 - `jvlink.sid`: JV-Link SID
 - `jvlink.service_key`: JV-Linkサービスキー
 - `database.type`: データベースタイプ
-- `database.path`: データベースパス（SQLite/DuckDB）
+- `database.path`: データベースパス
 - `logging.level`: ログレベル
 - `logging.file`: ログファイルパス
 
@@ -524,7 +524,7 @@ jltsql version
 
 ## データベース選択
 
-JRVLTSQLは3種類のデータベースをサポートしています。
+JRVLTSQLは2種類のデータベースをサポートしています。
 
 ### SQLite（デフォルト）
 
@@ -579,33 +579,6 @@ databases:
     user: postgres
     password: your_password
 ```
-
-### DuckDB
-
-**特徴:**
-
-- 分析特化型データベース
-- 高速なOLAPクエリ
-- Parquetファイルとの連携に優れる
-
-**使用方法:**
-
-```bash
-jltsql fetch --db duckdb --from 20240101 --to 20241231 --spec RACE
-```
-
-**設定例（config/config.yaml）:**
-
-```yaml
-database:
-  type: duckdb
-
-databases:
-  duckdb:
-    path: data/keiba.duckdb
-```
-
-**注意:** DuckDBを使用する場合は `pip install duckdb pandas` が必要です。
 
 ---
 
@@ -790,42 +763,8 @@ jltsql export --table NL_RA --where "開催年月日 >= 20240101 AND 開催年�
 # 馬情報をJSONでエクスポート
 jltsql export --table NL_SE --format json --output horses.json
 
-# DuckDBで高速分析
-jltsql export --table NL_RA --format parquet --output races.parquet --db duckdb
-```
-
-#### DuckDBを使った分析例
-
-```bash
-# DuckDBにデータを取得
-jltsql fetch --db duckdb --from 20240101 --to 20241231 --spec RACE
-
-# Parquetでエクスポート
-jltsql export --db duckdb --table NL_RA --format parquet --output races.parquet
-```
-
-その後、Pythonで分析:
-
-```python
-import duckdb
-
-# DuckDBに接続
-con = duckdb.connect('data/keiba.duckdb')
-
-# 東京競馬場の重賞レースを抽出
-results = con.execute("""
-    SELECT
-        開催年月日,
-        レース名,
-        距離,
-        馬場状態コード
-    FROM NL_RA
-    WHERE 競馬場コード = '05'  -- 東京
-        AND グレードコード IN ('A', 'B', 'C')  -- G1, G2, G3
-    ORDER BY 開催年月日 DESC
-""").fetchall()
-
-con.close()
+# PostgreSQLで高速分析
+jltsql export --table NL_RA --format parquet --output races.parquet --db postgresql
 ```
 
 ### 複数年のデータ取得

@@ -1,23 +1,24 @@
 """Parser factory for JV-Data records.
 
 This module provides a factory for creating appropriate parser instances
-based on record type. Supports 38 auto-generated record types from official JV-Data spec.
+based on record type. Supports 39 record types (38 JRA + 1 NAR: NU).
 
 Auto-generated parsers based on: 公式JV-Data仕様書 Ver.4.9.0.1
 """
 
 import importlib
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 
-# All supported record types (38 official parsers)
+# All supported record types (39 parsers: 38 official JRA + 1 NAR: NU)
 ALL_RECORD_TYPES = [
     'AV', 'BN', 'BR', 'BT', 'CC', 'CH', 'CK', 'CS', 'DM',
     'H1', 'H6', 'HC', 'HN', 'HR', 'HS', 'HY',
     'JC', 'JG', 'KS',
+    'NU',  # NAR (地方競馬) 競走馬登録データ
     'O1', 'O2', 'O3', 'O4', 'O5', 'O6',
     'RA', 'RC', 'SE', 'SK', 'TC', 'TK', 'TM',
     'UM', 'WC', 'WE', 'WF', 'WH', 'YS'
@@ -40,8 +41,8 @@ class ParserFactory:
 
     def __init__(self):
         """Initialize parser factory with dynamic parser loading."""
-        self._parsers: Dict[str, any] = {}
-        self._parser_classes: Dict[str, any] = {}
+        self._parsers: Dict[str, Any] = {}
+        self._parser_classes: Dict[str, Any] = {}
 
         logger.info("ParserFactory initialized", total_types=len(ALL_RECORD_TYPES))
 

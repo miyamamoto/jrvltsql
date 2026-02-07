@@ -157,7 +157,7 @@ class TestHRParser:
         """Test HR parser initialization."""
         parser = HRParser()
         assert parser.RECORD_TYPE == "HR"
-        assert parser.RECORD_LENGTH == 240
+        assert parser.RECORD_LENGTH == 719  # Updated per JV-Data spec Ver.4.9.0.1
 
     def test_parse_hr_record(self):
         """Test parsing HR record."""
@@ -172,7 +172,7 @@ class TestHRParser:
         record += b"03"  # idKaiji
         record += b"08"  # idNichiji
         record += b"11"  # idRaceNum
-        record += b" " * (240 - len(record))  # Pad to correct length
+        record += b" " * (719 - len(record))  # Pad to correct length
 
         data = parser.parse(record)
         assert data is not None
@@ -185,10 +185,11 @@ class TestParserFactory:
     def test_factory_initialization(self):
         """Test factory initialization."""
         factory = ParserFactory()
-        assert len(factory.supported_types()) == 38  # All JV-Data record types
+        assert len(factory.supported_types()) == 39  # 38 JRA + 1 NAR record types
         assert "RA" in factory.supported_types()
         assert "SE" in factory.supported_types()
         assert "HR" in factory.supported_types()
+        assert "NU" in factory.supported_types()  # NAR parser
 
     def test_get_parser(self):
         """Test getting parser by type."""

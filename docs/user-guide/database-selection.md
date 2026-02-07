@@ -1,34 +1,46 @@
 # データベース選択ガイド
 
-JRVLTSQLは3種類のデータベースに対応しています。用途に応じて最適なものを選択してください。
+JRVLTSQLは**SQLite**データベースを使用します。32-bit Python環境での安定動作を重視した設計です。
 
-## 比較表
+## 重要なお知らせ
 
-| 特徴 | SQLite | DuckDB | PostgreSQL |
-|------|--------|--------|------------|
-| **用途** | 開発・軽量運用 | 分析・OLAP | 本番運用 |
-| **セットアップ** | 不要 | 不要 | サーバー必要 |
-| **ファイル** | 単一ファイル | 単一ファイル | サーバー管理 |
-| **同時接続** | 単一 | 単一 | 複数 |
-| **分析クエリ** | 普通 | 高速 | 普通 |
-| **書き込み** | 高速 | 普通 | 高速 |
-| **メモリ使用** | 少 | 中〜多 | 設定次第 |
+**32-bit Python対応のため、SQLiteのみをサポートしています。**
 
-## SQLite
+地方競馬DATA (UmaConn) APIは32-bit COM DLLとして提供されており、32-bit Python環境が必須です。そのため、以下のデータベースは非対応または制限があります：
+
+- **PostgreSQL**: psycopgライブラリが64-bit環境を推奨（JRA-VANのみの場合は利用可能）
+
+## SQLite の特徴
+
+| 項目 | 内容 |
+|------|------|
+| **用途** | すべての用途（開発・分析・運用） |
+| **セットアップ** | 不要（Python標準ライブラリ） |
+| **ファイル** | 単一の.dbファイル |
+| **同時接続** | 単一プロセス |
+| **分析クエリ** | 高速（適切なインデックス設定で） |
+| **書き込み** | 高速 |
+| **メモリ使用** | 少（軽量） |
+| **32-bit対応** | 完全対応 |
+
+## SQLiteの詳細
 
 ### 特徴
 
 - **ファイルベース**: 単一の`.db`ファイルで管理
-- **セットアップ不要**: Pythonに標準搭載
-- **軽量**: 小〜中規模データに最適
-- **ポータブル**: ファイルをコピーするだけでバックアップ
+- **セットアップ不要**: Pythonに標準搭載（追加インストール不要）
+- **軽量**: メモリ使用量が少なく、高速動作
+- **ポータブル**: ファイルをコピーするだけでバックアップ・移行可能
+- **32-bit完全対応**: 32-bit Python環境で安定動作
+- **大規模データ対応**: 適切なインデックス設定で数十GB以上も処理可能
 
 ### 推奨用途
 
-- 開発・テスト環境
-- 個人利用
-- 小規模データ（〜数GB）
-- バックアップが容易
+- **すべての用途**: 開発・テスト・本番運用
+- JRA-VAN (JV-Link) データ取得
+- 地方競馬DATA (UmaConn) データ取得
+- データ分析（適切なインデックス設定で高速化）
+- 個人利用・共有利用
 
 ### 設定例
 
@@ -45,145 +57,87 @@ databases:
 ### 使用方法
 
 ```bash
+# デフォルトはSQLite
+jltsql fetch --from 20240101 --to 20241231 --spec RACE
+
+# 明示的に指定する場合
 jltsql fetch --from 20240101 --to 20241231 --spec RACE --db sqlite
 ```
 
-## DuckDB
+### パフォーマンス最適化
 
-### 特徴
-
-- **列指向ストレージ**: 分析クエリに最適化
-- **並列処理**: マルチスレッド対応
-- **メモリ効率**: 大規模データでも高速
-- **SQLite互換**: 移行が容易
-
-### 推奨用途
-
-- データ分析
-- 集計・統計処理
-- 大規模データ（数十GB以上）
-- Jupyter Notebook連携
-
-### 設定例
-
-```yaml
-database:
-  type: duckdb
-
-databases:
-  duckdb:
-    path: "data/keiba.duckdb"
-    memory_limit: "4GB"
-    threads: 8
-```
-
-### 使用方法
-
-```bash
-jltsql fetch --from 20240101 --to 20241231 --spec RACE --db duckdb
-```
-
-### 分析クエリ例
+SQLiteでも以下の設定で高速な分析クエリが可能です：
 
 ```sql
--- 年別レース数（DuckDBで高速）
+-- インデックスの作成
+CREATE INDEX idx_nl_ra_year ON NL_RA(Year);
+CREATE INDEX idx_nl_se_kakutei ON NL_SE(KakuteiJyuni);
+CREATE INDEX idx_nl_se_kisyu ON NL_SE(KisyuCode);
+
+-- プラグマ設定（高速化）
+PRAGMA journal_mode = WAL;
+PRAGMA synchronous = NORMAL;
+PRAGMA cache_size = -64000;  -- 64MBキャッシュ
+PRAGMA temp_store = MEMORY;
+```
+
+## 分析クエリ例
+
+SQLiteでも高速な分析クエリが可能です：
+
+```sql
+-- 年別レース数
 SELECT Year, COUNT(*) as race_count
 FROM NL_RA
 GROUP BY Year
 ORDER BY Year;
 
--- 騎手別勝率
+-- 騎手別勝率（インデックス使用で高速化）
 SELECT
     k.KisyuName,
     COUNT(*) as rides,
     SUM(CASE WHEN s.KakuteiJyuni = 1 THEN 1 ELSE 0 END) as wins,
-    ROUND(SUM(CASE WHEN s.KakuteiJyuni = 1 THEN 1 ELSE 0 END) * 100.0 / COUNT(*), 2) as win_rate
+    ROUND(CAST(SUM(CASE WHEN s.KakuteiJyuni = 1 THEN 1 ELSE 0 END) AS REAL) * 100.0 / COUNT(*), 2) as win_rate
 FROM NL_SE s
 JOIN NL_KS k ON s.KisyuCode = k.KisyuCode
 WHERE s.Year = 2024
 GROUP BY k.KisyuCode, k.KisyuName
 ORDER BY wins DESC
 LIMIT 20;
+
+-- 競馬場別レース数
+SELECT
+    ba.JyoCode,
+    ba.JyoName,
+    COUNT(*) as race_count
+FROM NL_RA ra
+JOIN NL_BA ba ON ra.JyoCode = ba.JyoCode
+WHERE ra.Year = 2024
+GROUP BY ba.JyoCode, ba.JyoName
+ORDER BY race_count DESC;
 ```
 
-## PostgreSQL
+## バックアップとリストア
 
-### 特徴
-
-- **マルチユーザー**: 複数同時接続対応
-- **高信頼性**: ACID完全準拠
-- **豊富な機能**: 全文検索、JSON対応
-- **スケーラブル**: 大規模運用に対応
-
-### 推奨用途
-
-- 本番環境
-- Webアプリケーション連携
-- 複数ユーザーでの共有
-- 高可用性が必要な場合
-
-### 設定例
-
-```yaml
-database:
-  type: postgresql
-
-databases:
-  postgresql:
-    host: localhost
-    port: 5432
-    database: keiba
-    user: postgres
-    password: "${POSTGRES_PASSWORD}"
-```
-
-### セットアップ
+SQLiteはファイルベースなので、バックアップが非常に簡単です：
 
 ```bash
-# PostgreSQLのインストール（Windows）
-# https://www.postgresql.org/download/windows/
+# バックアップ（ファイルコピー）
+copy data\keiba.db data\keiba_backup_20240101.db
 
-# データベース作成
-createdb keiba
+# リストア（ファイル復元）
+copy data\keiba_backup_20240101.db data\keiba.db
 
-# テーブル作成
-jltsql create-tables --db postgresql
+# 別環境への移行
+# keiba.db ファイルをコピーするだけ
 ```
 
-## 選択のポイント
+## よくある質問
 
-### 個人利用・開発
+### Q: PostgreSQLは使えますか？
 
-→ **SQLite**を推奨
+A: 64-bit Python環境が推奨されるため、現在は限定的なサポートです。JRA-VANのみを使用する場合は、64-bit Python + PostgreSQLの組み合わせが可能ですが、地方競馬DATAとの併用はできません。
 
-- セットアップ不要
-- ファイル管理が簡単
-- 十分な性能
+### Q: SQLiteで大規模データは扱えますか？
 
-### データ分析メイン
-
-→ **DuckDB**を推奨
-
-- 集計クエリが高速
-- Pandas/Jupyter連携
-- メモリ内処理
-
-### 本番運用・共有
-
-→ **PostgreSQL**を推奨
-
-- 複数接続対応
-- 高信頼性
-- バックアップ・レプリケーション
-
-## データベース間の移行
-
-SQLite → DuckDB/PostgreSQLへの移行は、エクスポート/インポートで行えます：
-
-```bash
-# SQLiteからエクスポート
-jltsql export --table NL_RA --output races.parquet --format parquet --db sqlite
-
-# DuckDBにインポート（DuckDB CLIで）
-duckdb data/keiba.duckdb "CREATE TABLE NL_RA AS SELECT * FROM 'races.parquet'"
-```
+A: はい、適切なインデックス設定とプラグマ設定により、数十GB以上のデータも高速に処理できます。JRVLTSQLは最適化されたスキーマとインデックスを自動作成します。

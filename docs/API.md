@@ -14,13 +14,12 @@ JRVLTSQLプロジェクトのデータベースハンドラAPIリファレンス
 
 ## 概要
 
-JRVLTSQLは、JV-Data（JRA-VAN競馬データ）をSQLite、DuckDB、PostgreSQLに格納・管理するためのデータベースハンドラを提供します。
+JRVLTSQLは、JV-Data（JRA-VAN競馬データ）をSQLite、PostgreSQLに格納・管理するためのデータベースハンドラを提供します。
 
 ### サポートデータベース
 
 - **SQLite**: 軽量、ファイルベース、組み込みデータベース
-- **DuckDB**: 分析処理に特化したOLAPデータベース
-- **PostgreSQL**: 本格的なリレーショナルデータベース（将来対応予定）
+- **PostgreSQL**: 本格的なリレーショナルデータベース（pg8000/psycopg対応）
 
 ### 主な機能
 
@@ -61,15 +60,6 @@ config = {
     "check_same_thread": False
 }
 db = SQLiteDatabase(config)
-
-# DuckDBの場合
-config = {
-    "path": "./data/keiba.duckdb",
-    "read_only": False,
-    "memory_limit": "2GB",
-    "threads": 4
-}
-db = DuckDBDatabase(config)
 ```
 
 ---
@@ -494,7 +484,7 @@ with SQLiteDatabase(config) as db:
 
 #### vacuum()
 
-データベースを最適化し、領域を回収します（SQLite/DuckDB）。
+データベースを最適化し、領域を回収します（SQLite）。
 
 ```python
 def vacuum(self) -> None
@@ -507,14 +497,11 @@ def vacuum(self) -> None
 ```python
 # SQLite: 削除されたデータの領域を回収
 db.vacuum()
-
-# DuckDB: WALをディスクにフラッシュ
-db.vacuum()  # 内部的にCHECKPOINTを実行
 ```
 
 #### analyze()
 
-データベース統計を更新します（DuckDB）。
+データベース統計を更新します。
 
 ```python
 def analyze(self) -> None
@@ -590,83 +577,6 @@ with db:
 
 ---
 
-### DuckDBDatabase
-
-分析処理に特化したOLAPデータベース。
-
-#### 設定項目
-
-```python
-config = {
-    "path": "./data/keiba.duckdb",   # データベースファイルパス
-    "read_only": False,              # 読み取り専用モード
-    "memory_limit": "2GB",           # メモリ制限
-    "threads": 4                     # 使用スレッド数
-}
-```
-
-#### 特徴
-
-**UPSERT構文:**
-```sql
-INSERT INTO table_name (columns...)
-VALUES (values...)
-ON CONFLICT (primary_key_columns) DO UPDATE SET
-    column1 = EXCLUDED.column1,
-    column2 = EXCLUDED.column2
-```
-
-**識別子のクォート:**
-- ダブルクォート（"）を使用（SQL標準）
-```python
-def _quote_identifier(self, identifier: str) -> str:
-    escaped = identifier.replace('"', '""')
-    return f'"{escaped}"'
-```
-
-**パフォーマンス最適化:**
-```python
-SET preserve_insertion_order = false  # 挿入順序の保持を無効化
-```
-
-**プライマリキーの自動検出:**
-- `ON CONFLICT` 句で使用するため、テーブルのプライマリキーを自動検出
-- プライマリキーがない場合は通常のINSERTにフォールバック
-
-**例:**
-```python
-from src.database.duckdb_handler import DuckDBDatabase
-
-config = {
-    "path": "./data/keiba.duckdb",
-    "memory_limit": "4GB",
-    "threads": 8
-}
-db = DuckDBDatabase(config)
-
-with db:
-    # 複数レコードを一括挿入（UPSERT）
-    race_data = [
-        {"Year": 2024, "MonthDay": "0525", "JyoCD": "05", ...},
-        {"Year": 2024, "MonthDay": "0526", "JyoCD": "06", ...},
-    ]
-    db.insert_many("NL_RA", race_data)
-
-    # 分析クエリ（DuckDBの強み）
-    stats = db.fetch_all("""
-        SELECT
-            Year,
-            COUNT(*) as race_count,
-            AVG(SyussoTosu) as avg_horses
-        FROM NL_RA
-        WHERE Year >= 2020
-        GROUP BY Year
-        ORDER BY Year
-    """)
-```
-
----
-
 ### PostgreSQLDatabase
 
 （将来実装予定）
@@ -691,14 +601,14 @@ ON CONFLICT (primary_key_columns) DO UPDATE SET
 
 ## データベース固有の動作比較
 
-| 機能 | SQLite | DuckDB | PostgreSQL |
-|------|--------|--------|------------|
-| UPSERT構文 | `INSERT OR REPLACE` | `ON CONFLICT DO UPDATE` | `ON CONFLICT DO UPDATE` |
-| 識別子クォート | バッククォート ` | ダブルクォート " | ダブルクォート " |
-| プライマリキー自動検出 | 不要 | 必要 | 必要 |
-| VACUUM | 領域回収 | CHECKPOINT | 領域回収 |
-| ANALYZE | 未対応 | 統計更新 | 統計更新 |
-| 並列処理 | 制限あり | 最適化済み | 最適化済み |
+| 機能 | SQLite | PostgreSQL |
+|------|--------|------------|
+| UPSERT構文 | `INSERT OR REPLACE` | `ON CONFLICT DO UPDATE` |
+| 識別子クォート | バッククォート ` | ダブルクォート " |
+| プライマリキー自動検出 | 不要 | 必要 |
+| VACUUM | 領域回収 | 領域回収 |
+| ANALYZE | 未対応 | 統計更新 |
+| 並列処理 | 制限あり | 最適化済み |
 
 ---
 
@@ -977,46 +887,6 @@ with db:
 
     for horse in horses:
         print(f"{horse['Bamei']} ({horse['KettoNum']})")
-```
-
-### 分析処理（DuckDB）
-
-```python
-from src.database.duckdb_handler import DuckDBDatabase
-
-config = {
-    "path": "./data/keiba.duckdb",
-    "memory_limit": "4GB",
-    "threads": 8
-}
-
-with DuckDBDatabase(config) as db:
-    # 集計クエリ
-    stats = db.fetch_all("""
-        SELECT
-            r.Year,
-            r.JyoCD,
-            COUNT(*) as race_count,
-            AVG(r.SyussoTosu) as avg_horses,
-            AVG(s.Time) as avg_time
-        FROM NL_RA r
-        LEFT JOIN NL_SE s ON
-            r.Year = s.Year AND
-            r.MonthDay = s.MonthDay AND
-            r.JyoCD = s.JyoCD AND
-            r.Kaiji = s.Kaiji AND
-            r.Nichiji = s.Nichiji AND
-            r.RaceNum = s.RaceNum AND
-            s.KakuteiJyuni = 1
-        WHERE r.Year >= 2020
-        GROUP BY r.Year, r.JyoCD
-        ORDER BY r.Year, r.JyoCD
-    """)
-
-    for row in stats:
-        print(f"{row['Year']} - 場所{row['JyoCD']}: "
-              f"{row['race_count']}レース, "
-              f"平均{row['avg_horses']:.1f}頭")
 ```
 
 ### 大量データのインポート

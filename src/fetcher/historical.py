@@ -7,6 +7,8 @@ import time
 from datetime import datetime
 from typing import Iterator, Optional
 
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+
 from src.fetcher.base import BaseFetcher, FetcherError
 from src.utils.logger import get_logger
 from src.utils.progress import JVLinkProgressDisplay
@@ -137,13 +139,16 @@ class HistoricalFetcher(BaseFetcher):
                 last_file_timestamp=last_file_timestamp,
             )
 
-            # Check if data is empty (result=-1 or read_count=0)
-            if result == -1 or read_count == 0:
+            # Check if data is empty
+            # Note: When result is -301 (download pending), read_count may be 0 but
+            # download_count > 0 indicates data exists and needs to be downloaded.
+            # Only report "no data" when both read_count and download_count are 0.
+            if result == -1 or (read_count == 0 and download_count == 0):
                 logger.info(
                     "No data available from specified timestamp",
                     data_spec=data_spec,
                     fromtime=fromtime,
-                    note="No data on JRA-VAN server for this spec/period",
+                    note="No data on server for this spec/period",
                 )
                 if self.progress_display:
                     self.progress_display.print_info(
@@ -208,6 +213,13 @@ class HistoricalFetcher(BaseFetcher):
             except Exception as e:
                 logger.warning(f"Failed to close stream: {e}")
 
+            # Explicitly cleanup COM resources (prevents "Win32 exception releasing IUnknown")
+            if hasattr(self.jvlink, 'cleanup'):
+                try:
+                    self.jvlink.cleanup()
+                except Exception:
+                    pass
+
             # Stop progress display
             if self.progress_display:
                 self.progress_display.stop()
@@ -256,13 +268,13 @@ class HistoricalFetcher(BaseFetcher):
         yield from self.fetch(data_spec, from_date, to_date, option)
 
     def _wait_for_download(
-        self, download_task_id: Optional[int] = None, timeout: int = 600, interval: float = 0.5
+        self, download_task_id: Optional[int] = None, timeout: int = 1800, interval: float = 0.5
     ):
         """Wait for JV-Link download to complete.
 
         Args:
             download_task_id: Progress task ID for download (optional)
-            timeout: Maximum wait time in seconds (default: 600 = 10 minutes)
+            timeout: Maximum wait time in seconds (default: 1800 = 30 minutes, increased for large data specs)
             interval: Status check interval in seconds (default: 0.5)
 
         Raises:
@@ -270,6 +282,19 @@ class HistoricalFetcher(BaseFetcher):
         """
         start_time = time.time()
         last_status = None
+        retry_count = 0
+        max_retries = 5  # Maximum retries for temporary errors
+
+        # Retryable error codes (temporary errors that may resolve)
+        # -201: Database error (might be busy)
+        # -202: File error (might be busy)
+        # -203: Other error (NAR: often indicates incomplete NVDTLab setup or cache issue)
+        #       For NV-Link (NAR), -203 typically means:
+        #       1. Initial NVDTLab setup not completed
+        #       2. Cache corruption
+        #       3. option=1 (differential mode) not working properly
+        #       Best practice: Use option=4 (setup mode) for NAR data
+        retryable_errors = {-201, -202, -203}
 
         while True:
             # Check if timeout exceeded
@@ -279,7 +304,7 @@ class HistoricalFetcher(BaseFetcher):
 
             try:
                 # Get download status
-                # JVStatus returns:
+                # JVStatus/NVStatus returns:
                 # > 0: Download in progress (percentage * 100)
                 # 0: Download complete
                 # < 0: Error
@@ -300,6 +325,8 @@ class HistoricalFetcher(BaseFetcher):
                                 completed=status,
                                 status=f"{percentage:.1f}% - {int(elapsed)}秒経過",
                             )
+                        # Reset retry count on progress
+                        retry_count = 0
                     last_status = status
 
                 if status == 0:
@@ -312,7 +339,6 @@ class HistoricalFetcher(BaseFetcher):
                         )
                     # Wait for file system write completion
                     # JV-Link reports download complete but files may not be written to disk yet
-                    # 小さなダウンロードでは短い待機時間で十分
                     wait_time = 2  # 2秒に短縮（元は10秒）
                     logger.info("Waiting for file write completion...", wait_seconds=wait_time)
                     time.sleep(wait_time)
@@ -320,7 +346,36 @@ class HistoricalFetcher(BaseFetcher):
                     return  # Download complete
 
                 if status < 0:
-                    raise FetcherError(f"Download failed with status code: {status}")
+                    if status in retryable_errors:
+                        retry_count += 1
+                        if retry_count <= max_retries:
+                            logger.warning(
+                                "Retryable download error, will retry",
+                                status_code=status,
+                                retry_count=retry_count,
+                                max_retries=max_retries,
+                            )
+                            time.sleep(interval * 2)  # Wait longer before retry
+                            continue
+                        else:
+                            # NAR (NV-Link) の -203 エラーは通常、キャッシュまたはセットアップの問題
+                            if status == -203:
+                                raise FetcherError(
+                                    f"NV-Linkダウンロードエラー (code: {status}): "
+                                    "地方競馬DATAのセットアップが完了していないか、キャッシュに問題があります。\n"
+                                    "対処方法:\n"
+                                    "1. NVDTLab設定ツールを起動し、「データダウンロード」タブで初回セットアップを実行\n"
+                                    "2. セットアップ完了後も問題が続く場合は、キャッシュをクリアして再試行\n"
+                                    "3. アプリケーション(UmaConn/地方競馬DATA)を再起動\n"
+                                    "注: NAR データ取得には option=4 (セットアップモード) の使用が推奨されます"
+                                )
+                            else:
+                                raise FetcherError(
+                                    f"Download failed after {max_retries} retries with status code: {status}"
+                                )
+                    else:
+                        # Fatal error (e.g., -100 series: setup/auth errors)
+                        raise FetcherError(f"Download failed with status code: {status}")
 
                 # Wait before next status check
                 time.sleep(interval)
@@ -328,4 +383,27 @@ class HistoricalFetcher(BaseFetcher):
             except Exception as e:
                 if isinstance(e, FetcherError):
                     raise
+
+                # Check for COM catastrophic errors that require reinitialization
+                # E_UNEXPECTED: -2147418113 (0x8000FFFF)
+                error_code = getattr(e, 'error_code', None)
+                error_str = str(e)
+
+                # COM catastrophic errors or "catastrophic failure" in message
+                if (error_code == -2147418113 or
+                    'E_UNEXPECTED' in error_str or
+                    'catastrophic' in error_str.lower() or
+                    '0x8000FFFF' in error_str):
+
+                    logger.warning("COM catastrophic error detected, attempting reinitialization", error=error_str)
+
+                    # Attempt COM reinitialization if method exists
+                    if hasattr(self.jvlink, 'reinitialize_com'):
+                        try:
+                            self.jvlink.reinitialize_com()
+                            # After reinitialization, may need to restart download
+                            logger.info("COM reinitialized successfully, you may need to retry the download")
+                        except Exception as reinit_error:
+                            logger.error("COM reinitialization failed", error=str(reinit_error))
+
                 raise FetcherError(f"Failed to check download status: {e}")

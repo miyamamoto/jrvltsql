@@ -20,6 +20,38 @@ from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+# CP1252 to byte mapping for 0x80-0x9F range
+# Moved to module level for performance (避けたい: ホットループ内での辞書再作成)
+CP1252_TO_BYTE = {
+    0x20AC: 0x80,  # €
+    0x201A: 0x82,  # ‚
+    0x0192: 0x83,  # ƒ
+    0x201E: 0x84,  # „
+    0x2026: 0x85,  # …
+    0x2020: 0x86,  # †
+    0x2021: 0x87,  # ‡
+    0x02C6: 0x88,  # ˆ
+    0x2030: 0x89,  # ‰
+    0x0160: 0x8A,  # Š
+    0x2039: 0x8B,  # ‹
+    0x0152: 0x8C,  # Œ
+    0x017D: 0x8E,  # Ž
+    0x2018: 0x91,  # '
+    0x2019: 0x92,  # '
+    0x201C: 0x93,  # "
+    0x201D: 0x94,  # "
+    0x2022: 0x95,  # •
+    0x2013: 0x96,  # –
+    0x2014: 0x97,  # —
+    0x02DC: 0x98,  # ˜
+    0x2122: 0x99,  # ™
+    0x0161: 0x9A,  # š
+    0x203A: 0x9B,  # ›
+    0x0153: 0x9C,  # œ
+    0x017E: 0x9E,  # ž
+    0x0178: 0x9F,  # Ÿ
+}
+
 
 class JVLinkError(Exception):
     """JV-Link related error."""
@@ -76,9 +108,23 @@ class JVLinkWrapper:
         self.sid = sid
         self._jvlink = None
         self._is_open = False
+        self._com_initialized = False
 
         try:
+            import sys
+            # Set COM threading model to Apartment Threaded (STA)
+            sys.coinit_flags = 2  # type: ignore[attr-defined]
+
+            import pythoncom
             import win32com.client
+
+            # Initialize COM
+            try:
+                pythoncom.CoInitialize()
+                self._com_initialized = True
+            except Exception:
+                # COM may already be initialized in this thread
+                pass
 
             self._jvlink = win32com.client.Dispatch("JVDTLab.JVLink")
             logger.info("JV-Link COM object created", sid=sid)
@@ -408,40 +454,10 @@ class JVLinkWrapper:
                     # 2. Some bytes interpreted as CP1252 by Windows/pywin32
                     #    -> Bytes 0x80-0x9F become Unicode chars like U+201C
                     #    -> Need to convert these back to original bytes
+                    #    -> Use module-level CP1252_TO_BYTE mapping
                     #
                     # 3. Proper Unicode (Japanese chars as U+3000+)
                     #    -> Encode to cp932 for parsers
-                    #
-                    # CP1252 to byte mapping for 0x80-0x9F range:
-                    CP1252_TO_BYTE = {
-                        0x20AC: 0x80,  # €
-                        0x201A: 0x82,  # ‚
-                        0x0192: 0x83,  # ƒ
-                        0x201E: 0x84,  # „
-                        0x2026: 0x85,  # …
-                        0x2020: 0x86,  # †
-                        0x2021: 0x87,  # ‡
-                        0x02C6: 0x88,  # ˆ
-                        0x2030: 0x89,  # ‰
-                        0x0160: 0x8A,  # Š
-                        0x2039: 0x8B,  # ‹
-                        0x0152: 0x8C,  # Œ
-                        0x017D: 0x8E,  # Ž
-                        0x2018: 0x91,  # '
-                        0x2019: 0x92,  # '
-                        0x201C: 0x93,  # "
-                        0x201D: 0x94,  # "
-                        0x2022: 0x95,  # •
-                        0x2013: 0x96,  # –
-                        0x2014: 0x97,  # —
-                        0x02DC: 0x98,  # ˜
-                        0x2122: 0x99,  # ™
-                        0x0161: 0x9A,  # š
-                        0x203A: 0x9B,  # ›
-                        0x0153: 0x9C,  # œ
-                        0x017E: 0x9E,  # ž
-                        0x0178: 0x9F,  # Ÿ
-                    }
 
                     # 高速変換: 3段階のエンコード戦略
                     # 1. Latin-1（ASCII + 拡張ASCII）- 最速
@@ -562,6 +578,10 @@ class JVLinkWrapper:
                     # Convert string to Shift-JIS bytes
                     # JVGets stores Shift-JIS bytes in a BSTR, similar to JVRead
                     # Use latin-1 encoding to extract raw bytes (1:1 mapping for 0x00-0xFF)
+                    # 高速変換: 3段階のエンコード戦略
+                    # 1. Latin-1（ASCII + 拡張ASCII）- 最速
+                    # 2. CP932（日本語）- 高速
+                    # 3. 個別処理（CP1252変換が必要な場合）- 低速だが稀
                     try:
                         data_bytes = buff_str.encode('latin-1')
                     except UnicodeEncodeError:
@@ -569,12 +589,18 @@ class JVLinkWrapper:
                         try:
                             data_bytes = buff_str.encode('cp932')
                         except UnicodeEncodeError:
-                            # Fallback: character-by-character conversion
+                            # Fallback: character-by-character conversion with CP1252 handling
                             result_bytes = bytearray()
                             for c in buff_str:
                                 cp = ord(c)
                                 if cp <= 0xFF:
                                     result_bytes.append(cp)
+                                elif cp in CP1252_TO_BYTE:
+                                    result_bytes.append(CP1252_TO_BYTE[cp])
+                                elif cp == 0xFFFD:
+                                    # Unicode replacement character - データ破損
+                                    # 数値フィールドでエラーを避けるため'0'に置換
+                                    result_bytes.append(0x30)  # '0'
                                 else:
                                     try:
                                         result_bytes.extend(c.encode('cp932'))
@@ -627,6 +653,31 @@ class JVLinkWrapper:
         except Exception as e:
             raise JVLinkError(f"JVClose failed: {e}")
 
+    def jv_file_delete(self, filename: str) -> int:
+        """Delete a cached file from JV-Link cache.
+
+        This method is used to handle recoverable errors (-203, -402, -403, -502, -503)
+        during data reading. When these errors occur, the corrupted file should be
+        deleted and the read operation retried.
+
+        Based on kmy-keiba's JVLinkReader.cs error handling pattern.
+
+        Args:
+            filename: The filename to delete (as returned by JVRead)
+
+        Returns:
+            Result code (0 = success)
+
+        Raises:
+            JVLinkError: If file deletion fails
+        """
+        try:
+            result = self._jvlink.JVFiledelete(filename)
+            logger.info("JVFiledelete called", filename=filename, result=result)
+            return result
+        except Exception as e:
+            raise JVLinkError(f"JVFiledelete failed: {e}")
+
     def jv_status(self) -> int:
         """Get JV-Link status.
 
@@ -662,6 +713,133 @@ class JVLinkWrapper:
         """Context manager exit."""
         if self._is_open:
             self.jv_close()
+
+    def reinitialize_com(self):
+        """Reinitialize COM component to recover from catastrophic errors.
+
+        This method should be called when encountering error -2147418113 (E_UNEXPECTED)
+        or other catastrophic COM failures during JV-Link operations.
+
+        Examples:
+            >>> wrapper = JVLinkWrapper()
+            >>> wrapper.jv_init()
+            >>> try:
+            ...     wrapper.jv_open("RACE", "20240101000000", 1)
+            ... except Exception as e:
+            ...     if "E_UNEXPECTED" in str(e):
+            ...         wrapper.reinitialize_com()
+            ...         wrapper.jv_init()  # Re-initialize after recovery
+        """
+        try:
+            import sys
+            sys.coinit_flags = 2  # type: ignore[attr-defined]
+
+            import pythoncom
+            import win32com.client
+            import time
+
+            logger.warning("Reinitializing COM component due to error...")
+
+            # Close any open streams
+            if self._is_open:
+                try:
+                    self.jv_close()
+                except Exception:
+                    pass
+
+            # Uninitialize and reinitialize COM
+            if self._com_initialized:
+                try:
+                    pythoncom.CoUninitialize()
+                except Exception:
+                    pass
+
+            # Wait for COM cleanup
+            time.sleep(1)
+
+            # Reinitialize COM
+            try:
+                pythoncom.CoInitialize()
+                self._com_initialized = True
+            except Exception:
+                pass
+
+            # Recreate COM object
+            # JV-Link ProgID: JVDTLab.JVLink
+            try:
+                self._jvlink = win32com.client.Dispatch("JVDTLab.JVLink")
+            except Exception as e:
+                # If ProgID fails, try with CLSID (if known)
+                logger.error("Failed to recreate JV-Link COM object", error=str(e))
+                raise
+
+            self._is_open = False
+
+            logger.info("COM component reinitialized successfully", sid=self.sid)
+
+        except Exception as e:
+            logger.error("Failed to reinitialize COM component", error=str(e))
+            raise JVLinkError(f"COM reinitialization failed: {e}")
+
+    def cleanup(self):
+        """Explicitly cleanup COM resources. Call this before the object goes out of scope.
+
+        This prevents "Win32 exception occurred releasing IUnknown" warnings
+        that occur when COM objects are released during Python shutdown.
+
+        Examples:
+            >>> wrapper = JVLinkWrapper()
+            >>> wrapper.jv_init()
+            >>> # ... use wrapper ...
+            >>> wrapper.cleanup()  # Explicit cleanup before deletion
+        """
+        # Check if Python is shutting down
+        # During shutdown, imports may fail or sys.meta_path becomes None
+        try:
+            import sys
+            if sys.meta_path is None:
+                return
+        except (ImportError, ModuleNotFoundError):
+            return
+
+        try:
+            import gc
+        except (ImportError, ModuleNotFoundError):
+            gc = None
+
+        # Close stream if still open
+        if hasattr(self, '_is_open') and self._is_open:
+            try:
+                self.jv_close()
+            except Exception:
+                pass
+
+        # Release COM object reference BEFORE CoUninitialize
+        # This prevents "Win32 exception occurred releasing IUnknown" warnings
+        if hasattr(self, '_jvlink') and self._jvlink is not None:
+            try:
+                # Set to None first to break reference
+                jvlink_ref = self._jvlink
+                self._jvlink = None
+                # Force garbage collection while COM is still initialized
+                del jvlink_ref
+                if gc is not None:
+                    gc.collect()
+            except Exception:
+                pass
+
+        # Uninitialize COM if we initialized it
+        if hasattr(self, '_com_initialized') and self._com_initialized:
+            try:
+                import pythoncom
+                pythoncom.CoUninitialize()
+                self._com_initialized = False
+            except Exception:
+                pass
+
+    def __del__(self):
+        """Destructor to ensure proper cleanup."""
+        self.cleanup()
 
     def __repr__(self) -> str:
         """String representation."""

@@ -84,7 +84,6 @@ tests/
 ├── test_parser.py          # パーサーテスト
 ├── test_database.py        # データベーステスト
 ├── test_importer.py        # インポーターテスト
-├── test_duckdb_handler.py  # DuckDBテスト
 ├── integration/            # 統合テスト
 └── conftest.py             # pytest設定
 ```

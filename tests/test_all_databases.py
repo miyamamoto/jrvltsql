@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """全データベース包括テスト
 
-DuckDB、PostgreSQL、SQLiteで全57スキーマーをテストします。
+PostgreSQL、SQLiteで全57スキーマーをテストします。
 """
 
 import sys
@@ -19,12 +19,6 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from src.parser.factory import ParserFactory, ALL_RECORD_TYPES
 from src.database.sqlite_handler import SQLiteDatabase
-try:
-    from src.database.duckdb_handler import DuckDBDatabase
-    HAS_DUCKDB = True
-except ImportError:
-    HAS_DUCKDB = False
-    DuckDBDatabase = None
 from src.database.postgresql_handler import PostgreSQLDatabase
 from src.database.schema import SchemaManager, SCHEMAS
 from src.importer.importer import DataImporter
@@ -57,11 +51,9 @@ class DatabaseTester:
             if self.db_type == 'sqlite':
                 database = SQLiteDatabase(self.db_config)
             elif self.db_type == 'duckdb':
-                if not HAS_DUCKDB:
-                    print(f"\n✗ DuckDBハンドラーが実装されていません")
-                    self.results['errors'].append("DuckDB handler not implemented")
-                    return False
-                database = DuckDBDatabase(self.db_config)
+                print(f"\n✗ DuckDBは非対応です（32-bit Python環境のため）")
+                self.results['errors'].append("DuckDB not supported in 32-bit Python")
+                return False
             elif self.db_type == 'postgresql':
                 database = PostgreSQLDatabase(self.db_config)
             else:
@@ -120,11 +112,9 @@ class DatabaseTester:
             if self.db_type == 'sqlite':
                 database = SQLiteDatabase(self.db_config)
             elif self.db_type == 'duckdb':
-                if not HAS_DUCKDB:
-                    print(f"\n✗ DuckDBハンドラーが実装されていません")
-                    self.results['errors'].append("DuckDB handler not implemented")
-                    return False
-                database = DuckDBDatabase(self.db_config)
+                print(f"\n✗ DuckDBは非対応です（32-bit Python環境のため）")
+                self.results['errors'].append("DuckDB not supported in 32-bit Python")
+                return False
             elif self.db_type == 'postgresql':
                 database = PostgreSQLDatabase(self.db_config)
             else:
@@ -245,29 +235,13 @@ def main():
         'results': sqlite_tester.results
     }
 
-    # 2. DuckDBテスト
-    print("\n\n2/3: DuckDB テスト開始...")
-
-    if not HAS_DUCKDB:
-        print("⚠ DuckDBハンドラーが実装されていないため、スキップします")
-        all_results['duckdb'] = {
-            'schema': False,
-            'import': False,
-            'results': {'error': 'DuckDB handler not implemented'}
-        }
-    else:
-        duckdb_config = {"path": "data/test_all_duckdb.duckdb"}
-        duckdb_tester = DatabaseTester("duckdb", duckdb_config)
-
-        duckdb_schema_ok = duckdb_tester.test_schema_creation()
-        duckdb_import_ok = duckdb_tester.test_data_import(test_data_count=100)
-
-        duckdb_tester.print_summary()
-        all_results['duckdb'] = {
-            'schema': duckdb_schema_ok,
-            'import': duckdb_import_ok,
-            'results': duckdb_tester.results
-        }
+    # 2. DuckDBテスト（非対応）
+    print("\n\n2/3: DuckDB テスト - スキップ（32-bit Python非対応）")
+    all_results['duckdb'] = {
+        'schema': False,
+        'import': False,
+        'results': {'error': 'DuckDB not supported in 32-bit Python'}
+    }
 
     # 3. PostgreSQLテスト
     print("\n\n3/3: PostgreSQL テスト開始...")

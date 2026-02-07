@@ -5,11 +5,12 @@ This module provides the base class for fetching JV-Data from JV-Link.
 
 import time
 from abc import ABC, abstractmethod
-from typing import Iterator, Optional
+from typing import Iterator, Optional, Union
 
 from src.jvlink.constants import JV_READ_NO_MORE_DATA, JV_READ_SUCCESS
 from src.jvlink.wrapper import JVLinkWrapper
 from src.parser.factory import ParserFactory
+from src.utils.data_source import DataSource
 from src.utils.logger import get_logger
 from src.utils.progress import JVLinkProgressDisplay
 
@@ -41,7 +42,9 @@ class BaseFetcher(ABC):
         self,
         sid: str = "UNKNOWN",
         service_key: Optional[str] = None,
+        initialization_key: Optional[str] = None,
         show_progress: bool = True,
+        data_source: DataSource = DataSource.JRA,
     ):
         """Initialize base fetcher.
 
@@ -51,9 +54,20 @@ class BaseFetcher(ABC):
                         programmatically without requiring registry configuration.
                         If not provided, the service key must be configured in
                         JRA-VAN DataLab application or registry.
+            initialization_key: Optional NV-Link initialization key (software ID)
+                        used for NVInit when data_source is NAR.
             show_progress: Show stylish progress display (default: True)
+            data_source: Data source (DataSource.JRA or DataSource.NAR)
         """
-        self.jvlink = JVLinkWrapper(sid)
+        self.data_source = data_source
+
+        # Select wrapper based on data source
+        if data_source == DataSource.NAR:
+            from src.nvlink.wrapper import NVLinkWrapper
+            self.jvlink: Union[JVLinkWrapper, NVLinkWrapper] = NVLinkWrapper(sid, initialization_key=initialization_key)
+        else:
+            self.jvlink = JVLinkWrapper(sid)
+
         self.parser_factory = ParserFactory()
         self._records_fetched = 0
         self._records_parsed = 0
@@ -61,12 +75,15 @@ class BaseFetcher(ABC):
         self._files_processed = 0
         self._total_files = 0
         self._service_key = service_key
+        self._initialization_key = initialization_key
         self.show_progress = show_progress
         self.progress_display: Optional[JVLinkProgressDisplay] = None
         self._start_time = None
 
         logger.info(f"{self.__class__.__name__} initialized", sid=sid,
-                   has_service_key=service_key is not None)
+                   has_service_key=service_key is not None,
+                   has_initialization_key=initialization_key is not None,
+                   data_source=data_source.value)
 
     @abstractmethod
     def fetch(self, **kwargs) -> Iterator[dict]:
@@ -204,8 +221,45 @@ class BaseFetcher(ABC):
                             )
                         last_update_time = current_time
 
+                elif ret_code in (-3, -201, -202, -203, -402, -403, -502, -503):
+                    # Recoverable errors - delete corrupted file and continue
+                    # Based on kmy-keiba's JVLinkReader.cs error handling:
+                    # -201: Database busy (リトライ可能)
+                    # -202: File busy (リトライ可能)
+                    # -203: Setup not complete or file corruption (セットアップ未完了またはファイル破損)
+                    # -402, -403: Database errors (データベースエラー)
+                    # -502, -503: File errors (ファイルエラー)
+
+                    # Error-specific guidance
+                    error_messages = {
+                        -201: "データベースビジー状態です。一時的なエラーのため続行します。",
+                        -202: "ファイルビジー状態です。一時的なエラーのため続行します。",
+                        -203: "セットアップ未完了またはファイル破損が検出されました。ファイルを削除して続行します。",
+                        -402: "データベースエラーが発生しました。破損ファイルを削除して続行します。",
+                        -403: "データベースエラーが発生しました。破損ファイルを削除して続行します。",
+                        -502: "ファイルエラーが発生しました。破損ファイルを削除して続行します。",
+                        -503: "ファイルエラーが発生しました。破損ファイルを削除して続行します。",
+                    }
+
+                    error_msg = error_messages.get(ret_code, "リカバリー可能なエラーが発生しました。")
+                    logger.warning(
+                        f"Recoverable JVRead error: {error_msg}",
+                        ret_code=ret_code,
+                        filename=filename,
+                        recommended_action="Deleting corrupted file and continuing",
+                    )
+
+                    # Delete corrupted file for file-related errors
+                    if ret_code in (-3, -203, -402, -403, -502, -503) and filename and hasattr(self.jvlink, 'jv_file_delete'):
+                        try:
+                            self.jvlink.jv_file_delete(filename)
+                            logger.info(f"Deleted corrupted file: {filename}")
+                        except Exception as e:
+                            logger.warning(f"Failed to delete file {filename}: {e}")
+                    continue
+
                 else:
-                    # Error (< -1)
+                    # Fatal error (< -1, other codes)
                     logger.error(
                         "JVRead error",
                         ret_code=ret_code,

@@ -5,41 +5,36 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "jltsql"
 version = "2.2.0"
-description = "JRA-VAN DataLab競馬データをSQLite/PostgreSQL/DuckDBにリアルタイムインポートするツール"
+description = "JRA-VAN DataLab競馬データをSQLiteにリアルタイムインポートするツール (32-bit Python対応)"
 readme = "README.md"
 license = {text = "Apache-2.0"}
 authors = [
     {name = "JLTSQL Contributors"}
 ]
-requires-python = ">=3.9"
-keywords = ["jra-van", "horse-racing", "data", "sqlite", "postgresql", "duckdb"]
+requires-python = ">=3.12"
+keywords = ["jra-van", "horse-racing", "data", "sqlite", "nar", "umaconn", "32-bit"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: Apache Software License",
     "Operating System :: Microsoft :: Windows",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Database",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
-    "pywin32>=305",
-    "psycopg[binary]>=3.1",
+    "pywin32>=305; sys_platform == 'win32'",
     "pyyaml>=6.0",
     "python-dateutil>=2.8",
     "click>=8.1",
     "rich>=13.0",
     "structlog>=23.0",
     "tenacity>=8.2",
-    "duckdb>=1.0.0",
-    "pandas>=2.0.0",
 ]
 
 [project.optional-dependencies]
+postgres = ["pg8000"]
 dev = [
     "pytest>=7.4",
     "pytest-cov>=4.1",
@@ -53,17 +48,17 @@ dev = [
 jltsql = "src.cli.main:cli"
 
 [project.urls]
-Homepage = "https://github.com/yourusername/jltsql"
-Documentation = "https://github.com/yourusername/jltsql/docs"
-Repository = "https://github.com/yourusername/jltsql"
-Issues = "https://github.com/yourusername/jltsql/issues"
+Homepage = "https://github.com/miyamamoto/jrvltsql"
+Documentation = "https://github.com/miyamamoto/jrvltsql/docs"
+Repository = "https://github.com/miyamamoto/jrvltsql"
+Issues = "https://github.com/miyamamoto/jrvltsql/issues"
 
 [tool.setuptools]
 packages = ["src"]
 
 [tool.black]
 line-length = 100
-target-version = ['py39', 'py310', 'py311', 'py312']
+target-version = ['py312']
 include = '\.pyi?$'
 extend-exclude = '''
 /(
@@ -81,7 +76,7 @@ extend-exclude = '''
 
 [tool.ruff]
 line-length = 100
-target-version = "py39"
+target-version = "py312"
 select = [
     "E",  # pycodestyle errors
     "W",  # pycodestyle warnings
@@ -111,9 +106,14 @@ addopts = [
     "--cov-report=term-missing",
     "--cov-report=html",
 ]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "windows_only: marks tests that require Windows",
+]
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.12"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false

@@ -35,7 +35,7 @@ cp config/config.yaml.example config/config.yaml
 
 - **jvlink**: JRA-VAN JV-Link の接続設定
 - **database**: デフォルトのデータベースタイプ
-- **databases**: 各データベースの詳細設定（SQLite, PostgreSQL, DuckDB）
+- **databases**: 各データベースの詳細設定（SQLite, PostgreSQL）
 - **data_fetch**: データ取得設定（初期取得・リアルタイム取得）
 - **performance**: パフォーマンスチューニング設定
 - **logging**: ログ出力設定
@@ -130,7 +130,7 @@ POSTGRES_PORT=5432
 
 ```yaml
 database:
-  type: "sqlite"  # sqlite, postgresql, duckdb のいずれか
+  type: "sqlite"  # sqlite, postgresql のいずれか
 ```
 
 ### SQLite 設定（シングルユーザー推奨）
@@ -208,27 +208,6 @@ CREATE DATABASE keiba ENCODING 'UTF8';
 CREATE USER keiba_user WITH PASSWORD 'your_password';
 GRANT ALL PRIVILEGES ON DATABASE keiba TO keiba_user;
 ```
-
-### DuckDB 設定（分析クエリ・OLAP 推奨）
-
-DuckDB は分析的なクエリ（集計、グループ化など）に最適化されています。
-
-```yaml
-databases:
-  duckdb:
-    enabled: true
-    path: "./data/keiba.duckdb"
-    read_only: false          # 読み取り専用モード
-    memory_limit: "2GB"       # メモリ使用量の上限
-    threads: null             # スレッド数（null で自動検出）
-```
-
-#### パラメータ説明
-
-- **path**: データベースファイルのパス
-- **read_only**: `true` で読み取り専用（複数プロセスから同時読み取り可能）
-- **memory_limit**: クエリ実行時のメモリ使用上限（例: "512MB", "2GB", "4GB"）
-- **threads**: 並列実行スレッド数（`null` で CPU コア数に応じて自動設定）
 
 ---
 
@@ -460,68 +439,7 @@ $env:JVLINK_SERVICE_KEY = "YOUR_SERVICE_KEY_HERE"
 
 ---
 
-### 例 2: DuckDB（分析・集計用途）
-
-大量の集計クエリやデータ分析に最適です。
-
-```yaml
-# config/config.yaml
-jvlink:
-  service_key: "${JVLINK_SERVICE_KEY}"
-
-database:
-  type: "duckdb"
-
-databases:
-  duckdb:
-    enabled: true
-    path: "./data/keiba.duckdb"
-    read_only: false
-    memory_limit: "4GB"       # 分析用に大きめに設定
-    threads: null             # CPU コア数に応じて自動設定
-
-data_fetch:
-  initial:
-    enabled: true
-    date_from: "2020-01-01"
-    date_to: "2024-12-31"
-    data_specs:
-      - "RACE"
-      - "DIFF"
-      - "YSCH"
-      - "O1"
-      - "O2"
-      - "O3"
-
-  realtime:
-    enabled: false
-
-performance:
-  batch_size: 2000            # DuckDB は大きなバッチに強い
-  commit_interval: 20000
-  max_workers: 6
-  memory_limit_mb: 1024
-
-logging:
-  level: "INFO"
-  file:
-    enabled: true
-    path: "./logs/jltsql_analytics.log"
-    max_size_mb: 200
-    backup_count: 10
-  console:
-    enabled: true
-```
-
-環境変数設定:
-
-```powershell
-$env:JVLINK_SERVICE_KEY = "YOUR_SERVICE_KEY_HERE"
-```
-
----
-
-### 例 3: PostgreSQL（本番環境・マルチユーザー）
+### 例 2: PostgreSQL（本番環境・マルチユーザー）
 
 複数ユーザーでの同時アクセスやサーバー環境に適しています。
 
@@ -701,7 +619,6 @@ mkdir data
 - [JRA-VAN データラボ](https://jra-van.jp/dlb/)
 - [SQLite PRAGMA 文](https://www.sqlite.org/pragma.html)
 - [PostgreSQL 公式ドキュメント](https://www.postgresql.org/docs/)
-- [DuckDB 公式ドキュメント](https://duckdb.org/docs/)
 
 ---
 

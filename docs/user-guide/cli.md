@@ -27,7 +27,7 @@ jltsql create-tables [--db TYPE]
 
 | オプション | 説明 |
 |-----------|------|
-| `--db` | データベースタイプ (sqlite/postgresql/duckdb) |
+| `--db` | データベースタイプ (sqlite/postgresql) |
 
 ### fetch
 
@@ -82,8 +82,8 @@ jltsql fetch --from 20240101 --to 20241231 --spec RACE
 # マスターデータを差分更新
 jltsql fetch --from 20240101 --to 20241231 --spec DIFF --option 1
 
-# DuckDBに取り込み
-jltsql fetch --from 20240101 --to 20241231 --spec RACE --db duckdb
+# PostgreSQLに取り込み
+jltsql fetch --from 20240101 --to 20241231 --spec RACE --db postgresql
 ```
 
 ### export

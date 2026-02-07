@@ -133,8 +133,6 @@ dmypy.json
 # Database files
 data/
 data/*.db
-data/*.duckdb
-data/*.duckdb.wal
 data/*.db-shm
 data/*.db-wal
 
@@ -218,7 +216,6 @@ scripts/benchmark_*.py
 scripts/check_*.py
 !scripts/check_data_quality.py
 scripts/comprehensive_*.py
-scripts/duckdb_performance_*.py
 scripts/fetch_all_*.sh
 scripts/final_*.py
 scripts/fix_*.py
@@ -238,3 +235,6 @@ migrations/
 
 # Temporary files
 nul
+
+# Auto Claude data directory
+.auto-claude/

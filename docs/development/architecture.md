@@ -32,7 +32,7 @@ JRVLTSQLのシステムアーキテクチャについて説明します。
                           │
 ┌─────────────────────────▼───────────────────────────────┐
 │                  Database Layer                         │
-│  (SQLite, DuckDB, PostgreSQL handlers)                 │
+│  (SQLite, PostgreSQL handlers)                         │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -45,7 +45,6 @@ src/
 ├── database/           # データベース層
 │   ├── base.py         # BaseDatabase抽象クラス
 │   ├── sqlite_handler.py
-│   ├── duckdb_handler.py
 │   ├── postgresql_handler.py
 │   ├── schema.py       # 64テーブル定義
 │   ├── schema_metadata.py  # メタデータ
@@ -89,7 +88,7 @@ src/
    │  - _convert_record() (型変換)
    │  - database.insert_many() (バッチ挿入)
    │
-5. Database (SQLite/DuckDB/PostgreSQL)
+5. Database (SQLite/PostgreSQL)
 ```
 
 ### リアルタイムデータ取得
@@ -163,7 +162,7 @@ class DataImporter:
 
 ### 1. 抽象化
 
-データベース層は抽象クラスで統一され、SQLite/DuckDB/PostgreSQLを同じインターフェースで扱えます。
+データベース層は抽象クラスで統一され、SQLite/PostgreSQLを同じインターフェースで扱えます。
 
 ### 2. ファクトリーパターン
 
@@ -222,12 +221,6 @@ def fetch_with_retry():
 - WALモード
 - 64MBキャッシュ
 - メモリ内一時テーブル
-
-### DuckDB最適化
-
-- 列指向ストレージ
-- マルチスレッド処理
-- メモリマップドファイル
 
 ## 拡張ポイント
 

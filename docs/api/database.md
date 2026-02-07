@@ -10,7 +10,7 @@ JRVLTSQLのデータベースハンドラーAPIリファレンスです。
 
 ```python
 from src.database.sqlite_handler import SQLiteDatabase
-from src.database.duckdb_handler import DuckDBDatabase
+from src.database.postgresql_handler import PostgreSQLDatabase
 
 # SQLite
 db = SQLiteDatabase({
@@ -18,11 +18,13 @@ db = SQLiteDatabase({
     "timeout": 30.0
 })
 
-# DuckDB
-db = DuckDBDatabase({
-    "path": "data/keiba.duckdb",
-    "memory_limit": "2GB",
-    "threads": 4
+# PostgreSQL
+db = PostgreSQLDatabase({
+    "host": "localhost",
+    "port": 5432,
+    "database": "keiba",
+    "user": "postgres",
+    "password": "password"
 })
 ```
 
@@ -187,7 +189,7 @@ if db.table_exists("NL_RA"):
 データベースタイプを取得します。
 
 ```python
-db_type = db.get_db_type()  # "sqlite", "duckdb", "postgresql"
+db_type = db.get_db_type()  # "sqlite", "postgresql"
 ```
 
 #### is_connected()
@@ -230,41 +232,27 @@ db.vacuum()
 db.analyze()
 ```
 
-## DuckDBDatabase
+## PostgreSQLDatabase
 
-DuckDB固有の機能です。
+PostgreSQL固有の機能です。
 
 ### 設定オプション
 
 ```python
-db = DuckDBDatabase({
-    "path": "data/keiba.duckdb",
-    "memory_limit": "4GB",    # メモリ制限
-    "threads": 8,             # スレッド数
-    "read_only": False        # 読み取り専用
+db = PostgreSQLDatabase({
+    "host": "localhost",
+    "port": 5432,
+    "database": "keiba",
+    "user": "postgres",
+    "password": "password",
+    "pool_size": 5,
+    "max_overflow": 10
 })
 ```
 
-### 分析クエリの最適化
+### 注意事項
 
-DuckDBは列指向ストレージのため、以下のクエリが高速です：
-
-```python
-# 集計クエリ
-rows = db.fetch_all("""
-    SELECT Year, COUNT(*) as cnt
-    FROM NL_RA
-    GROUP BY Year
-    ORDER BY Year
-""")
-
-# 大量データのスキャン
-rows = db.fetch_all("""
-    SELECT *
-    FROM NL_SE
-    WHERE Year = 2024
-""")
-```
+PostgreSQLは64-bit Python環境を推奨します。32-bit Python環境（UmaConn/NAR対応）では、SQLiteの使用を推奨します。
 
 ## エラーハンドリング
 

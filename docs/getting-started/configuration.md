@@ -16,17 +16,12 @@ jvlink:
   service_key: "${JVLINK_SERVICE_KEY}"  # サービスキー（環境変数推奨）
 
 database:
-  type: sqlite                     # デフォルトDB (sqlite/postgresql/duckdb)
+  type: sqlite                     # デフォルトDB (sqlite/postgresql)
 
 databases:
   sqlite:
     path: "data/keiba.db"
     timeout: 30.0
-
-  duckdb:
-    path: "data/keiba.duckdb"
-    memory_limit: "2GB"
-    threads: 4
 
   postgresql:
     host: "${POSTGRES_HOST:localhost}"
@@ -86,19 +81,6 @@ databases:
 - `PRAGMA journal_mode = WAL`
 - `PRAGMA synchronous = NORMAL`
 - `PRAGMA cache_size = -64000` (64MB)
-
-### DuckDB
-
-```yaml
-databases:
-  duckdb:
-    path: "data/keiba.duckdb"
-    memory_limit: "2GB"     # メモリ制限
-    threads: 4              # スレッド数
-    read_only: false
-```
-
-DuckDBは分析クエリに最適化されています。
 
 ### PostgreSQL
 

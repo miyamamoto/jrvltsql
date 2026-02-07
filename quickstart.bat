@@ -6,68 +6,89 @@ title JLTSQL Setup
 REM Move to batch file directory
 cd /d "%~dp0"
 
-REM Check if 64bit DLL Surrogate is configured
-REM This allows 64bit Python to use 32bit JV-Link
-reg query "HKCR\CLSID\{2AB1774D-0C41-11D7-916F-0003479BEB3F}" /v AppID >nul 2>&1
-if errorlevel 1 (
-    echo 64bit Python用のDLLサロゲート設定を登録しています...
-    echo （管理者権限が必要な場合はUACダイアログが表示されます）
+echo ============================================================
+echo   JLTSQL Quickstart
+echo ============================================================
+echo.
 
-    REM Try to register without elevation first
-    regedit /s "%~dp0tools\JV-Link_DllSurrogate.reg" >nul 2>&1
+REM Store exit code for later
+set SCRIPT_EXIT_CODE=0
 
-    REM Check if it worked
-    reg query "HKCR\CLSID\{2AB1774D-0C41-11D7-916F-0003479BEB3F}" /v AppID >nul 2>&1
-    if errorlevel 1 (
-        REM Need elevation - use PowerShell to elevate
-        powershell -Command "Start-Process regedit -ArgumentList '/s', '%~dp0tools\JV-Link_DllSurrogate.reg' -Verb RunAs -Wait" >nul 2>&1
-
-        REM Final check
-        reg query "HKCR\CLSID\{2AB1774D-0C41-11D7-916F-0003479BEB3F}" /v AppID >nul 2>&1
-        if errorlevel 1 (
-            echo [警告] DLLサロゲート設定の登録に失敗しました。
-            echo         64bit Pythonを使用する場合は、管理者権限で
-            echo         tools\enable_64bit_python.bat を実行してください。
-            echo.
-        ) else (
-            echo [完了] 64bit Python対応設定を登録しました。
-            echo.
-        )
-    ) else (
-        echo [完了] 64bit Python対応設定を登録しました。
-        echo.
-    )
-)
-
-REM Try to find any Python (prefer 64bit now that surrogate is configured)
-set PYTHON_EXE=
+REM ============================================================
+REM   Python Detection (32-bit preferred for UmaConn/NAR)
+REM ============================================================
 
 REM First try: explicit PYTHON environment variable
 if defined PYTHON (
-    set PYTHON_EXE=%PYTHON%
-    goto :check_python
+    echo Using PYTHON environment variable: %PYTHON%
+    "%PYTHON%" scripts/quickstart.py %*
+    set SCRIPT_EXIT_CODE=%errorlevel%
+    goto :check_result
 )
 
-REM Second try: py launcher (prefers highest version)
-for /f "delims=" %%i in ('py -c "import sys; print(sys.executable)" 2^>nul') do set PYTHON_EXE=%%i
-if defined PYTHON_EXE goto :check_python
-
-REM Third try: python in PATH
-for /f "delims=" %%i in ('python -c "import sys; print(sys.executable)" 2^>nul') do set PYTHON_EXE=%%i
-if defined PYTHON_EXE goto :check_python
-
-:check_python
-if not defined PYTHON_EXE (
-    echo ERROR: Python not found
-    echo Please install Python 3.10+
-    pause
-    exit /b 1
+REM Second try: py launcher with 32-bit Python 3.12
+py -3.12-32 --version >nul 2>&1
+if %errorlevel%==0 (
+    echo Using: Python 3.12 (32-bit)
+    py -3.12-32 scripts/quickstart.py %*
+    set SCRIPT_EXIT_CODE=%errorlevel%
+    goto :check_result
 )
 
-:run_python
-"%PYTHON_EXE%" scripts/quickstart.py %*
+REM Third try: py launcher with any 32-bit Python
+py -32 --version >nul 2>&1
+if %errorlevel%==0 (
+    echo Using: Python (32-bit)
+    py -32 scripts/quickstart.py %*
+    set SCRIPT_EXIT_CODE=%errorlevel%
+    goto :check_result
+)
 
+REM Fourth try: py launcher (any version)
+py --version >nul 2>&1
+if %errorlevel%==0 (
+    echo Using: Python (py launcher)
+    echo [WARNING] 64-bit Python may not support NAR/UmaConn
+    py scripts/quickstart.py %*
+    set SCRIPT_EXIT_CODE=%errorlevel%
+    goto :check_result
+)
+
+REM Fifth try: python in PATH
+python --version >nul 2>&1
+if %errorlevel%==0 (
+    echo Using: Python (PATH)
+    echo [WARNING] 64-bit Python may not support NAR/UmaConn
+    python scripts/quickstart.py %*
+    set SCRIPT_EXIT_CODE=%errorlevel%
+    goto :check_result
+)
+
+REM No Python found
+echo ERROR: Python not found
+echo Please install Python 3.12 (32-bit) for full NAR/UmaConn support
+echo Download: https://www.python.org/downloads/
+pause
+exit /b 1
+
+:check_result
 echo.
+if %SCRIPT_EXIT_CODE% neq 0 (
+    echo ============================================================
+    echo   Setup Failed (Exit Code: %SCRIPT_EXIT_CODE%)
+    echo ============================================================
+    echo.
+    echo   Please check the error messages above.
+    echo   Common issues:
+    echo     - Missing config/config.yaml
+    echo     - Invalid service key
+    echo     - No data available for the specified date range
+    echo.
+    echo   Press Enter to close...
+    set /p dummy=
+    exit /b %SCRIPT_EXIT_CODE%
+)
+
 echo ============================================================
 echo   Setup Complete
 echo ============================================================
@@ -89,3 +110,4 @@ echo     https://github.com/miyamamoto/jvlink-mcp-server
 echo.
 echo   Press Enter to close...
 set /p dummy=
+exit /b 0
