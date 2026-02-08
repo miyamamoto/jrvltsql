@@ -132,6 +132,30 @@ copy data\keiba_backup_20240101.db data\keiba.db
 # keiba.db ファイルをコピーするだけ
 ```
 
+## NARテーブル（地方競馬）
+
+NAR（地方競馬）データはJRAテーブルと同じスキーマ構造で、テーブル名に `_NAR` サフィックスが付きます。
+
+| JRAテーブル | NARテーブル | 説明 |
+|------------|-----------|------|
+| NL_RA | NL_RA_NAR | レース詳細 |
+| NL_SE | NL_SE_NAR | 馬毎レース情報 |
+| NL_HR | NL_HR_NAR | 払戻情報 |
+| NL_UM | NL_UM_NAR | 馬マスタ |
+| RT_RA | RT_RA_NAR | レース情報（速報） |
+| ... | ..._NAR | 全テーブルに対応 |
+
+NARテーブルは `create_all_nar_tables(db)` で一括作成できます：
+
+```python
+from src.database.schema_nar import create_all_nar_tables
+
+with db:
+    create_all_nar_tables(db)
+```
+
+`jltsql create-tables` コマンドでもJRA・NARテーブルが一括作成されます。
+
 ## よくある質問
 
 ### Q: PostgreSQLは使えますか？

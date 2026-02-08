@@ -292,13 +292,15 @@ except DatabaseError as e:
 ```python
 from src.database.sqlite_handler import SQLiteDatabase
 from src.database.schema import create_all_tables
+from src.database.schema_nar import create_all_nar_tables
 
 # データベース初期化
 db = SQLiteDatabase({"path": "data/keiba.db"})
 
 with db:
-    # テーブル作成
+    # テーブル作成（JRA + NAR）
     create_all_tables(db)
+    create_all_nar_tables(db)
 
     # データ挿入
     db.insert("NL_RA", {
