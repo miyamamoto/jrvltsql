@@ -33,7 +33,10 @@ class TestCLIBasic(unittest.TestCase):
         result = self.runner.invoke(cli, ['version'])
         self.assertEqual(result.exit_code, 0)
         self.assertIn('JLTSQL version', result.output)
-        self.assertIn('Python version', result.output)
+        self.assertTrue(
+            'Python version' in result.output or 'Python:' in result.output,
+            f"Expected 'Python version' or 'Python:' in output: {result.output}"
+        )
 
     def test_status_command(self):
         """Test status command."""

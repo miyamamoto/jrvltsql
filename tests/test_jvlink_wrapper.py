@@ -117,10 +117,10 @@ class TestJVLinkWrapper:
 
     @patch("win32com.client.Dispatch")
     def test_jv_open_failure(self, mock_dispatch):
-        """Test JVOpen failure."""
+        """Test JVOpen failure with actual error code (<-2)."""
         mock_com = MagicMock()
-        # JVOpen returns error as tuple (error_code, 0, 0, "")
-        mock_com.JVOpen.return_value = (JV_RT_ERROR, 0, 0, "")
+        # JVOpen: -1/-2 are "no data" (not errors), -100 is setup required (real error)
+        mock_com.JVOpen.return_value = (-100, 0, 0, "")
         mock_dispatch.return_value = mock_com
 
         wrapper = JVLinkWrapper(sid="TEST")
@@ -128,7 +128,18 @@ class TestJVLinkWrapper:
         with pytest.raises(JVLinkError) as exc_info:
             wrapper.jv_open("RACE", "20240101000000")
 
-        assert exc_info.value.error_code == JV_RT_ERROR
+        assert exc_info.value.error_code == -100
+
+    @patch("win32com.client.Dispatch")
+    def test_jv_open_no_data(self, mock_dispatch):
+        """Test JVOpen with no data available (-1) does NOT raise."""
+        mock_com = MagicMock()
+        mock_com.JVOpen.return_value = (JV_RT_ERROR, 0, 0, "")  # -1 = no data
+        mock_dispatch.return_value = mock_com
+
+        wrapper = JVLinkWrapper(sid="TEST")
+        # Should NOT raise - -1 means no data, not an error
+        wrapper.jv_open("RACE", "20240101000000")
 
     @patch("win32com.client.Dispatch")
     def test_jv_rt_open_success(self, mock_dispatch):
@@ -148,10 +159,10 @@ class TestJVLinkWrapper:
 
     @patch("win32com.client.Dispatch")
     def test_jv_rt_open_failure(self, mock_dispatch):
-        """Test JVRTOpen failure."""
+        """Test JVRTOpen failure with actual error code."""
         mock_com = MagicMock()
-        # JVRTOpen returns error as tuple (error_code, 0)
-        mock_com.JVRTOpen.return_value = (JV_RT_ERROR, 0)
+        # -114 = data spec not subscribed (real error that raises)
+        mock_com.JVRTOpen.return_value = (-114, 0)
         mock_dispatch.return_value = mock_com
 
         wrapper = JVLinkWrapper(sid="TEST")
@@ -159,7 +170,19 @@ class TestJVLinkWrapper:
         with pytest.raises(JVLinkError) as exc_info:
             wrapper.jv_rt_open("0B12")
 
-        assert exc_info.value.error_code == JV_RT_ERROR
+        assert exc_info.value.error_code == -114
+
+    @patch("win32com.client.Dispatch")
+    def test_jv_rt_open_no_data(self, mock_dispatch):
+        """Test JVRTOpen with no data (-1) does NOT raise."""
+        mock_com = MagicMock()
+        mock_com.JVRTOpen.return_value = (JV_RT_ERROR, 0)  # -1 = no data
+        mock_dispatch.return_value = mock_com
+
+        wrapper = JVLinkWrapper(sid="TEST")
+        result, count = wrapper.jv_rt_open("0B12")
+        assert result == -1
+        assert count == 0
 
     @patch("win32com.client.Dispatch")
     def test_jv_rt_open_with_new_specs(self, mock_dispatch):
