@@ -16,8 +16,26 @@ from src.utils.updater import (
     perform_update,
 )
 
-# Version - keep in sync with pyproject.toml
-__version__ = "2.2.0"
+# Version - single source of truth from pyproject.toml
+def _read_version():
+    """Read version from pyproject.toml."""
+    try:
+        from importlib.metadata import version as _get_version
+        return _get_version("jrvltsql")
+    except Exception:
+        pass
+    try:
+        from pathlib import Path
+        import re
+        pyproject = Path(__file__).resolve().parents[2] / "pyproject.toml"
+        match = re.search(r'^version\s*=\s*"([^"]+)"', pyproject.read_text(), re.M)
+        if match:
+            return match.group(1)
+    except Exception:
+        pass
+    return "unknown"
+
+__version__ = _read_version()
 
 # Console for rich output (Windows cp932-safe)
 console = Console(legacy_windows=True)
@@ -38,7 +56,7 @@ logger = get_logger(__name__)
     is_flag=True,
     help="Enable verbose output (DEBUG level)",
 )
-@click.version_option(version=__version__, prog_name="jrvltsql")
+@click.version_option(version=__version__, prog_name="jltsql")
 @click.pass_context
 def cli(ctx, config, verbose):
     """JRVLTSQL - JRA-VAN Link To SQL
@@ -48,9 +66,9 @@ def cli(ctx, config, verbose):
 
     \b
     使用例:
-      jrvltsql init                     # プロジェクト初期化
-      jrvltsql fetch --from 2024-01-01  # データ取得
-      jrvltsql monitor --daemon         # リアルタイム監視開始
+      jltsql init                     # プロジェクト初期化
+      jltsql fetch --from 2024-01-01  # データ取得
+      jltsql monitor --daemon         # リアルタイム監視開始
 
     詳細: https://github.com/miyamamoto/jrvltsql
     """
