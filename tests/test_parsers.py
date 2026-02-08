@@ -74,7 +74,8 @@ class TestIndividualParsers:
             'JC': 252, 'JG': 251, 'KS': 282,
             'O1': 148, 'O2': 148, 'O3': 148, 'O4': 148, 'O5': 148, 'O6': 148,
             'RA': 856, 'RC': 1926, 'SE': 463, 'SK': 263, 'TC': 71, 'TK': 240, 'TM': 216,
-            'UM': 969, 'WC': 72, 'WE': 195, 'WF': 3416, 'WH': 1356, 'YS': 424
+            'UM': 969, 'WC': 72, 'WE': 195, 'WF': 3416, 'WH': 1356, 'YS': 424,
+            'HA': 1032, 'NC': 145, 'NU': 64
         }
 
         for record_type in ALL_RECORD_TYPES:

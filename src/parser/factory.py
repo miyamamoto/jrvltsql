@@ -13,7 +13,7 @@ from src.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-# All supported record types (40 parsers: 38 official JRA + 2 NAR: HA, NU)
+# All supported record types (41 parsers: 38 official JRA + 3 NAR: HA, NU, NC)
 ALL_RECORD_TYPES = [
     'AV', 'BN', 'BR', 'BT', 'CC', 'CH', 'CK', 'CS', 'DM',
     'H1', 'H6', 'HC', 'HN', 'HR', 'HS', 'HY',
