@@ -295,6 +295,7 @@ class HistoricalFetcher(BaseFetcher):
         #       3. option=1 (differential mode) not working properly
         #       Best practice: Use option=4 (setup mode) for NAR data
         retryable_errors = {-201, -202, -203}
+        download_started = False  # NVStatus > 0 を確認してから 0 を「完了」と判定
 
         while True:
             # Check if timeout exceeded
@@ -312,6 +313,7 @@ class HistoricalFetcher(BaseFetcher):
 
                 if status != last_status:
                     if status > 0:
+                        download_started = True
                         percentage = status / 100
                         logger.info(
                             "Download in progress",
@@ -327,9 +329,11 @@ class HistoricalFetcher(BaseFetcher):
                             )
                         # Reset retry count on progress
                         retry_count = 0
+                    elif status == 0 and not download_started:
+                        logger.debug("Waiting for download to start", elapsed=f"{elapsed:.1f}s")
                     last_status = status
 
-                if status == 0:
+                if status == 0 and download_started:
                     logger.info("Download completed", elapsed_seconds=int(elapsed))
                     if self.progress_display and download_task_id is not None:
                         self.progress_display.update_download(
