@@ -22,6 +22,7 @@ CI では実行できません。COM API（JV-Link / NV-Link）が必要なた�
 | `e2e_jra_smoke.py` | JRA: 1日分データ取得→パース→DB格納→SQLクエリ検証 | 2-5分 |
 | `e2e_nar_smoke.py` | NAR: 1日分データ取得→パース→DB格納→SQLクエリ検証 | 2-5分 |
 | `e2e_error_recovery.py` | エラーリカバリ（-502等）の動作確認 | 1-3分 |
+| `e2e_edge_cases.py` | 異常レース検証（中止、取消、除外、少頭数、震災期間等） | 1分 |
 
 ## 実行手順
 
@@ -54,6 +55,14 @@ C:\Users\mitsu\AppData\Local\Programs\Python\Python312-32\python.exe tests\e2e\e
 ```cmd
 C:\Users\mitsu\AppData\Local\Programs\Python\Python312-32\python.exe tests\e2e\e2e_error_recovery.py 2>&1 | tee data\e2e_error_result.txt
 ```
+
+### 6. 異常レース・エッジケース検証（既存DB使用）
+
+```cmd
+C:\Users\mitsu\AppData\Local\Programs\Python\Python312-32\python.exe tests\e2e\e2e_edge_cases.py 2>&1 | tee data\e2e_edge_result.txt
+```
+
+> **注意:** このテストは既存の `data/keiba.db` を **読み取り専用** で使用します。COM API は不要なので SSH からも実行可能です。
 
 ## 結果の確認
 
