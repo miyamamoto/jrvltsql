@@ -8,9 +8,16 @@ from rich.console import Console
 
 from src.utils.config import ConfigError, load_config
 from src.utils.logger import get_logger, setup_logging_from_config
+from src.utils.updater import (
+    auto_update_check_notice,
+    check_for_updates,
+    get_current_commit,
+    get_current_version,
+    perform_update,
+)
 
-# Version
-__version__ = "0.1.0-alpha"
+# Version - keep in sync with pyproject.toml
+__version__ = "2.2.0"
 
 # Console for rich output (Windows cp932-safe)
 console = Console(legacy_windows=True)
@@ -85,6 +92,14 @@ def cli(ctx, config, verbose):
                 setup_logging(level="DEBUG")
 
             logger.info("Configuration loaded", config_path=str(config_path))
+
+            # Auto-update check (if enabled in config)
+            auto_check = cfg.get("auto_update_check", True)
+            if auto_check and ctx.invoked_subcommand not in ("update", "version"):
+                notice = auto_update_check_notice()
+                if notice:
+                    console.print(f"[dim yellow]{notice}[/dim yellow]")
+                    console.print()
 
         except ConfigError as e:
             console.print(f"[red]Configuration Error:[/red] {e}", style="bold")
@@ -202,16 +217,19 @@ def status(source):
     default="all",
     help="表示するデータソース",
 )
-def version(source):
-    """Show version information."""
-    console.print(f"JLTSQL version {__version__}")
-    console.print("Python version: " + sys.version.split()[0])
+@click.option("--check", is_flag=True, help="最新版の確認")
+def version(source, check):
+    """Show version information and check for updates."""
+    current = get_current_version()
+    commit = get_current_commit()
+    commit_str = f" ({commit})" if commit else ""
+
+    console.print(f"[bold]JLTSQL[/bold] version {current}{commit_str}")
+    console.print(f"Python: {sys.version.split()[0]} ({'32-bit' if sys.maxsize <= 2**31 else '64-bit'})")
 
     if source in ["jra", "all"]:
         console.print()
         console.print("[bold]対応データソース:[/bold]")
-
-        # Check JRA availability
         try:
             from src.jvlink import JVLinkWrapper
             console.print("  - JRA-VAN DataLab (JV-Link): [green]利用可能[/green]")
@@ -222,13 +240,74 @@ def version(source):
         if source != "all":
             console.print()
             console.print("[bold]対応データソース:[/bold]")
-
-        # Check NAR availability
         try:
             from src.nvlink import NVLinkWrapper
             console.print("  - 地方競馬DATA (UmaConn): [green]利用可能[/green]")
         except ImportError:
             console.print("  - 地方競馬DATA (UmaConn): [red]未インストール[/red]")
+
+    if check:
+        console.print()
+        console.print("[dim]Checking for updates...[/dim]")
+        info = check_for_updates()
+        if info is None:
+            console.print("[yellow]Could not check for updates.[/yellow]")
+        elif info["update_available"]:
+            console.print(
+                f"[bold yellow]Update available:[/bold yellow] "
+                f"{info['current_version']} → {info['latest_version']}"
+            )
+            console.print(f"Run [bold]jltsql update[/bold] to update.")
+            if info.get("html_url"):
+                console.print(f"[dim]{info['html_url']}[/dim]")
+        else:
+            console.print("[green]You are on the latest version.[/green]")
+
+
+@cli.command()
+@click.option("--force", is_flag=True, help="Force update even if already up to date")
+@click.pass_context
+def update(ctx, force):
+    """Update JLTSQL to the latest version.
+
+    Pulls the latest code from GitHub and updates dependencies.
+
+    \b
+    Examples:
+      jltsql update          # Update to latest version
+      jltsql update --force  # Force reinstall dependencies
+    """
+    current = get_current_version()
+    console.print(f"[bold cyan]JLTSQL Update[/bold cyan]")
+    console.print(f"Current version: {current}")
+    console.print()
+
+    console.print("[dim]Checking for updates...[/dim]")
+    info = check_for_updates()
+
+    if info and not info["update_available"] and not force:
+        console.print("[green]Already up to date.[/green]")
+        return
+
+    if info and info["update_available"]:
+        console.print(
+            f"[yellow]New version available:[/yellow] {info['latest_version']}"
+        )
+        console.print()
+
+    console.print("[bold]Updating...[/bold]")
+    success = perform_update(verbose=True)
+
+    if success:
+        new_version = get_current_version()
+        console.print()
+        console.print(f"[bold green]✓ Update complete![/bold green]")
+        console.print(f"  Version: {new_version}")
+    else:
+        console.print()
+        console.print("[bold red]✗ Update failed.[/bold red]")
+        console.print("Try manually: git pull && pip install -e .")
+        sys.exit(1)
 
 
 @cli.command("setup-nar")
