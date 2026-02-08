@@ -33,16 +33,145 @@ nvlink:
 
 - 正しい ProgID: `NVDTLabLib.NVLink`（`NVDTLab.NVLink` ではない）
 
-### NVRead 戻り値
+### データ読み取り: NVGets vs NVRead
+
+NV-Linkのデータ読み取りには **NVGets** を使用してください（NVReadではなく）。
+
+```python
+# NVGets: バイト配列で読み取り（推奨）
+buf = bytearray(110000)
+result = link.NVGets(buf, 110000, "")
+# result[0]: 戻り値, result[1]: データ(bytes), result[2]: ファイル名
+
+# NVRead: 文字列で読み取り（JV-Link互換、非推奨）
+result = link.NVRead("", 110000, "")
+# result[0]: 戻り値, result[1]: データ(str), result[3]: ファイル名
+```
+
+**バッファサイズ**: `110000` が必須です。H1レコードは28,955バイトあり、50000以下では `-3` エラーになります。
+
+> **参考**: kmy-keiba（NV-Link利用の競馬ソフト）もNVGetsをバッファサイズ110000で使用しています。
+
+### NVRead/NVGets 戻り値
 
 | 値 | 意味 |
 |----|------|
 | > 0 | データあり（データ長） |
 | 0 | 読み取り完了 |
 | -1 | ファイル切り替え（読み続ける） |
-| -3 | ファイル未検出（リカバリ可能） |
+| -3 | ダウンロード中（該当ファイルが未DL） |
 | -116 | 未提供データスペック |
 | -301 | 認証エラー（初期化キーが不正） |
+| -402/-403 | ファイル破損（NVFiledeleteで削除して続行） |
+| -502 | ダウンロード失敗 |
+
+> **注意**: `-3` は「ファイル未検出」ではなく「**ダウンロード中**」を意味します。該当ファイルがまだサーバーからダウンロードされていない状態です。
+
+### NVStatus 戻り値
+
+| 値 | 意味 |
+|----|------|
+| 0 | ダウンロード完了（または未開始） |
+| > 0 | ダウンロード進行中（DL済みファイル数） |
+| -502 | ダウンロード失敗 |
+
+### ダウンロード手順
+
+NV-Linkのデータ取得は **ダウンロードフェーズ** と **読み取りフェーズ** の2段階で行います。
+
+#### 1. ダウンロードフェーズ（option=3）
+
+```python
+import win32com.client
+import pythoncom
+
+link = win32com.client.Dispatch("NVDTLabLib.NVLink")
+link.NVInit("UNKNOWN")
+link.ParentHWnd = hwnd  # ウィンドウハンドル（必須）
+
+# option=3（セットアップ）でダウンロード開始
+result = link.NVOpen("RACE", fromtime, 3)
+# result: (rc, read_count, download_count, timestamp)
+```
+
+#### 2. ダウンロード完了待ち
+
+```python
+while True:
+    pythoncom.PumpWaitingMessages()  # COMメッセージポンプ（必須）
+    status = link.NVStatus()
+    if status < 0:   # エラー (-502等)
+        break
+    if status >= download_count:  # 完了
+        break
+    time.sleep(0.08)
+```
+
+#### 3. -502 リトライ戦略
+
+NV-Linkのダウンロードサーバーは不安定で、15〜20ファイル程度ダウンロードすると `-502`（ダウンロード失敗）が発生することがあります。これはNV-Link側の既知の問題です。
+
+**対策**: リトライにより着実にファイルがキャッシュされるため、繰り返し実行することで全ファイルのダウンロードが完了します。
+
+```python
+for attempt in range(MAX_RETRIES):
+    link = win32com.client.Dispatch("NVDTLabLib.NVLink")
+    link.NVInit("UNKNOWN")
+    link.ParentHWnd = hwnd
+
+    result = link.NVOpen("RACE", "20250101000000", 3)
+    rc, read_count, dl_count, ts = result
+
+    if dl_count == 0:
+        # ダウンロード完了！読み取りフェーズへ
+        break
+
+    # NVStatusをポーリング
+    while True:
+        pythoncom.PumpWaitingMessages()
+        st = link.NVStatus()
+        if st < 0:  # -502等
+            break
+        if st >= dl_count:
+            break
+        time.sleep(0.08)
+
+    link.NVClose()
+
+    if st == -502:
+        time.sleep(10)  # 待機してリトライ
+        continue
+```
+
+**ポイント**:
+- 各リトライで `dl_count`（残りDL数）が減少していく
+- `dl_count == 0` になればダウンロード完了
+- `ParentHWnd` の設定が必須（未設定だと `-100` エラー）
+- `pythoncom.PumpWaitingMessages()` の呼び出しが必須（COMの非同期DLに必要）
+- `-421`（サーバーエラー）の場合は30秒以上待機してからリトライ
+
+#### 4. 読み取りフェーズ
+
+ダウンロード完了後、NVGetsでレコードを読み取ります：
+
+```python
+result = link.NVOpen("RACE", fromtime, 2)  # option=2で差分読み取り
+
+while True:
+    rd = link.NVGets(buf, 110000, "")
+    rc = rd[0]
+    if rc > 0:
+        data = rd[1]       # bytes (CP932)
+        filename = rd[2]   # ファイル名
+        rec_type = data[:2].decode('cp932')  # "RA", "SE", "HR" 等
+        # レコードをパースしてDBに保存
+    elif rc == -1:
+        continue  # ファイル切り替え
+    elif rc == 0:
+        break     # 読み取り完了
+    elif rc == -3:
+        continue  # DL中のファイル（スキップ）
+```
 
 ### NVDファイル構造
 
@@ -79,10 +208,12 @@ NVDファイルはZIPアーカイブで、以下のパスに保存されます�
 
 | option | 動作 | 備考 |
 |--------|------|------|
-| 1 | 差分データ取得 | 通常使用 |
+| 1 | 通常取得 | ローカルにあるデータを取得 |
 | 2 | 未読データ取得 | 既読データは返さない |
-| 3 | セットアップ（ダイアログあり） | 初回のみ |
+| 3 | セットアップ（全データDL） | 初回 or 12ヶ月以上前のデータ取得時 |
 | 4 | 分割セットアップ | 初回のみ |
+
+> **注意**: option=1/2 はローカルにダウンロード済みのデータのみ返します。未ダウンロードのレコードタイプは取得できません。初回は必ず option=3 でデータをダウンロードしてください。
 
 ## トラブルシューティング
 
@@ -90,9 +221,13 @@ NVDファイルはZIPアーカイブで、以下のパスに保存されます�
 
 NVDTLab設定ツールを起動し、初回セットアップ（全データダウンロード）を実行してください。
 
-### -3 エラー（ファイル未検出）
+### -3 エラー（ダウンロード中）
 
-`option=2` で既読データを再取得しようとした場合に発生します。`fromtime` を新しいタイムスタンプに更新してください。
+該当ファイルがまだサーバーからダウンロードされていません。option=3 でセットアップダウンロードを完了してから再度 option=1/2 で読み取ってください。
+
+### -502 エラー（ダウンロード失敗）
+
+NV-Linkのダウンロードサーバーが不安定で、15〜20ファイル程度で接続が切断されます。**リトライにより着実にファイルがキャッシュされる**ため、自動リトライで対処してください（上記「-502 リトライ戦略」参照）。
 
 ### -116 エラー（未提供データスペック）
 
