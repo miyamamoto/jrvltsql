@@ -3840,7 +3840,12 @@ class QuickstartRunner:
         months_ago = (datetime.now().year * 12 + datetime.now().month) - (from_date_dt.year * 12 + from_date_dt.month)
         if option == 1 and spec in OPTION_4_SUPPORTED_SPECS and months_ago > 11:
             option = 4  # 11ヶ月以上前 → セットアップモード
-        # option=1のままなら通常差分取得、option=2はそのまま維持
+
+        # NAR (NV-Link) 注意:
+        # option=1（差分取得）はローカルキャッシュにないデータをサーバーからDLしようとし、
+        # -502エラーが発生することがある。UmaConn設定ツールで事前にデータをDLしておくか、
+        # option=4（セットアップ）を使用することが推奨される。
+        # _fetch_nar_daily() で日別チャンクに分割し、-502発生時は該当日をスキップして続行する。
 
         try:
             # 設定読み込み
@@ -4042,7 +4047,13 @@ class QuickstartRunner:
             error_str = str(e)
 
             # FetcherError の内容からエラー種別を判定
-            if '-203' in error_str or 'キャッシュ' in error_str:
+            if '-502' in error_str or '-503' in error_str:
+                details['error_type'] = 'download'
+                details['error_message'] = (
+                    'NV-Linkダウンロードエラー(-502): ローカルにキャッシュされていないデータがあります。\n'
+                    '対処方法: UmaConn設定ツール(地方競馬DATA)でデータをダウンロードしてから再実行してください。'
+                )
+            elif '-203' in error_str or 'キャッシュ' in error_str:
                 details['error_type'] = 'cache'
                 details['error_message'] = 'NV-Linkキャッシュエラー: NVDTLab設定ツールでキャッシュをクリアしてください'
             elif '-3' in error_str or 'ファイル' in error_str:
