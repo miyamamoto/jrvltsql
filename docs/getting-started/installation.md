@@ -72,7 +72,7 @@ JRVLTSQLは以下のパッケージに依存しています：
 JRVLTSQLは**SQLite**（デフォルト）と**PostgreSQL**に対応しています。
 
 - **SQLite**: Python標準の`sqlite3`モジュールを使用。追加インストール不要
-- **PostgreSQL**: マルチユーザー/サーバーデプロイ向け。`psycopg2`が必要
+- **PostgreSQL**: マルチユーザー/サーバーデプロイ向け。`pg8000` または `psycopg` が必要
 
 ## JRA-VAN DataLab (JV-Link) のセットアップ
 
