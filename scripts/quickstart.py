@@ -4154,8 +4154,13 @@ class QuickstartRunner:
 def main():
     """メイン関数"""
     parser = argparse.ArgumentParser(
-        description="JLTSQL セットアップ",
+        description="JLTSQL クイックスタート — JRA-VAN / 地方競馬DATAからデータを取得してDBを構築します",
         formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="例:\n"
+               "  python scripts/quickstart.py              # 対話形式セットアップ\n"
+               "  python scripts/quickstart.py --years 5    # 過去5年分を取得\n"
+               "  python scripts/quickstart.py --source nar # 地方競馬のみ\n"
+               "  python scripts/quickstart.py -y           # 確認プロンプトをスキップ\n",
     )
 
     parser.add_argument("--mode", choices=["simple", "standard", "full", "update"], default=None,
