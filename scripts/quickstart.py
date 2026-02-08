@@ -3766,17 +3766,17 @@ class QuickstartRunner:
         # ただし、option=2非対応スペックはoption=1のまま維持
         data_source_str = self.settings.get('data_source', 'jra')
 
-        # NAR (NV-Link) ではoption=3（セットアップ）でデータDLが必要
-        # option=1/2はDL済みデータのみ返すため、初回はoption=3でDLしてからoption=2で読む
-        # DLサーバーが不安定で-502エラーが頻発するが、リトライで対処
-        # (HistoricalFetcher.fetch() が nv_download_with_retry() で自動リトライ)
-        # 参考: docs/TECHNICAL.md#ダウンロード手順
-        if data_source_str == 'nar':
-            if option == 1 or option == 2:
-                option = 3  # NAR: セットアップモード（DL+読み取り）
-        elif option == 1 and spec in OPTION_4_SUPPORTED_SPECS:
-            option = 4  # JRA: 分割セットアップモード（全データ取得）
-        # option=2非対応スペックはoption=1で実行（差分データ）
+        # kmy-keiba準拠: 11ヶ月以上前のデータはSetup(option=4)、それ以内はNormal(option=1)
+        # JRA/NAR共通ロジック（NV-LinkもJV-Linkも同じoption体系）
+        # option=1: Normal（差分取得）
+        # option=2: ThisWeek（今週データ）
+        # option=4: Setup（セットアップ、全データ取得）
+        from_date_str = self.settings['from_date']
+        from_date_dt = datetime.strptime(from_date_str, "%Y%m%d")
+        months_ago = (datetime.now().year * 12 + datetime.now().month) - (from_date_dt.year * 12 + from_date_dt.month)
+        if option == 1 and spec in OPTION_4_SUPPORTED_SPECS and months_ago > 11:
+            option = 4  # 11ヶ月以上前 → セットアップモード
+        # option=1のままなら通常差分取得、option=2はそのまま維持
 
         try:
             # 設定読み込み
