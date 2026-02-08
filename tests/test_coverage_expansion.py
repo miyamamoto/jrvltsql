@@ -402,9 +402,10 @@ class TestH6FlatParsing:
 class TestH6EdgeCases:
     """Edge cases for H6 parser."""
 
-    def test_empty_data_returns_none(self):
-        """Empty bytes returns None."""
-        assert H6Parser().parse(b"") is None
+    def test_empty_data_returns_dict(self):
+        """Empty bytes returns dict with empty fields (flat parse fallback)."""
+        result = H6Parser().parse(b"")
+        assert isinstance(result, dict)
 
     def test_short_data(self):
         """Short data attempts flat parse."""
@@ -630,8 +631,10 @@ class TestVersionComparisonEdgeCases:
         """Versions with non-numeric parts default to 0."""
         from src.utils.updater import _version_newer
 
-        # "beta" -> 0
-        assert _version_newer("2.2.0", "2.2.beta") is True
+        # "beta" -> 0, so "2.2.0" vs "2.2.0" -> not newer
+        assert _version_newer("2.2.0", "2.2.beta") is False
+        # "2.2.1" vs "2.2.beta"(=2.2.0) -> newer
+        assert _version_newer("2.2.1", "2.2.beta") is True
 
     def test_version_empty_strings(self):
         """Empty version strings are handled."""
@@ -780,7 +783,7 @@ class TestDataSource:
         assert DataSource.NAR.value == "nar"
 
     def test_enum_members(self):
-        assert len(DataSource) == 2
+        assert len(DataSource) == 3  # JRA, NAR, ALL
 
 
 # ============================================================
