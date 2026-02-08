@@ -3764,13 +3764,14 @@ class QuickstartRunner:
         # ただし、option=2非対応スペックはoption=1のまま維持
         data_source_str = self.settings.get('data_source', 'jra')
 
-        # NAR (NV-Link) では option 1 が正常動作しない（NVStatusが-203を返す既知の問題）
-        # 原因: NVDTLabのセットアップ不完全、またはキャッシュの問題
-        # 対策: NAR では常に option 2 を使用することで回避
-        # 参考: docs/reference/error-codes.md#nvlink--203-エラー-地方競馬data
+        # NAR (NV-Link) ではoption=3（セットアップ）でデータDLが必要
+        # option=1/2はDL済みデータのみ返すため、初回はoption=3でDLしてからoption=2で読む
+        # DLサーバーが不安定で-502エラーが頻発するが、リトライで対処
+        # (HistoricalFetcher.fetch() が nv_download_with_retry() で自動リトライ)
+        # 参考: docs/TECHNICAL.md#ダウンロード手順
         if data_source_str == 'nar':
             if option == 1 or option == 2:
-                option = 2  # NAR: ローカルデータのみ取得（option=2はファイルエラーになるため）
+                option = 3  # NAR: セットアップモード（DL+読み取り）
         elif option == 1 and spec in OPTION_4_SUPPORTED_SPECS:
             option = 4  # JRA: 分割セットアップモード（全データ取得）
         # option=2非対応スペックはoption=1で実行（差分データ）
