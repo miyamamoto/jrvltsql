@@ -49,7 +49,8 @@ jltsql fetch --from YYYYMMDD --to YYYYMMDD --spec SPEC [OPTIONS]
 
 | オプション | 説明 | デフォルト |
 |-----------|------|-----------|
-| `--option` | JVOpenオプション (1-4) | 1 |
+| `--source` | データソース (jra/nar/all) | jra |
+| `--option` | JVOpen/NVOpenオプション (1-4) | 1 |
 | `--db` | データベースタイプ | 設定ファイル |
 | `--batch-size` | バッチサイズ | 1000 |
 | `--progress/--no-progress` | 進捗表示 | --progress |
@@ -64,14 +65,14 @@ jltsql fetch --from YYYYMMDD --to YYYYMMDD --spec SPEC [OPTIONS]
 | `SNAP` | 出馬表 | NL_TK |
 | `BLOD` | 血統情報 | NL_BT |
 
-**JVOpenオプション (--option)**:
+**JVOpen/NVOpenオプション (--option)**:
 
-| 値 | 説明 |
-|----|------|
-| 1 | 通常データ（差分更新） |
-| 2 | 今週データ |
-| 3 | セットアップ（全データ、確認ダイアログあり） |
-| 4 | 分割セットアップ |
+| 値 | JV-Link (JRA) | NV-Link (NAR) |
+|----|---------------|---------------|
+| 1 | 通常データ（差分更新） | 動作不安定（-203エラーの可能性） |
+| 2 | 今週データ | 未サポート |
+| 3 | セットアップ（全データ、確認ダイアログあり） | **推奨**（安定動作） |
+| 4 | 分割セットアップ | 動作確認中 |
 
 **使用例**:
 
@@ -84,6 +85,9 @@ jltsql fetch --from 20240101 --to 20241231 --spec DIFF --option 1
 
 # PostgreSQLに取り込み
 jltsql fetch --from 20240101 --to 20241231 --spec RACE --db postgresql
+
+# 地方競馬データを取得（option=3推奨）
+jltsql fetch --from 20240101 --to 20241231 --spec RACE --source nar --option 3
 ```
 
 ### export

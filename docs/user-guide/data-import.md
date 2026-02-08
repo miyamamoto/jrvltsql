@@ -148,17 +148,21 @@ jltsql fetch --from 20240101 --to 20241231 --spec RACE --batch-size 200
 ### 1. 初回セットアップ
 
 ```bash
-# テーブル作成
+# テーブル作成（JRA + NAR テーブル）
 jltsql create-tables
 
-# レースデータ（過去5年）
+# JRA: レースデータ（過去5年）
 jltsql fetch --from 20200101 --to 20241231 --spec RACE --option 3
 
-# マスターデータ
+# JRA: マスターデータ
 jltsql fetch --from 20200101 --to 20241231 --spec DIFF --option 3
 
-# 血統データ
+# JRA: 血統データ
 jltsql fetch --from 20200101 --to 20241231 --spec BLOD --option 3
+
+# NAR: 地方競馬データ（option=3推奨）
+jltsql fetch --from 20200101 --to 20241231 --spec RACE --source nar --option 3
+jltsql fetch --from 20200101 --to 20241231 --spec DIFN --source nar --option 3
 ```
 
 ### 2. 日次更新（cronなど）
