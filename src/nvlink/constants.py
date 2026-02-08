@@ -8,7 +8,7 @@ which mirrors the JV-Link API with 'JV' -> 'NV' naming.
 NV_RT_SUCCESS = 0  # 正常終了
 NV_RT_ERROR = -1  # エラー
 NV_RT_NO_MORE_DATA = -2  # データなし
-NV_RT_FILE_NOT_FOUND = -3  # ファイルが見つからない
+NV_RT_DOWNLOADING = -3  # ダウンロード中（該当ファイルが未DL）
 NV_RT_INVALID_PARAMETER = -4  # 無効なパラメータ
 NV_RT_DOWNLOAD_FAILED = -5  # ダウンロード失敗
 
@@ -101,7 +101,7 @@ ERROR_MESSAGES = {
     0: "成功",
     -1: "失敗",
     -2: "データなし",
-    -3: "ファイルが見つかりません",
+    -3: "ダウンロード中です（該当ファイルがまだサーバーからダウンロードされていません）",
     -4: "無効なパラメータです",
     -5: "ダウンロードに失敗しました",
     # Service Key Related Errors
