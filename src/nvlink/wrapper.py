@@ -673,8 +673,15 @@ class NVLinkWrapper:
                 # Note: Debug log removed - this is very frequent during data fetching
                 return result, None, None
 
+            elif result in (-3, -203, -402, -403, -502, -503):
+                # Recoverable errors - caller should delete file and continue
+                # -3: ダウンロード中（該当ファイルがまだサーバーからDLされていない）
+                # -203, -402, -403, -502, -503: kmy-keiba準拠のリカバリー可能エラー
+                logger.warning("NVRead recoverable error", error_code=result, filename=filename_str)
+                return result, None, filename_str
+
             else:
-                # Error (< -1)
+                # Fatal error (< -1, other codes)
                 logger.error("NVRead failed", error_code=result)
                 raise NVLinkError("NVRead failed", error_code=result)
 
