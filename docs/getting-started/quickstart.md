@@ -1,21 +1,35 @@
 # クイックスタート
 
-## 対話形式セットアップ
+## quickstartスクリプトで簡単セットアップ
 
-最も簡単な方法は、quickstartスクリプトを使用することです：
+最も簡単な方法は、`quickstart.bat`をダブルクリックするか、コマンドラインから実行することです：
 
 ```bash
+# batファイル（32-bit Pythonを自動検出）
+quickstart.bat
+
+# または直接実行
 python scripts/quickstart.py
 ```
 
-または、`quickstart.bat`をダブルクリックしてください。
+`quickstart.bat`はPython 3.12 (32-bit) を優先的に検出します（`py -3.12-32` → `py -32` → `py` → `python`の順）。
 
 ### セットアップの流れ
 
-1. **データベース選択**: SQLite / PostgreSQL
-2. **データ範囲指定**: 過去何年分のデータを取得するか
-3. **データ種別選択**: 取得するデータの種類
-4. **確認と実行**: 設定を確認してインポート開始
+1. **データソース選択**: JRA（中央）/ NAR（地方）/ ALL（両方）
+2. **データベース選択**: SQLite（デフォルト）/ PostgreSQL
+3. **データ範囲指定**: 過去何年分のデータを取得するか
+4. **データ種別選択**: 取得するデータの種類
+5. **サービスキー確認**: JV-Link / NV-Link の接続チェック
+6. **確認と実行**: 設定を確認してインポート開始
+
+### データソースモード
+
+| モード | 説明 | 必要なサービス |
+|--------|------|---------------|
+| **JRA** | 中央競馬データのみ取得 | JV-Link (JRA-VAN DataLab) |
+| **NAR** | 地方競馬データのみ取得 | NV-Link (地方競馬DATA) |
+| **ALL** | 中央・地方の両方を取得 | JV-Link + NV-Link |
 
 ## コマンドラインでのセットアップ
 
@@ -36,9 +50,9 @@ jltsql init
 jltsql create-tables
 ```
 
-64テーブルすべてが作成されます。
-
 ### 3. データ取得
+
+JV-Link / NV-Linkでは`option=3`でデータダウンロード、`option=2`で読み取りを行います。
 
 ```bash
 # レースデータ取得（2024年）
@@ -67,8 +81,8 @@ python scripts/quickstart.py -y
 # ステータス確認
 jltsql status
 
-# テーブル一覧と件数
-sqlite3 data/keiba.db "SELECT name, (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=m.name) FROM sqlite_master m WHERE type='table';"
+# SQLiteでテーブル一覧と件数を確認
+sqlite3 data/keiba.db "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;"
 ```
 
 ## 次のステップ
