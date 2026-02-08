@@ -81,7 +81,7 @@ class HistoricalFetcher(BaseFetcher):
         """
         # NAR (NV-Link): split date range into daily chunks to avoid -502 errors.
         # NV-Link server rejects large downloads; 1-day chunks keep file counts small.
-        if self._should_chunk_by_day(from_date, to_date):
+        if self._should_chunk_by_day(from_date, to_date, option):
             yield from self._fetch_nar_daily(data_spec, from_date, to_date, option)
             return
 
@@ -260,7 +260,8 @@ class HistoricalFetcher(BaseFetcher):
                 logger.warning(f"Failed to close stream: {e}")
 
             # Explicitly cleanup COM resources (prevents "Win32 exception releasing IUnknown")
-            if hasattr(self.jvlink, 'cleanup'):
+            # Skip cleanup when called from _fetch_nar_daily loop (cleanup on final day only)
+            if not getattr(self, '_skip_cleanup', False) and hasattr(self.jvlink, 'cleanup'):
                 try:
                     self.jvlink.cleanup()
                 except Exception:
@@ -270,11 +271,15 @@ class HistoricalFetcher(BaseFetcher):
             if self.progress_display:
                 self.progress_display.stop()
 
-    def _should_chunk_by_day(self, from_date: str, to_date: str) -> bool:
+    def _should_chunk_by_day(self, from_date: str, to_date: str, option: int) -> bool:
         """Check if NAR date range should be split into daily chunks.
 
-        Returns True if data_source is NAR and the range spans more than 1 day.
+        Returns True if data_source is NAR, the range spans more than 1 day,
+        and we are NOT in setup mode (option 3/4).
         """
+        # Setup mode (option=3/4) downloads all data; daily chunking is unnecessary
+        if option in (3, 4):
+            return False
         if self.data_source != DataSource.NAR:
             return False
         return from_date != to_date
@@ -311,17 +316,26 @@ class HistoricalFetcher(BaseFetcher):
 
         current = start
         day_num = 0
-        while current <= end:
-            day_num += 1
-            day_str = current.strftime("%Y%m%d")
-            logger.info(
-                f"NAR daily chunk [{day_num}/{total_days}]",
-                date=day_str,
-                data_spec=data_spec,
-            )
-            # fetch() will see same from/to date → _should_chunk_by_day returns False
-            yield from self.fetch(data_spec, day_str, day_str, option)
-            current += timedelta(days=1)
+        try:
+            self._skip_cleanup = True
+            while current <= end:
+                day_num += 1
+                day_str = current.strftime("%Y%m%d")
+                is_last_day = (current + timedelta(days=1)) > end
+                if is_last_day:
+                    self._skip_cleanup = False  # Allow cleanup on final day
+                logger.info(
+                    "Processing NAR daily chunk",
+                    day_num=day_num,
+                    total_days=total_days,
+                    date=day_str,
+                    data_spec=data_spec,
+                )
+                # fetch() will see same from/to date → _should_chunk_by_day returns False
+                yield from self.fetch(data_spec, day_str, day_str, option)
+                current += timedelta(days=1)
+        finally:
+            self._skip_cleanup = False
 
         logger.info(
             "NAR daily chunking completed",

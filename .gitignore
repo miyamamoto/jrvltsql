@@ -238,3 +238,17 @@ nul
 # Auto Claude data directory
 .auto-claude/
 Z:*
+
+# IDE/Tool caches
+.serena/
+.ruff_cache/
+
+# Windows path artifacts
+Z:/
+
+# Development-only files (not needed in repo)
+CLAUDE.md
+requirements*.txt
+jv_data_formats.json
+quickstart_debug.bat
+setup_dll_surrogate.bat
