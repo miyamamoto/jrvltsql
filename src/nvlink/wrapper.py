@@ -388,8 +388,9 @@ class NVLinkWrapper:
             # - option: VT_I4 (3, 1) - input integer
             # - readcount: VT_I4|VT_BYREF (16387, 3) - in/out reference
             # - downloadcount: VT_I4|VT_BYREF (16387, 3) - in/out reference
-            # - lastfiletimestamp: VT_BSTR|VT_BYREF (16392, 2) - out reference (optional)
-            nv_result = self._nvlink.NVOpen(data_spec, fromtime, option, 0, 0)
+            # - lastfiletimestamp: VT_BSTR|VT_BYREF (16392, 2) - out reference
+            # Note: fromtime must be integer (not string), and all 6 params required
+            nv_result = self._nvlink.NVOpen(data_spec, int(fromtime), option, 0, 0, '')
 
             # Handle return value
             if isinstance(nv_result, tuple):
