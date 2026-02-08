@@ -170,20 +170,23 @@ class BaseFetcher(ABC):
                     try:
                         data = self.parser_factory.parse(buff)
                         if data:
-                            # Filter by to_date if specified
-                            if to_date and not self._is_within_date_range(data, to_date):
-                                # Skip records after to_date
-                                logger.debug(
-                                    "Skipping record outside date range",
-                                    record_num=self._records_fetched,
-                                    to_date=to_date,
-                                )
-                                continue
+                            # Full-struct parsers (H1, H6) return List[Dict]
+                            records_list = data if isinstance(data, list) else [data]
 
-                            self._records_parsed += 1
-                            # Include raw buffer for callers that need it (e.g., RealtimeUpdater)
-                            data["_raw"] = buff
-                            yield data
+                            for record_item in records_list:
+                                # Filter by to_date if specified
+                                if to_date and not self._is_within_date_range(record_item, to_date):
+                                    logger.debug(
+                                        "Skipping record outside date range",
+                                        record_num=self._records_fetched,
+                                        to_date=to_date,
+                                    )
+                                    continue
+
+                                self._records_parsed += 1
+                                # Include raw buffer for callers that need it (e.g., RealtimeUpdater)
+                                record_item["_raw"] = buff
+                                yield record_item
                         else:
                             self._records_failed += 1
                             logger.warning(

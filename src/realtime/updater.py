@@ -144,6 +144,24 @@ class RealtimeUpdater:
                 logger.warning("Failed to parse record")
                 return None
 
+            # Full-struct parsers (H1, H6) return List[Dict]
+            if isinstance(parsed_data, list):
+                results = []
+                for item in parsed_data:
+                    result = self._process_single_record(item, timeseries=timeseries)
+                    if result:
+                        results.append(result)
+                return results[-1] if results else None
+
+            return self._process_single_record(parsed_data, timeseries=timeseries)
+
+        except Exception as e:
+            logger.error(f"Error processing record: {e}", exc_info=True)
+            raise
+
+    def _process_single_record(self, parsed_data: Dict, timeseries: bool = False) -> Optional[Dict]:
+        """Process a single parsed record dict."""
+        try:
             record_type = parsed_data.get("RecordSpec")
             if not record_type:
                 logger.warning("Missing RecordSpec in parsed data")
@@ -191,7 +209,7 @@ class RealtimeUpdater:
                 return None
 
         except Exception as e:
-            logger.error(f"Error processing record: {e}", exc_info=True)
+            logger.error(f"Error processing single record: {e}", exc_info=True)
             raise
 
     def _handle_new_record(self, table_name: str, data: Dict) -> Dict:

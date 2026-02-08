@@ -156,6 +156,7 @@ class ParserFactory:
                 return None
 
             parsed_result = parser.parse(record)
+            # Some parsers (H1, H6) return List[Dict] for full-struct records
             return parsed_result
 
         except UnicodeDecodeError:
