@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jltsql"
-version = "1.0.0"
+version = "1.1.0"
 description = "JRA-VAN DataLab / 地方競馬DATA の競馬データをSQLite・PostgreSQLにインポートするツール"
 readme = "README.md"
 license = {text = "Apache-2.0"}

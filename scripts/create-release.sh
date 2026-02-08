@@ -8,8 +8,8 @@
 
 set -euo pipefail
 
-TAG="v1.0.0"
-TITLE="jltsql v1.0.0 — 初回安定リリース 🏇"
+TAG="v1.1.0"
+TITLE="jltsql v1.1.0 — 初回安定リリース 🏇"
 NOTES_FILE="RELEASE_NOTES.md"
 
 echo "=== jltsql Release: ${TAG} ==="

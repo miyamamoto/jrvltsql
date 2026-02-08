@@ -1,4 +1,4 @@
-# jltsql v1.0.0 🏇
+# jltsql v1.1.0 🏇
 
 JRA-VAN DataLab / 地方競馬DATA の競馬データを SQLite・PostgreSQL にインポートするツールの初回安定リリースです。
 
