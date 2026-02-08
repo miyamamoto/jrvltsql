@@ -90,6 +90,10 @@ performance:
   prefetch_size: 100          # Prefetch buffer size
   memory_limit_mb: 500        # Memory limit for buffering
 
+# Auto-Update Check
+# Check for new versions when running CLI commands (once per day)
+auto_update_check: true
+
 # Logging Settings
 logging:
   level: "INFO"               # DEBUG, INFO, WARNING, ERROR, CRITICAL
