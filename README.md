@@ -20,7 +20,17 @@ JRA-VAN DataLab / 地方競馬DATA の競馬データを SQLite・PostgreSQL に
 
 > ⚠️ **64-bit Python は非対応です。** JV-Link / NV-Link の COM DLL が 32-bit のため、32-bit Python が必要です。詳細は [技術詳細](docs/TECHNICAL.md) を参照してください。
 
-## インストール
+## 🚀 ワンコマンドインストール
+
+PowerShell で以下を実行するだけ！Python・仮想環境・依存パッケージすべて自動でセットアップされます。
+
+```powershell
+irm https://raw.githubusercontent.com/miyamamoto/jrvltsql/master/install.ps1 | iex
+```
+
+> 📦 32-bit Python の自動検出、仮想環境作成、パッケージインストールまで一括で行います。
+
+### 手動インストール
 
 ```bash
 pip install git+https://github.com/miyamamoto/jrvltsql.git
