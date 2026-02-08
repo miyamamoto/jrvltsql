@@ -126,9 +126,9 @@ class HistoricalFetcher(BaseFetcher):
             )
 
             # NAR (NV-Link) downloads can fail with -502 intermittently.
-            # kmy-keiba handles this by restarting the entire program.
-            # We implement retry at the Open+Download level instead.
-            max_open_retries = 3
+            # kmy-keiba handles this by restarting the entire program (up to 16 times).
+            # We implement retry with full COM reinitialization (Close + Reinit + Init + Open).
+            max_open_retries = 16  # kmy-keiba uses 16
             for open_attempt in range(max_open_retries):
                 result, read_count, download_count, last_file_timestamp = self.jvlink.jv_open(
                     data_spec,
@@ -151,7 +151,6 @@ class HistoricalFetcher(BaseFetcher):
                         "No data available from specified timestamp",
                         data_spec=data_spec,
                         fromtime=fromtime,
-                        note="No data on server for this spec/period",
                     )
                     if self.progress_display:
                         self.progress_display.print_info(
@@ -159,7 +158,7 @@ class HistoricalFetcher(BaseFetcher):
                         )
                     return  # No data to fetch
 
-                # Wait for download to complete if needed (download_count > 0)
+                # Wait for download to complete if needed
                 if download_count > 0:
                     logger.info(
                         "Download in progress, waiting for completion",
@@ -174,25 +173,38 @@ class HistoricalFetcher(BaseFetcher):
                         self._wait_for_download(download_task_id)
                         break  # Download succeeded
                     except FetcherError as dl_err:
-                        # Check if this is a -502 retry situation
-                        if "-502" in str(dl_err) and open_attempt < max_open_retries - 1:
+                        if ("-502" in str(dl_err) or "-503" in str(dl_err)) and open_attempt < max_open_retries - 1:
                             logger.warning(
-                                "Download failed with -502, retrying with NVClose/NVOpen",
+                                "Download failed, performing full COM restart (kmy-keiba style)",
                                 attempt=open_attempt + 1,
                                 max_retries=max_open_retries,
+                                error=str(dl_err),
                             )
                             if self.progress_display:
                                 self.progress_display.print_warning(
-                                    f"-502エラー: リトライ中 ({open_attempt + 2}/{max_open_retries})"
+                                    f"-502エラー: COM再初期化リトライ ({open_attempt + 2}/{max_open_retries})"
                                 )
+                            # Full restart: Close → Reinitialize COM → Init → Open
                             try:
                                 self.jvlink.jv_close()
                             except Exception:
                                 pass
                             import time as _time
-                            _time.sleep(5)  # Wait before retry
+                            _time.sleep(3)
+                            # Reinitialize COM object (like kmy-keiba's RestartProgram)
+                            if hasattr(self.jvlink, 'reinitialize_com'):
+                                try:
+                                    self.jvlink.reinitialize_com()
+                                except Exception as reinit_err:
+                                    logger.warning("COM reinit failed, trying anyway", error=str(reinit_err))
+                            _time.sleep(2)
+                            # Re-initialize
+                            try:
+                                self.jvlink.jv_init()
+                            except Exception as init_err:
+                                logger.warning("Re-init failed", error=str(init_err))
                             continue
-                        raise  # Re-raise if not retryable or max retries reached
+                        raise
                 else:
                     break  # No download needed
 
