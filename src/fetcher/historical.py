@@ -125,49 +125,88 @@ class HistoricalFetcher(BaseFetcher):
                 ),
             )
 
-            result, read_count, download_count, last_file_timestamp = self.jvlink.jv_open(
-                data_spec,
-                fromtime,
-                option,
-            )
-
-            logger.info(
-                "Data stream opened",
-                result_code=result,
-                read_count=read_count,
-                download_count=download_count,
-                last_file_timestamp=last_file_timestamp,
-            )
-
-            # Check if data is empty
-            # Note: When result is -301 (download pending), read_count may be 0 but
-            # download_count > 0 indicates data exists and needs to be downloaded.
-            # Only report "no data" when both read_count and download_count are 0.
-            if result == -1 or (read_count == 0 and download_count == 0):
-                logger.info(
-                    "No data available from specified timestamp",
-                    data_spec=data_spec,
-                    fromtime=fromtime,
-                    note="No data on server for this spec/period",
+            # NAR (NV-Link) downloads can fail with -502 intermittently.
+            # kmy-keiba handles this by restarting the entire program (up to 16 times).
+            # We implement retry with full COM reinitialization (Close + Reinit + Init + Open).
+            max_open_retries = 16  # kmy-keiba uses 16
+            for open_attempt in range(max_open_retries):
+                result, read_count, download_count, last_file_timestamp = self.jvlink.jv_open(
+                    data_spec,
+                    fromtime,
+                    option,
                 )
-                if self.progress_display:
-                    self.progress_display.print_info(
-                        f"{data_spec}: サーバーにデータなし"
-                    )
-                return  # No data to fetch
 
-            # Wait for download to complete if needed (download_count > 0)
-            if download_count > 0:
                 logger.info(
-                    "Download in progress, waiting for completion",
+                    "Data stream opened",
+                    result_code=result,
+                    read_count=read_count,
                     download_count=download_count,
+                    last_file_timestamp=last_file_timestamp,
+                    attempt=open_attempt + 1,
                 )
-                if self.progress_display:
-                    download_task_id = self.progress_display.add_download_task(
-                        f"{data_spec} ダウンロード",
-                        total=100,
+
+                # Check if data is empty
+                if result == -1 or (read_count == 0 and download_count == 0):
+                    logger.info(
+                        "No data available from specified timestamp",
+                        data_spec=data_spec,
+                        fromtime=fromtime,
                     )
-                self._wait_for_download(download_task_id)
+                    if self.progress_display:
+                        self.progress_display.print_info(
+                            f"{data_spec}: サーバーにデータなし"
+                        )
+                    return  # No data to fetch
+
+                # Wait for download to complete if needed
+                if download_count > 0:
+                    logger.info(
+                        "Download in progress, waiting for completion",
+                        download_count=download_count,
+                    )
+                    if self.progress_display:
+                        download_task_id = self.progress_display.add_download_task(
+                            f"{data_spec} ダウンロード",
+                            total=100,
+                        )
+                    try:
+                        self._wait_for_download(download_task_id)
+                        break  # Download succeeded
+                    except FetcherError as dl_err:
+                        if ("-502" in str(dl_err) or "-503" in str(dl_err)) and open_attempt < max_open_retries - 1:
+                            logger.warning(
+                                "Download failed, performing full COM restart (kmy-keiba style)",
+                                attempt=open_attempt + 1,
+                                max_retries=max_open_retries,
+                                error=str(dl_err),
+                            )
+                            if self.progress_display:
+                                self.progress_display.print_warning(
+                                    f"-502エラー: COM再初期化リトライ ({open_attempt + 2}/{max_open_retries})"
+                                )
+                            # Full restart: Close → Reinitialize COM → Init → Open
+                            try:
+                                self.jvlink.jv_close()
+                            except Exception:
+                                pass
+                            import time as _time
+                            _time.sleep(3)
+                            # Reinitialize COM object (like kmy-keiba's RestartProgram)
+                            if hasattr(self.jvlink, 'reinitialize_com'):
+                                try:
+                                    self.jvlink.reinitialize_com()
+                                except Exception as reinit_err:
+                                    logger.warning("COM reinit failed, trying anyway", error=str(reinit_err))
+                            _time.sleep(2)
+                            # Re-initialize
+                            try:
+                                self.jvlink.jv_init()
+                            except Exception as init_err:
+                                logger.warning("Re-init failed", error=str(init_err))
+                            continue
+                        raise
+                else:
+                    break  # No download needed
 
             # Reset statistics and set total files
             self.reset_statistics()
@@ -283,7 +322,7 @@ class HistoricalFetcher(BaseFetcher):
         start_time = time.time()
         last_status = None
         retry_count = 0
-        max_retries = 5  # Maximum retries for temporary errors
+        max_retries = 10  # Maximum retries for temporary errors (NAR -502 is flaky)
 
         # Retryable error codes (temporary errors that may resolve)
         # -201: Database error (might be busy)
@@ -294,7 +333,11 @@ class HistoricalFetcher(BaseFetcher):
         #       2. Cache corruption
         #       3. option=1 (differential mode) not working properly
         #       Best practice: Use option=4 (setup mode) for NAR data
-        retryable_errors = {-201, -202, -203}
+        # -502: Download failed (NAR/NV-Link known issue - kmy-keiba comment:
+        #       "地方競馬では、きちんとネットにつながってるはずなのにこのようなエラーが出ることがある")
+        # -503: Similar download error
+        retryable_errors = {-201, -202, -203, -502, -503}
+        download_started = False  # NVStatus > 0 を確認してから 0 を「完了」と判定
 
         while True:
             # Check if timeout exceeded
@@ -312,6 +355,7 @@ class HistoricalFetcher(BaseFetcher):
 
                 if status != last_status:
                     if status > 0:
+                        download_started = True
                         percentage = status / 100
                         logger.info(
                             "Download in progress",
@@ -327,9 +371,11 @@ class HistoricalFetcher(BaseFetcher):
                             )
                         # Reset retry count on progress
                         retry_count = 0
+                    elif status == 0 and not download_started:
+                        logger.debug("Waiting for download to start", elapsed=f"{elapsed:.1f}s")
                     last_status = status
 
-                if status == 0:
+                if status == 0 and download_started:
                     logger.info("Download completed", elapsed_seconds=int(elapsed))
                     if self.progress_display and download_task_id is not None:
                         self.progress_display.update_download(
@@ -374,6 +420,11 @@ class HistoricalFetcher(BaseFetcher):
                                     f"Download failed after {max_retries} retries with status code: {status}"
                                 )
                     else:
+                        # -502/-503: NAR download failures may resolve with NVClose/NVOpen retry
+                        if status in (-502, -503):
+                            raise FetcherError(
+                                f"Download failed with status code: {status}",
+                            )
                         # Fatal error (e.g., -100 series: setup/auth errors)
                         raise FetcherError(f"Download failed with status code: {status}")
 

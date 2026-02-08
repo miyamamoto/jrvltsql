@@ -114,6 +114,9 @@ class BaseFetcher(ABC):
         last_update_time = self._start_time
         update_interval = 2.0  # 更新間隔を増やして高速化  # Update progress every 0.5 seconds (reduced to prevent flickering)
 
+        consecutive_downloading_errors = 0
+        max_consecutive_downloading = 1000  # -3 (downloading) が連続1000回で打ち切り
+
         while True:
             try:
                 # Read next record
@@ -159,6 +162,7 @@ class BaseFetcher(ABC):
                     continue
 
                 elif ret_code > 0:
+                    consecutive_downloading_errors = 0  # Reset on success
                     # Success with data (ret_code is data length)
                     self._records_fetched += 1
 
@@ -222,6 +226,19 @@ class BaseFetcher(ABC):
                         last_update_time = current_time
 
                 elif ret_code in (-3, -201, -202, -203, -402, -403, -502, -503):
+                    # -3 連続エラー上限チェック (未DLファイル大量時の無限ループ防止)
+                    if ret_code == -3:
+                        consecutive_downloading_errors += 1
+                        if consecutive_downloading_errors >= max_consecutive_downloading:
+                            logger.warning(
+                                f"NVRead -3 (downloading) が {max_consecutive_downloading} 回連続。"
+                                "未ダウンロードファイルが多すぎるため打ち切ります。"
+                                "UmaConn設定.exe で初期データDLを完了してから再実行してください。"
+                            )
+                            break
+                    else:
+                        consecutive_downloading_errors = 0
+
                     # Recoverable errors - delete corrupted file and continue
                     # Based on kmy-keiba's JVLinkReader.cs error handling:
                     # -201: Database busy (リトライ可能)

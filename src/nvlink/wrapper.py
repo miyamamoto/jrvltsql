@@ -318,6 +318,17 @@ class NVLinkWrapper:
             >>> assert result == 0
         """
         try:
+            # Set ParentHWnd for shell notification icon (required by NV-Link)
+            # Without this, NVStatus returns -502 (download failed) during data fetching.
+            # kmy-keiba also sets this: this.link.ParentHWnd = value
+            try:
+                import ctypes
+                hwnd = ctypes.windll.user32.GetDesktopWindow()
+                self._nvlink.ParentHWnd = hwnd
+                logger.debug("ParentHWnd set", hwnd=hwnd)
+            except Exception as hwnd_err:
+                logger.warning("Failed to set ParentHWnd (NV-Link may fail to download)", error=str(hwnd_err))
+
             init_key = self.initialization_key or self.sid
             result = int(self._nvlink.NVInit(init_key))
             if result == NV_RT_SUCCESS:
@@ -388,8 +399,9 @@ class NVLinkWrapper:
             # - option: VT_I4 (3, 1) - input integer
             # - readcount: VT_I4|VT_BYREF (16387, 3) - in/out reference
             # - downloadcount: VT_I4|VT_BYREF (16387, 3) - in/out reference
-            # - lastfiletimestamp: VT_BSTR|VT_BYREF (16392, 2) - out reference (optional)
-            nv_result = self._nvlink.NVOpen(data_spec, fromtime, option, 0, 0)
+            # - lastfiletimestamp: VT_BSTR|VT_BYREF (16392, 2) - out reference
+            # Note: fromtime must be integer (not string), and all 6 params required
+            nv_result = self._nvlink.NVOpen(data_spec, int(fromtime), option, 0, 0, '')
 
             # Handle return value
             if isinstance(nv_result, tuple):
@@ -672,8 +684,15 @@ class NVLinkWrapper:
                 # Note: Debug log removed - this is very frequent during data fetching
                 return result, None, None
 
+            elif result in (-3, -203, -402, -403, -502, -503):
+                # Recoverable errors - caller should delete file and continue
+                # -3: ダウンロード中（該当ファイルがまだサーバーからDLされていない）
+                # -203, -402, -403, -502, -503: kmy-keiba準拠のリカバリー可能エラー
+                logger.warning("NVRead recoverable error", error_code=result, filename=filename_str)
+                return result, None, filename_str
+
             else:
-                # Error (< -1)
+                # Fatal error (< -1, other codes)
                 logger.error("NVRead failed", error_code=result)
                 raise NVLinkError("NVRead failed", error_code=result)
 
