@@ -1021,11 +1021,11 @@ def _interactive_setup_rich() -> dict:
 
     source_table.add_row(
         "1", "中央競馬",
-        "[dim](デフォルト)[/dim] JRA-VAN DataLab (JV-Link)"
+        "[dim](デフォルト)[/dim] JRA-VAN DataLab  [link=https://jra-van.jp/dlb/]jra-van.jp/dlb[/link]"
     )
     source_table.add_row(
         "2", "地方競馬",
-        "地方競馬DATA (UmaConn/NV-Link)"
+        "地方競馬DATA (UmaConn)  [link=https://www.keiba-data.com/]keiba-data.com[/link]"
     )
     source_table.add_row(
         "3", "両方",
@@ -1289,8 +1289,16 @@ def _interactive_setup_rich() -> dict:
         else:
             # 両方とも利用不可
             console.print("[yellow]JRA-VAN DataLab と UmaConn のサービスキーを設定してください[/yellow]")
-            console.print("[dim]JRA: https://jra-van.jp/dlb/[/dim]")
-            console.print("[dim]NAR: https://www.umaconn.com/[/dim]")
+            console.print("[dim]JRA（中央競馬）: https://jra-van.jp/dlb/[/dim]")
+            console.print("[dim]NAR（地方競馬）: https://www.keiba-data.com/[/dim]")
+            console.print()
+            # 契約ページをブラウザで開く
+            try:
+                console.print("[dim]契約ページをブラウザで開いています...[/dim]")
+                webbrowser.open("https://jra-van.jp/dlb/")
+                webbrowser.open("https://www.keiba-data.com/")
+            except Exception:
+                pass
             console.print()
             console.print("[red]セットアップを中止します。[/red]")
             sys.exit(1)
@@ -1343,10 +1351,20 @@ def _interactive_setup_rich() -> dict:
             console.print()
             if data_source == 'nar':
                 console.print("[yellow]UmaConn（地方競馬DATA）ソフトウェアでサービスキーを設定してください[/yellow]")
-                console.print("[dim]https://www.umaconn.com/[/dim]")
+                console.print("[dim]https://www.keiba-data.com/[/dim]")
+                try:
+                    console.print("[dim]契約ページをブラウザで開いています...[/dim]")
+                    webbrowser.open("https://www.keiba-data.com/")
+                except Exception:
+                    pass
             else:
                 console.print("[yellow]JRA-VAN DataLabソフトウェアでサービスキーを設定してください[/yellow]")
                 console.print("[dim]https://jra-van.jp/dlb/[/dim]")
+                try:
+                    console.print("[dim]契約ページをブラウザで開いています...[/dim]")
+                    webbrowser.open("https://jra-van.jp/dlb/")
+                except Exception:
+                    pass
             console.print()
             console.print("[red]セットアップを中止します。[/red]")
             sys.exit(1)
