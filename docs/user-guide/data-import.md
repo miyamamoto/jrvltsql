@@ -1,6 +1,31 @@
 # データインポート
 
-JV-Linkからデータを取得してデータベースにインポートする方法を説明します。
+JV-Link（中央競馬）およびNV-Link（地方競馬）からデータを取得してデータベースにインポートする方法を説明します。
+
+## データソースの指定
+
+`--source` オプションでデータソースを選択できます。
+
+| 値 | 説明 | 使用API |
+|----|------|--------|
+| `jra` | 中央競馬（デフォルト） | JV-Link (JVDTLab.JVLink) |
+| `nar` | 地方競馬 | NV-Link (NVDTLabLib.NVLink) |
+| `all` | 両方 | JV-Link + NV-Link |
+
+```bash
+# 中央競馬（デフォルト）
+jltsql fetch --from 20240101 --to 20241231 --spec RACE
+
+# 地方競馬
+jltsql fetch --from 20240101 --to 20241231 --spec RACE --source nar
+
+# 両方
+jltsql fetch --from 20240101 --to 20241231 --spec RACE --source all
+```
+
+!!! warning "32-bit Python必須"
+    NV-Link（地方競馬DATA / UmaConn）は32-bit COM DLLとして提供されているため、
+    **32-bit Python環境が必須**です。
 
 ## データ仕様の理解
 
@@ -29,11 +54,14 @@ JV-Linkからデータを取得してデータベースにインポートする�
 初めてデータを取得する場合は、セットアップモードを使用します：
 
 ```bash
-# 全データ取得（確認ダイアログあり）
+# JRA: 全データ取得（確認ダイアログあり）
 jltsql fetch --from 20200101 --to 20241231 --spec RACE --option 3
 
-# マスターデータも取得
+# JRA: マスターデータも取得
 jltsql fetch --from 20200101 --to 20241231 --spec DIFF --option 3
+
+# NAR: 地方競馬データ取得（option=3推奨）
+jltsql fetch --from 20200101 --to 20241231 --spec RACE --source nar --option 3
 ```
 
 !!! warning "注意"
