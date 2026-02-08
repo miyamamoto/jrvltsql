@@ -41,4 +41,4 @@ irm https://raw.githubusercontent.com/miyamamoto/jrvltsql/master/install.ps1 | i
 ```
 
 ## テスト
-- 1,050+ テストケース（全パス）
+- 1,247 テストケース（1,239 pass, 8 skip）
