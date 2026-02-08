@@ -318,6 +318,17 @@ class NVLinkWrapper:
             >>> assert result == 0
         """
         try:
+            # Set ParentHWnd for shell notification icon (required by NV-Link)
+            # Without this, NVStatus returns -502 (download failed) during data fetching.
+            # kmy-keiba also sets this: this.link.ParentHWnd = value
+            try:
+                import ctypes
+                hwnd = ctypes.windll.user32.GetDesktopWindow()
+                self._nvlink.ParentHWnd = hwnd
+                logger.debug("ParentHWnd set", hwnd=hwnd)
+            except Exception as hwnd_err:
+                logger.warning("Failed to set ParentHWnd (NV-Link may fail to download)", error=str(hwnd_err))
+
             init_key = self.initialization_key or self.sid
             result = int(self._nvlink.NVInit(init_key))
             if result == NV_RT_SUCCESS:
