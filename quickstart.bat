@@ -1,4 +1,5 @@
 @echo off
+setlocal enabledelayedexpansion
 chcp 65001 >nul 2>&1
 set PYTHONIOENCODING=utf-8
 title JLTSQL Setup
@@ -22,45 +23,45 @@ REM First try: explicit PYTHON environment variable
 if defined PYTHON (
     echo Using PYTHON environment variable: %PYTHON%
     "%PYTHON%" scripts/quickstart.py %*
-    set SCRIPT_EXIT_CODE=%errorlevel%
+    set SCRIPT_EXIT_CODE=!errorlevel!
     goto :check_result
 )
 
 REM Second try: py launcher with 32-bit Python 3.12
 py -3.12-32 --version >nul 2>&1
-if %errorlevel%==0 (
-    echo Using: Python 3.12 (32-bit)
+if !errorlevel!==0 (
+    echo Using: Python 3.12 ^(32-bit^)
     py -3.12-32 scripts/quickstart.py %*
-    set SCRIPT_EXIT_CODE=%errorlevel%
+    set SCRIPT_EXIT_CODE=!errorlevel!
     goto :check_result
 )
 
 REM Third try: py launcher with any 32-bit Python
 py -32 --version >nul 2>&1
-if %errorlevel%==0 (
-    echo Using: Python (32-bit)
+if !errorlevel!==0 (
+    echo Using: Python ^(32-bit^)
     py -32 scripts/quickstart.py %*
-    set SCRIPT_EXIT_CODE=%errorlevel%
+    set SCRIPT_EXIT_CODE=!errorlevel!
     goto :check_result
 )
 
 REM Fourth try: py launcher (any version)
 py --version >nul 2>&1
-if %errorlevel%==0 (
-    echo Using: Python (py launcher)
+if !errorlevel!==0 (
+    echo Using: Python ^(py launcher^)
     echo [WARNING] 64-bit Python may not support NAR/UmaConn
     py scripts/quickstart.py %*
-    set SCRIPT_EXIT_CODE=%errorlevel%
+    set SCRIPT_EXIT_CODE=!errorlevel!
     goto :check_result
 )
 
 REM Fifth try: python in PATH
 python --version >nul 2>&1
-if %errorlevel%==0 (
-    echo Using: Python (PATH)
+if !errorlevel!==0 (
+    echo Using: Python ^(PATH^)
     echo [WARNING] 64-bit Python may not support NAR/UmaConn
     python scripts/quickstart.py %*
-    set SCRIPT_EXIT_CODE=%errorlevel%
+    set SCRIPT_EXIT_CODE=!errorlevel!
     goto :check_result
 )
 
@@ -73,9 +74,9 @@ exit /b 1
 
 :check_result
 echo.
-if %SCRIPT_EXIT_CODE% neq 0 (
+if !SCRIPT_EXIT_CODE! neq 0 (
     echo ============================================================
-    echo   Setup Failed (Exit Code: %SCRIPT_EXIT_CODE%)
+    echo   Setup Failed (Exit Code: !SCRIPT_EXIT_CODE!)
     echo ============================================================
     echo.
     echo   Please check the error messages above.
@@ -86,7 +87,7 @@ if %SCRIPT_EXIT_CODE% neq 0 (
     echo.
     echo   Press Enter to close...
     set /p dummy=
-    exit /b %SCRIPT_EXIT_CODE%
+    endlocal & exit /b 1
 )
 
 echo ============================================================
@@ -110,4 +111,5 @@ echo     https://github.com/miyamamoto/jvlink-mcp-server
 echo.
 echo   Press Enter to close...
 set /p dummy=
+endlocal
 exit /b 0
