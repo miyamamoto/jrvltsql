@@ -1039,6 +1039,10 @@ class NVLinkWrapper:
 
         This method should be called when encountering error -2147418113 (E_UNEXPECTED)
         or other catastrophic COM failures.
+
+        Note:
+            COM再初期化時にIUnknown解放でWin32例外が発生することがある。
+            すべてのCOM操作をtry/exceptで保護し、例外が発生しても続行する。
         """
         try:
             import sys
@@ -1046,6 +1050,7 @@ class NVLinkWrapper:
             
             import pythoncom
             import win32com.client
+            import gc
             import time
 
             logger.warning("Reinitializing COM component due to error...")
@@ -1057,12 +1062,24 @@ class NVLinkWrapper:
                 except Exception:
                     pass
 
+            # Release COM object reference BEFORE CoUninitialize
+            # This prevents "Win32 exception occurred releasing IUnknown" warnings
+            if self._nvlink is not None:
+                try:
+                    nvlink_ref = self._nvlink
+                    self._nvlink = None
+                    del nvlink_ref
+                    gc.collect()
+                except Exception as e:
+                    logger.warning("Error releasing COM object during reinit", error=str(e))
+
             # Uninitialize and reinitialize COM
             if self._com_initialized:
                 try:
                     pythoncom.CoUninitialize()
-                except Exception:
-                    pass
+                except Exception as e:
+                    # Win32例外が出てもログだけ出して続行
+                    logger.warning("CoUninitialize raised exception (continuing)", error=str(e))
 
             # Wait for COM cleanup
             time.sleep(1)
@@ -1071,8 +1088,8 @@ class NVLinkWrapper:
             try:
                 pythoncom.CoInitialize()
                 self._com_initialized = True
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("CoInitialize issue during reinit", error=str(e))
 
             # Recreate COM object using CLSID
             NVLINK_CLSID = "{F726BBA6-5784-4529-8C67-26E152D49D73}"
@@ -1132,7 +1149,8 @@ class NVLinkWrapper:
                 pythoncom.CoUninitialize()
                 self._com_initialized = False
             except Exception:
-                pass
+                # Win32例外が出ても無視（プロセス終了時に発生しやすい）
+                self._com_initialized = False
 
     def __del__(self):
         """Destructor to ensure proper cleanup."""

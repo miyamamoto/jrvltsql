@@ -134,8 +134,9 @@ class HistoricalFetcher(BaseFetcher):
 
             # NAR (NV-Link) downloads can fail with -502 intermittently.
             # kmy-keiba handles this by restarting the entire program (up to 16 times).
-            # We implement retry with full COM reinitialization (Close + Reinit + Init + Open).
-            max_open_retries = 16  # kmy-keiba uses 16
+            # We reduce to 3 retries because COM reinit often causes Win32 exceptions
+            # and crashes anyway. Better to skip the day quickly and move on.
+            max_open_retries = 3
             for open_attempt in range(max_open_retries):
                 result, read_count, download_count, last_file_timestamp = self.jvlink.jv_open(
                     data_spec,
@@ -296,6 +297,10 @@ class HistoricalFetcher(BaseFetcher):
         NV-Link server cannot handle large downloads (e.g., 289 files for a week).
         Splitting into daily chunks (typically ~3 files/day) avoids -502 errors.
 
+        When a day fails with -502, the day is skipped and recorded.
+        If -502 occurs on 3 consecutive days, all remaining days are skipped
+        (the server likely doesn't have the data cached).
+
         Args:
             data_spec: Data specification code
             from_date: Start date (YYYYMMDD)
@@ -316,6 +321,10 @@ class HistoricalFetcher(BaseFetcher):
 
         current = start
         day_num = 0
+        skipped_dates: list[str] = []
+        consecutive_502_count = 0
+        max_consecutive_502 = 3  # 3日連続-502で残りをスキップ
+
         try:
             self._skip_cleanup = True
             while current <= end:
@@ -324,6 +333,21 @@ class HistoricalFetcher(BaseFetcher):
                 is_last_day = (current + timedelta(days=1)) > end
                 if is_last_day:
                     self._skip_cleanup = False  # Allow cleanup on final day
+
+                # 連続-502チェック: 3日連続なら残り全スキップ
+                if consecutive_502_count >= max_consecutive_502:
+                    remaining_days = []
+                    while current <= end:
+                        remaining_days.append(current.strftime("%Y%m%d"))
+                        current += timedelta(days=1)
+                    skipped_dates.extend(remaining_days)
+                    logger.warning(
+                        f"-502エラーが{max_consecutive_502}日連続で発生したため、残り{len(remaining_days)}日をスキップします",
+                        data_spec=data_spec,
+                        skipped_dates=remaining_days,
+                    )
+                    break
+
                 logger.info(
                     "Processing NAR daily chunk",
                     day_num=day_num,
@@ -331,16 +355,59 @@ class HistoricalFetcher(BaseFetcher):
                     date=day_str,
                     data_spec=data_spec,
                 )
-                # fetch() will see same from/to date → _should_chunk_by_day returns False
-                yield from self.fetch(data_spec, day_str, day_str, option)
+
+                try:
+                    # fetch() will see same from/to date → _should_chunk_by_day returns False
+                    yield from self.fetch(data_spec, day_str, day_str, option)
+                    consecutive_502_count = 0  # Reset on success
+                except FetcherError as e:
+                    error_str = str(e)
+                    if "-502" in error_str or "-503" in error_str:
+                        consecutive_502_count += 1
+                        skipped_dates.append(day_str)
+                        logger.warning(
+                            f"-502エラーで{day_str}をスキップします "
+                            f"(連続{consecutive_502_count}日目)",
+                            data_spec=data_spec,
+                            date=day_str,
+                        )
+                        if self.progress_display:
+                            self.progress_display.print_warning(
+                                f"-502: {day_str}をスキップ (連続{consecutive_502_count}日目)"
+                            )
+                    else:
+                        raise  # -502以外のエラーは再送出
+
                 current += timedelta(days=1)
         finally:
             self._skip_cleanup = False
+
+        # スキップした日付のサマリーを表示
+        if skipped_dates:
+            logger.warning(
+                f"NAR -502エラーにより{len(skipped_dates)}日分のデータをスキップしました",
+                data_spec=data_spec,
+                skipped_dates=skipped_dates,
+            )
+            if self.progress_display:
+                self.progress_display.print_warning(
+                    f"⚠️  {data_spec}: {len(skipped_dates)}日分のデータをスキップしました"
+                )
+                for d in skipped_dates:
+                    self.progress_display.print_warning(f"  スキップ: {d}")
+                self.progress_display.print_warning(
+                    "💡 UmaConn設定ツールでデータをダウンロードしてから再実行してください"
+                )
+            # Store skipped dates for callers to inspect
+            self._nar_skipped_dates = skipped_dates
+        else:
+            self._nar_skipped_dates = []
 
         logger.info(
             "NAR daily chunking completed",
             data_spec=data_spec,
             total_days=total_days,
+            skipped_days=len(skipped_dates),
         )
 
     def fetch_with_date_range(
@@ -402,7 +469,7 @@ class HistoricalFetcher(BaseFetcher):
         start_time = time.time()
         last_status = None
         retry_count = 0
-        max_retries = 10  # Maximum retries for temporary errors (NAR -502 is flaky)
+        max_retries = 5  # Maximum retries for temporary errors (reduced: -502 rarely resolves with retry)
 
         # Retryable error codes (temporary errors that may resolve)
         # -201: Database error (might be busy)
