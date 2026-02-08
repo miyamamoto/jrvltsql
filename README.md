@@ -19,6 +19,8 @@ JRA-VAN DataLab / 地方競馬DATA の競馬データを SQLite・PostgreSQL に
 | Python | 3.12以上 **（32-bit 必須）** |
 
 > ⚠️ **64-bit Python は非対応です。** JV-Link / NV-Link の COM DLL が 32-bit のため、32-bit Python が必要です。詳細は [技術詳細](docs/TECHNICAL.md) を参照してください。
+>
+> ⚠️ **Windows 専用です。** JV-Link / NV-Link は Windows COM コンポーネントとして提供されており、macOS や Linux 上では動作しません。Wine 等での動作も保証外です。
 
 ## 🚀 ワンコマンドインストール
 
