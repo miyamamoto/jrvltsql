@@ -283,7 +283,7 @@ class HistoricalFetcher(BaseFetcher):
         start_time = time.time()
         last_status = None
         retry_count = 0
-        max_retries = 5  # Maximum retries for temporary errors
+        max_retries = 10  # Maximum retries for temporary errors (NAR -502 is flaky)
 
         # Retryable error codes (temporary errors that may resolve)
         # -201: Database error (might be busy)
@@ -294,7 +294,10 @@ class HistoricalFetcher(BaseFetcher):
         #       2. Cache corruption
         #       3. option=1 (differential mode) not working properly
         #       Best practice: Use option=4 (setup mode) for NAR data
-        retryable_errors = {-201, -202, -203}
+        # -502: Download failed (NAR/NV-Link known issue - kmy-keiba comment:
+        #       "地方競馬では、きちんとネットにつながってるはずなのにこのようなエラーが出ることがある")
+        # -503: Similar download error
+        retryable_errors = {-201, -202, -203, -502, -503}
         download_started = False  # NVStatus > 0 を確認してから 0 を「完了」と判定
 
         while True:
