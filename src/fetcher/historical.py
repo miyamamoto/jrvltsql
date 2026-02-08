@@ -4,12 +4,13 @@ This module fetches historical JV-Data from JV-Link.
 """
 
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Iterator, Optional
 
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from src.fetcher.base import BaseFetcher, FetcherError
+from src.utils.data_source import DataSource
 from src.utils.logger import get_logger
 from src.utils.progress import JVLinkProgressDisplay
 
@@ -78,6 +79,12 @@ class HistoricalFetcher(BaseFetcher):
             ...     # Process all records up to 20240630
             ...     pass
         """
+        # NAR (NV-Link): split date range into daily chunks to avoid -502 errors.
+        # NV-Link server rejects large downloads; 1-day chunks keep file counts small.
+        if self._should_chunk_by_day(from_date, to_date):
+            yield from self._fetch_nar_daily(data_spec, from_date, to_date, option)
+            return
+
         # Create progress display if enabled
         if self.show_progress:
             self.progress_display = JVLinkProgressDisplay()
@@ -262,6 +269,65 @@ class HistoricalFetcher(BaseFetcher):
             # Stop progress display
             if self.progress_display:
                 self.progress_display.stop()
+
+    def _should_chunk_by_day(self, from_date: str, to_date: str) -> bool:
+        """Check if NAR date range should be split into daily chunks.
+
+        Returns True if data_source is NAR and the range spans more than 1 day.
+        """
+        if self.data_source != DataSource.NAR:
+            return False
+        return from_date != to_date
+
+    def _fetch_nar_daily(
+        self,
+        data_spec: str,
+        from_date: str,
+        to_date: str,
+        option: int,
+    ) -> Iterator[dict]:
+        """Fetch NAR data by iterating one day at a time.
+
+        NV-Link server cannot handle large downloads (e.g., 289 files for a week).
+        Splitting into daily chunks (typically ~3 files/day) avoids -502 errors.
+
+        Args:
+            data_spec: Data specification code
+            from_date: Start date (YYYYMMDD)
+            to_date: End date (YYYYMMDD)
+            option: NVOpen option
+        """
+        start = datetime.strptime(from_date, "%Y%m%d")
+        end = datetime.strptime(to_date, "%Y%m%d")
+
+        total_days = (end - start).days + 1
+        logger.info(
+            "NAR daily chunking: splitting date range",
+            from_date=from_date,
+            to_date=to_date,
+            total_days=total_days,
+            data_spec=data_spec,
+        )
+
+        current = start
+        day_num = 0
+        while current <= end:
+            day_num += 1
+            day_str = current.strftime("%Y%m%d")
+            logger.info(
+                f"NAR daily chunk [{day_num}/{total_days}]",
+                date=day_str,
+                data_spec=data_spec,
+            )
+            # fetch() will see same from/to date → _should_chunk_by_day returns False
+            yield from self.fetch(data_spec, day_str, day_str, option)
+            current += timedelta(days=1)
+
+        logger.info(
+            "NAR daily chunking completed",
+            data_spec=data_spec,
+            total_days=total_days,
+        )
 
     def fetch_with_date_range(
         self,
