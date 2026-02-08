@@ -1371,7 +1371,7 @@ def _interactive_setup_rich() -> dict:
         period_table.add_column("No", width=4)
         period_table.add_column("期間", width=14)
         period_table.add_column("説明", width=20)
-        period_table.add_column("所要時間(税込)", width=20)
+        period_table.add_column("所要時間(目安)", width=20)
 
         # セットアップモード(option=4)では調教データ等が全期間分返されるため
         # 短期間でも相当な時間がかかる
@@ -1489,7 +1489,7 @@ def _interactive_setup_rich() -> dict:
     console.print()
 
     # 時系列オッズ取得オプション
-    console.print("[bold]3. 時系列オッズ（オッズ変動履歴）[/bold]")
+    console.print("[bold]4. 時系列オッズ（オッズ変動履歴）[/bold]")
     console.print()
 
     data_source = settings.get('data_source', 'jra')
@@ -1596,7 +1596,7 @@ def _interactive_setup_rich() -> dict:
     console.print()
 
     # 速報系データの取得
-    console.print("[bold]4. 当日レース情報の取得[/bold]")
+    console.print("[bold]5. 当日レース情報の取得[/bold]")
     console.print("[dim]レース当日に更新される情報を取得します。[/dim]")
     console.print("[dim]含まれる情報: 馬体重、出走取消、騎手変更、天候・馬場状態など[/dim]")
     console.print()
@@ -1604,7 +1604,7 @@ def _interactive_setup_rich() -> dict:
     console.print()
 
     # バックグラウンド更新
-    console.print("[bold]5. 自動更新サービス[/bold]")
+    console.print("[bold]6. 自動更新サービス[/bold]")
     console.print("[dim]データを自動で最新に保つバックグラウンドサービスです。[/dim]")
     console.print("[dim]起動しておくと、新しいレース情報やオッズが自動的にDBに追加されます。[/dim]")
     console.print()
@@ -1651,7 +1651,7 @@ def _interactive_setup_rich() -> dict:
 
     # 自動起動設定（バックグラウンドが有効または継続の場合のみ）
     if settings.get('enable_background') or settings.get('keep_existing_background'):
-        console.print("[bold]6. Windows起動時の自動起動[/bold]")
+        console.print("[bold]7. Windows起動時の自動起動[/bold]")
         if auto_start_enabled:
             console.print("[dim]現在: [green]有効[/green] (Windowsスタートアップに登録済み)[/dim]")
         else:
@@ -1699,7 +1699,9 @@ def _interactive_setup_rich() -> dict:
 
     # データソース情報
     data_source = settings.get('data_source', 'jra')
-    if data_source == 'nar':
+    if data_source == 'all':
+        source_info = "[cyan]中央競馬（JRA）+ 地方競馬（NAR）[/cyan]"
+    elif data_source == 'nar':
         source_info = "[cyan]地方競馬（NAR/UmaConn）[/cyan]"
     else:
         source_info = "中央競馬（JRA）"
@@ -2103,7 +2105,7 @@ def _interactive_setup_simple() -> dict:
     print()
 
     # 時系列オッズ取得オプション
-    print("3. 時系列オッズ（オッズ変動履歴）")
+    print("4. 時系列オッズ（オッズ変動履歴）")
     print()
 
     data_source = settings.get('data_source', 'jra')
@@ -2217,7 +2219,7 @@ def _interactive_setup_simple() -> dict:
     print()
 
     # 速報系データ
-    print("4. 当日レース情報を取得しますか？")
+    print("5. 当日レース情報を取得しますか？")
     print("   レース当日に更新される情報（馬体重、出走取消、騎手変更など）")
     print("   [y/N]: ", end="")
     realtime_choice = input().strip().lower()
@@ -2225,7 +2227,7 @@ def _interactive_setup_simple() -> dict:
     print()
 
     # バックグラウンド更新
-    print("5. 自動更新サービスを起動しますか？")
+    print("6. 自動更新サービスを起動しますか？")
     print("   データを自動で最新に保つバックグラウンドサービスです。")
     print("   起動しておくと、新しいレース情報やオッズが自動的にDBに追加されます。")
     print()
@@ -2269,7 +2271,7 @@ def _interactive_setup_simple() -> dict:
 
     # 自動起動設定（バックグラウンドが有効または継続の場合のみ）
     if settings.get('enable_background') or settings.get('keep_existing_background'):
-        print("6. Windows起動時の自動起動")
+        print("7. Windows起動時の自動起動")
         if auto_start_enabled:
             print("   現在: 有効 (Windowsスタートアップに登録済み)")
             print("   自動起動を維持しますか？ [Y/n]: ", end="")
