@@ -432,6 +432,7 @@ def _check_nar_initial_setup() -> tuple[bool, str]:
     check_code = """
 import sys
 import time
+import ctypes
 try:
     sys.coinit_flags = 2  # STA mode
 except Exception:
@@ -443,45 +444,65 @@ try:
     pythoncom.CoInitialize()
     nvlink = win32com.client.Dispatch("NVDTLabLib.NVLink")
 
+    # Set ParentHWnd (required for NV-Link downloads to work)
+    try:
+        hwnd = ctypes.windll.user32.GetDesktopWindow()
+        nvlink.ParentHWnd = hwnd
+    except Exception:
+        pass
+
     # Initialize
     init_result = nvlink.NVInit("UNKNOWN")
     if init_result != 0:
         print(f"INIT_ERROR:{init_result}")
         sys.exit(0)
 
-    # Try NVOpen with option=1 (normal mode)
-    result = nvlink.NVOpen("RACE", "20241201000000", 1)
-    read_count = nvlink.m_ReadCount
-    download_count = nvlink.m_DownloadCount
-
-    # Check status if download is pending
-    if download_count > 0:
-        time.sleep(0.5)
-        status = nvlink.NVStatus()
-        if status == -203:
-            print("SETUP_NEEDED:-203")
-        else:
-            print(f"STATUS:{status}")
-    elif read_count > 0:
-        # Try to read a record
-        ret_code = nvlink.NVGets()
-        filename = nvlink.m_FileName
-        if ret_code == -203:
-            print("SETUP_NEEDED:-203")
-        elif ret_code > 0 or ret_code == 0:
-            print("SETUP_COMPLETE")
-        elif ret_code == -1:
-            # File switch - check again
-            ret_code = nvlink.NVGets()
-            if ret_code == -203:
-                print("SETUP_NEEDED:-203")
-            else:
-                print("SETUP_COMPLETE")
-        else:
-            print(f"READ_ERROR:{ret_code}")
+    # Try NVOpen with option=1 (normal mode), 6 arguments required
+    result = nvlink.NVOpen("RACE", 20241201000000, 1, 0, 0, "")
+    if isinstance(result, tuple) and len(result) >= 3:
+        rc, read_count, download_count = result[0], result[1], result[2]
     else:
-        # No data but that's OK - setup is complete
-        print("SETUP_COMPLETE:nodata")
+        print(f"OPEN_ERROR:{result}")
+        sys.exit(0)
+
+    if rc != 0:
+        if rc == -203:
+            print("SETUP_NEEDED:-203")
+        else:
+            print(f"OPEN_ERROR:{rc}")
+        sys.exit(0)
+
+    # Wait for download if needed
+    if download_count > 0:
+        for i in range(120):
+            status = nvlink.NVStatus()
+            if status == 0:
+                break
+            if status == -203:
+                print("SETUP_NEEDED:-203")
+                sys.exit(0)
+            if status < 0:
+                # -502 etc are download errors, not setup issues
+                print(f"STATUS_ERROR:{status}")
+                sys.exit(0)
+            time.sleep(1)
+
+    # Try to read a record
+    r = nvlink.NVGets(b"", 110000)
+    if isinstance(r, tuple):
+        ret_code = r[0]
+    else:
+        ret_code = r
+
+    if ret_code == -203:
+        print("SETUP_NEEDED:-203")
+    elif ret_code > 0 or ret_code == 0 or ret_code == -1:
+        print("SETUP_COMPLETE")
+    elif ret_code == -3:
+        # -3 = still downloading, but setup is done
+        print("SETUP_COMPLETE:downloading")
+    else:
+        print(f"READ_ERROR:{ret_code}")
 
     nvlink.NVClose()
 
@@ -523,16 +544,10 @@ except Exception as e:
 
 
 def _run_nar_initial_setup(console=None, show_progress: bool = True) -> tuple[bool, str]:
-    """NV-Linkの初回セットアップダイアログを開く
+    """NV-Linkの初回セットアップを実行
 
-    NVSetUIPropertiesを呼び出してサービスキー設定ダイアログを開きます。
-
-    Note:
-        UmaConn/NV-Linkの初回データダウンロードは、公式アプリケーションを
-        通じて手動で完了する必要があります。NV-Link APIだけでは初回セット
-        アップを完了できないため、以下の手順が必要です：
-        1. NVSetUIPropertiesでサービスキーを設定
-        2. 地方競馬DATAセットアップツールで「セットアップ」を実行
+    NVOpen option=4 (Setup) でサーバーから基本データをダウンロードします。
+    kmy-keibaと同様のアプローチで、COM API経由で直接セットアップを行います。
 
     Args:
         console: Rich console for output (optional)
@@ -544,11 +559,13 @@ def _run_nar_initial_setup(console=None, show_progress: bool = True) -> tuple[bo
     import subprocess
     import sys
 
-    # Open NVSetUIProperties dialog for service key configuration
+    # Run NVOpen option=4 (Setup) to download base data
     setup_code = """
 import sys
+import time
+import ctypes
 try:
-    sys.coinit_flags = 2  # STA mode for UI
+    sys.coinit_flags = 2  # STA mode
 except Exception:
     pass
 import win32com.client
@@ -558,13 +575,61 @@ try:
     pythoncom.CoInitialize()
     nvlink = win32com.client.Dispatch("NVDTLabLib.NVLink")
 
-    # Open UI Properties dialog
-    result = nvlink.NVSetUIProperties()
+    # Set ParentHWnd (required for NV-Link downloads)
+    try:
+        hwnd = ctypes.windll.user32.GetDesktopWindow()
+        nvlink.ParentHWnd = hwnd
+    except Exception:
+        pass
 
-    if result == 0:
-        print("DIALOG_CLOSED")
+    init_result = nvlink.NVInit("UNKNOWN")
+    if init_result != 0:
+        print(f"INIT_ERROR:{init_result}")
+        sys.exit(0)
+
+    # NVOpen with option=4 (Setup) - downloads all historical data
+    # kmy-keiba uses start year 2005 for NAR
+    result = nvlink.NVOpen("RACE", 20050101000000, 4, 0, 0, "")
+    if isinstance(result, tuple) and len(result) >= 3:
+        rc, read_count, dl_count = result[0], result[1], result[2]
     else:
-        print(f"DIALOG_ERROR:{result}")
+        print(f"OPEN_ERROR:{result}")
+        sys.exit(0)
+
+    if rc != 0:
+        print(f"OPEN_ERROR:{rc}")
+        sys.exit(0)
+
+    print(f"OPEN_OK:read={read_count},dl={dl_count}")
+
+    # Wait for download (kmy-keiba: 1 year = 60s timeout, 2005-2026 = ~21 years)
+    if dl_count > 0:
+        timeout = max(1800, dl_count // 10)  # At least 30 min
+        last_status = -999
+        stall_count = 0
+        for i in range(timeout):
+            status = nvlink.NVStatus()
+            if status != last_status:
+                print(f"STATUS:{status}", flush=True)
+                last_status = status
+                stall_count = 0
+            else:
+                stall_count += 1
+            if status == 0:
+                print("DOWNLOAD_COMPLETE")
+                break
+            if status < 0:
+                print(f"DOWNLOAD_ERROR:{status}")
+                break
+            if stall_count > 300:  # 5 min no progress
+                print("DOWNLOAD_STALL")
+                break
+            time.sleep(1)
+    else:
+        print("NO_DOWNLOAD_NEEDED")
+
+    nvlink.NVClose()
+    print("SETUP_OK")
 
 except Exception as e:
     print(f"ERROR:{e}")
@@ -572,11 +637,8 @@ except Exception as e:
 
     if console:
         console.print()
-        console.print("    [yellow]サービスキー設定ダイアログを開いています...[/yellow]")
-        console.print()
-        console.print("    [bold]手順:[/bold]")
-        console.print("    1. ダイアログでサービスキーを入力/確認")
-        console.print("    2. 「OK」をクリックしてダイアログを閉じる")
+        console.print("    [yellow]NV-Link初回セットアップを開始します...[/yellow]")
+        console.print("    [dim]サーバーから基本データをダウンロードします（数分〜数十分）[/dim]")
         console.print()
 
     try:
@@ -585,27 +647,29 @@ except Exception as e:
             capture_output=True,
             text=True,
             encoding='utf-8',
-            timeout=300,  # 5 minutes for dialog interaction
+            timeout=3600,  # 1 hour max
             creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
         )
 
         output = proc.stdout.strip()
+        lines = output.split('\n')
 
-        if "DIALOG_CLOSED" in output:
-            if console:
-                console.print()
-                console.print("    [yellow]⚠ 重要: 初回データダウンロードについて[/yellow]")
-                console.print()
-                console.print("    UmaConnの初回セットアップを完了するには、")
-                console.print("    [bold]地方競馬DATAセットアップツール[/bold]を実行してください:")
-                console.print()
-                console.print("    スタートメニュー → 地方競馬DATA → セットアップ")
-                console.print("    または: C:\\UmaConn\\chiho.k-ba\\data\\UmaConn設定.exe")
-                console.print()
-            return True, "サービスキー設定完了（初回データダウンロードは手動で実行してください）"
-        elif "DIALOG_ERROR" in output:
-            error_code = output.split(":")[1] if ":" in output else "不明"
-            return False, f"ダイアログエラー (code: {error_code})"
+        if "SETUP_OK" in output:
+            if "DOWNLOAD_COMPLETE" in output:
+                return True, "初回セットアップ完了（データダウンロード成功）"
+            elif "NO_DOWNLOAD_NEEDED" in output:
+                return True, "初回セットアップ完了（ダウンロード不要）"
+            else:
+                return True, "初回セットアップ完了"
+        elif "DOWNLOAD_ERROR" in output:
+            # -502 is known to be flaky with NAR - retry may help
+            return False, "ダウンロードエラー（再実行してください）"
+        elif "DOWNLOAD_STALL" in output:
+            return False, "ダウンロードが停止しました（再実行してください）"
+        elif "INIT_ERROR" in output:
+            return False, "NV-Link初期化エラー"
+        elif "OPEN_ERROR" in output:
+            return False, f"NVOpenエラー: {output}"
         elif "ERROR:" in output:
             error_msg = output.split("ERROR:")[1].strip()
             return False, f"エラー: {error_msg}"
@@ -613,7 +677,7 @@ except Exception as e:
             return False, f"不明なレスポンス: {output}"
 
     except subprocess.TimeoutExpired:
-        return False, "タイムアウト（5分）"
+        return False, "タイムアウト（1時間）"
     except Exception as e:
         return False, f"セットアップ実行エラー: {e}"
 
