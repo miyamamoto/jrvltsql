@@ -56,7 +56,7 @@ python scripts/quickstart.py -y           # 確認スキップ
 
 ## 中央競馬 (JRA) セットアップ
 
-1. [JRA-VAN DataLab](https://jra-van.jp/) で会員登録し、サービスキーを取得
+1. [JRA-VAN DataLab](https://jra-van.jp/dlb/) で会員登録し、サービスキーを取得
 2. JV-Link ソフトウェアをインストール
 3. `config/config.yaml` にサービスキーを設定:
 
@@ -73,7 +73,7 @@ jltsql fetch --source jra --from 20240101 --to 20241231
 
 ## 地方競馬 (NAR) セットアップ
 
-1. [地方競馬DATA](https://www.keiba-data.com/) で会員登録し、サービスキーを取得
+1. [地方競馬DATA](https://www.umaconn.com/) で会員登録し、サービスキーを取得
 2. UmaConn ソフトウェアをインストール
 3. `config/config.yaml` に設定:
 
@@ -85,7 +85,7 @@ nvlink:
 
 > ⚠️ `initialization_key` は **必ず `"UNKNOWN"`** にしてください。他の値では認証エラー（-301）が発生します。
 
-4. 初回データダウンロード — NVInit で `option=3` を指定:
+4. 初回データダウンロード（`quickstart.bat`が自動実行、または手動で）:
 
 ```bash
 jltsql fetch --source nar --from 20240101 --to 20241231 --spec RACE

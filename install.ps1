@@ -255,13 +255,15 @@ Write-Host "  Install directory: $INSTALL_DIR" -ForegroundColor White
 Write-Host "  Python (32-bit):   $python32" -ForegroundColor White
 Write-Host ""
 Write-Host "  Next steps:" -ForegroundColor Yellow
-Write-Host "    1. Restart your terminal" -ForegroundColor White
-Write-Host "    2. Edit config: $configFile" -ForegroundColor White
-Write-Host "    3. Run: jltsql init" -ForegroundColor White
-Write-Host "    4. Run: jltsql fetch --from 20240101 --to 20241231 --spec RACE" -ForegroundColor White
+Write-Host "    1. Restart your terminal (PATH update)" -ForegroundColor White
+Write-Host "    2. Run quickstart (recommended):" -ForegroundColor White
+Write-Host "       cd $INSTALL_DIR && quickstart.bat" -ForegroundColor Cyan
+Write-Host "       -> Interactive setup: DB creation, data fetch, all-in-one" -ForegroundColor DarkGray
 Write-Host ""
-Write-Host "  Quick start (interactive):" -ForegroundColor Yellow
-Write-Host "    cd $INSTALL_DIR && quickstart.bat" -ForegroundColor White
+Write-Host "  Or manual setup:" -ForegroundColor Yellow
+Write-Host "    1. Edit config: $configFile" -ForegroundColor White
+Write-Host "    2. Run: jltsql init" -ForegroundColor White
+Write-Host "    3. Run: jltsql fetch --from 20240101 --to 20241231 --spec RACE" -ForegroundColor White
 Write-Host ""
 Write-Host "  Commands:" -ForegroundColor Yellow
 Write-Host "    jltsql version     Show version info" -ForegroundColor DarkGray
