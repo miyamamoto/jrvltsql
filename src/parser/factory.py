@@ -1,7 +1,7 @@
 """Parser factory for JV-Data records.
 
 This module provides a factory for creating appropriate parser instances
-based on record type. Supports 40 record types (38 JRA + 2 NAR: HA, NU).
+based on record type. Supports 41 record types (38 JRA + 3 NAR: HA, NC, NU).
 
 Auto-generated parsers based on: 公式JV-Data仕様書 Ver.4.9.0.1
 """
@@ -19,6 +19,7 @@ ALL_RECORD_TYPES = [
     'H1', 'H6', 'HC', 'HN', 'HR', 'HS', 'HY',
     'JC', 'JG', 'KS',
     'HA',  # NAR (地方競馬) 払戻データ
+    'NC',  # NAR (地方競馬) 競馬場マスタ
     'NU',  # NAR (地方競馬) 競走馬登録データ
     'O1', 'O2', 'O3', 'O4', 'O5', 'O6',
     'RA', 'RC', 'SE', 'SK', 'TC', 'TK', 'TM',
