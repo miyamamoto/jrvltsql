@@ -48,7 +48,7 @@ Odds Tables:
     NL_O6, RT_O6: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi)
 
 Payout Tables:
-    NL_H1, RT_H1: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
+    NL_H1, RT_H1: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, BetType, Kumi)
     NL_H6, RT_H6: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, SanrentanKumi)
     NL_HR, RT_HR: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
 
@@ -411,30 +411,13 @@ SCHEMAS = {
             HatubaiFlag6 TEXT,
             HatubaiFlag7 TEXT,
             FukuChakuBaraiKey TEXT,
-            HenkanUma1 TEXT,
-            HenkanUma2 TEXT,
-            HenkanUma3 TEXT,
-            TanUma TEXT,
-            TanHyo BIGINT,
-            TanNinki INTEGER,
-            FukuUma TEXT,
-            FukuHyo BIGINT,
-            FukuNinki INTEGER,
-            WakuKumi TEXT,
-            WakuHyo BIGINT,
-            WakuNinki INTEGER,
-            UmarenKumi TEXT,
-            UmarenHyo BIGINT,
-            UmarenNinki INTEGER,
-            WideKumi TEXT,
-            WideHyo BIGINT,
-            WideNinki INTEGER,
-            UmatanKumi TEXT,
-            UmatanHyo BIGINT,
-            UmatanNinki INTEGER,
-            SanrenfukuKumi TEXT,
-            SanrenfukuHyo BIGINT,
-            SanrenfukuNinki INTEGER,
+            HenkanUma TEXT,
+            HenkanWaku TEXT,
+            HenkanDoWaku TEXT,
+            BetType TEXT,
+            Kumi TEXT,
+            Hyo BIGINT,
+            Ninki INTEGER,
             TanHyoTotal BIGINT,
             FukuHyoTotal BIGINT,
             WakuHyoTotal BIGINT,
@@ -449,8 +432,7 @@ SCHEMAS = {
             WideHenkanHyoTotal BIGINT,
             UmatanHenkanHyoTotal BIGINT,
             SanrenfukuHenkanHyoTotal BIGINT,
-            RecordDelimiter TEXT,
-            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, BetType, Kumi)
         )
     """,
     "NL_H6": """
@@ -1496,30 +1478,13 @@ SCHEMAS = {
             HatubaiFlag6 TEXT,
             HatubaiFlag7 TEXT,
             FukuChakuBaraiKey TEXT,
-            HenkanUma1 TEXT,
-            HenkanUma2 TEXT,
-            HenkanUma3 TEXT,
-            TanUma TEXT,
-            TanHyo BIGINT,
-            TanNinki INTEGER,
-            FukuUma TEXT,
-            FukuHyo BIGINT,
-            FukuNinki INTEGER,
-            WakuKumi TEXT,
-            WakuHyo BIGINT,
-            WakuNinki INTEGER,
-            UmarenKumi TEXT,
-            UmarenHyo BIGINT,
-            UmarenNinki INTEGER,
-            WideKumi TEXT,
-            WideHyo BIGINT,
-            WideNinki INTEGER,
-            UmatanKumi TEXT,
-            UmatanHyo BIGINT,
-            UmatanNinki INTEGER,
-            SanrenfukuKumi TEXT,
-            SanrenfukuHyo BIGINT,
-            SanrenfukuNinki INTEGER,
+            HenkanUma TEXT,
+            HenkanWaku TEXT,
+            HenkanDoWaku TEXT,
+            BetType TEXT,
+            Kumi TEXT,
+            Hyo BIGINT,
+            Ninki INTEGER,
             TanHyoTotal BIGINT,
             FukuHyoTotal BIGINT,
             WakuHyoTotal BIGINT,
@@ -1534,8 +1499,7 @@ SCHEMAS = {
             WideHenkanHyoTotal BIGINT,
             UmatanHenkanHyoTotal BIGINT,
             SanrenfukuHenkanHyoTotal BIGINT,
-            RecordDelimiter TEXT,
-            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, BetType, Kumi)
         )
     """,
     "RT_H6": """

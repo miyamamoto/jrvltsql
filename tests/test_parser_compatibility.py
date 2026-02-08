@@ -153,6 +153,7 @@ class TestH1Parser:
         result = parser.parse(data)
 
         assert result is not None
+        assert isinstance(result, dict)  # Flat returns single dict
         assert result["RecordSpec"] == "H1"
         assert result["TanUma"] == "03"
         assert result["TanHyo"] == "00000012345"
@@ -163,7 +164,7 @@ class TestH1Parser:
         assert len(data) == 28955
 
     def test_h1_full_record_header_parse(self, factory):
-        """Parser can at least read header from full 28,955-byte record."""
+        """Parser returns list of rows from full 28,955-byte record."""
         data = make_h1_record_full(
             jyo_cd="55",
             race_num="05",
@@ -172,35 +173,35 @@ class TestH1Parser:
         parser = factory.get_parser("H1")
         result = parser.parse(data)
 
-        # Parser reads first 317 bytes - header fields should be correct
+        # Full struct returns list of dicts
         assert result is not None
-        assert result["RecordSpec"] == "H1"
-        assert result["JyoCD"] == "55"
-        assert result["RaceNum"] == "05"
-        assert result["TorokuTosu"] == "09"
+        assert isinstance(result, list)
+        assert len(result) > 0
+        # All rows share the same header fields
+        first = result[0]
+        assert first["RecordSpec"] == "H1"
+        assert first["JyoCD"] == "55"
+        assert first["RaceNum"] == "05"
+        assert first["TorokuTosu"] == "09"
 
-    def test_h1_full_record_data_misalignment(self, factory):
-        """Document that full H1 struct misaligns with flat parser.
-
-        When the full 28,955-byte record is fed to the 317-byte parser,
-        fields after HenkanUma3 (position 42) are misaligned because
-        the flat parser expects single entries while the full struct
-        has arrays (28 HenkanUma entries, not 3).
-        """
-        data = make_h1_record_full(jyo_cd="55")
+    def test_h1_full_record_bet_types(self, factory):
+        """Full H1 struct expands into rows per bet type and combination."""
+        data = make_h1_record_full(jyo_cd="55", syusso_tosu="10")
         parser = factory.get_parser("H1")
         result = parser.parse(data)
 
-        assert result is not None
-        # Header fields are correct
-        assert result["RecordSpec"] == "H1"
-        assert result["JyoCD"] == "55"
+        assert isinstance(result, list)
+        # Should have Tansyo entries (10 horses), Fukusyo entries, etc.
+        bet_types = set(r.get("BetType") for r in result)
+        assert "Tansyo" in bet_types
+        assert "Fukusyo" in bet_types
+        # Total row included
+        assert "Total" in bet_types
 
-        # But TanUma reads from position 42-43, which in the full struct
-        # is HenkanUma[3] and HenkanUma[4], not the first TanSho entry.
-        # The first TanSho in the full struct starts at position 83.
-        # This documents the known misalignment.
-        assert result["TanUma"] is not None  # Will have some value, but wrong
+        # Check tansyo entries
+        tansyo_rows = [r for r in result if r.get("BetType") == "Tansyo"]
+        assert len(tansyo_rows) == 10  # 10 horses with data
+        assert tansyo_rows[0]["Kumi"] == "01"
 
     def test_h1_nar_full_record_format(self):
         """NAR H1 full record has identical format to JRA."""
@@ -234,9 +235,11 @@ class TestH1Parser:
         result = parser.parse(data)
 
         assert result is not None
-        assert result["RecordSpec"] == "H1"
+        assert isinstance(result, list)
+        first = result[0]
+        assert first["RecordSpec"] == "H1"
         # JyoCD should be NAR range (30-57)
-        jyo = int(result["JyoCD"])
+        jyo = int(first["JyoCD"])
         assert 30 <= jyo <= 57, f"NAR JyoCD should be 30-57, got {jyo}"
 
 
@@ -258,7 +261,7 @@ class TestAllParsersBasic:
 
     RECORD_LENGTHS = {
         'BN': 387, 'BR': 455, 'CH': 592, 'DM': 48,
-        'H1': 317, 'H6': 78, 'HC': 60, 'HN': 251, 'HR': 719,
+        'H1': 28955, 'H6': 102900, 'HC': 60, 'HN': 251, 'HR': 719,
         'HS': 200, 'HY': 123,
         'JG': 80, 'KS': 772,
         'HA': 1032,
@@ -296,7 +299,12 @@ class TestAllParsersBasic:
         # Should not raise
         result = parser.parse(data)
         if result is not None:
-            assert result.get("RecordSpec") == record_type
+            # Full-struct parsers return List[Dict]
+            if isinstance(result, list):
+                assert len(result) > 0
+                assert result[0].get("RecordSpec") == record_type
+            else:
+                assert result.get("RecordSpec") == record_type
 
     @pytest.mark.parametrize("record_type", ALL_RECORD_TYPES)
     def test_parser_handles_empty_data(self, factory, record_type):
@@ -351,6 +359,14 @@ class TestNARJRAFormatCompatibility:
         assert jra_result["JyoCD"] == "05"
         assert nar_result["JyoCD"] == "55"
 
+    def test_crlf_termination(self):
+        """All records end with CRLF."""
+        for record_fn in [make_ra_record, make_se_record, make_hr_record,
+                          make_h1_record_flat, make_h1_record_full,
+                          make_wf_record, make_bn_record]:
+            data = record_fn()
+            assert data[-2:] == b'\r\n', f"{record_fn.__name__} missing CRLF"
+
     def test_h1_format_identical(self):
         """H1 full record format is identical between JRA and NAR."""
         jra = make_h1_record_full(jyo_cd="05")
@@ -362,14 +378,6 @@ class TestNARJRAFormatCompatibility:
         # Header structure
         assert jra[0:2] == nar[0:2] == b'H1'
         assert jra[27:29] == nar[27:29]  # TorokuTosu at same position
-
-    def test_crlf_termination(self):
-        """All records end with CRLF."""
-        for record_fn in [make_ra_record, make_se_record, make_hr_record,
-                          make_h1_record_flat, make_h1_record_full,
-                          make_wf_record, make_bn_record]:
-            data = record_fn()
-            assert data[-2:] == b'\r\n', f"{record_fn.__name__} missing CRLF"
 
 
 class TestH1FullStructParsing:

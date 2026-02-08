@@ -50,8 +50,8 @@ PARSER_MAP = {
     "BR": (BRParser, 455),
     "CH": (CHParser, 592),
     "DM": (DMParser, 48),
-    "H1": (H1Parser, 317),
-    "H6": (H6Parser, 78),
+    "H1": (H1Parser, 317),   # Fixture files use flat format (317 bytes)
+    "H6": (H6Parser, 78),    # Fixture files use flat format (78 bytes)
     "HC": (HCParser, 60),
     "HN": (HNParser, 251),
     "HS": (HSParser, 200),
