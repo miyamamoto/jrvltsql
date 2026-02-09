@@ -10,7 +10,8 @@ from typing import Iterator, Optional, Union
 
 from src.jvlink.constants import JV_READ_NO_MORE_DATA, JV_READ_SUCCESS
 from src.jvlink.wrapper import JVLinkWrapper
-from src.nvlink.wrapper import COMBrokenError
+from src.nvlink.wrapper import COMBrokenError as _WrapperCOMBrokenError
+from src.nvlink.bridge import COMBrokenError as _BridgeCOMBrokenError
 from src.parser.factory import ParserFactory
 from src.utils.data_source import DataSource
 from src.utils.logger import get_logger
@@ -65,8 +66,20 @@ class BaseFetcher(ABC):
 
         # Select wrapper based on data source
         if data_source == DataSource.NAR:
-            from src.nvlink.wrapper import NVLinkWrapper
-            self.jvlink: Union[JVLinkWrapper, NVLinkWrapper] = NVLinkWrapper(sid, initialization_key=initialization_key)
+            # Prefer C# NVLinkBridge over Python win32com for NAR operations.
+            # The bridge uses native COM interop that avoids E_UNEXPECTED errors
+            # caused by Python's VARIANT BYREF marshaling issues with Delphi COM.
+            from src.nvlink.bridge import NVLinkBridge, find_bridge_executable
+            bridge_exe = find_bridge_executable()
+            if bridge_exe is not None:
+                logger.info("Using NVLinkBridge (C#) for NAR", bridge_path=str(bridge_exe))
+                self.jvlink: Union[JVLinkWrapper, "NVLinkBridge", "NVLinkWrapper"] = NVLinkBridge(
+                    sid, initialization_key=initialization_key, bridge_path=bridge_exe
+                )
+            else:
+                logger.warning("NVLinkBridge not found, falling back to Python COM wrapper")
+                from src.nvlink.wrapper import NVLinkWrapper
+                self.jvlink = NVLinkWrapper(sid, initialization_key=initialization_key)
         else:
             self.jvlink = JVLinkWrapper(sid)
 
@@ -296,7 +309,7 @@ class BaseFetcher(ABC):
                     )
                     raise FetcherError(f"JVRead returned error code: {ret_code}")
 
-            except (FetcherError, COMBrokenError):
+            except (FetcherError, _WrapperCOMBrokenError, _BridgeCOMBrokenError):
                 raise
             except Exception as e:
                 logger.error("Error during fetch", error=str(e))

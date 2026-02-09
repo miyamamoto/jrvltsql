@@ -38,10 +38,18 @@ from src.nvlink.wrapper import (
     COMBrokenError,
 )
 
+from src.nvlink.bridge import (
+    NVLinkBridge,
+    NVLinkBridgeError,
+    find_bridge_executable,
+)
+
 __all__ = [
     # Main classes
     "NVLinkWrapper",
+    "NVLinkBridge",
     "NVLinkError",
+    "NVLinkBridgeError",
     # Return codes
     "NV_RT_SUCCESS",
     "NV_RT_ERROR",

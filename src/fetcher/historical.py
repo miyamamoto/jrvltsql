@@ -10,7 +10,8 @@ from typing import Iterator, Optional
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from src.fetcher.base import BaseFetcher, FetcherError
-from src.nvlink.wrapper import COMBrokenError
+from src.nvlink.wrapper import COMBrokenError as _WrapperCOMBrokenError
+from src.nvlink.bridge import COMBrokenError as _BridgeCOMBrokenError
 from src.utils.data_source import DataSource
 from src.utils.logger import get_logger
 from src.utils.progress import JVLinkProgressDisplay
@@ -217,7 +218,7 @@ class HistoricalFetcher(BaseFetcher):
                     f"(失敗: {stats['records_failed']}件)"
                 )
 
-        except COMBrokenError:
+        except (_WrapperCOMBrokenError, _BridgeCOMBrokenError):
             # Let COMBrokenError propagate to _fetch_nar_daily for retry
             logger.warning("COM broken error during fetch, propagating for retry")
             raise
@@ -337,7 +338,7 @@ class HistoricalFetcher(BaseFetcher):
                     # fetch() will see same from/to date → _should_chunk_by_day returns False
                     yield from self.fetch(data_spec, day_str, day_str, option)
                     consecutive_502_count = 0  # Reset on success
-                except COMBrokenError as e:
+                except (_WrapperCOMBrokenError, _BridgeCOMBrokenError) as e:
                     # COM E_UNEXPECTED: NVClose→reinit→retry once for this day
                     logger.warning(
                         "COM E_UNEXPECTED during fetch, attempting recovery",
@@ -372,7 +373,7 @@ class HistoricalFetcher(BaseFetcher):
                         yield from self.fetch(data_spec, day_str, day_str, option)
                         consecutive_502_count = 0
                         logger.info("Retry after COM recovery succeeded", date=day_str)
-                    except (COMBrokenError, FetcherError) as retry_err:
+                    except (_WrapperCOMBrokenError, _BridgeCOMBrokenError, FetcherError) as retry_err:
                         logger.warning(
                             "Retry after COM recovery also failed, skipping day",
                             date=day_str,
