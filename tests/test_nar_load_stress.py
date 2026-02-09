@@ -439,23 +439,27 @@ class TestFetcherNarDailyLoadTest:
         assert len(fetcher._nar_skipped_dates) == 3
 
     def test_alternating_502_never_triggers_abort(self):
-        """-502が1日おき → 連続カウントリセットで中断しない"""
+        """-502が1日おき → 連続カウントリセットで中断しない
+
+        With option=2 fallback, each -502 day is called twice (option=1 + option=2).
+        """
         fetcher = _make_fetcher()
-        call_count = 0
+        option1_count = 0
 
         def mock_fetch(data_spec, from_date, to_date, option):
-            nonlocal call_count
-            call_count += 1
+            nonlocal option1_count
+            if option == 1:
+                option1_count += 1
             day = int(from_date[-2:])
-            if day % 2 == 0:  # 偶数日に-502
+            if day % 2 == 0:  # 偶数日に-502 (both option=1 and option=2)
                 raise FetcherError("-502")
             yield {"date": from_date}
 
         with patch.object(fetcher, 'fetch', side_effect=mock_fetch):
             results = list(fetcher._fetch_nar_daily("RACE", "20240101", "20240131", 1))
 
-        # 全31日が試行される（連続3日にならないため中断しない）
-        assert call_count == 31
+        # 全31日がoption=1で試行される
+        assert option1_count == 31
         assert len(results) == 16  # 奇数日のみ成功（1,3,5,...,31 = 16日）
         assert len(fetcher._nar_skipped_dates) == 15  # 偶数日スキップ
 
