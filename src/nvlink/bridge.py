@@ -102,7 +102,7 @@ class NVLinkBridge:
         sid: str = "UNKNOWN",
         initialization_key: Optional[str] = None,
         bridge_path: Optional[Union[str, Path]] = None,
-        timeout: float = 30.0,
+        timeout: float = 600.0,
     ):
         """Initialize NVLinkBridge.
 
@@ -288,15 +288,22 @@ class NVLinkBridge:
         Returns:
             Tuple of (result_code, read_count, download_count, last_file_timestamp).
         """
-        response = self._send_command(
-            {
-                "cmd": "open",
-                "dataspec": data_spec,
-                "fromtime": fromtime,
-                "option": option,
-            },
-            timeout=120.0,  # Open can take a while with downloads
-        )
+        try:
+            response = self._send_command(
+                {
+                    "cmd": "open",
+                    "dataspec": data_spec,
+                    "fromtime": fromtime,
+                    "option": option,
+                },
+                timeout=120.0,  # NVOpen can block during download
+            )
+        except NVLinkBridgeError as e:
+            # NVOpen blocked (download or COM hang) — kill bridge and raise -502
+            # so _fetch_nar_daily can retry with option=2 or skip day
+            logger.warning("NVOpen timeout/error, killing bridge", error=str(e), data_spec=data_spec)
+            self._kill_process()
+            raise NVLinkBridgeError("NVOpen timeout", error_code=-502)
 
         code = response.get("code", -1)
         read_count = response.get("readcount", 0)
@@ -506,6 +513,17 @@ class NVLinkBridge:
         """Check if stream is open."""
         return self._is_open
 
+    def _kill_process(self):
+        """Force-kill the bridge subprocess without graceful shutdown."""
+        if self._process is not None:
+            try:
+                self._process.kill()
+                self._process.wait(timeout=5.0)
+            except Exception:
+                pass
+        self._process = None
+        self._is_open = False
+
     def cleanup(self):
         """Stop the bridge subprocess."""
         if self._process is not None and self._process.poll() is None:
@@ -578,7 +596,7 @@ class NVLinkBridge:
     def reinitialize_com(self):
         """Reinitialize by restarting the bridge process."""
         logger.warning("Reinitializing bridge (restart subprocess)")
-        self.cleanup()
+        self._kill_process()
         self._start_process()
         init_key = self.initialization_key or self.sid
         self._send_command({"cmd": "init", "type": "nar", "key": init_key})

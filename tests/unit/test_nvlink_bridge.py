@@ -320,13 +320,12 @@ class TestNVLinkBridgeAliases:
         assert buff == raw_data
 
     def test_reinitialize_com(self, bridge):
-        """reinitialize_com calls cleanup then restarts."""
-        # Just verify cleanup is called and the method doesn't crash
-        bridge.cleanup = MagicMock()
+        """reinitialize_com calls _kill_process then restarts."""
+        bridge._kill_process = MagicMock()
         bridge._start_process = MagicMock()
         bridge._send_command = MagicMock(return_value={"status": "ok"})
         bridge.reinitialize_com()
-        bridge.cleanup.assert_called_once()
+        bridge._kill_process.assert_called_once()
         bridge._start_process.assert_called_once()
 
 

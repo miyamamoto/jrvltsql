@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Text;
 using System.Text.Json;
+using System.Threading.Tasks;
 using System.Runtime.InteropServices;
 
 // JV/NV-Link COM Bridge for Python
@@ -140,7 +141,6 @@ class Program
         var dataspec = root.GetProperty("dataspec").GetString() ?? "";
         var fromtime = root.GetProperty("fromtime").GetString() ?? "";
         var option = root.TryGetProperty("option", out var o) ? o.GetInt32() : 1;
-
         int readcount = 0;
         int downloadcount = 0;
         string lastfiletimestamp = "";
@@ -148,14 +148,13 @@ class Program
 
         if (linkType == "jra")
         {
-            // JVOpen(dataspec, fromtime, option, ref readcount, ref downloadcount, out lastfiletimestamp)
-            // JV-Link passes fromtime as string
             result = link.JVOpen(dataspec, fromtime, option, ref readcount, ref downloadcount, out lastfiletimestamp);
         }
         else
         {
-            // NVOpen(dataspec, fromtime_as_int, option, ref readcount, ref downloadcount, out lastfiletimestamp)
-            result = link.NVOpen(dataspec, int.Parse(fromtime), option, ref readcount, ref downloadcount, out lastfiletimestamp);
+            // NV-Link expects fromtime as integer (YYYYMMDDhhmmss format)
+            // Use long.Parse since 14-digit timestamps overflow int32
+            result = link.NVOpen(dataspec, long.Parse(fromtime), option, ref readcount, ref downloadcount, out lastfiletimestamp);
         }
 
         return new
