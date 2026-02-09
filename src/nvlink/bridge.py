@@ -29,9 +29,12 @@ logger = get_logger(__name__)
 
 # Default bridge executable locations (searched in order)
 _BRIDGE_SEARCH_PATHS = [
-    # Relative to jrvltsql repo root
+    # Relative to jrvltsql repo root (build output)
+    Path("tools/nvlink-bridge/bin/x86/Release/net8.0-windows/NVLinkBridge.exe"),
+    # Relative to jrvltsql repo root (flat copy)
     Path("tools/nvlink-bridge/NVLinkBridge.exe"),
-    # A6 build location
+    # A6 build locations
+    Path(r"C:\Users\mitsu\work\jrvltsql\tools\nvlink-bridge\bin\x86\Release\net8.0-windows\NVLinkBridge.exe"),
     Path(r"C:\Users\mitsu\work\nvlink-bridge\bin\x86\Release\net8.0-windows\NVLinkBridge.exe"),
     # Generic Windows location
     Path(r"C:\Program Files\NVLinkBridge\NVLinkBridge.exe"),
