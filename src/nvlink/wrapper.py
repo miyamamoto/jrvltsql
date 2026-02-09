@@ -69,6 +69,18 @@ class NVLinkError(Exception):
         super().__init__(message)
 
 
+class COMBrokenError(NVLinkError):
+    """Raised when COM object is broken (E_UNEXPECTED -2147418113).
+
+    This error indicates the COM object is in an unrecoverable state
+    and needs NVClose → NVOpen cycle to recover. The caller should
+    retry the current operation after reinitializing the connection.
+    """
+
+    def __init__(self, message: str = "COM E_UNEXPECTED: object is broken"):
+        super().__init__(message, error_code=-2147418113)
+
+
 class NVLinkWrapper:
     """Wrapper class for NV-Link COM API.
 
@@ -721,13 +733,14 @@ class NVLinkWrapper:
             # Check for E_UNEXPECTED COM error (-2147418113)
             # This happens due to NV-Link memory leak / dialog popups
             # COM object is broken - cannot continue reading
+            # Raise COMBrokenError so caller can retry with NVClose→NVOpen
             error_str = str(e)
             if "-2147418113" in error_str or "E_UNEXPECTED" in error_str:
-                logger.error("COM E_UNEXPECTED error in NVRead - COM object is broken, stopping read", error=error_str)
-                # Return 0 (read complete) to stop the read loop gracefully
-                # The data read so far will be saved
+                logger.error("COM E_UNEXPECTED error in NVRead - COM object is broken", error=error_str)
                 self._is_open = False
-                return 0, None, None
+                raise COMBrokenError(
+                    f"COM E_UNEXPECTED in NVRead: {error_str}"
+                )
             raise NVLinkError(f"NVRead failed: {e}")
 
     def nv_gets(self) -> Tuple[int, Optional[bytes], Optional[str]]:

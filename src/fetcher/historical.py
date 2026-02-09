@@ -10,6 +10,7 @@ from typing import Iterator, Optional
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from src.fetcher.base import BaseFetcher, FetcherError
+from src.nvlink.wrapper import COMBrokenError
 from src.utils.data_source import DataSource
 from src.utils.logger import get_logger
 from src.utils.progress import JVLinkProgressDisplay
@@ -216,6 +217,10 @@ class HistoricalFetcher(BaseFetcher):
                     f"(失敗: {stats['records_failed']}件)"
                 )
 
+        except COMBrokenError:
+            # Let COMBrokenError propagate to _fetch_nar_daily for retry
+            logger.warning("COM broken error during fetch, propagating for retry")
+            raise
         except Exception as e:
             logger.error("Failed to fetch historical data", error=str(e))
             if self.progress_display:
@@ -332,6 +337,53 @@ class HistoricalFetcher(BaseFetcher):
                     # fetch() will see same from/to date → _should_chunk_by_day returns False
                     yield from self.fetch(data_spec, day_str, day_str, option)
                     consecutive_502_count = 0  # Reset on success
+                except COMBrokenError as e:
+                    # COM E_UNEXPECTED: NVClose→reinit→retry once for this day
+                    logger.warning(
+                        "COM E_UNEXPECTED during fetch, attempting recovery",
+                        date=day_str,
+                        data_spec=data_spec,
+                        error=str(e),
+                    )
+                    if self.progress_display:
+                        self.progress_display.print_warning(
+                            f"⚠️  COM broken on {day_str}, recovering..."
+                        )
+
+                    # Recovery: close → reinitialize COM → retry
+                    try:
+                        self.jvlink.jv_close()
+                    except Exception:
+                        pass
+
+                    if hasattr(self.jvlink, 'reinitialize_com'):
+                        try:
+                            self.jvlink.reinitialize_com()
+                            self.jvlink.jv_init()
+                            logger.info("COM recovery successful, retrying day", date=day_str)
+                        except Exception as reinit_err:
+                            logger.error("COM reinit failed, skipping day", date=day_str, error=str(reinit_err))
+                            skipped_dates.append(day_str)
+                            current += timedelta(days=1)
+                            continue
+
+                    # Retry the day once after recovery
+                    try:
+                        yield from self.fetch(data_spec, day_str, day_str, option)
+                        consecutive_502_count = 0
+                        logger.info("Retry after COM recovery succeeded", date=day_str)
+                    except (COMBrokenError, FetcherError) as retry_err:
+                        logger.warning(
+                            "Retry after COM recovery also failed, skipping day",
+                            date=day_str,
+                            error=str(retry_err),
+                        )
+                        skipped_dates.append(day_str)
+                        if self.progress_display:
+                            self.progress_display.print_warning(
+                                f"⚠️  {day_str} skipped after COM recovery failure"
+                            )
+
                 except FetcherError as e:
                     error_str = str(e)
                     # NAR server errors that should be retried/skipped:
