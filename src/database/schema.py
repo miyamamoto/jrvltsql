@@ -2216,6 +2216,7 @@ SCHEMAS = {
             JyoName_Eng TEXT,
             Address TEXT,
             TelNum TEXT,
+            RecordDelimiter TEXT,
             PRIMARY KEY (JyoCD)
         )
     """,
