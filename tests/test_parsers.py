@@ -32,7 +32,7 @@ class TestParserFactory:
     def test_supported_types(self, parser_factory):
         """サポートされているレコードタイプの確認"""
         supported = parser_factory.supported_types()
-        assert len(supported) == 41  # 38 JRA + 3 NAR (HA, NC, NU)
+        assert len(supported) == 43  # 38 JRA + 5 NAR (HA, NK, NC, NU, OA)
         assert supported == ALL_RECORD_TYPES
 
     def test_get_parser_invalid_type(self, parser_factory):
@@ -106,7 +106,10 @@ class TestIndividualParsers:
         assert has_rt, f"{record_type}パーサーにRECORD_TYPE/record_type属性がない"
 
         actual_type = getattr(parser, 'RECORD_TYPE', None) or getattr(parser, 'record_type', None)
-        assert actual_type == record_type, f"{record_type}パーサーのRECORD_TYPEが正しくない"
+        # Aliased record types (e.g., NK -> KS) use the base parser's RECORD_TYPE
+        from src.parser.factory import PARSER_ALIASES
+        expected = PARSER_ALIASES.get(record_type, record_type)
+        assert actual_type == expected, f"{record_type}パーサーのRECORD_TYPEが正しくない (got {actual_type}, expected {expected})"
 
     @pytest.mark.parametrize("record_type", ALL_RECORD_TYPES)
     def test_parser_has_record_length(self, parser_factory, record_type):
@@ -438,8 +441,8 @@ class TestAllParsersComprehensive:
             else:
                 failed_parsers.append(record_type)
 
-        assert loaded_count == 41, \
-            f"ロードできなかったパーサー: {failed_parsers}"  # 38 JRA + 1 NAR (NU)
+        assert loaded_count == 43, \
+            f"ロードできなかったパーサー: {failed_parsers}"  # 38 JRA + 5 NAR
         assert len(failed_parsers) == 0
 
     def test_all_parsers_have_consistent_interface(self, parser_factory):
