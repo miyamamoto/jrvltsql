@@ -9,6 +9,7 @@ from typing import Iterator, Optional, Union
 
 from src.jvlink.constants import JV_READ_NO_MORE_DATA, JV_READ_SUCCESS
 from src.jvlink.wrapper import JVLinkWrapper
+from src.nvlink.wrapper import COMBrokenError
 from src.parser.factory import ParserFactory
 from src.utils.data_source import DataSource
 from src.utils.logger import get_logger
@@ -286,7 +287,7 @@ class BaseFetcher(ABC):
                     )
                     raise FetcherError(f"JVRead returned error code: {ret_code}")
 
-            except FetcherError:
+            except (FetcherError, COMBrokenError):
                 raise
             except Exception as e:
                 logger.error("Error during fetch", error=str(e))

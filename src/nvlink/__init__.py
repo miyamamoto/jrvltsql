@@ -35,6 +35,7 @@ from src.nvlink.constants import (
 from src.nvlink.wrapper import (
     NVLinkWrapper,
     NVLinkError,
+    COMBrokenError,
 )
 
 __all__ = [
