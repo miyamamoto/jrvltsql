@@ -2451,10 +2451,19 @@ class SchemaManager:
 def create_all_tables(db: BaseDatabase) -> None:
     """Create all tables defined in SCHEMAS.
 
+    Before creating tables, checks for schema mismatches in existing tables
+    and recreates them if needed (e.g., when column definitions have changed).
+
     Args:
         db: Database instance
     """
+    from src.database.migration import migrate_all_tables
+
     logger.info("Creating tables...")
+
+    # Check and migrate existing tables with mismatched schemas
+    migrate_all_tables(db, SCHEMAS)
+
     for table_name, schema_sql in SCHEMAS.items():
         try:
             db.execute(schema_sql)
