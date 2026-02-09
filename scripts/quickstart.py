@@ -468,6 +468,12 @@ try:
         print(f"INIT_ERROR:{init_result}")
         sys.exit(0)
 
+    # Safety: close any previously open stream (prevents -202 AlreadyOpen)
+    try:
+        nvlink.NVClose()
+    except Exception:
+        pass
+
     # Try NVOpen with option=1 (normal mode), 6 arguments required
     result = nvlink.NVOpen("RACE", 20241201000000, 1, 0, 0, "")
     if isinstance(result, tuple) and len(result) >= 3:
@@ -475,6 +481,19 @@ try:
     else:
         print(f"OPEN_ERROR:{result}")
         sys.exit(0)
+
+    # -202: Stream already open — close and retry once
+    if rc == -202:
+        try:
+            nvlink.NVClose()
+        except Exception:
+            pass
+        result = nvlink.NVOpen("RACE", 20241201000000, 1, 0, 0, "")
+        if isinstance(result, tuple) and len(result) >= 3:
+            rc, read_count, download_count = result[0], result[1], result[2]
+        else:
+            print(f"OPEN_ERROR:{result}")
+            sys.exit(0)
 
     if rc != 0:
         if rc == -203:
@@ -598,6 +617,12 @@ try:
         print(f"INIT_ERROR:{init_result}")
         sys.exit(0)
 
+    # Safety: close any previously open stream (prevents -202 AlreadyOpen)
+    try:
+        nvlink.NVClose()
+    except Exception:
+        pass
+
     # NVOpen with option=4 (Setup) - downloads all historical data
     # kmy-keiba uses start year 2005 for NAR
     result = nvlink.NVOpen("RACE", 20050101000000, 4, 0, 0, "")
@@ -606,6 +631,20 @@ try:
     else:
         print(f"OPEN_ERROR:{result}")
         sys.exit(0)
+
+    # -202: Stream already open — close and retry once
+    if rc == -202:
+        print("WARN:-202 AlreadyOpen, retrying after NVClose")
+        try:
+            nvlink.NVClose()
+        except Exception:
+            pass
+        result = nvlink.NVOpen("RACE", 20050101000000, 4, 0, 0, "")
+        if isinstance(result, tuple) and len(result) >= 3:
+            rc, read_count, dl_count = result[0], result[1], result[2]
+        else:
+            print(f"OPEN_ERROR:{result}")
+            sys.exit(0)
 
     if rc != 0:
         print(f"OPEN_ERROR:{rc}")

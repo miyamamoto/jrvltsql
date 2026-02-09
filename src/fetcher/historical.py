@@ -225,9 +225,10 @@ class HistoricalFetcher(BaseFetcher):
         finally:
             # Close stream
             try:
-                if self.jvlink.is_open():
-                    self.jvlink.jv_close()
-                    logger.info("Data stream closed")
+                # Always try to close, even if _is_open is False
+                # This prevents -202 (AlreadyOpen) on next NVOpen call
+                self.jvlink.jv_close()
+                logger.info("Data stream closed")
             except Exception as e:
                 logger.warning(f"Failed to close stream: {e}")
 
