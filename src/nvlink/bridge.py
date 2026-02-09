@@ -258,7 +258,7 @@ class NVLinkBridge:
         self._start_process()
 
         init_key = self.initialization_key or self.sid
-        response = self._send_command({"cmd": "init", "key": init_key})
+        response = self._send_command({"cmd": "init", "type": "nar", "key": init_key})
 
         if response.get("status") == "error":
             code = response.get("code", -1)
@@ -578,4 +578,4 @@ class NVLinkBridge:
         self.cleanup()
         self._start_process()
         init_key = self.initialization_key or self.sid
-        self._send_command({"cmd": "init", "key": init_key})
+        self._send_command({"cmd": "init", "type": "nar", "key": init_key})

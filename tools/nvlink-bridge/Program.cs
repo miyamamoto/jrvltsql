@@ -4,15 +4,22 @@ using System.Text;
 using System.Text.Json;
 using System.Runtime.InteropServices;
 
-// NV-Link COM Bridge for Python
-// Wraps NVDTLabLib.NVLink COM component via C# native interop.
+// JV/NV-Link COM Bridge for Python
+// Wraps both JVDTLab.JVLink (JRA/中央競馬) and NVDTLabLib.NVLink (NAR/地方競馬)
+// COM components via C# native interop.
 // Communicates via stdin (JSON commands) / stdout (JSON responses).
+//
+// This eliminates the need for Python win32com, solving:
+// - VARIANT BYREF marshaling issues (E_UNEXPECTED errors)
+// - 32-bit Python requirement (C# handles COM bitness)
+// - Delphi COM memory management issues
 
 class Program
 {
-    static dynamic? nvlink;
+    static dynamic? link;          // JVLink or NVLink COM object
     static bool initialized = false;
     static IntPtr parentHwnd = IntPtr.Zero;
+    static string linkType = "";   // "jra" or "nar"
 
     static void Main(string[] args)
     {
@@ -23,7 +30,7 @@ class Program
         Console.InputEncoding = Encoding.UTF8;
 
         // Signal ready
-        WriteResponse(new { status = "ready", version = "1.0.0" });
+        WriteResponse(new { status = "ready", version = "2.0.0" });
 
         string? line;
         while ((line = Console.ReadLine()) != null)
@@ -46,6 +53,8 @@ class Program
                     "status" => CmdStatus(),
                     "skip" => CmdSkip(),
                     "close" => CmdClose(),
+                    "filedelete" => CmdFileDelete(root),
+                    "rtopen" => CmdRTOpen(root),
                     "quit" => CmdQuit(),
                     _ => new { status = "error", error = $"Unknown command: {cmd}" }
                 };
@@ -65,50 +74,67 @@ class Program
     {
         if (initialized)
         {
-            // Re-init: close first
-            try { nvlink?.NVClose(); } catch { }
-            nvlink = null;
+            try { link?.JVClose(); } catch { }
+            try { link?.NVClose(); } catch { }
+            link = null;
             initialized = false;
         }
 
         var key = root.TryGetProperty("key", out var k) ? k.GetString() ?? "UNKNOWN" : "UNKNOWN";
+        linkType = root.TryGetProperty("type", out var t) ? t.GetString() ?? "nar" : "nar";
 
-        // Create COM object
-        var type = Type.GetTypeFromProgID("NVDTLabLib.NVLink");
-        if (type == null)
+        Type? comType = null;
+
+        if (linkType == "jra")
         {
-            // Fallback
-            type = Type.GetTypeFromProgID("NVDTLab.NVLink");
+            // JRA: JVDTLab.JVLink
+            comType = Type.GetTypeFromProgID("JVDTLab.JVLink");
+            if (comType == null)
+            {
+                return new { status = "error", error = "JV-Link COM not found. Is JRA-VAN Data Lab installed?" };
+            }
         }
-        if (type == null)
+        else
         {
-            return new { status = "error", error = "NV-Link COM component not found. Is NV-Link installed?" };
+            // NAR: NVDTLabLib.NVLink
+            comType = Type.GetTypeFromProgID("NVDTLabLib.NVLink");
+            if (comType == null)
+                comType = Type.GetTypeFromProgID("NVDTLab.NVLink");
+            if (comType == null)
+            {
+                return new { status = "error", error = "NV-Link COM not found. Is UmaConn installed?" };
+            }
         }
 
-        nvlink = Activator.CreateInstance(type);
-        if (nvlink == null)
+        link = Activator.CreateInstance(comType);
+        if (link == null)
         {
-            return new { status = "error", error = "Failed to create NV-Link COM instance" };
+            return new { status = "error", error = "Failed to create COM instance" };
         }
 
-        // Set ParentHWnd (critical for NV-Link!)
+        // Set ParentHWnd (critical for NV-Link, optional but safe for JV-Link)
         parentHwnd = GetDesktopWindow();
-        nvlink.ParentHWnd = (int)parentHwnd;
+        try { link.ParentHWnd = (int)parentHwnd; } catch { }
 
         // Initialize
-        int result = nvlink.NVInit(key);
+        int result;
+        if (linkType == "jra")
+            result = link.JVInit(key);
+        else
+            result = link.NVInit(key);
+
         if (result != 0)
         {
-            return new { status = "error", error = $"NVInit failed", code = result };
+            return new { status = "error", error = $"Init failed", code = result, linkType };
         }
 
         initialized = true;
-        return new { status = "ok", hwnd = (long)parentHwnd };
+        return new { status = "ok", hwnd = (long)parentHwnd, linkType };
     }
 
     static object CmdOpen(JsonElement root)
     {
-        if (!initialized || nvlink == null)
+        if (!initialized || link == null)
             return new { status = "error", error = "Not initialized" };
 
         var dataspec = root.GetProperty("dataspec").GetString() ?? "";
@@ -118,12 +144,23 @@ class Program
         int readcount = 0;
         int downloadcount = 0;
         string lastfiletimestamp = "";
+        int result;
 
-        int result = nvlink.NVOpen(dataspec, fromtime, option, ref readcount, ref downloadcount, out lastfiletimestamp);
+        if (linkType == "jra")
+        {
+            // JVOpen(dataspec, fromtime, option, ref readcount, ref downloadcount, out lastfiletimestamp)
+            // JV-Link passes fromtime as string
+            result = link.JVOpen(dataspec, fromtime, option, ref readcount, ref downloadcount, out lastfiletimestamp);
+        }
+        else
+        {
+            // NVOpen(dataspec, fromtime_as_int, option, ref readcount, ref downloadcount, out lastfiletimestamp)
+            result = link.NVOpen(dataspec, int.Parse(fromtime), option, ref readcount, ref downloadcount, out lastfiletimestamp);
+        }
 
         return new
         {
-            status = result >= 0 ? "ok" : "error",
+            status = result >= -1 ? "ok" : "error",
             code = result,
             readcount,
             downloadcount,
@@ -131,137 +168,207 @@ class Program
         };
     }
 
+    static object CmdRTOpen(JsonElement root)
+    {
+        if (!initialized || link == null)
+            return new { status = "error", error = "Not initialized" };
+
+        var dataspec = root.GetProperty("dataspec").GetString() ?? "";
+        var key = root.TryGetProperty("key", out var k) ? k.GetString() ?? "" : "";
+
+        int readcount = 0;
+        int result;
+
+        if (linkType == "jra")
+            result = link.JVRTOpen(dataspec, key);
+        else
+            result = link.NVRTOpen(dataspec, key);
+
+        // Handle tuple return from COM
+        // pywin32 returns tuple, but C# dynamic gets individual return + out params
+        // For now, return the result code
+        return new
+        {
+            status = result >= -1 ? "ok" : "error",
+            code = result,
+            readcount
+        };
+    }
+
     static object CmdGets(JsonElement root)
     {
-        if (!initialized || nvlink == null)
+        if (!initialized || link == null)
             return new { status = "error", error = "Not initialized" };
 
         var size = root.TryGetProperty("size", out var s) ? s.GetInt32() : 110000;
 
+        if (linkType == "jra")
+        {
+            // JV-Link doesn't have JVGets; use JVRead and convert
+            return CmdRead(root);
+        }
+
+        // NAR: NVGets returns byte array
         var buff = new byte[size];
         string filename = "";
 
         object obj = buff;
-        int result = nvlink.NVGets(ref obj, size, out filename);
+        int result = link.NVGets(ref obj, size, out filename);
         buff = (byte[])obj;
 
         if (result > 0)
         {
-            // Data available - encode as base64
-            // NVGets returns Shift-JIS data in byte array
             var data = Convert.ToBase64String(buff, 0, result);
-
-            // Free COM memory (kmy-keiba pattern)
             Array.Resize(ref buff, 0);
-
-            return new
-            {
-                status = "ok",
-                code = result,
-                data,
-                filename = filename ?? "",
-                size = result
-            };
-        }
-        else if (result == 0)
-        {
-            Array.Resize(ref buff, 0);
-            return new { status = "ok", code = 0, data = (string?)null, filename = filename ?? "", size = 0 };
-        }
-        else if (result == -1)
-        {
-            Array.Resize(ref buff, 0);
-            return new { status = "ok", code = -1, data = (string?)null, filename = filename ?? "", size = 0 };
+            return new { status = "ok", code = result, data, filename = filename ?? "", size = result };
         }
         else
         {
             Array.Resize(ref buff, 0);
-            return new { status = "error", code = result, filename = filename ?? "" };
+            return new
+            {
+                status = result >= -1 ? "ok" : "error",
+                code = result,
+                data = (string?)null,
+                filename = filename ?? "",
+                size = 0
+            };
         }
     }
 
     static object CmdRead(JsonElement root)
     {
-        if (!initialized || nvlink == null)
+        if (!initialized || link == null)
             return new { status = "error", error = "Not initialized" };
 
         var size = root.TryGetProperty("size", out var s) ? s.GetInt32() : 110000;
 
         string buff = "";
         string filename = "";
+        int result;
 
-        int result = nvlink.NVRead(out buff, out size, out filename);
+        if (linkType == "jra")
+        {
+            // JVRead(out buff, out size, out filename)
+            result = link.JVRead(out buff, out size, out filename);
+        }
+        else
+        {
+            // NVRead(out buff, out size, out filename)
+            result = link.NVRead(out buff, out size, out filename);
+        }
 
         if (result > 0)
         {
-            // NVRead returns Unicode string, but NV-Link stuffs Shift-JIS bytes into it
-            // Convert to byte array and base64 encode
+            // Data returned as string. JV/NV-Link stuffs Shift-JIS bytes into BSTR.
+            // Encode to Shift-JIS bytes, then base64.
             byte[] bytes;
             try
             {
+                // Try Shift-JIS encoding first (most reliable for JV-Link data)
                 bytes = Encoding.GetEncoding(932).GetBytes(buff ?? "");
             }
             catch
             {
-                bytes = Encoding.Unicode.GetBytes(buff ?? "");
+                // Fallback: extract raw bytes via Latin-1 (1:1 byte mapping)
+                try
+                {
+                    bytes = Encoding.GetEncoding(28591).GetBytes(buff ?? "");
+                }
+                catch
+                {
+                    bytes = Encoding.Unicode.GetBytes(buff ?? "");
+                }
             }
             var data = Convert.ToBase64String(bytes, 0, Math.Min(bytes.Length, result));
 
-            return new
-            {
-                status = "ok",
-                code = result,
-                data,
-                filename = filename ?? "",
-                size = result
-            };
-        }
-        else if (result == 0)
-        {
-            return new { status = "ok", code = 0, data = (string?)null, filename = filename ?? "", size = 0 };
-        }
-        else if (result == -1)
-        {
-            return new { status = "ok", code = -1, data = (string?)null, filename = filename ?? "", size = 0 };
+            return new { status = "ok", code = result, data, filename = filename ?? "", size = result };
         }
         else
         {
-            return new { status = "error", code = result, filename = filename ?? "" };
+            return new
+            {
+                status = result >= -1 ? "ok" : "error",
+                code = result,
+                data = (string?)null,
+                filename = filename ?? "",
+                size = 0
+            };
         }
     }
 
     static object CmdStatus()
     {
-        if (!initialized || nvlink == null)
+        if (!initialized || link == null)
             return new { status = "error", error = "Not initialized" };
 
-        int result = nvlink.NVStatus();
+        int result;
+        if (linkType == "jra")
+            result = link.JVStatus();
+        else
+            result = link.NVStatus();
+
         return new { status = "ok", code = result };
     }
 
     static object CmdSkip()
     {
-        if (!initialized || nvlink == null)
+        if (!initialized || link == null)
             return new { status = "error", error = "Not initialized" };
 
-        nvlink.NVSkip();
+        if (linkType == "jra")
+            link.JVSkip();
+        else
+            link.NVSkip();
+
         return new { status = "ok" };
+    }
+
+    static object CmdFileDelete(JsonElement root)
+    {
+        if (!initialized || link == null)
+            return new { status = "error", error = "Not initialized" };
+
+        var filename = root.GetProperty("filename").GetString() ?? "";
+
+        int result;
+        if (linkType == "jra")
+            result = link.JVFiledelete(filename);
+        else
+            result = link.NVFiledelete(filename);
+
+        return new { status = "ok", code = result };
     }
 
     static object CmdClose()
     {
-        if (!initialized || nvlink == null)
+        if (!initialized || link == null)
             return new { status = "ok" };
 
-        try { nvlink.NVClose(); } catch { }
+        try
+        {
+            if (linkType == "jra")
+                link.JVClose();
+            else
+                link.NVClose();
+        }
+        catch { }
+
         return new { status = "ok" };
     }
 
     static object CmdQuit()
     {
-        if (initialized && nvlink != null)
+        if (initialized && link != null)
         {
-            try { nvlink.NVClose(); } catch { }
+            try
+            {
+                if (linkType == "jra")
+                    link.JVClose();
+                else
+                    link.NVClose();
+            }
+            catch { }
         }
         return new { status = "ok", message = "bye" };
     }
