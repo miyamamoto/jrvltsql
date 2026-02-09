@@ -2204,6 +2204,20 @@ SCHEMAS = {
             Vote BIGINT,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi, HassoTime)
         )
+    """,
+    "NL_NC": """
+        CREATE TABLE IF NOT EXISTS NL_NC (
+            RecordSpec TEXT,
+            DataKubun TEXT,
+            MakeDate TEXT,
+            JyoCD TEXT,
+            JyoName TEXT,
+            JyoName_Ryaku TEXT,
+            JyoName_Eng TEXT,
+            Address TEXT,
+            TelNum TEXT,
+            PRIMARY KEY (JyoCD)
+        )
     """
 }
 
