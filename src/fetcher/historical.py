@@ -181,37 +181,8 @@ class HistoricalFetcher(BaseFetcher):
                         self._wait_for_download(download_task_id)
                         break  # Download succeeded
                     except FetcherError as dl_err:
-                        if ("-502" in str(dl_err) or "-503" in str(dl_err)) and open_attempt < max_open_retries - 1:
-                            logger.warning(
-                                "Download failed, performing full COM restart (kmy-keiba style)",
-                                attempt=open_attempt + 1,
-                                max_retries=max_open_retries,
-                                error=str(dl_err),
-                            )
-                            if self.progress_display:
-                                self.progress_display.print_warning(
-                                    f"-502エラー: COM再初期化リトライ ({open_attempt + 2}/{max_open_retries})"
-                                )
-                            # Full restart: Close → Reinitialize COM → Init → Open
-                            try:
-                                self.jvlink.jv_close()
-                            except Exception:
-                                pass
-                            import time as _time
-                            _time.sleep(3)
-                            # Reinitialize COM object (like kmy-keiba's RestartProgram)
-                            if hasattr(self.jvlink, 'reinitialize_com'):
-                                try:
-                                    self.jvlink.reinitialize_com()
-                                except Exception as reinit_err:
-                                    logger.warning("COM reinit failed, trying anyway", error=str(reinit_err))
-                            _time.sleep(2)
-                            # Re-initialize
-                            try:
-                                self.jvlink.jv_init()
-                            except Exception as init_err:
-                                logger.warning("Re-init failed", error=str(init_err))
-                            continue
+                        # -502/-503: Don't retry with COM reinit — it rarely helps and
+                        # causes Win32 crashes. Let _fetch_nar_daily skip the day instead.
                         raise
                 else:
                     break  # No download needed
@@ -454,13 +425,14 @@ class HistoricalFetcher(BaseFetcher):
         yield from self.fetch(data_spec, from_date, to_date, option)
 
     def _wait_for_download(
-        self, download_task_id: Optional[int] = None, timeout: int = 1800, interval: float = 0.5
+        self, download_task_id: Optional[int] = None, timeout: int = 300, interval: float = 0.5
     ):
         """Wait for JV-Link download to complete.
 
         Args:
             download_task_id: Progress task ID for download (optional)
-            timeout: Maximum wait time in seconds (default: 1800 = 30 minutes, increased for large data specs)
+            timeout: Maximum wait time in seconds (default: 300 = 5 minutes).
+                     Reduced from 1800s to prevent long hangs on -502 errors.
             interval: Status check interval in seconds (default: 0.5)
 
         Raises:
@@ -469,7 +441,7 @@ class HistoricalFetcher(BaseFetcher):
         start_time = time.time()
         last_status = None
         retry_count = 0
-        max_retries = 5  # Maximum retries for temporary errors (reduced: -502 rarely resolves with retry)
+        max_retries = 2  # Maximum retries for temporary errors (reduced from 5: -502 rarely resolves with retry)
 
         # Retryable error codes (temporary errors that may resolve)
         # -201: Database error (might be busy)
