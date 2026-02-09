@@ -426,6 +426,25 @@ class NVLinkWrapper:
             # -303: Licence key not set (利用キー未設定)
             # -5xx: Download/server errors
 
+            # -202: Already open — close and retry once
+            # kmy-keiba handles this by tracking consecutive AlreadyOpen errors
+            # and eventually disposing the COM object. We simply close and retry.
+            if result == -202:
+                logger.warning("NVOpen returned -202 (AlreadyOpen), calling NVClose and retrying")
+                try:
+                    self._nvlink.NVClose()
+                except Exception:
+                    pass
+                self._is_open = False
+                # Retry NVOpen
+                nv_result = self._nvlink.NVOpen(data_spec, int(fromtime), option, 0, 0, '')
+                if isinstance(nv_result, tuple) and len(nv_result) == 4:
+                    result, read_count, download_count, last_file_timestamp = nv_result
+                else:
+                    raise NVLinkError(f"NVOpen retry failed: unexpected return {nv_result}")
+                if result == -202:
+                    raise NVLinkError("NVOpen failed: stream still open after NVClose", error_code=-202)
+
             # Check for authentication errors first (-301, -302, -303)
             if result in (-301, -302, -303):
                 if result == -301:
@@ -874,11 +893,16 @@ class NVLinkWrapper:
             >>> wrapper.nv_close()
         """
         try:
-            result = int(self._nvlink.NVClose())
+            try:
+                result = int(self._nvlink.NVClose())
+            except Exception:
+                # Treat close failure as success (idempotent close)
+                result = 0
             self._is_open = False
-            logger.info("NV-Link stream closed")
+            logger.info("NV-Link stream closed", result=result)
             return result
         except Exception as e:
+            self._is_open = False
             raise NVLinkError(f"NVClose failed: {e}")
 
     def nv_status(self) -> int:
