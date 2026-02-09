@@ -79,7 +79,7 @@ class TestNarOption2Fallback:
         def mock_fetch(data_spec, from_date, to_date, option=1):
             call_log.append((from_date, option))
             raise FetcherError("Download failed with status code: -502")
-            yield  # noqa: make generator
+            yield  # noqa: F841 - make generator
 
         nar_fetcher.fetch = mock_fetch
         results = list(nar_fetcher._fetch_nar_daily("RACE", "20250101", "20250101", 2))

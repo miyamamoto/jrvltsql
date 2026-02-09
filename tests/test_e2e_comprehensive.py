@@ -7,11 +7,11 @@ Tests data storage across:
 - PostgreSQL (if available)
 
 Schema Status:
-- Total defined: 64 tables (38 NL_* + 20 RT_* + 6 TS_*)
+- Total defined: 68 tables (42 NL_* + 20 RT_* + 6 TS_*)
 - All tables should be created successfully with the current schema
 
 Note: The schema has been fully implemented with proper SQL syntax.
-All 64 tables should create successfully across all database backends.
+All 68 tables should create successfully across all database backends.
 DuckDB is not supported (32-bit Python required for JV-Link, DuckDB doesn't support 32-bit).
 """
 
@@ -34,16 +34,16 @@ except ImportError:
 
 
 class TestAllTablesCreation(unittest.TestCase):
-    """Test that all 64 tables can be created in all databases."""
+    """Test that all 68 tables can be created in all databases."""
 
     def test_schema_count(self):
-        """Verify we have exactly 58 schemas (38 NL + 20 RT)."""
+        """Verify we have exactly 58 schemas (42 NL + 20 RT)."""
         nl_tables = [name for name in SCHEMAS.keys() if name.startswith('NL_')]
         rt_tables = [name for name in SCHEMAS.keys() if name.startswith('RT_')]
 
-        self.assertEqual(len(nl_tables), 38, "Should have 38 NL_* tables")
+        self.assertEqual(len(nl_tables), 42, "Should have 42 NL_* tables")
         self.assertEqual(len(rt_tables), 20, "Should have 20 RT_* tables")
-        self.assertEqual(len(SCHEMAS), 64, "Should have 64 total tables")
+        self.assertEqual(len(SCHEMAS), 68, "Should have 64 total tables")
 
     def test_realtime_tables_subset(self):
         """Verify RT tables are only for real-time record types."""
@@ -77,7 +77,7 @@ class TestSQLiteAllTables(unittest.TestCase):
         self.temp_dir.cleanup()
 
     def test_create_all_nl_tables(self):
-        """Test creating NL_* tables (all 38 should succeed)."""
+        """Test creating NL_* tables (all 42 should succeed)."""
         nl_tables = [name for name in SCHEMAS.keys() if name.startswith('NL_')]
 
         created_count = 0
@@ -90,7 +90,7 @@ class TestSQLiteAllTables(unittest.TestCase):
                 failed_tables.append(table_name)
 
         # All 38 NL tables should create successfully
-        self.assertEqual(created_count, 38, f"Should create all 38 NL_* tables, failed: {failed_tables}")
+        self.assertEqual(created_count, 42, f"Should create all 42 NL_* tables, failed: {failed_tables}")
 
         # Verify all tables exist
         for table_name in nl_tables:
@@ -130,8 +130,8 @@ class TestSQLiteAllTables(unittest.TestCase):
         failed = sum(1 for success in results.values() if not success)
         failed_tables = [name for name, success in results.items() if not success]
 
-        # All 64 tables should create successfully (38 NL + 20 RT)
-        self.assertEqual(successful, 64, f"Should create all 64 tables, failed: {failed_tables}")
+        # All 68 tables should create successfully (42 NL + 20 RT)
+        self.assertEqual(successful, 68, f"Should create all 68 tables, failed: {failed_tables}")
         self.assertEqual(failed, 0, "Should have 0 failing tables")
 
         # Verify all tables exist
@@ -219,7 +219,7 @@ class TestPostgreSQLAllTables(unittest.TestCase):
 
         successful = sum(1 for success in results.values() if success)
         failed_tables = [name for name, success in results.items() if not success]
-        self.assertEqual(successful, 64, f"PostgreSQL: Should create all 64 tables, failed: {failed_tables}")
+        self.assertEqual(successful, 68, f"PostgreSQL: Should create all 68 tables, failed: {failed_tables}")
 
         # Verify all tables exist
         for table_name, success in results.items():

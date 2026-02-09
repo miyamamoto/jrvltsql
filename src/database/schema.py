@@ -2218,6 +2218,58 @@ SCHEMAS = {
             TelNum TEXT,
             PRIMARY KEY (JyoCD)
         )
+    """,
+    "NL_HA": """
+        CREATE TABLE IF NOT EXISTS NL_HA (
+            RecordSpec TEXT,
+            DataKubun TEXT,
+            MakeDate TEXT,
+            KaisaiDate TEXT,
+            JyoCD TEXT,
+            Kaiji TEXT,
+            Nichiji TEXT,
+            RaceNum TEXT,
+            TorokuTosu TEXT,
+            SyussoTosu TEXT,
+            FukuFlag TEXT,
+            WakurenFlag TEXT,
+            UmarenFlag TEXT,
+            WideFlag TEXT,
+            Utan TEXT,
+            SanrenpukuFlag TEXT,
+            SanrentanFlag TEXT,
+            PayKumi TEXT,
+            PayVal INTEGER,
+            PRIMARY KEY (KaisaiDate, JyoCD, Kaiji, Nichiji, RaceNum, PayKumi)
+        )
+    """,
+    "NL_NU": """
+        CREATE TABLE IF NOT EXISTS NL_NU (
+            RecordSpec TEXT,
+            UmaID TEXT,
+            TorokuNum TEXT,
+            Reserved TEXT,
+            BirthDate TEXT,
+            Bamei TEXT,
+            PRIMARY KEY (UmaID)
+        )
+    """,
+    "NL_OA": """
+        CREATE TABLE IF NOT EXISTS NL_OA (
+            RecordSpec TEXT,
+            DataKubun TEXT,
+            MakeDate TEXT,
+            KaisaiDate TEXT,
+            JyoCD TEXT,
+            Kaiji TEXT,
+            Nichiji TEXT,
+            RaceNum TEXT,
+            OddsType TEXT,
+            Kumi TEXT,
+            Odds REAL,
+            Ninki INTEGER,
+            PRIMARY KEY (KaisaiDate, JyoCD, Kaiji, Nichiji, RaceNum, OddsType, Kumi)
+        )
     """
 }
 
