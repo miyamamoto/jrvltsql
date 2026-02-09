@@ -238,6 +238,7 @@ class DataImporter:
             'レコード種別ID',
             '_raw_data',
             '_parse_errors',
+            'RecordDelimiter',
         }
 
         return {k: v for k, v in record.items() if k not in metadata_fields and not k.startswith('_')}
