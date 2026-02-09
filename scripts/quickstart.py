@@ -2446,6 +2446,16 @@ class QuickstartRunner:
         ("DIFN", "蓄積系ソフト用蓄積情報", 1),
     ]
 
+    # NAR用簡易モード: DIFNを先に取得してからRACE
+    # NV-LinkサーバーはUmaConnでデータダウンロード未完了のスペックに対して
+    # option=1（セットアップ）で-502を返すことがある。
+    # DIFNは蓄積系で別メカニズムのため成功しやすい。
+    # RACEはoption=2（差分モード）を使用して-502を回避する。
+    NAR_SIMPLE_SPECS = [
+        ("DIFN", "蓄積系ソフト用蓄積情報", 1),
+        ("RACE", "レース情報", 2),
+    ]
+
     # 標準モード: 簡易 + 付加情報 (option=1)
     STANDARD_SPECS = [
         ("TOKU", "特別登録馬", 1),
@@ -2690,10 +2700,18 @@ class QuickstartRunner:
         return not has_error
 
     def _get_specs_for_mode(self) -> list:
-        """モードに応じたスペックリストを取得（蓄積系のみ）"""
+        """モードに応じたスペックリストを取得（蓄積系のみ）
+
+        NARデータソースの場合、簡易モードではNAR_SIMPLE_SPECSを使用する。
+        これによりDIFNを先に取得し、RACEはoption=2（差分モード）で取得する。
+        """
         mode = self.settings.get('mode', 'simple')
+        data_source = self.settings.get('data_source', 'jra')
         if mode == 'simple':
-            specs = self.SIMPLE_SPECS.copy()
+            if data_source == 'nar':
+                specs = self.NAR_SIMPLE_SPECS.copy()
+            else:
+                specs = self.SIMPLE_SPECS.copy()
         elif mode == 'standard':
             specs = self.STANDARD_SPECS.copy()
         elif mode == 'update':

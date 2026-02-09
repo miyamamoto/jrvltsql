@@ -334,18 +334,45 @@ class HistoricalFetcher(BaseFetcher):
                 except FetcherError as e:
                     error_str = str(e)
                     if "-502" in error_str or "-503" in error_str:
-                        consecutive_502_count += 1
-                        skipped_dates.append(day_str)
-                        logger.warning(
-                            f"-502エラーで{day_str}をスキップします "
-                            f"(連続{consecutive_502_count}日目)",
-                            data_spec=data_spec,
-                            date=day_str,
-                        )
-                        if self.progress_display:
-                            self.progress_display.print_warning(
-                                f"-502: {day_str}をスキップ (連続{consecutive_502_count}日目)"
+                        # option=1で-502が発生した場合、option=2（差分モード）でフォールバック
+                        fallback_succeeded = False
+                        if option == 1:
+                            logger.info(
+                                f"-502エラー発生、option=2（差分モード）で再試行します",
+                                data_spec=data_spec,
+                                date=day_str,
                             )
+                            if self.progress_display:
+                                self.progress_display.print_warning(
+                                    f"-502: {day_str} option=2で再試行中..."
+                                )
+                            try:
+                                yield from self.fetch(data_spec, day_str, day_str, 2)
+                                consecutive_502_count = 0  # Reset on success
+                                fallback_succeeded = True
+                            except FetcherError as e2:
+                                error_str2 = str(e2)
+                                if "-502" not in error_str2 and "-503" not in error_str2:
+                                    raise  # -502以外のエラーは再送出
+                                logger.warning(
+                                    f"option=2でも-502エラー、{day_str}をスキップします",
+                                    data_spec=data_spec,
+                                    date=day_str,
+                                )
+
+                        if not fallback_succeeded:
+                            consecutive_502_count += 1
+                            skipped_dates.append(day_str)
+                            logger.warning(
+                                f"-502エラーで{day_str}をスキップします "
+                                f"(連続{consecutive_502_count}日目)",
+                                data_spec=data_spec,
+                                date=day_str,
+                            )
+                            if self.progress_display:
+                                self.progress_display.print_warning(
+                                    f"-502: {day_str}をスキップ (連続{consecutive_502_count}日目)"
+                                )
                     else:
                         raise  # -502以外のエラーは再送出
 
