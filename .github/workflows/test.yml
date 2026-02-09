@@ -8,20 +8,15 @@ on:
 
 jobs:
   test:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-        python-version: ['3.12']
+    runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set up Python ${{ matrix.python-version }}
+    - name: Set up Python 3.12
       uses: actions/setup-python@v5
       with:
-        python-version: ${{ matrix.python-version }}
+        python-version: '3.12'
         cache: 'pip'
 
     - name: Install dependencies
@@ -29,17 +24,11 @@ jobs:
         python -m pip install --upgrade pip
         pip install -e ".[dev,postgres]"
 
-    - name: Run tests (cross-platform)
+    - name: Run tests
       run: |
-        pytest tests/test_parsers.py tests/test_parser.py -v --cov=src --cov-report=xml --cov-report=term
-
-    - name: Run comprehensive tests (Windows only)
-      if: matrix.os == 'windows-latest'
-      run: |
-        pytest tests/test_comprehensive_integration.py tests/test_realtime.py tests/test_error_scenarios.py -v --cov=src --cov-report=xml --cov-report=term --cov-append
+        pytest tests/test_parsers.py tests/test_parser.py tests/test_comprehensive_integration.py tests/test_realtime.py tests/test_error_scenarios.py -v --cov=src --cov-report=xml --cov-report=term
 
     - name: Upload coverage to Codecov
-      if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
       uses: codecov/codecov-action@v4
       with:
         file: ./coverage.xml
