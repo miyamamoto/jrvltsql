@@ -53,9 +53,20 @@ try:
     from rich.console import Console
     from rich.panel import Panel
     from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
-    from rich.prompt import Prompt, Confirm, IntPrompt
+    from rich.prompt import Prompt as _Prompt, Confirm as _Confirm, IntPrompt as _IntPrompt
     from rich.table import Table
     from rich import box
+
+    class Prompt(_Prompt):
+        illegal_choice_message = "[prompt.invalid.choice]選択肢から選んでください"
+
+    class IntPrompt(_IntPrompt):
+        illegal_choice_message = "[prompt.invalid.choice]選択肢から選んでください"
+        validate_error_message = "[prompt.invalid]数値を入力してください"
+
+    class Confirm(_Confirm):
+        validate_error_message = "[prompt.invalid]Y/Nで入力してください"
+
     RICH_AVAILABLE = True
 except ImportError:
     RICH_AVAILABLE = False
@@ -1100,8 +1111,7 @@ def _interactive_setup_rich() -> dict:
             pg_user = Prompt.ask("ユーザー名", default="postgres")
 
             # パスワード入力（マスク表示、デフォルトpostgres）
-            from rich.prompt import Prompt as RichPrompt
-            pg_password = RichPrompt.ask("パスワード", default="postgres", password=True)
+            pg_password = Prompt.ask("パスワード", default="postgres", password=True)
 
             console.print()
             console.print("[cyan]データベース確認中...[/cyan]")
