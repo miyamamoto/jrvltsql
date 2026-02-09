@@ -300,7 +300,7 @@ class HistoricalFetcher(BaseFetcher):
         day_num = 0
         skipped_dates: list[str] = []
         consecutive_502_count = 0
-        max_consecutive_502 = 3  # 3日連続-502で残りをスキップ
+        max_consecutive_502 = 5  # 5日連続-502で残りをスキップ（ウェイト有り）
 
         try:
             self._skip_cleanup = True
@@ -426,9 +426,11 @@ class HistoricalFetcher(BaseFetcher):
                         if not fallback_succeeded:
                             consecutive_502_count += 1
                             skipped_dates.append(day_str)
+                            # エラー後は長めにバックオフ（サーバー回復待ち）
+                            backoff = min(5.0 * consecutive_502_count, 30.0)
                             logger.warning(
                                 f"{error_type}で{day_str}をスキップします "
-                                f"(連続{consecutive_502_count}日目)",
+                                f"(連続{consecutive_502_count}日目, {backoff}秒待機)",
                                 data_spec=data_spec,
                                 date=day_str,
                             )
@@ -436,10 +438,18 @@ class HistoricalFetcher(BaseFetcher):
                                 self.progress_display.print_warning(
                                     f"{error_type}: {day_str}をスキップ (連続{consecutive_502_count}日目)"
                                 )
+                            time.sleep(backoff)
                     else:
                         raise  # サーバーエラー/タイムアウト以外は再送出
 
                 current += timedelta(days=1)
+
+                # NARサーバーへの負荷軽減: 日次チャンク間にウェイトを入れる
+                # 連続リクエストはサーバー側でレートリミット(-502)の原因になる
+                if current <= end:
+                    delay = 2.0  # 2秒間隔
+                    logger.debug("NAR daily chunk delay", delay_seconds=delay)
+                    time.sleep(delay)
         finally:
             self._skip_cleanup = False
 

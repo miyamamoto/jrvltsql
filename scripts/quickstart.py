@@ -2495,6 +2495,19 @@ class QuickstartRunner:
         ("RACE", "レース情報", 2),
     ]
 
+    # NAR用標準/フルモード: NV-Linkで対応するスペックのみ
+    # NV-LinkはRACEとDIFNのみ対応。TOKU/BLDN/MING/SLOP/WOOD/YSCH/HOSN/HOYU/COMM等は
+    # JRA-VAN DataLab固有で、NV-Linkでは-116(未提供データ種別)が返される。
+    NAR_STANDARD_SPECS = [
+        ("DIFN", "蓄積系ソフト用蓄積情報", 1),
+        ("RACE", "レース情報", 2),
+    ]
+
+    NAR_FULL_SPECS = [
+        ("DIFN", "蓄積系ソフト用蓄積情報", 1),
+        ("RACE", "レース情報", 2),
+    ]
+
     # 標準モード: 簡易 + 付加情報 (option=1)
     STANDARD_SPECS = [
         ("TOKU", "特別登録馬", 1),
@@ -2752,12 +2765,21 @@ class QuickstartRunner:
             else:
                 specs = self.SIMPLE_SPECS.copy()
         elif mode == 'standard':
-            specs = self.STANDARD_SPECS.copy()
+            if data_source == 'nar':
+                specs = self.NAR_STANDARD_SPECS.copy()
+            else:
+                specs = self.STANDARD_SPECS.copy()
         elif mode == 'update':
             # 更新モード: UPDATE_SPECSを使用（option=2で今週データのみ）
-            specs = self.UPDATE_SPECS.copy()
+            if data_source == 'nar':
+                specs = self.NAR_SIMPLE_SPECS.copy()  # NARのupdateはsimpleと同じ
+            else:
+                specs = self.UPDATE_SPECS.copy()
         else:  # full
-            specs = self.FULL_SPECS.copy()
+            if data_source == 'nar':
+                specs = self.NAR_FULL_SPECS.copy()
+            else:
+                specs = self.FULL_SPECS.copy()
 
         # --no-odds: オッズ系スペック(O1-O6)を除外
         if self.settings.get('no_odds'):

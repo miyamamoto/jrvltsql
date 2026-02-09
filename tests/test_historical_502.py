@@ -100,10 +100,11 @@ class TestFetchNarDaily502Logic:
         assert len(results) == 2
         assert fetcher._nar_skipped_dates == ["20240101", "20240102", "20240104"]
 
-    def test_three_consecutive_502_aborts_remaining(self, fetcher):
-        """3 consecutive -502 days → all remaining days skipped without fetch.
+    def test_five_consecutive_502_aborts_remaining(self, fetcher):
+        """5 consecutive -502 days → all remaining days skipped without fetch.
 
-        With option=2 fallback, each day tries option=1 then option=2 (6 calls for 3 days).
+        With option=2 fallback, each day tries option=1 then option=2 (10 calls for 5 days).
+        max_consecutive_502 = 5 (with rate-limiting delays between requests).
         """
         effects = [
             FetcherError("-502"),  # day1 option=1
@@ -112,23 +113,29 @@ class TestFetchNarDaily502Logic:
             FetcherError("-502"),  # day2 option=2
             FetcherError("-502"),  # day3 option=1
             FetcherError("-502"),  # day3 option=2
-            # Days 4-5 should never be called
-            iter([{"day": "4"}]),
-            iter([{"day": "5"}]),
+            FetcherError("-502"),  # day4 option=1
+            FetcherError("-502"),  # day4 option=2
+            FetcherError("-502"),  # day5 option=1
+            FetcherError("-502"),  # day5 option=2
+            # Days 6-7 should never be called
+            iter([{"day": "6"}]),
+            iter([{"day": "7"}]),
         ]
-        results, mock = self._run_daily(fetcher, "20240101", "20240105", effects)
+        results, mock = self._run_daily(fetcher, "20240101", "20240107", effects)
         assert len(results) == 0
-        # 3 days × 2 attempts (option=1 + option=2 fallback) = 6 calls
-        assert mock.call_count == 6
-        # All 5 days skipped (3 failed + 2 remaining)
+        # 5 days × 2 attempts (option=1 + option=2 fallback) = 10 calls
+        assert mock.call_count == 10
+        # All 7 days skipped (5 failed + 2 remaining)
         assert fetcher._nar_skipped_dates == [
-            "20240101", "20240102", "20240103", "20240104", "20240105"
+            "20240101", "20240102", "20240103", "20240104", "20240105",
+            "20240106", "20240107",
         ]
 
     def test_503_also_counted(self, fetcher):
         """-503 errors are treated same as -502.
 
         With option=2 fallback, each day tries option=1 then option=2.
+        max_consecutive_502 = 5.
         """
         effects = [
             FetcherError("-503 error"),  # day1 option=1
@@ -137,10 +144,14 @@ class TestFetchNarDaily502Logic:
             FetcherError("-502 error"),  # day2 option=2
             FetcherError("-503 error"),  # day3 option=1
             FetcherError("-503 error"),  # day3 option=2
+            FetcherError("-502 error"),  # day4 option=1
+            FetcherError("-502 error"),  # day4 option=2
+            FetcherError("-503 error"),  # day5 option=1
+            FetcherError("-503 error"),  # day5 option=2
         ]
-        results, mock = self._run_daily(fetcher, "20240101", "20240105", effects)
-        assert mock.call_count == 6  # 3 days × 2 attempts
-        assert len(fetcher._nar_skipped_dates) == 5  # 3 failed + 2 remaining
+        results, mock = self._run_daily(fetcher, "20240101", "20240107", effects)
+        assert mock.call_count == 10  # 5 days × 2 attempts
+        assert len(fetcher._nar_skipped_dates) == 7  # 5 failed + 2 remaining
 
     def test_non_502_error_propagates(self, fetcher):
         """Non-502 errors are re-raised immediately."""
