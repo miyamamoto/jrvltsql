@@ -102,7 +102,7 @@ class NVLinkBridge:
         sid: str = "UNKNOWN",
         initialization_key: Optional[str] = None,
         bridge_path: Optional[Union[str, Path]] = None,
-        timeout: float = 30.0,
+        timeout: float = 600.0,
     ):
         """Initialize NVLinkBridge.
 
@@ -295,7 +295,7 @@ class NVLinkBridge:
                 "fromtime": fromtime,
                 "option": option,
             },
-            timeout=120.0,  # Open can take a while with downloads
+            timeout=600.0,  # Open can take a while with downloads
         )
 
         code = response.get("code", -1)
@@ -315,7 +315,7 @@ class NVLinkBridge:
                     "fromtime": fromtime,
                     "option": option,
                 },
-                timeout=120.0,
+                timeout=600.0,
             )
             code = response.get("code", -1)
             read_count = response.get("readcount", 0)
