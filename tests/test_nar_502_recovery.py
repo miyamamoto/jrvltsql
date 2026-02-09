@@ -116,27 +116,26 @@ class TestNar502SkipLogic:
         assert fetcher._nar_skipped_dates == ["20240102"]
 
     def test_consecutive_502_aborts_remaining(self):
-        """3 consecutive -502 days causes remaining days to be skipped."""
+        """5 consecutive -502 days causes remaining days to be skipped."""
         fetcher = self._make_fetcher()
         call_dates = []
 
         def mock_fetch(data_spec, from_date, to_date, option):
             call_dates.append(from_date)
-            if from_date in ("20240102", "20240103", "20240104"):
+            if from_date in ("20240102", "20240103", "20240104", "20240105", "20240106"):
                 raise FetcherError("Download failed with status code: -502")
             return iter([])
 
         with patch.object(fetcher, 'fetch', side_effect=mock_fetch):
-            results = list(fetcher._fetch_nar_daily("RACE", "20240101", "20240107", 1))
+            results = list(fetcher._fetch_nar_daily("RACE", "20240101", "20240109", 1))
 
-        # Day 1 succeeds, days 2-4 fail with -502
-        # After 3 consecutive failures, days 5-7 are auto-skipped
+        # Day 1 succeeds, days 2-6 fail with -502
+        # After 5 consecutive failures, days 7-9 are auto-skipped
         assert "20240101" in call_dates
         assert "20240102" in call_dates
-        assert "20240103" in call_dates
-        assert "20240104" in call_dates
-        # Days 5-7 should NOT be attempted (auto-skipped)
-        assert "20240105" not in call_dates
+        assert "20240106" in call_dates
+        # Days 7-9 should NOT be attempted (auto-skipped)
+        assert "20240107" not in call_dates
 
         # All skipped dates should be recorded
         assert "20240102" in fetcher._nar_skipped_dates
