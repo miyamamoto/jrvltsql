@@ -141,39 +141,20 @@ class Program
         var dataspec = root.GetProperty("dataspec").GetString() ?? "";
         var fromtime = root.GetProperty("fromtime").GetString() ?? "";
         var option = root.TryGetProperty("option", out var o) ? o.GetInt32() : 1;
-        var timeoutSec = root.TryGetProperty("timeout", out var t) ? t.GetInt32() : 300;
-
         int readcount = 0;
         int downloadcount = 0;
         string lastfiletimestamp = "";
-        int result = -1;
+        int result;
 
-        // NVOpen/JVOpen can block for minutes during download.
-        // Run in a background thread with timeout to prevent hanging.
-        var openTask = Task.Run(() =>
+        if (linkType == "jra")
         {
-            if (linkType == "jra")
-            {
-                result = link.JVOpen(dataspec, fromtime, option, ref readcount, ref downloadcount, out lastfiletimestamp);
-            }
-            else
-            {
-                result = link.NVOpen(dataspec, int.Parse(fromtime), option, ref readcount, ref downloadcount, out lastfiletimestamp);
-            }
-        });
-
-        if (!openTask.Wait(TimeSpan.FromSeconds(timeoutSec)))
-        {
-            // Timeout — try to cancel and return error
-            try { if (linkType == "jra") link.JVCancel(); else link.NVCancel(); } catch { }
-            return new { status = "error", code = -502, error = $"Open timeout ({timeoutSec}s)", readcount = 0, downloadcount = 0, lastfiletimestamp = "" };
+            result = link.JVOpen(dataspec, fromtime, option, ref readcount, ref downloadcount, out lastfiletimestamp);
         }
-
-        // Check for task exception
-        if (openTask.IsFaulted)
+        else
         {
-            var ex = openTask.Exception?.InnerException ?? openTask.Exception;
-            return new { status = "error", code = -1, error = ex?.Message ?? "Unknown error", readcount = 0, downloadcount = 0, lastfiletimestamp = "" };
+            // NV-Link expects fromtime as integer (YYYYMMDDhhmmss format)
+            // Use long.Parse since 14-digit timestamps overflow int32
+            result = link.NVOpen(dataspec, long.Parse(fromtime), option, ref readcount, ref downloadcount, out lastfiletimestamp);
         }
 
         return new
