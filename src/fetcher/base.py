@@ -81,7 +81,16 @@ class BaseFetcher(ABC):
                 from src.nvlink.wrapper import NVLinkWrapper
                 self.jvlink = NVLinkWrapper(sid, initialization_key=initialization_key)
         else:
-            self.jvlink = JVLinkWrapper(sid)
+            # Prefer C# JVLinkBridge over Python win32com for JRA operations.
+            # Eliminates 32-bit Python requirement and COM instability.
+            from src.nvlink.bridge import find_bridge_executable
+            bridge_exe = find_bridge_executable()
+            if bridge_exe is not None:
+                from src.jvlink.bridge import JVLinkBridge
+                logger.info("Using JVLinkBridge (C#) for JRA", bridge_path=str(bridge_exe))
+                self.jvlink = JVLinkBridge(sid, bridge_path=bridge_exe)
+            else:
+                self.jvlink = JVLinkWrapper(sid)
 
         self.parser_factory = ParserFactory()
         self._records_fetched = 0

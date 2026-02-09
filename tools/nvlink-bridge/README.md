@@ -1,13 +1,13 @@
-# NVLinkBridge
+# JV/NV-LinkBridge
 
-C# console app that wraps the NV-Link (地方競馬DATA) COM API.
-Communicates with jrvltsql's Python code via stdin/stdout JSON protocol.
+C# console app that wraps both JV-Link (JRA/中央競馬) and NV-Link (NAR/地方競馬)
+COM APIs. Communicates with jrvltsql's Python code via stdin/stdout JSON protocol.
 
 ## Why?
 
-NV-Link is a Delphi-built COM component. Python's `win32com` has VARIANT BYREF
-marshaling issues that cause `E_UNEXPECTED` errors during NVGets/NVRead.
-C# has native COM interop that works correctly (same approach as kmy-keiba).
+- **64-bit Python対応**: C# が COM を全部やるので、Python のビット数制約なし
+- **COM安定性**: Python win32com の VARIANT BYREF マーシャリング問題を回避
+- **統合ブリッジ**: JRA/NAR 両方を1つの実行ファイルで対応
 
 ## Build
 
@@ -21,29 +21,39 @@ Output: `bin/x86/Release/net8.0-windows/NVLinkBridge.exe`
 
 ## Usage
 
-The bridge reads JSON commands from stdin and writes JSON responses to stdout.
-
 ### Commands
 
 | Command | Fields | Description |
 |---------|--------|-------------|
-| `init` | `key` (optional) | Initialize NV-Link COM |
+| `init` | `type` ("jra"/"nar"), `key` | Initialize COM |
 | `open` | `dataspec`, `fromtime`, `option` | Open data stream |
-| `gets` | `size` (optional, default 110000) | Read record (byte array) |
-| `read` | `size` (optional) | Read record (string) |
+| `gets` | `size` (NAR only) | Read record (byte array) |
+| `read` | `size` | Read record (string) |
 | `status` | — | Get download progress |
 | `skip` | — | Skip current record |
+| `filedelete` | `filename` | Delete cached file |
+| `rtopen` | `dataspec`, `key` | Open realtime stream |
 | `close` | — | Close data stream |
 | `quit` | — | Exit process |
 
-### Example
+### Example (JRA)
 
 ```json
-{"cmd":"init","key":"UNKNOWN"}
-→ {"status":"ok","hwnd":65548}
+{"cmd":"init","type":"jra","key":"UNKNOWN"}
+→ {"status":"ok","hwnd":65548,"linkType":"jra"}
 
 {"cmd":"open","dataspec":"RACE","fromtime":"20260201000000","option":1}
-→ {"status":"ok","code":0,"readcount":11,"downloadcount":0,"lastfiletimestamp":""}
+→ {"status":"ok","code":0,"readcount":500,"downloadcount":0,...}
+
+{"cmd":"read","size":50000}
+→ {"status":"ok","code":1340,"data":"<base64>","filename":"...","size":1340}
+```
+
+### Example (NAR)
+
+```json
+{"cmd":"init","type":"nar","key":"UNKNOWN"}
+→ {"status":"ok","hwnd":65548,"linkType":"nar"}
 
 {"cmd":"gets","size":110000}
 → {"status":"ok","code":28955,"data":"<base64>","filename":"H1NV...nvd","size":28955}
@@ -51,5 +61,5 @@ The bridge reads JSON commands from stdin and writes JSON responses to stdout.
 
 ## Note
 
-NV-Link COM requires GUI context (shell notification icon). When running from SSH,
+Both JV-Link and NV-Link COM require GUI context. When running from SSH,
 use `schtasks` to execute in the interactive console session.
