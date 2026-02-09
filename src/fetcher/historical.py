@@ -334,18 +334,26 @@ class HistoricalFetcher(BaseFetcher):
                     consecutive_502_count = 0  # Reset on success
                 except FetcherError as e:
                     error_str = str(e)
-                    if "-502" in error_str or "-503" in error_str:
-                        # option=1で-502が発生した場合、option=2（差分モード）でフォールバック
+                    # NAR server errors that should be retried/skipped:
+                    # -502/-503: Download failures
+                    # -421: Invalid server response (temporary server issue)
+                    # -431: Invalid server application response
+                    # "timeout": Download timeout
+                    is_server_error = any(code in error_str for code in ["-502", "-503", "-421", "-431"])
+                    is_timeout = "timeout" in error_str.lower()
+                    if is_server_error or is_timeout:
+                        error_type = "timeout" if is_timeout else "server error"
+                        # option=1でサーバーエラーが発生した場合、option=2（差分モード）でフォールバック
                         fallback_succeeded = False
-                        if option == 1:
+                        if option == 1 and is_server_error:
                             logger.info(
-                                f"-502エラー発生、option=2（差分モード）で再試行します",
+                                f"{error_type}発生、option=2（差分モード）で再試行します",
                                 data_spec=data_spec,
                                 date=day_str,
                             )
                             if self.progress_display:
                                 self.progress_display.print_warning(
-                                    f"-502: {day_str} option=2で再試行中..."
+                                    f"{error_type}: {day_str} option=2で再試行中..."
                                 )
                             try:
                                 yield from self.fetch(data_spec, day_str, day_str, 2)
@@ -353,10 +361,12 @@ class HistoricalFetcher(BaseFetcher):
                                 fallback_succeeded = True
                             except FetcherError as e2:
                                 error_str2 = str(e2)
-                                if "-502" not in error_str2 and "-503" not in error_str2:
-                                    raise  # -502以外のエラーは再送出
+                                is_server_error2 = any(code in error_str2 for code in ["-502", "-503", "-421", "-431"])
+                                is_timeout2 = "timeout" in error_str2.lower()
+                                if not is_server_error2 and not is_timeout2:
+                                    raise  # サーバーエラー/タイムアウト以外は再送出
                                 logger.warning(
-                                    f"option=2でも-502エラー、{day_str}をスキップします",
+                                    f"option=2でも{error_type}、{day_str}をスキップします",
                                     data_spec=data_spec,
                                     date=day_str,
                                 )
@@ -365,17 +375,17 @@ class HistoricalFetcher(BaseFetcher):
                             consecutive_502_count += 1
                             skipped_dates.append(day_str)
                             logger.warning(
-                                f"-502エラーで{day_str}をスキップします "
+                                f"{error_type}で{day_str}をスキップします "
                                 f"(連続{consecutive_502_count}日目)",
                                 data_spec=data_spec,
                                 date=day_str,
                             )
                             if self.progress_display:
                                 self.progress_display.print_warning(
-                                    f"-502: {day_str}をスキップ (連続{consecutive_502_count}日目)"
+                                    f"{error_type}: {day_str}をスキップ (連続{consecutive_502_count}日目)"
                                 )
                     else:
-                        raise  # -502以外のエラーは再送出
+                        raise  # サーバーエラー/タイムアウト以外は再送出
 
                 current += timedelta(days=1)
         finally:
@@ -453,7 +463,7 @@ class HistoricalFetcher(BaseFetcher):
         yield from self.fetch(data_spec, from_date, to_date, option)
 
     def _wait_for_download(
-        self, download_task_id: Optional[int] = None, timeout: int = 300, interval: float = 0.5
+        self, download_task_id: Optional[int] = None, timeout: int = 600, interval: float = 0.5
     ):
         """Wait for JV-Link download to complete.
 

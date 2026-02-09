@@ -463,8 +463,8 @@ class TestFetcherNarDailyLoadTest:
         assert len(results) == 16  # 奇数日のみ成功（1,3,5,...,31 = 16日）
         assert len(fetcher._nar_skipped_dates) == 15  # 偶数日スキップ
 
-    def test_mixed_error_types(self):
-        """-502と非-502エラーの混合 → 非-502で即座に例外"""
+    def test_mixed_error_types_server_errors_skipped(self):
+        """-502とtimeoutの混合 → 両方スキップされて残りは成功"""
         fetcher = _make_fetcher()
 
         def mock_fetch(data_spec, from_date, to_date, option):
@@ -475,7 +475,21 @@ class TestFetcherNarDailyLoadTest:
             yield {"date": from_date}
 
         with patch.object(fetcher, 'fetch', side_effect=mock_fetch):
-            with pytest.raises(FetcherError, match="Connection timeout"):
+            results = list(fetcher._fetch_nar_daily("RACE", "20240101", "20240105", 1))
+        # Days 1, 4, 5 succeed; days 2 (-502) and 3 (timeout) are skipped
+        assert len(results) == 3
+
+    def test_non_server_error_raises(self):
+        """非サーバーエラー（例: パース失敗）は即座に例外"""
+        fetcher = _make_fetcher()
+
+        def mock_fetch(data_spec, from_date, to_date, option):
+            if from_date == "20240102":
+                raise FetcherError("Parse error: invalid record format")
+            yield {"date": from_date}
+
+        with patch.object(fetcher, 'fetch', side_effect=mock_fetch):
+            with pytest.raises(FetcherError, match="Parse error"):
                 list(fetcher._fetch_nar_daily("RACE", "20240101", "20240105", 1))
 
     def test_performance_daily_iteration(self):

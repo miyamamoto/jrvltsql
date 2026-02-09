@@ -41,11 +41,11 @@ class TestWaitForDownloadTimeout:
         with pytest.raises(FetcherError, match="Download timeout"):
             fetcher._wait_for_download(timeout=1, interval=0.1)
 
-    def test_default_timeout_is_300(self, fetcher):
-        """Default timeout should be 300 seconds (5 minutes), not 1800."""
+    def test_default_timeout_is_600(self, fetcher):
+        """Default timeout should be 600 seconds (10 minutes) for NAR server reliability."""
         import inspect
         sig = inspect.signature(fetcher._wait_for_download)
-        assert sig.parameters['timeout'].default == 300
+        assert sig.parameters['timeout'].default == 600
 
     def test_502_max_retries_is_2(self, fetcher):
         """_wait_for_download should retry -502 only 2 times (reduced from 5)."""
