@@ -3,6 +3,7 @@
 This module provides the base class for fetching JV-Data from JV-Link.
 """
 
+import gc
 import time
 from abc import ABC, abstractmethod
 from typing import Iterator, Optional, Union
@@ -114,6 +115,7 @@ class BaseFetcher(ABC):
         self._start_time = time.time()
         last_update_time = self._start_time
         update_interval = 2.0  # 更新間隔を増やして高速化  # Update progress every 0.5 seconds (reduced to prevent flickering)
+        last_gc_time = self._start_time  # Periodic GC to free COM buffers
 
         consecutive_downloading_errors = 0
         max_consecutive_downloading = 1000  # -3 (downloading) が連続1000回で打ち切り
@@ -203,8 +205,15 @@ class BaseFetcher(ABC):
                             error=str(e),
                         )
 
-                    # Update progress display (stats only - progress updated on file switch)
+                    # Periodic GC to free COM buffer references (every 10s).
+                    # kmy-keiba frees COM buffers with Array.Resize(ref buff, 0) after each read.
+                    # In Python, COM BSTR data may accumulate and cause E_UNEXPECTED.
                     current_time = time.time()
+                    if (current_time - last_gc_time) >= 10.0:
+                        gc.collect()
+                        last_gc_time = current_time
+
+                    # Update progress display (stats only - progress updated on file switch)
                     if (current_time - last_update_time) >= update_interval:
                         elapsed = current_time - self._start_time
                         speed = self._records_fetched / elapsed if elapsed > 0 else 0
