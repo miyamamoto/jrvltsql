@@ -133,7 +133,12 @@ class TestDatabaseConnectivityErrors(unittest.TestCase):
     def test_connect_to_nonexistent_path(self):
         """Test connecting to invalid database path."""
         # Use a path with non-existent parent directories that SQLite can't auto-create
-        invalid_path = "/nonexistent/dir/that/cannot/be/created/database.db"
+        # Use platform-appropriate invalid path
+        import sys
+        if sys.platform == "win32":
+            invalid_path = "Z:\\nonexistent\\dir\\that\\cannot\\be\\created\\database.db"
+        else:
+            invalid_path = "/nonexistent/dir/that/cannot/be/created/database.db"
 
         # Should raise error when trying to use connection
         with self.assertRaises((DatabaseError, Exception)):
