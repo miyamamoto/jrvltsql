@@ -446,8 +446,10 @@ class HistoricalFetcher(BaseFetcher):
 
                 # NARサーバーへの負荷軽減: 日次チャンク間にウェイトを入れる
                 # 連続リクエストはサーバー側でレートリミット(-502)の原因になる
+                # kmy-keiba doesn't chunk by day, but since we do, we need a small gap.
+                # Reduced from 2s: the GC + NVClose already adds ~0.5s.
                 if current <= end:
-                    delay = 2.0  # 2秒間隔
+                    delay = 1.0
                     logger.debug("NAR daily chunk delay", delay_seconds=delay)
                     time.sleep(delay)
         finally:
@@ -525,15 +527,15 @@ class HistoricalFetcher(BaseFetcher):
         yield from self.fetch(data_spec, from_date, to_date, option)
 
     def _wait_for_download(
-        self, download_task_id: Optional[int] = None, timeout: int = 600, interval: float = 0.5
+        self, download_task_id: Optional[int] = None, timeout: int = 600, interval: float = 0.08
     ):
         """Wait for JV-Link download to complete.
 
         Args:
             download_task_id: Progress task ID for download (optional)
-            timeout: Maximum wait time in seconds (default: 300 = 5 minutes).
-                     Reduced from 1800s to prevent long hangs on -502 errors.
-            interval: Status check interval in seconds (default: 0.5)
+            timeout: Maximum wait time in seconds (default: 600 = 10 minutes).
+            interval: Status check interval in seconds (default: 0.08).
+                     kmy-keiba uses 80ms (Task.Delay(80)) for download polling.
 
         Raises:
             FetcherError: If download fails or times out
@@ -542,6 +544,8 @@ class HistoricalFetcher(BaseFetcher):
         last_status = None
         retry_count = 0
         max_retries = 2  # Maximum retries for temporary errors (reduced from 5: -502 rarely resolves with retry)
+        last_progress_time = start_time  # Track when progress last changed (stall detection)
+        stall_timeout = 60.0  # kmy-keiba: 60s stall = restart program
 
         # Retryable error codes (temporary errors that may resolve)
         # -201: Database error (might be busy)
@@ -573,6 +577,7 @@ class HistoricalFetcher(BaseFetcher):
                 status = self.jvlink.jv_status()
 
                 if status != last_status:
+                    last_progress_time = time.time()  # Reset stall timer on any change
                     if status > 0:
                         download_started = True
                         percentage = status / 100
@@ -593,6 +598,20 @@ class HistoricalFetcher(BaseFetcher):
                     elif status == 0 and not download_started:
                         logger.debug("Waiting for download to start", elapsed=f"{elapsed:.1f}s")
                     last_status = status
+                else:
+                    # Stall detection: kmy-keiba restarts if download progress
+                    # doesn't change for 60 seconds
+                    if download_started and status > 0:
+                        stall_elapsed = time.time() - last_progress_time
+                        if stall_elapsed >= stall_timeout:
+                            logger.warning(
+                                "Download stalled (no progress for 60s), treating as timeout",
+                                last_status=status,
+                                stall_seconds=stall_elapsed,
+                            )
+                            raise FetcherError(
+                                f"Download stalled at {status}% for {stall_elapsed:.0f}s"
+                            )
 
                 if status == 0 and download_started:
                     logger.info("Download completed", elapsed_seconds=int(elapsed))
@@ -603,8 +622,9 @@ class HistoricalFetcher(BaseFetcher):
                             status="完了",
                         )
                     # Wait for file system write completion
-                    # JV-Link reports download complete but files may not be written to disk yet
-                    wait_time = 2  # 2秒に短縮（元は10秒）
+                    # kmy-keiba has no explicit wait after download, reads immediately.
+                    # Keep a minimal wait for safety.
+                    wait_time = 0.5
                     logger.info("Waiting for file write completion...", wait_seconds=wait_time)
                     time.sleep(wait_time)
                     logger.info("File write wait completed")

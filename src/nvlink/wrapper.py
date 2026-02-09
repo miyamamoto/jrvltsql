@@ -894,6 +894,9 @@ class NVLinkWrapper:
         """Close NV-Link data stream.
 
         Should be called after finishing reading data.
+        Performs GC.Collect equivalent before closing to prevent COM reference
+        issues (based on kmy-keiba pattern: GC.Collect() before reader.Dispose()
+        for Local/NAR type).
 
         Returns:
             Result code (0 = success)
@@ -906,6 +909,13 @@ class NVLinkWrapper:
             >>> wrapper.nv_close()
         """
         try:
+            # Force garbage collection before NVClose to release any COM buffer
+            # references. kmy-keiba does GC.Collect() before reader.Dispose() for
+            # Local (NAR) type to prevent COM reference counting issues that cause
+            # E_UNEXPECTED errors.
+            import gc
+            gc.collect()
+
             try:
                 result = int(self._nvlink.NVClose())
             except Exception:
