@@ -131,9 +131,11 @@ class BatchProcessor:
             logger.info("Ensuring all tables exist", data_source=self.data_source.value)
             try:
                 if self.data_source == DataSource.NAR:
-                    # Create NAR tables
+                    # Create NAR tables (with schema migration check)
                     from src.database.schema_nar import get_nar_schemas
+                    from src.database.migration import migrate_all_tables
                     nar_schemas = get_nar_schemas()
+                    migrate_all_tables(self.database, nar_schemas)
                     for table_name, schema_sql in nar_schemas.items():
                         try:
                             self.database.execute(schema_sql)
