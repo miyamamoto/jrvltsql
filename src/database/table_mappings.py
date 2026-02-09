@@ -188,6 +188,7 @@ NAR_RECORD_TYPE_TO_TABLE: Dict[str, str] = {
     "BT": "NL_BT_NAR",  # 血統情報 (Bloodline)
     "DM": "NL_DM_NAR",  # データマスタ (Data Master)
     "NC": "NL_NC_NAR",  # 競馬場マスタ (Racecourse Master)
+    "NK": "NL_KS_NAR",  # 騎手 (Jockey/Rider, NAR-specific code, same struct as KS)
 }
 
 # NAR JRA-VAN標準名 → jrvltsqlテーブル名 (NAR版)

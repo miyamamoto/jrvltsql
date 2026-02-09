@@ -20,11 +20,19 @@ ALL_RECORD_TYPES = [
     'JC', 'JG', 'KS',
     'HA',  # NAR (地方競馬) 払戻データ
     'NC',  # NAR (地方競馬) 競馬場マスタ
+    'NK',  # NAR (地方競馬) 騎手 (KSと同一構造)
     'NU',  # NAR (地方競馬) 競走馬登録データ
+    'OA',  # NAR (地方競馬) オッズ
     'O1', 'O2', 'O3', 'O4', 'O5', 'O6',
     'RA', 'RC', 'SE', 'SK', 'TC', 'TK', 'TM',
     'UM', 'WC', 'WE', 'WF', 'WH', 'YS'
 ]
+
+# NAR record type aliases: maps NAR-specific codes to JRA equivalents
+# These use the same parser/struct as their JRA counterpart
+PARSER_ALIASES = {
+    'NK': 'KS',  # NAR騎手 → KSパーサー (JV_KS_KISYU構造体)
+}
 
 
 class ParserFactory:
@@ -101,9 +109,12 @@ class ParserFactory:
         if record_type in self._parsers:
             return self._parsers[record_type]
 
+        # Resolve alias (e.g., NK -> KS)
+        resolved_type = PARSER_ALIASES.get(record_type, record_type)
+
         # Load parser class if not cached
         if record_type not in self._parser_classes:
-            parser_class = self._load_parser_class(record_type)
+            parser_class = self._load_parser_class(resolved_type)
             if not parser_class:
                 logger.warning(f"No parser available for record type: {record_type}")
                 return None
