@@ -160,13 +160,16 @@ class TestNar502SkipLogic:
                 list(fetcher._fetch_nar_daily("RACE", "20240101", "20240103", 1))
 
     def test_502_reset_on_success(self):
-        """Consecutive -502 counter resets when a day succeeds."""
+        """Consecutive -502 counter resets when a day succeeds.
+
+        With option=2 fallback, failing days are called twice (option=1 then option=2).
+        """
         fetcher = self._make_fetcher()
-        call_dates = []
+        call_log = []
 
         def mock_fetch(data_spec, from_date, to_date, option):
-            call_dates.append(from_date)
-            # Days 2,3 fail, day 4 succeeds, day 5 fails - should NOT trigger abort
+            call_log.append((from_date, option))
+            # Days 2,3 fail (both option=1 and option=2), day 4 succeeds, day 5 fails
             if from_date in ("20240102", "20240103", "20240105"):
                 raise FetcherError("Download failed with status code: -502")
             return iter([])
@@ -174,8 +177,10 @@ class TestNar502SkipLogic:
         with patch.object(fetcher, 'fetch', side_effect=mock_fetch):
             results = list(fetcher._fetch_nar_daily("RACE", "20240101", "20240106", 1))
 
-        # All days should be attempted (consecutive count reset by day 4 success)
-        assert len(call_dates) == 6
+        # Failing days are called twice (option=1 + option=2 fallback)
+        # call_log: (d1,1), (d2,1), (d2,2), (d3,1), (d3,2), (d4,1), (d5,1), (d5,2), (d6,1)
+        option1_dates = [d for d, o in call_log if o == 1]
+        assert len(option1_dates) == 6  # All days attempted with option=1
         assert fetcher._nar_skipped_dates == ["20240102", "20240103", "20240105"]
 
 
