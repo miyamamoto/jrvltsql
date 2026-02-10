@@ -33,6 +33,8 @@ class TestNVOpen202Recovery:
             from src.nvlink.wrapper import NVLinkWrapper
             wrapper = NVLinkWrapper.__new__(NVLinkWrapper)
             wrapper._nvlink = mock_nvlink_com
+            wrapper._bridge = None
+            wrapper._use_bridge = False
             wrapper._is_open = False
             wrapper._com_initialized = True
             wrapper.sid = "TEST"
@@ -56,6 +58,8 @@ class TestNVOpen202Recovery:
             from src.nvlink.wrapper import NVLinkWrapper, NVLinkError
             wrapper = NVLinkWrapper.__new__(NVLinkWrapper)
             wrapper._nvlink = mock_nvlink_com
+            wrapper._bridge = None
+            wrapper._use_bridge = False
             wrapper._is_open = False
             wrapper._com_initialized = True
             wrapper.sid = "TEST"
@@ -76,6 +80,8 @@ class TestNVOpen202Recovery:
             from src.nvlink.wrapper import NVLinkWrapper
             wrapper = NVLinkWrapper.__new__(NVLinkWrapper)
             wrapper._nvlink = mock_nvlink_com
+            wrapper._bridge = None
+            wrapper._use_bridge = False
             wrapper._is_open = False
             wrapper._com_initialized = True
             wrapper.sid = "TEST"

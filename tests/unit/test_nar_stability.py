@@ -81,6 +81,8 @@ class TestGCBeforeNVClose:
                 from src.nvlink.wrapper import NVLinkWrapper
                 wrapper = NVLinkWrapper.__new__(NVLinkWrapper)
                 wrapper._nvlink = MagicMock()
+                wrapper._bridge = None
+                wrapper._use_bridge = False
                 wrapper._nvlink.NVClose.return_value = 0
                 wrapper._is_open = True
 
