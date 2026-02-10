@@ -1,9 +1,10 @@
-"""Tests for NVLinkBridge client."""
+"""Tests for NVLinkBridge TCP client."""
 
 import json
 import base64
+import socket
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, PropertyMock
 
 import pytest
 
@@ -16,87 +17,63 @@ from src.nvlink.bridge import (
 
 
 class TestFindBridgeExecutable:
-    """Tests for find_bridge_executable."""
+    """Tests for find_bridge_executable (stub in TCP version)."""
 
-    def test_returns_none_when_not_found(self, tmp_path):
-        with patch("src.nvlink.bridge._BRIDGE_SEARCH_PATHS", [tmp_path / "nonexistent.exe"]):
-            assert find_bridge_executable() is None
-
-    def test_finds_absolute_path(self, tmp_path):
-        exe = tmp_path / "NVLinkBridge.exe"
-        exe.touch()
-        with patch("src.nvlink.bridge._BRIDGE_SEARCH_PATHS", [exe]):
-            assert find_bridge_executable() == exe
-
-    def test_finds_relative_path(self, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
-        subdir = tmp_path / "tools"
-        subdir.mkdir()
-        exe = subdir / "NVLinkBridge.exe"
-        exe.touch()
-        with patch("src.nvlink.bridge._BRIDGE_SEARCH_PATHS", [Path("tools/NVLinkBridge.exe")]):
-            result = find_bridge_executable()
-            assert result is not None
-            assert result.exists()
+    def test_always_returns_none(self):
+        """TCP version doesn't need local executable."""
+        assert find_bridge_executable() is None
 
 
 class TestNVLinkBridgeInit:
     """Tests for NVLinkBridge initialization."""
 
-    def test_raises_if_exe_not_found(self):
-        with pytest.raises(NVLinkBridgeError, match="見つかりません"):
-            NVLinkBridge(bridge_path="/nonexistent/path.exe")
-
-    def test_init_with_valid_path(self, tmp_path):
-        exe = tmp_path / "NVLinkBridge.exe"
-        exe.touch()
-        bridge = NVLinkBridge(bridge_path=exe)
-        assert bridge._bridge_path == exe
+    def test_init_defaults(self):
+        bridge = NVLinkBridge()
+        assert bridge.host == "127.0.0.1"
+        assert bridge.port == 8901
         assert not bridge._is_open
 
-    def test_default_timeout(self, tmp_path):
-        exe = tmp_path / "NVLinkBridge.exe"
-        exe.touch()
-        bridge = NVLinkBridge(bridge_path=exe, timeout=60.0)
-        assert bridge._timeout == 60.0
+    def test_init_custom_host_port(self):
+        bridge = NVLinkBridge(host="192.168.0.250", port=9000)
+        assert bridge.host == "192.168.0.250"
+        assert bridge.port == 9000
+
+    def test_init_with_sid(self):
+        bridge = NVLinkBridge(sid="TEST")
+        assert bridge.sid == "TEST"
+
+    def test_default_timeout(self):
+        bridge = NVLinkBridge(command_timeout=60.0)
+        assert bridge.command_timeout == 60.0
 
 
 @pytest.fixture
-def bridge(tmp_path):
-    """Create bridge with mocked _send_command and _read_response."""
-    exe = tmp_path / "NVLinkBridge.exe"
-    exe.touch()
-    b = NVLinkBridge(bridge_path=exe)
-    # Mock process as running
-    mock_proc = MagicMock()
-    mock_proc.poll.return_value = None
-    mock_proc.stdin = MagicMock()
-    mock_proc.stdout = MagicMock()
-    mock_proc.stderr = MagicMock()
-    b._process = mock_proc
+def bridge():
+    """Create bridge with mocked socket connection."""
+    b = NVLinkBridge(host="127.0.0.1", port=8901)
+    b._socket = MagicMock(spec=socket.socket)
+    b._socket_file = MagicMock()
+    b._connected = True
     return b
 
 
 def _patch_responses(bridge, *responses):
-    """Patch _read_response to return queued responses."""
-    bridge._read_response = MagicMock(side_effect=list(responses))
+    """Patch _send_command to return queued responses."""
+    bridge._send_command = MagicMock(side_effect=list(responses))
 
 
 class TestNVLinkBridgeAPI:
-    """Tests for NV-Link API methods via bridge."""
+    """Tests for NV-Link API methods via TCP bridge."""
 
     def test_nv_init_success(self, bridge):
-        # Process already running (fixture), so _start_process skips.
         _patch_responses(
             bridge,
-            {"status": "ok", "hwnd": 65548},
+            {"status": "ok", "initResult": 0, "hwnd": 65548},
         )
         result = bridge.nv_init()
         assert result == 0
 
     def test_nv_init_error(self, bridge):
-        # Process already running (fixture), so _start_process returns immediately.
-        # Only the init command response is read.
         _patch_responses(
             bridge,
             {"status": "error", "error": "NVInit failed", "code": -100},
@@ -231,50 +208,26 @@ class TestNVLinkBridgeAPI:
         _patch_responses(bridge, {"status": "ok", "code": -502})
         assert bridge.nv_status() == -502
 
-    def test_wait_for_download_immediate(self, bridge):
-        """Download already complete (status stays 0)."""
-        # Starts with 0 (not started), gets >0 (progress), then 0 (complete)
-        call_count = [0]
-        statuses = [0, 50, 100, 0]
-        original = bridge._read_response
-        def fake_response(timeout=30.0):
-            idx = min(call_count[0], len(statuses) - 1)
-            call_count[0] += 1
-            return {"status": "ok", "code": statuses[idx]}
-        bridge._read_response = fake_response
-        result = bridge.wait_for_download(timeout=5.0, poll_interval=0.01)
-        assert result is True
-
-    def test_nv_file_delete_stub(self, bridge):
-        """nv_file_delete is a stub returning 0."""
+    def test_nv_file_delete(self, bridge):
+        """nv_file_delete sends command and returns 0."""
+        _patch_responses(bridge, {"status": "ok", "code": 0})
         assert bridge.nv_file_delete("test.nvd") == 0
 
 
 class TestNVLinkBridgeLifecycle:
     """Tests for bridge lifecycle management."""
 
-    def test_cleanup_terminates_process(self, bridge):
-        proc = bridge._process
-        _patch_responses(bridge, {"status": "ok", "message": "bye"})
+    def test_cleanup_closes_socket(self, bridge):
+        sock = bridge._socket
         bridge.cleanup()
-        proc.terminate.assert_called_once()
-        assert bridge._process is None
-
-    def test_cleanup_kills_on_timeout(self, bridge):
-        proc = bridge._process
-        _patch_responses(bridge, {"status": "ok", "message": "bye"})
-        proc.wait.side_effect = TimeoutError
-        bridge.cleanup()
-        proc.kill.assert_called_once()
+        sock.close.assert_called()
+        assert bridge._socket is None
 
     def test_context_manager(self, bridge):
-        # Process already running. __enter__ calls nv_init (sends init cmd).
-        # __exit__ calls nv_close + cleanup.
         _patch_responses(
             bridge,
-            {"status": "ok", "hwnd": 1},   # init
+            {"status": "ok", "initResult": 0, "hwnd": 1},   # init
             {"status": "ok"},               # close
-            {"status": "ok", "message": "bye"},  # quit
         )
         with bridge:
             bridge._is_open = True
@@ -320,14 +273,11 @@ class TestNVLinkBridgeAliases:
         assert buff == raw_data
 
     def test_reinitialize_com(self, bridge):
-        """reinitialize_com calls cleanup then restarts."""
-        # Just verify cleanup is called and the method doesn't crash
-        bridge.cleanup = MagicMock()
-        bridge._start_process = MagicMock()
-        bridge._send_command = MagicMock(return_value={"status": "ok"})
+        """reinitialize_com reconnects to bridge."""
+        bridge._reconnect = MagicMock()
+        bridge._send_command = MagicMock(return_value={"status": "ok", "initResult": 0})
         bridge.reinitialize_com()
-        bridge.cleanup.assert_called_once()
-        bridge._start_process.assert_called_once()
+        bridge._reconnect.assert_called_once()
 
 
 class TestCOMBrokenError:

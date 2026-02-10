@@ -1,18 +1,16 @@
-"""NV-Link Bridge Client.
+"""NV-Link Bridge TCP Client.
 
-Communicates with the C# NVLinkBridge subprocess via stdin/stdout JSON protocol.
-This replaces the Python win32com-based NVLinkWrapper for NAR operations,
-solving COM VARIANT BYREF marshaling issues that cause E_UNEXPECTED errors.
+TCP-based client for communicating with the Python NVLinkBridge server.
+This replaces the subprocess-based C# bridge client, solving COM connection issues
+by using a remotely running Python bridge executable that wraps NV-Link COM API.
 
-The C# bridge uses native COM interop (like kmy-keiba) and properly handles
-NV-Link's Delphi COM memory management via Array.Resize(ref buff, 0).
+The Python bridge server handles the COM object management and provides
+a simple TCP JSON protocol for NAR data operations.
 """
 
 import base64
 import json
-import os
-import subprocess
-import sys
+import socket
 import time
 from pathlib import Path
 from typing import Optional, Tuple, Union
@@ -27,35 +25,16 @@ from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-# Default bridge executable locations (searched in order)
-_BRIDGE_SEARCH_PATHS = [
-    # Relative to jrvltsql repo root (build output)
-    Path("tools/nvlink-bridge/bin/x86/Release/net8.0-windows/NVLinkBridge.exe"),
-    # Relative to jrvltsql repo root (flat copy)
-    Path("tools/nvlink-bridge/NVLinkBridge.exe"),
-    # A6 build locations
-    Path(r"C:\Users\mitsu\work\jrvltsql\tools\nvlink-bridge\bin\x86\Release\net8.0-windows\NVLinkBridge.exe"),
-    Path(r"C:\Users\mitsu\work\nvlink-bridge\bin\x86\Release\net8.0-windows\NVLinkBridge.exe"),
-    # Generic Windows location
-    Path(r"C:\Program Files\NVLinkBridge\NVLinkBridge.exe"),
-    Path(r"C:\Program Files (x86)\NVLinkBridge\NVLinkBridge.exe"),
-]
-
 
 def find_bridge_executable() -> Optional[Path]:
-    """Find the NVLinkBridge executable.
-
+    """Find the NVLinkBridge executable (stub for TCP version).
+    
+    Note: TCP version doesn't need local bridge executable.
+    This function exists only for backward compatibility.
+    
     Returns:
-        Path to NVLinkBridge.exe, or None if not found.
+        None (TCP version doesn't use local executable)
     """
-    for p in _BRIDGE_SEARCH_PATHS:
-        if p.is_absolute() and p.exists():
-            return p
-        # Try relative to current working directory
-        if not p.is_absolute():
-            abs_p = Path.cwd() / p
-            if abs_p.exists():
-                return abs_p
     return None
 
 
@@ -77,16 +56,17 @@ class COMBrokenError(NVLinkBridgeError):
 
 
 class NVLinkBridge:
-    """NV-Link Bridge Client.
+    """NV-Link TCP Bridge Client.
 
-    Spawns and communicates with the C# NVLinkBridge subprocess.
-    Provides the same interface as NVLinkWrapper for drop-in replacement.
+    Connects to a running Python NVLinkBridge server via TCP and communicates
+    using JSON commands. Provides the same interface as NVLinkWrapper for
+    drop-in replacement.
 
-    The bridge process must run in a GUI context (console session) on Windows.
-    When running headless (SSH), use schtasks to launch in interactive session.
+    The bridge server must be running on the target Windows machine, typically
+    started via schtasks to ensure it runs in GUI context.
 
     Examples:
-        >>> bridge = NVLinkBridge()
+        >>> bridge = NVLinkBridge(host='192.168.0.250', port=8901)
         >>> bridge.nv_init()
         0
         >>> result, count, dl, ts = bridge.nv_open("RACE", "20240101000000", 1)
@@ -101,62 +81,111 @@ class NVLinkBridge:
         self,
         sid: str = "UNKNOWN",
         initialization_key: Optional[str] = None,
-        bridge_path: Optional[Union[str, Path]] = None,
-        timeout: float = 30.0,
+        host: str = "127.0.0.1",
+        port: int = 8901,
+        connect_timeout: float = 10.0,
+        command_timeout: float = 600.0,
+        max_retries: int = 3,
     ):
         """Initialize NVLinkBridge.
 
         Args:
             sid: Session ID (passed to NVInit as key).
             initialization_key: Optional init key (overrides sid for NVInit).
-            bridge_path: Path to NVLinkBridge.exe. Auto-detected if None.
-            timeout: Default timeout for bridge commands in seconds.
+            host: Bridge server hostname/IP.
+            port: Bridge server port.
+            connect_timeout: Connection timeout in seconds.
+            command_timeout: Default command timeout in seconds.
+            max_retries: Maximum connection retry attempts.
         """
         self.sid = sid
         self.initialization_key = initialization_key
-        self._timeout = timeout
-        self._process: Optional[subprocess.Popen] = None
+        self.host = host
+        self.port = port
+        self.connect_timeout = connect_timeout
+        self.command_timeout = command_timeout
+        self.max_retries = max_retries
+        
+        self._socket: Optional[socket.socket] = None
+        self._socket_file = None
         self._is_open = False
+        self._connected = False
+        self._bridge_version = None
 
-        # Find bridge executable
-        if bridge_path:
-            self._bridge_path = Path(bridge_path)
-        else:
-            self._bridge_path = find_bridge_executable()
-
-        if self._bridge_path is None or not self._bridge_path.exists():
-            raise NVLinkBridgeError(
-                "NVLinkBridge.exe が見つかりません。"
-                "tools/nvlink-bridge/ にビルド済みバイナリを配置するか、"
-                "bridge_path を指定してください。"
-            )
-
-        logger.info("NVLinkBridge initialized", bridge_path=str(self._bridge_path), sid=sid)
-
-    def _start_process(self):
-        """Start the bridge subprocess."""
-        if self._process is not None and self._process.poll() is None:
-            return  # Already running
-
-        logger.info("Starting NVLinkBridge subprocess", path=str(self._bridge_path))
-
-        self._process = subprocess.Popen(
-            [str(self._bridge_path)],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            encoding="utf-8",
-            bufsize=1,  # Line-buffered
+        logger.info(
+            "NVLinkBridge initialized",
+            host=host,
+            port=port,
+            sid=sid,
         )
 
-        # Wait for "ready" signal
-        response = self._read_response(timeout=10.0)
-        if response.get("status") != "ready":
-            raise NVLinkBridgeError(
-                f"NVLinkBridge failed to start: {response.get('error', 'unknown')}"
-            )
-        logger.info("NVLinkBridge subprocess ready", version=response.get("version"))
+    def _connect(self):
+        """Establish TCP connection to bridge server."""
+        if self._connected and self._socket:
+            return
+
+        for attempt in range(self.max_retries):
+            try:
+                logger.info(
+                    "Connecting to bridge server",
+                    host=self.host,
+                    port=self.port,
+                    attempt=attempt + 1,
+                )
+                
+                # Create socket
+                self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                self._socket.settimeout(self.connect_timeout)
+                self._socket.connect((self.host, self.port))
+                
+                # Create file-like wrapper for line reading
+                self._socket_file = self._socket.makefile('rw', encoding='utf-8')
+                
+                # Read greeting
+                greeting_line = self._socket_file.readline()
+                if not greeting_line:
+                    raise NVLinkBridgeError("No greeting received from bridge server")
+                
+                greeting = json.loads(greeting_line.strip())
+                if greeting.get("status") != "ready":
+                    raise NVLinkBridgeError(
+                        f"Bridge server not ready: {greeting.get('error', 'unknown')}"
+                    )
+                
+                self._bridge_version = greeting.get("version", "unknown")
+                self._connected = True
+                
+                logger.info(
+                    "Connected to bridge server",
+                    version=self._bridge_version,
+                    backend=greeting.get("backend"),
+                )
+                return
+                
+            except Exception as e:
+                self._cleanup_connection()
+                if attempt == self.max_retries - 1:
+                    raise NVLinkBridgeError(f"Failed to connect after {self.max_retries} attempts: {e}")
+                logger.warning(f"Connection attempt {attempt + 1} failed: {e}, retrying...")
+                time.sleep(1.0 * (attempt + 1))  # Exponential backoff
+
+    def _cleanup_connection(self):
+        """Clean up socket connection."""
+        if self._socket_file:
+            try:
+                self._socket_file.close()
+            except Exception:
+                pass
+            self._socket_file = None
+            
+        if self._socket:
+            try:
+                self._socket.close()
+            except Exception:
+                pass
+            self._socket = None
+            
+        self._connected = False
 
     def _send_command(self, cmd: dict, timeout: Optional[float] = None) -> dict:
         """Send a JSON command to the bridge and read the response.
@@ -171,82 +200,42 @@ class NVLinkBridge:
         Raises:
             NVLinkBridgeError: If communication fails.
         """
-        if self._process is None or self._process.poll() is not None:
-            raise NVLinkBridgeError("Bridge process is not running")
+        if not self._connected:
+            self._connect()
 
-        timeout = timeout or self._timeout
+        timeout = timeout or self.command_timeout
         cmd_json = json.dumps(cmd, ensure_ascii=False)
 
         try:
-            self._process.stdin.write(cmd_json + "\n")
-            self._process.stdin.flush()
-        except (BrokenPipeError, OSError) as e:
-            raise NVLinkBridgeError(f"Failed to send command to bridge: {e}")
+            # Set socket timeout for this operation
+            if self._socket:
+                self._socket.settimeout(timeout)
+            
+            # Send command
+            self._socket_file.write(cmd_json + "\n")
+            self._socket_file.flush()
 
-        return self._read_response(timeout=timeout)
+            # Read response
+            response_line = self._socket_file.readline()
+            if not response_line:
+                raise NVLinkBridgeError("Connection closed by bridge server")
 
-    def _read_response(self, timeout: float = 30.0) -> dict:
-        """Read a JSON response line from the bridge stdout.
+            return json.loads(response_line.strip())
 
-        Args:
-            timeout: Timeout in seconds.
-
-        Returns:
-            Parsed JSON response.
-        """
-        if self._process is None:
-            raise NVLinkBridgeError("Bridge process is not running")
-
-        import select
-
-        # On Windows, select doesn't work on pipes. Use a simple blocking read
-        # with timeout via threading.
-        if sys.platform == "win32":
-            import threading
-
-            result = [None]
-            error = [None]
-
-            def _read():
-                try:
-                    line = self._process.stdout.readline()
-                    result[0] = line
-                except Exception as e:
-                    error[0] = e
-
-            thread = threading.Thread(target=_read, daemon=True)
-            thread.start()
-            thread.join(timeout=timeout)
-
-            if thread.is_alive():
-                raise NVLinkBridgeError(f"Bridge response timeout ({timeout}s)")
-            if error[0]:
-                raise NVLinkBridgeError(f"Bridge read error: {error[0]}")
-
-            line = result[0]
-        else:
-            # Unix: use select for timeout
-            ready, _, _ = select.select([self._process.stdout], [], [], timeout)
-            if not ready:
-                raise NVLinkBridgeError(f"Bridge response timeout ({timeout}s)")
-            line = self._process.stdout.readline()
-
-        if not line:
-            # Process may have exited
-            stderr_output = ""
-            if self._process.stderr:
-                try:
-                    stderr_output = self._process.stderr.read()
-                except Exception:
-                    pass
-            raise NVLinkBridgeError(
-                f"Bridge process terminated unexpectedly. stderr: {stderr_output}"
-            )
-
-        try:
-            return json.loads(line.strip())
+        except socket.timeout:
+            raise NVLinkBridgeError(f"Bridge command timeout ({timeout}s)")
+        except (ConnectionError, BrokenPipeError, OSError) as e:
+            self._cleanup_connection()
+            raise NVLinkBridgeError(f"Connection lost: {e}")
         except json.JSONDecodeError as e:
-            raise NVLinkBridgeError(f"Invalid JSON from bridge: {line.strip()!r}: {e}")
+            raise NVLinkBridgeError(f"Invalid JSON from bridge: {response_line.strip()!r}: {e}")
+
+    def _reconnect(self):
+        """Reconnect to bridge server."""
+        logger.warning("Reconnecting to bridge server")
+        self._cleanup_connection()
+        self._is_open = False
+        self._connect()
 
     # =========================================================================
     # NV-Link API Methods (same interface as NVLinkWrapper)
@@ -258,10 +247,14 @@ class NVLinkBridge:
         Returns:
             Result code (0 = success).
         """
-        self._start_process()
+        self._connect()
 
         init_key = self.initialization_key or self.sid
-        response = self._send_command({"cmd": "init", "type": "nar", "key": init_key})
+        response = self._send_command({
+            "cmd": "init",
+            "sid": init_key,
+            "type": "nar"
+        })
 
         if response.get("status") == "error":
             code = response.get("code", -1)
@@ -269,8 +262,8 @@ class NVLinkBridge:
                 response.get("error", "NVInit failed"), error_code=code
             )
 
-        logger.info("NV-Link initialized via bridge", hwnd=response.get("hwnd"))
-        return 0
+        logger.info("NV-Link initialized via TCP bridge", hwnd=response.get("hwnd"))
+        return response.get("initResult", 0)
 
     def nv_open(
         self,
@@ -288,15 +281,12 @@ class NVLinkBridge:
         Returns:
             Tuple of (result_code, read_count, download_count, last_file_timestamp).
         """
-        response = self._send_command(
-            {
-                "cmd": "open",
-                "dataspec": data_spec,
-                "fromtime": fromtime,
-                "option": option,
-            },
-            timeout=120.0,  # Open can take a while with downloads
-        )
+        response = self._send_command({
+            "cmd": "open",
+            "dataspec": data_spec,
+            "date_from": fromtime,
+            "option": option,
+        }, timeout=600.0)  # Open can take a while with downloads
 
         code = response.get("code", -1)
         read_count = response.get("readcount", 0)
@@ -308,15 +298,12 @@ class NVLinkBridge:
             logger.warning("NVOpen returned -202 (AlreadyOpen), closing and retrying")
             self._send_command({"cmd": "close"})
             self._is_open = False
-            response = self._send_command(
-                {
-                    "cmd": "open",
-                    "dataspec": data_spec,
-                    "fromtime": fromtime,
-                    "option": option,
-                },
-                timeout=120.0,
-            )
+            response = self._send_command({
+                "cmd": "open",
+                "dataspec": data_spec,
+                "date_from": fromtime,
+                "option": option,
+            }, timeout=600.0)
             code = response.get("code", -1)
             read_count = response.get("readcount", 0)
             download_count = response.get("downloadcount", 0)
@@ -342,7 +329,7 @@ class NVLinkBridge:
 
         self._is_open = True
         logger.info(
-            "NVOpen via bridge",
+            "NVOpen via TCP bridge",
             data_spec=data_spec,
             fromtime=fromtime,
             option=option,
@@ -362,10 +349,7 @@ class NVLinkBridge:
         if not self._is_open:
             raise NVLinkBridgeError("NV-Link stream not open.")
 
-        response = self._send_command(
-            {"cmd": "gets", "size": BUFFER_SIZE_NVREAD},
-            timeout=60.0,
-        )
+        response = self._send_command({"cmd": "read"}, timeout=60.0)
 
         code = response.get("code", 0)
 
@@ -386,16 +370,20 @@ class NVLinkBridge:
             filename = response.get("filename", "")
             return code, None, filename
 
+        elif code == -3:  # downloading
+            filename = response.get("filename", "")
+            return code, None, filename
+
         elif code in (-203, -402, -403, -502, -503):
             # Recoverable errors
             filename = response.get("filename", "")
-            logger.warning("NVGets recoverable error via bridge", code=code, filename=filename)
+            logger.warning("NVGets recoverable error via TCP bridge", code=code, filename=filename)
             return code, None, filename
 
         else:
             # Other errors
             filename = response.get("filename", "")
-            logger.error("NVGets error via bridge", code=code, filename=filename)
+            logger.error("NVGets error via TCP bridge", code=code, filename=filename)
             return code, None, filename
 
     def nv_read(self) -> Tuple[int, Optional[bytes], Optional[str]]:
@@ -404,37 +392,20 @@ class NVLinkBridge:
         Returns:
             Tuple of (return_code, buffer, filename).
         """
+        # For TCP bridge, both nv_read and nv_gets use the same "read" command
+        return self.nv_gets()
+
+    def nv_skip(self) -> int:
+        """Skip current record.
+
+        Returns:
+            Result code (0 = success).
+        """
         if not self._is_open:
             raise NVLinkBridgeError("NV-Link stream not open.")
 
-        response = self._send_command(
-            {"cmd": "read", "size": BUFFER_SIZE_NVREAD},
-            timeout=60.0,
-        )
-
-        code = response.get("code", 0)
-
-        if code > 0:
-            data_b64 = response.get("data", "")
-            data_bytes = base64.b64decode(data_b64) if data_b64 else b""
-            filename = response.get("filename", "")
-            return code, data_bytes, filename
-
-        elif code == NV_READ_SUCCESS:
-            return code, None, None
-
-        elif code == NV_READ_NO_MORE_DATA:
-            return code, None, response.get("filename")
-
-        elif code in (-203, -402, -403, -502, -503):
-            filename = response.get("filename", "")
-            logger.warning("NVRead recoverable error via bridge", code=code, filename=filename)
-            return code, None, filename
-
-        else:
-            filename = response.get("filename", "")
-            logger.error("NVRead error via bridge", code=code, filename=filename)
-            return code, None, filename
+        response = self._send_command({"cmd": "skip"}, timeout=10.0)
+        return response.get("code", 0)
 
     def nv_status(self) -> int:
         """Get download status.
@@ -456,21 +427,27 @@ class NVLinkBridge:
         except NVLinkBridgeError:
             pass  # Best effort
         self._is_open = False
-        logger.info("NV-Link stream closed via bridge")
+        logger.info("NV-Link stream closed via TCP bridge")
         return 0
 
     def nv_file_delete(self, filename: str) -> int:
-        """Delete a cached file. (Not yet implemented in C# bridge.)
+        """Delete a cached file.
 
         Args:
             filename: File to delete.
 
         Returns:
-            0 (stub).
+            Result code.
         """
-        # TODO: Add NVFiledelete command to C# bridge
-        logger.warning("nv_file_delete not implemented in bridge", filename=filename)
-        return 0
+        try:
+            response = self._send_command({
+                "cmd": "file_delete",
+                "filename": filename
+            }, timeout=10.0)
+            return response.get("code", 0)
+        except NVLinkBridgeError:
+            logger.warning("nv_file_delete not implemented in bridge", filename=filename)
+            return 0
 
     def wait_for_download(self, timeout: float = 600.0, poll_interval: float = 1.0) -> bool:
         """Wait for download to complete.
@@ -489,17 +466,17 @@ class NVLinkBridge:
             status = self.nv_status()
             if status > 0:
                 download_started = True
-                logger.debug("Download progress via bridge", progress=status)
+                logger.debug("Download progress via TCP bridge", progress=status)
             elif status == 0:
                 if download_started:
-                    logger.info("Download completed via bridge")
+                    logger.info("Download completed via TCP bridge")
                     return True
             else:
-                logger.error("Download error via bridge", status=status)
+                logger.error("Download error via TCP bridge", status=status)
                 return False
             time.sleep(poll_interval)
 
-        logger.warning("Download timeout via bridge", timeout=timeout)
+        logger.warning("Download timeout via TCP bridge", timeout=timeout)
         return False
 
     def is_open(self) -> bool:
@@ -507,21 +484,13 @@ class NVLinkBridge:
         return self._is_open
 
     def cleanup(self):
-        """Stop the bridge subprocess."""
-        if self._process is not None and self._process.poll() is None:
-            try:
+        """Close TCP connection."""
+        try:
+            if self._connected:
                 self._send_command({"cmd": "quit"}, timeout=5.0)
-            except Exception:
-                pass
-            try:
-                self._process.terminate()
-                self._process.wait(timeout=5.0)
-            except Exception:
-                try:
-                    self._process.kill()
-                except Exception:
-                    pass
-        self._process = None
+        except Exception:
+            pass
+        self._cleanup_connection()
         self._is_open = False
 
     def __enter__(self):
@@ -544,8 +513,8 @@ class NVLinkBridge:
 
     def __repr__(self) -> str:
         status = "open" if self._is_open else "closed"
-        running = self._process is not None and self._process.poll() is None
-        return f"<NVLinkBridge status={status} running={running}>"
+        connected = "connected" if self._connected else "disconnected"
+        return f"<NVLinkBridge {self.host}:{self.port} status={status} {connected}>"
 
     # =========================================================================
     # JVLinkWrapper互換エイリアス（BaseFetcherでポリモーフィックに使用）
@@ -576,9 +545,8 @@ class NVLinkBridge:
         return self.wait_for_download(timeout, poll_interval)
 
     def reinitialize_com(self):
-        """Reinitialize by restarting the bridge process."""
-        logger.warning("Reinitializing bridge (restart subprocess)")
-        self.cleanup()
-        self._start_process()
+        """Reinitialize by reconnecting to bridge server."""
+        logger.warning("Reinitializing bridge (reconnect)")
+        self._reconnect()
         init_key = self.initialization_key or self.sid
-        self._send_command({"cmd": "init", "type": "nar", "key": init_key})
+        self._send_command({"cmd": "init", "sid": init_key, "type": "nar"})

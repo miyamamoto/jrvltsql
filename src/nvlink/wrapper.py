@@ -20,6 +20,14 @@ from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+# Try to import bridge for TCP connection (may not be available on all systems)
+try:
+    from src.nvlink.bridge import NVLinkBridge, NVLinkBridgeError
+    BRIDGE_AVAILABLE = True
+except ImportError:
+    BRIDGE_AVAILABLE = False
+    logger.info("NVLinkBridge not available, will use COM direct mode only")
+
 # CP1252 to byte mapping for 0x80-0x9F range
 # Moved to module level for performance (避けたい: ホットループ内での辞書再作成)
 CP1252_TO_BYTE = {
@@ -105,7 +113,14 @@ class NVLinkWrapper:
         >>> wrapper.nv_close()
     """
 
-    def __init__(self, sid: str = "UNKNOWN", initialization_key: Optional[str] = None):
+    def __init__(
+        self, 
+        sid: str = "UNKNOWN", 
+        initialization_key: Optional[str] = None,
+        bridge_host: str = "127.0.0.1",
+        bridge_port: int = 8901,
+        prefer_bridge: bool = True,
+    ):
         """Initialize NVLinkWrapper.
 
         Args:
@@ -115,16 +130,43 @@ class NVLinkWrapper:
                  configured separately in UmaConn (地方競馬DATA) application.
             initialization_key: Optional NV-Link initialization key (software ID)
                 used for NVInit. If provided, this value is used instead of sid.
+            bridge_host: Bridge server hostname/IP.
+            bridge_port: Bridge server port.
+            prefer_bridge: Whether to prefer TCP bridge over COM direct.
 
         Raises:
-            NVLinkError: If COM object creation fails
+            NVLinkError: If both bridge and COM initialization fail
         """
         self.sid = sid
         self.initialization_key = initialization_key
+        self.bridge_host = bridge_host
+        self.bridge_port = bridge_port
+        
         self._nvlink = None
+        self._bridge = None
         self._is_open = False
         self._com_initialized = False
+        self._use_bridge = False
 
+        # Try TCP bridge first if available and preferred
+        if prefer_bridge and BRIDGE_AVAILABLE:
+            try:
+                self._bridge = NVLinkBridge(
+                    sid=sid,
+                    initialization_key=initialization_key,
+                    host=bridge_host,
+                    port=bridge_port,
+                )
+                # Test connection
+                self._bridge._connect()
+                self._use_bridge = True
+                logger.info("NVLinkWrapper initialized with TCP bridge", host=bridge_host, port=bridge_port)
+                return
+            except Exception as e:
+                logger.warning(f"Failed to initialize TCP bridge: {e}, falling back to COM direct")
+                self._bridge = None
+
+        # Fallback to COM direct approach
         try:
             import sys
             # Set COM threading model to Apartment Threaded (STA)
@@ -329,6 +371,11 @@ class NVLinkWrapper:
             >>> result = wrapper.nv_init()
             >>> assert result == 0
         """
+        if self._use_bridge and self._bridge:
+            # Use TCP bridge
+            return self._bridge.nv_init()
+            
+        # Use COM direct
         try:
             # Set ParentHWnd for shell notification icon (required by NV-Link)
             # Without this, NVStatus returns -502 (download failed) during data fetching.
@@ -399,6 +446,11 @@ class NVLinkWrapper:
             ...     "RACE", "20240101000000-20241231235959")
             >>> print(f"Will read {read_count} records")
         """
+        if self._use_bridge and self._bridge:
+            # Use TCP bridge
+            return self._bridge.nv_open(data_spec, fromtime, option)
+            
+        # Use COM direct
         try:
             # NVOpen signature: (dataspec, fromtime, option, ref readCount, ref downloadCount, out lastFileTimestamp)
             # The COM interface requires all parameters including in/out parameters
@@ -611,6 +663,11 @@ class NVLinkWrapper:
             ...         data = buff.decode('cp932')
             ...         print(data[:100])
         """
+        if self._use_bridge and self._bridge:
+            # Use TCP bridge
+            return self._bridge.nv_read()
+            
+        # Use COM direct
         if not self._is_open:
             raise NVLinkError("NV-Link stream not open. Call nv_open() or nv_rt_open() first.")
 
@@ -785,6 +842,11 @@ class NVLinkWrapper:
             ...         data = buff.decode('cp932')
             ...         print(data[:100])
         """
+        if self._use_bridge and self._bridge:
+            # Use TCP bridge
+            return self._bridge.nv_gets()
+            
+        # Use COM direct
         if not self._is_open:
             raise NVLinkError("NV-Link stream not open. Call nv_open() or nv_rt_open() first.")
 
@@ -908,6 +970,13 @@ class NVLinkWrapper:
             >>> # ... read data ...
             >>> wrapper.nv_close()
         """
+        if self._use_bridge and self._bridge:
+            # Use TCP bridge
+            result = self._bridge.nv_close()
+            self._is_open = False
+            return result
+            
+        # Use COM direct
         try:
             # Force garbage collection before NVClose to release any COM buffer
             # references. kmy-keiba does GC.Collect() before reader.Dispose() for
@@ -949,6 +1018,11 @@ class NVLinkWrapper:
             >>> wrapper.nv_init()
             >>> status = wrapper.nv_status()
         """
+        if self._use_bridge and self._bridge:
+            # Use TCP bridge
+            return self._bridge.nv_status()
+            
+        # Use COM direct
         try:
             result = int(self._nvlink.NVStatus())
             logger.debug("NVStatus", status=result)

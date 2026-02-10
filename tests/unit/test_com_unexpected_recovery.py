@@ -43,6 +43,8 @@ class TestNVReadCOMBroken:
             w.sid = "TEST"
             w.initialization_key = None
             w._nvlink = MagicMock()
+            w._bridge = None
+            w._use_bridge = False
             w._is_open = True
             w._com_initialized = False
             return w
