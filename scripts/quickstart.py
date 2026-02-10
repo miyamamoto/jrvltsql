@@ -1846,6 +1846,37 @@ def _interactive_setup_rich() -> dict:
     confirm_table.add_row("データベース", db_info)
 
     confirm_table.add_row("取得モード", settings['mode_name'])
+
+    # セットアップ/通常モードの期間内訳を表示（更新モード以外）
+    if settings.get('mode') != 'update' and settings.get('from_date') and settings.get('to_date'):
+        from_date_str = settings['from_date']
+        to_date_str = settings['to_date']
+        from_dt = datetime.strptime(from_date_str, "%Y%m%d")
+        now = datetime.now()
+        months_diff = (now.year * 12 + now.month) - (from_dt.year * 12 + from_dt.month)
+        if months_diff > 11:
+            # 境界日: 今月から11ヶ月前の1日
+            boundary_dt = now.replace(day=1) - timedelta(days=11 * 30)
+            boundary_dt = boundary_dt.replace(day=1)
+            # より正確に: 今月-11ヶ月
+            boundary_month = now.month - 11
+            boundary_year = now.year
+            while boundary_month <= 0:
+                boundary_month += 12
+                boundary_year -= 1
+            boundary_dt = datetime(boundary_year, boundary_month, 1)
+            boundary_str = boundary_dt.strftime("%Y%m%d")
+            confirm_table.add_row(
+                "データ取得方式",
+                f"[cyan]セットアップ(option=4)[/cyan]: {from_date_str}〜{boundary_str}\n"
+                f"                     [green]通常(option=1)[/green]: {boundary_str}〜{to_date_str}"
+            )
+        else:
+            confirm_table.add_row(
+                "データ取得方式",
+                f"[green]通常(option=1)[/green]: {from_date_str}〜{to_date_str}"
+            )
+
     confirm_table.add_row("オッズ変動履歴", "[dim]自動更新で蓄積[/dim]")
     confirm_table.add_row("当日レース情報", "[green]取得する[/green]" if settings.get('include_realtime') else "[dim]取得しない[/dim]")
     if settings.get('keep_existing_background'):
@@ -2450,6 +2481,26 @@ def _interactive_setup_simple() -> dict:
         db_info = f"SQLite ({settings.get('db_path', 'data/keiba.db')})"
     print(f"  データベース:     {db_info}")
     print(f"  取得モード:       {settings['mode_name']}")
+
+    # セットアップ/通常モードの期間内訳を表示（更新モード以外）
+    if settings.get('mode') != 'update' and settings.get('from_date') and settings.get('to_date'):
+        from_date_str = settings['from_date']
+        to_date_str = settings['to_date']
+        from_dt = datetime.strptime(from_date_str, "%Y%m%d")
+        now = datetime.now()
+        months_diff = (now.year * 12 + now.month) - (from_dt.year * 12 + from_dt.month)
+        if months_diff > 11:
+            boundary_month = now.month - 11
+            boundary_year = now.year
+            while boundary_month <= 0:
+                boundary_month += 12
+                boundary_year -= 1
+            boundary_str = f"{boundary_year:04d}{boundary_month:02d}01"
+            print(f"  データ取得方式:   セットアップ(option=4): {from_date_str}〜{boundary_str}")
+            print(f"                    通常(option=1): {boundary_str}〜{to_date_str}")
+        else:
+            print(f"  データ取得方式:   通常(option=1): {from_date_str}〜{to_date_str}")
+
     print(f"  オッズ変動履歴:   自動更新で蓄積")
     print(f"  当日レース情報:   {'取得する' if settings.get('include_realtime') else '取得しない'}")
     if settings.get('keep_existing_background'):
@@ -3945,8 +3996,8 @@ class QuickstartRunner:
         from_date_str = self.settings['from_date']
         from_date_dt = datetime.strptime(from_date_str, "%Y%m%d")
         months_ago = (datetime.now().year * 12 + datetime.now().month) - (from_date_dt.year * 12 + from_date_dt.month)
-        if option == 1 and spec in OPTION_4_SUPPORTED_SPECS and months_ago > 11:
-            option = 4  # 11ヶ月以上前 → セットアップモード
+        if option in (1, 2) and spec in OPTION_4_SUPPORTED_SPECS and months_ago > 11:
+            option = 4  # 11ヶ月以上前 → セットアップモード（JRA/NAR共通）
 
         # NAR (NV-Link) 注意:
         # option=1（差分取得）はローカルキャッシュにないデータをサーバーからDLしようとし、
