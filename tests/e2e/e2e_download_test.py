@@ -1,9 +1,8 @@
-"""E2E Download Test - JRA + NAR actual data download via COM API.
+"""E2E Download Test - JRA actual data download via COM API.
 
 Tests:
 1. JRA: 1 day of RACE data download
-2. NAR: 1 day of RACE data download
-3. JRA quickstart mini: download -> parse -> DB store -> verify
+2. JRA quickstart mini: download -> parse -> DB store -> verify
 """
 import os
 import sys
@@ -80,69 +79,6 @@ def test_jra_download():
         except Exception:
             pass
 
-
-def test_nar_download():
-    """Test NAR (NV-Link) actual data download - 1 day."""
-    log("=" * 60)
-    log("TEST 2: NAR 1-day download")
-    log("=" * 60)
-
-    from nvlink.wrapper import NVLinkWrapper
-
-    wrapper = NVLinkWrapper()
-    try:
-        wrapper.nv_init()
-        log("NV-Link initialized OK")
-
-        target_date = (datetime.now() - timedelta(days=7)).strftime("%Y%m%d")
-        log(f"Target date: {target_date}")
-
-        ret = wrapper.nv_open("RACE", f"{target_date}000000", option=1)
-        log(f"NV_Open returned: {ret}")
-
-        if ret < 0:
-            log(f"WARN: NV_Open returned {ret}")
-            wrapper.nv_close()
-            return "SKIP"
-
-        record_count = 0
-        while True:
-            status, filename, data = wrapper.nv_read(110000)
-            if status == 0:
-                break
-            elif status == -1:
-                log("No more data")
-                break
-            elif status == -3:
-                log("Data downloading (-3), waiting...")
-                time.sleep(2)
-                continue
-            elif status < -1:
-                log(f"Error: {status}")
-                break
-            else:
-                record_count += 1
-                if record_count <= 3:
-                    log(f"  Record #{record_count}: {len(data)}B from {filename}")
-
-        wrapper.nv_close()
-        log(f"NAR download complete: {record_count} records")
-
-        if record_count > 0:
-            log("PASS: NAR download OK")
-            return "PASS"
-        else:
-            log("WARN: No records")
-            return "SKIP"
-
-    except Exception as e:
-        log(f"FAIL: {e}")
-        return "FAIL"
-    finally:
-        try:
-            wrapper.nv_close()
-        except Exception:
-            pass
 
 
 def test_jra_quickstart_mini():
@@ -238,7 +174,6 @@ if __name__ == "__main__":
 
     results = {}
     results["JRA Download"] = test_jra_download()
-    results["NAR Download"] = test_nar_download()
     results["JRA Quickstart Mini"] = test_jra_quickstart_mini()
 
     log("")

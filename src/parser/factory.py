@@ -1,7 +1,7 @@
 """Parser factory for JV-Data records.
 
 This module provides a factory for creating appropriate parser instances
-based on record type. Supports 41 record types (38 JRA + 3 NAR: HA, NC, NU).
+based on record type. Supports 38 JRA record types.
 
 Auto-generated parsers based on: 公式JV-Data仕様書 Ver.4.9.0.1
 """
@@ -13,26 +13,19 @@ from src.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-# All supported record types (41 parsers: 38 official JRA + 3 NAR: HA, NU, NC)
+# All supported record types (38 official JRA)
 ALL_RECORD_TYPES = [
     'AV', 'BN', 'BR', 'BT', 'CC', 'CH', 'CK', 'CS', 'DM',
     'H1', 'H6', 'HC', 'HN', 'HR', 'HS', 'HY',
     'JC', 'JG', 'KS',
-    'HA',  # NAR (地方競馬) 払戻データ
-    'NC',  # NAR (地方競馬) 競馬場マスタ
-    'NK',  # NAR (地方競馬) 騎手 (KSと同一構造)
-    'NU',  # NAR (地方競馬) 競走馬登録データ
-    'OA',  # NAR (地方競馬) オッズ
+    'OA',
     'O1', 'O2', 'O3', 'O4', 'O5', 'O6',
     'RA', 'RC', 'SE', 'SK', 'TC', 'TK', 'TM',
     'UM', 'WC', 'WE', 'WF', 'WH', 'YS'
 ]
 
-# NAR record type aliases: maps NAR-specific codes to JRA equivalents
-# These use the same parser/struct as their JRA counterpart
-PARSER_ALIASES = {
-    'NK': 'KS',  # NAR騎手 → KSパーサー (JV_KS_KISYU構造体)
-}
+# Record type aliases
+PARSER_ALIASES: Dict[str, str] = {}
 
 
 class ParserFactory:

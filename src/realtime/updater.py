@@ -15,7 +15,6 @@ from src.jvlink.constants import (
     DATA_KUBUN_ERASE,
 )
 from src.parser.factory import ParserFactory
-from src.utils.data_source import DataSource
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -109,18 +108,16 @@ class RealtimeUpdater:
     # - YS, BT, CS (Change data) - Updated via YSCH, SLOP, etc.
     # - WF (WIN5), JG (重賞), WC (天候) - Not in real-time stream
 
-    def __init__(self, database: BaseDatabase, data_source: DataSource = DataSource.JRA):
+    def __init__(self, database: BaseDatabase):
         """Initialize real-time updater.
 
         Args:
             database: Database handler instance
-            data_source: Data source (DataSource.JRA or DataSource.NAR, default: JRA)
         """
         self.database = database
-        self.data_source = data_source
         self.parser_factory = ParserFactory()
 
-        logger.info("RealtimeUpdater initialized", data_source=data_source.value)
+        logger.info("RealtimeUpdater initialized")
 
     def process_record(self, buff: bytes, timeseries: bool = False) -> Optional[Dict]:
         """Process real-time data record.
@@ -177,10 +174,6 @@ class RealtimeUpdater:
             if not table_name:
                 logger.warning(f"Unknown record type: {record_type}")
                 return None
-
-            # Add _NAR suffix for NAR data source
-            if self.data_source == DataSource.NAR:
-                table_name = f"{table_name}_NAR"
 
             # Get headDataKubun with fallback to DataKubun
             head_data_kubun = (
@@ -298,10 +291,7 @@ class RealtimeUpdater:
             Primary key definitions are based on schema.py table definitions.
             Tables without explicit primary keys return empty list.
         """
-        # Strip _NAR suffix for lookup since NAR tables use the same key structure
         lookup_name = table_name
-        if lookup_name.endswith("_NAR"):
-            lookup_name = lookup_name[:-4]
 
         PRIMARY_KEY_MAP = {
             # Race data - standard race identifier

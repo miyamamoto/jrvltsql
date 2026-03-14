@@ -11,7 +11,6 @@ from typing import Optional
 
 from src.jvlink.constants import JV_RT_SUCCESS, JV_READ_SUCCESS
 from src.realtime.updater import RealtimeUpdater
-from src.utils.data_source import DataSource
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -39,8 +38,6 @@ class RealtimeMonitor:
         data_spec: str = "RACE",
         polling_interval: int = 60,
         sid: str = "REALTIME",
-        initialization_key: Optional[str] = None,
-        data_source: DataSource = DataSource.JRA,
     ):
         """Initialize real-time monitor.
 
@@ -49,31 +46,16 @@ class RealtimeMonitor:
             data_spec: Data specification code (default: "RACE")
             polling_interval: Polling interval in seconds (default: 60)
             sid: Session ID for JV-Link API (default: "REALTIME")
-            initialization_key: Optional NV-Link initialization key (software ID)
-                used for NVInit when data_source is NAR.
-            data_source: Data source (DataSource.JRA or DataSource.NAR, default: JRA)
         """
         self.database = database
         self.data_spec = data_spec
         self.polling_interval = polling_interval
         self.sid = sid
-        self.initialization_key = initialization_key
-        self.data_source = data_source
 
-        # Select wrapper based on data source
-        if data_source == DataSource.ALL:
-            raise ValueError(
-                "DataSource.ALL is not supported for realtime monitoring. "
-                "Please run separate monitors for JRA and NAR (--source jra / --source nar)."
-            )
-        elif data_source == DataSource.NAR:
-            from src.nvlink.wrapper import NVLinkWrapper
-            self.jvlink = NVLinkWrapper(sid=sid, initialization_key=initialization_key)
-        else:
-            from src.jvlink.wrapper import JVLinkWrapper
-            self.jvlink = JVLinkWrapper(sid=sid)
+        from src.jvlink.wrapper import JVLinkWrapper
+        self.jvlink = JVLinkWrapper(sid=sid)
 
-        self.updater = RealtimeUpdater(database, data_source=data_source)
+        self.updater = RealtimeUpdater(database)
 
         self._running = False
         self._thread: Optional[threading.Thread] = None
@@ -94,7 +76,6 @@ class RealtimeMonitor:
             "RealtimeMonitor initialized",
             data_spec=data_spec,
             polling_interval=polling_interval,
-            data_source=data_source.value,
         )
 
     def start(self, daemon: bool = False) -> None:
@@ -116,7 +97,6 @@ class RealtimeMonitor:
 
         # Open real-time stream
         rt_result = self.jvlink.jv_rt_open(self.data_spec)
-        # NVLink returns tuple (result_code, read_count), JVLink returns int
         if isinstance(rt_result, tuple):
             ret_code = int(rt_result[0])
         else:
@@ -277,12 +257,8 @@ class RealtimeMonitor:
         Returns:
             Track name in Japanese
         """
-        if self.data_source == DataSource.NAR:
-            from src.nvlink.constants import get_nar_track_name
-            return get_nar_track_name(track_code)
-        else:
-            from src.jvlink.constants import get_track_name
-            return get_track_name(track_code)
+        from src.jvlink.constants import get_track_name
+        return get_track_name(track_code)
 
     def __enter__(self):
         """Context manager entry."""

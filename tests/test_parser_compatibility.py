@@ -1,17 +1,15 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""Parser compatibility tests for JRA and NAR data.
+"""Parser compatibility tests for JRA data.
 
 Tests that parsers correctly handle:
 1. JRA standard records (proper field extraction)
-2. NAR records (same format, different jyo_cd range)
-3. Full-struct vs flat records (H1/H6 28955-byte structs vs 317-byte per-combination)
-4. Edge cases (short records, empty fields, Japanese text)
+2. Full-struct vs flat records (H1/H6 28955-byte structs vs 317-byte per-combination)
+3. Edge cases (short records, empty fields, Japanese text)
 
-Key finding: NV-Link returns full JV-Data structs (e.g., H1 = 28,955 bytes
-with arrays for all bet type combinations), but our parsers expect
-per-combination flat records (H1 = 317 bytes). This mismatch is documented
-and tested here.
+Key finding: JV-Link returns full JV-Data structs (e.g., H1 = 28,955 bytes
+with arrays for all bet type combinations), but our parsers also handle
+per-combination flat records (H1 = 317 bytes). Both formats are tested here.
 """
 
 import os
@@ -30,8 +28,6 @@ from fixtures.record_factory import (
     make_hr_record,
     make_wf_record,
     make_bn_record,
-    make_ra_record_nar,
-    make_h1_record_nar_full,
     make_record_header,
 )
 
@@ -62,10 +58,10 @@ class TestRAParser:
         assert result["Kyori"] == "2000"
         assert result["HassoTime"] == "1510"
 
-    def test_parse_nar_ra_record(self, factory):
-        """NAR RA record parses with same parser (format is identical)."""
-        data = make_ra_record_nar(
-            jyo_cd="55",  # 佐賀
+    def test_parse_regional_ra_record(self, factory):
+        """RA record with regional jyo_cd (30-57) parses with same parser."""
+        data = make_ra_record(
+            jyo_cd="55",  # 佐賀 (regional track code)
             hondai="テスト佐賀記念",
             kyori="1400",
         )
@@ -86,7 +82,7 @@ class TestRAParser:
         assert parser.RECORD_LENGTH == 856
 
     def test_ra_all_jyo_codes(self, factory):
-        """RA parser works with both JRA (01-10) and NAR (30-57) codes."""
+        """RA parser works with JRA (01-10) and regional (30-57) codes."""
         parser = factory.get_parser("RA")
 
         for jyo_cd in ["01", "05", "10", "30", "44", "55"]:
@@ -203,15 +199,15 @@ class TestH1Parser:
         assert len(tansyo_rows) == 10  # 10 horses with data
         assert tansyo_rows[0]["Kumi"] == "01"
 
-    def test_h1_nar_full_record_format(self):
-        """NAR H1 full record has identical format to JRA."""
-        nar_data = make_h1_record_nar_full(jyo_cd="55")
-        jra_data = make_h1_record_full(jyo_cd="05")
+    def test_h1_different_jyo_cd_same_format(self):
+        """H1 full records with different JyoCD have identical format."""
+        data_55 = make_h1_record_full(jyo_cd="55")
+        data_05 = make_h1_record_full(jyo_cd="05")
 
-        assert len(nar_data) == len(jra_data) == 28955
+        assert len(data_55) == len(data_05) == 28955
         # Only jyo_cd differs
-        assert nar_data[19:21] == b'55'
-        assert jra_data[19:21] == b'05'
+        assert data_55[19:21] == b'55'
+        assert data_05[19:21] == b'05'
 
     @pytest.mark.skipif(
         not os.path.exists(os.path.join(
@@ -264,7 +260,6 @@ class TestAllParsersBasic:
         'H1': 28955, 'H6': 102900, 'HC': 60, 'HN': 251, 'HR': 719,
         'HS': 200, 'HY': 123,
         'JG': 80, 'KS': 772,
-        'HA': 1032,
         'O1': 107, 'O2': 66, 'O3': 70, 'O4': 66, 'O5': 68, 'O6': 70,
         'RA': 856, 'RC': 241, 'SE': 463, 'SK': 78,
         'TK': 727, 'TM': 39,
@@ -328,36 +323,34 @@ class TestAllParsersBasic:
             pytest.fail(f"{record_type} parser crashed on short data")
 
 
-class TestNARJRAFormatCompatibility:
-    """Verify that NAR and JRA use identical record formats.
+class TestJyoCodeFormatCompatibility:
+    """Verify that records with different JyoCD values use identical formats.
 
-    NV-Link (NAR) uses the same JV-Data record format as JV-Link (JRA).
-    The only differences are:
-    - JyoCD range: JRA=01-10, NAR=30-57
-    - Table names: JRA=NL_XX, NAR=NL_XX_NAR
+    JV-Data format is the same regardless of track (JyoCD) value.
+    JyoCD range: 01-10 for JRA tracks, 30-57 for regional tracks.
 
-    Record byte layouts are identical.
+    Record byte layouts are identical across all JyoCD values.
     """
 
-    def test_ra_format_identical(self, factory):
-        """RA format is identical between JRA and NAR."""
+    def test_ra_format_identical_across_jyo_cd(self, factory):
+        """RA format is identical regardless of JyoCD."""
         parser = factory.get_parser("RA")
 
-        jra_data = make_ra_record(jyo_cd="05", hondai="中央テスト")
-        nar_data = make_ra_record(jyo_cd="55", hondai="地方テスト")
+        data_05 = make_ra_record(jyo_cd="05", hondai="東京テスト")
+        data_55 = make_ra_record(jyo_cd="55", hondai="佐賀テスト")
 
-        jra_result = parser.parse(jra_data)
-        nar_result = parser.parse(nar_data)
+        result_05 = parser.parse(data_05)
+        result_55 = parser.parse(data_55)
 
-        assert jra_result is not None
-        assert nar_result is not None
+        assert result_05 is not None
+        assert result_55 is not None
 
         # Same fields exist
-        assert set(jra_result.keys()) == set(nar_result.keys())
+        assert set(result_05.keys()) == set(result_55.keys())
 
         # Different values for jyo-specific fields
-        assert jra_result["JyoCD"] == "05"
-        assert nar_result["JyoCD"] == "55"
+        assert result_05["JyoCD"] == "05"
+        assert result_55["JyoCD"] == "55"
 
     def test_crlf_termination(self):
         """All records end with CRLF."""

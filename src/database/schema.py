@@ -2232,16 +2232,17 @@ SCHEMAS = {
             RaceNum TEXT,
             TorokuTosu TEXT,
             SyussoTosu TEXT,
-            FukuFlag TEXT,
-            WakurenFlag TEXT,
-            UmarenFlag TEXT,
-            WideFlag TEXT,
-            Utan TEXT,
-            SanrenpukuFlag TEXT,
-            SanrentanFlag TEXT,
-            PayKumi TEXT,
-            PayVal INTEGER,
-            PRIMARY KEY (KaisaiDate, JyoCD, Kaiji, Nichiji, RaceNum, PayKumi)
+            HatsubaiFlag TEXT,
+            Reserved TEXT,
+            TotalPay TEXT,
+            PayKumi1 TEXT,
+            PayAmount1 TEXT,
+            PayKumi2 TEXT,
+            PayAmount2 TEXT,
+            PayKumi3 TEXT,
+            PayAmount3 TEXT,
+            PayoutCount TEXT,
+            PRIMARY KEY (KaisaiDate, JyoCD, Kaiji, Nichiji, RaceNum)
         )
     """,
     "NL_NU": """

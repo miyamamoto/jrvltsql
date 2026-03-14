@@ -148,10 +148,6 @@ def _validate_config(config: Dict[str, Any]) -> None:
         # Assume valid keys are at least 10 characters
         raise ConfigError("Invalid JV-Link service key")
 
-    # NV-Link settings are optional; if present, lightly validate service key format length
-    nv_service_key = config.get("nvlink", {}).get("service_key", "")
-    if nv_service_key and not nv_service_key.startswith("${") and len(nv_service_key) < 10:
-        raise ConfigError("Invalid NV-Link service key")
 
 
 def load_config(config_path: Optional[Union[str, Path]] = None) -> Config:
@@ -209,10 +205,6 @@ def get_default_config() -> Dict[str, Any]:
     return {
         "jvlink": {
             "service_key": "",
-        },
-        "nvlink": {
-            "service_key": "",
-            "initialization_key": "",
         },
         "databases": {
             "sqlite": {

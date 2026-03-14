@@ -25,13 +25,11 @@ from src.parser.h1_parser import H1Parser, _H1_ARRAYS, _TOTAL_NAMES
 from src.parser.h6_parser import H6Parser
 from src.parser.factory import ParserFactory
 from src.fetcher.base import FetcherError
-from src.fetcher.historical import HistoricalFetcher
 from src.utils.data_source import DataSource
 from fixtures.record_factory import (
     _pad, _num,
     make_h1_record_full,
     make_h1_record_flat,
-    make_h1_record_nar_full,
 )
 
 
@@ -226,17 +224,17 @@ class TestH1FullStructExpansion:
         tansyo = [r for r in rows if r["BetType"] == "Tansyo"]
         assert len(tansyo) == 18
 
-    def test_nar_h1_same_structure(self):
-        """NAR H1 full record has same expansion as JRA."""
-        nar_data = make_h1_record_nar_full(syusso_tosu="8")
-        jra_data = make_h1_record_full(syusso_tosu="8")
+    def test_different_jyo_cd_same_structure(self):
+        """H1 records with different JyoCD have same expansion structure."""
+        data_05 = make_h1_record_full(syusso_tosu="8", jyo_cd="05")
+        data_09 = make_h1_record_full(syusso_tosu="8", jyo_cd="09")
         parser = H1Parser()
-        nar_rows = parser.parse(nar_data)
-        jra_rows = parser.parse(jra_data)
-        # Same number of rows (structure identical)
-        nar_counts = Counter(r["BetType"] for r in nar_rows)
-        jra_counts = Counter(r["BetType"] for r in jra_rows)
-        assert nar_counts == jra_counts
+        rows_05 = parser.parse(data_05)
+        rows_09 = parser.parse(data_09)
+        # Same number of rows (structure identical regardless of JyoCD)
+        counts_05 = Counter(r["BetType"] for r in rows_05)
+        counts_09 = Counter(r["BetType"] for r in rows_09)
+        assert counts_05 == counts_09
 
 
 class TestH1FlatParsing:
@@ -420,142 +418,6 @@ class TestH6EdgeCases:
         assert result is None or isinstance(result, dict)
 
 
-# ============================================================
-# Historical Fetcher: _should_chunk_by_day Tests
-# ============================================================
-
-
-class TestShouldChunkByDay:
-    """Test the _should_chunk_by_day logic in HistoricalFetcher."""
-
-    def _make_fetcher(self, data_source=DataSource.NAR):
-        """Create a minimal HistoricalFetcher for testing."""
-        with patch.object(HistoricalFetcher, "__init__", lambda self, **kw: None):
-            fetcher = HistoricalFetcher()
-            fetcher.data_source = data_source
-            return fetcher
-
-    def test_nar_multi_day_chunks(self):
-        """NAR with multi-day range and option=1 should chunk."""
-        f = self._make_fetcher(DataSource.NAR)
-        assert f._should_chunk_by_day("20240101", "20240103", 1) is True
-
-    def test_nar_same_day_no_chunk(self):
-        """NAR with same from/to date should not chunk."""
-        f = self._make_fetcher(DataSource.NAR)
-        assert f._should_chunk_by_day("20240101", "20240101", 1) is False
-
-    def test_nar_setup_mode_no_chunk(self):
-        """NAR with option=3 (setup) should not chunk."""
-        f = self._make_fetcher(DataSource.NAR)
-        assert f._should_chunk_by_day("20240101", "20240131", 3) is False
-
-    def test_nar_setup_mode_4_no_chunk(self):
-        """NAR with option=4 (split setup) should not chunk."""
-        f = self._make_fetcher(DataSource.NAR)
-        assert f._should_chunk_by_day("20240101", "20240131", 4) is False
-
-    def test_jra_never_chunks(self):
-        """JRA source never chunks by day."""
-        f = self._make_fetcher(DataSource.JRA)
-        assert f._should_chunk_by_day("20240101", "20240131", 1) is False
-
-    def test_jra_setup_never_chunks(self):
-        """JRA with setup mode never chunks."""
-        f = self._make_fetcher(DataSource.JRA)
-        assert f._should_chunk_by_day("20240101", "20240131", 3) is False
-
-
-# ============================================================
-# Historical Fetcher: NAR Daily Chunking Additional Tests
-# ============================================================
-
-
-class TestNarDailyChunkingExtended:
-    """Extended tests for _fetch_nar_daily."""
-
-    def _make_fetcher(self):
-        with patch.object(HistoricalFetcher, "__init__", lambda self, **kw: None):
-            fetcher = HistoricalFetcher()
-            fetcher.data_source = DataSource.NAR
-            fetcher.show_progress = False
-            fetcher.progress_display = None
-            fetcher._skip_cleanup = False
-            fetcher._nar_skipped_dates = []
-            fetcher._records_fetched = 0
-            fetcher._records_parsed = 0
-            fetcher._records_failed = 0
-            fetcher._files_processed = 0
-            fetcher._total_files = 0
-            fetcher._start_time = None
-            fetcher._service_key = None
-            return fetcher
-
-    def test_single_day_range(self):
-        """Single day range processes one day."""
-        fetcher = self._make_fetcher()
-        call_dates = []
-
-        def mock_fetch(data_spec, from_date, to_date, option):
-            call_dates.append(from_date)
-            return iter([])
-
-        with patch.object(fetcher, "fetch", side_effect=mock_fetch):
-            list(fetcher._fetch_nar_daily("RACE", "20240101", "20240101", 1))
-
-        assert call_dates == ["20240101"]
-        assert fetcher._nar_skipped_dates == []
-
-    def test_503_treated_same_as_502(self):
-        """-503 errors are treated same as -502 (skipped)."""
-        fetcher = self._make_fetcher()
-
-        def mock_fetch(data_spec, from_date, to_date, option):
-            if from_date == "20240102":
-                raise FetcherError("Download failed with status code: -503")
-            return iter([])
-
-        with patch.object(fetcher, "fetch", side_effect=mock_fetch):
-            list(fetcher._fetch_nar_daily("RACE", "20240101", "20240103", 1))
-
-        assert "20240102" in fetcher._nar_skipped_dates
-        assert len(fetcher._nar_skipped_dates) == 1
-
-    def test_data_yielded_from_successful_days(self):
-        """Records from successful days are yielded."""
-        fetcher = self._make_fetcher()
-
-        def mock_fetch(data_spec, from_date, to_date, option):
-            if from_date == "20240102":
-                raise FetcherError("-502 error")
-            return iter([{"date": from_date}])
-
-        with patch.object(fetcher, "fetch", side_effect=mock_fetch):
-            results = list(fetcher._fetch_nar_daily("RACE", "20240101", "20240103", 1))
-
-        assert len(results) == 2  # Day 1 and Day 3
-        dates = [r["date"] for r in results]
-        assert "20240101" in dates
-        assert "20240103" in dates
-
-    def test_skip_cleanup_flag_management(self):
-        """_skip_cleanup is True during loop, False on last day and finally."""
-        fetcher = self._make_fetcher()
-        skip_values = []
-
-        original_fetch = fetcher.fetch
-
-        def mock_fetch(data_spec, from_date, to_date, option):
-            skip_values.append(fetcher._skip_cleanup)
-            return iter([])
-
-        with patch.object(fetcher, "fetch", side_effect=mock_fetch):
-            list(fetcher._fetch_nar_daily("RACE", "20240101", "20240103", 1))
-
-        # First 2 days: _skip_cleanup=True, last day: False
-        assert skip_values == [True, True, False]
-        # After completion
-        assert fetcher._skip_cleanup is False
 
 
 # ============================================================
@@ -584,7 +446,7 @@ class TestQuickstartArgParsing:
         parser.add_argument("-y", "--yes", action="store_true")
         parser.add_argument("--from-date", type=str, default=None)
         parser.add_argument("--to-date", type=str, default=None)
-        parser.add_argument("--source", choices=["jra", "nar", "all"], default="jra")
+        parser.add_argument("--source", choices=["jra"], default="jra")
         parser.add_argument("--db-type", choices=["sqlite", "postgresql"], default="sqlite")
 
         args = parser.parse_args([])
@@ -601,13 +463,13 @@ class TestQuickstartArgParsing:
 
         parser = argparse.ArgumentParser()
         parser.add_argument("--mode", choices=["simple", "standard", "full", "update"], default=None)
-        parser.add_argument("--source", choices=["jra", "nar", "all"], default="jra")
+        parser.add_argument("--source", choices=["jra"], default="jra")
         parser.add_argument("-y", "--yes", action="store_true")
         parser.add_argument("--from-date", type=str, default=None)
 
-        args = parser.parse_args(["--mode", "full", "--source", "nar", "-y", "--from-date", "20200101"])
+        args = parser.parse_args(["--mode", "full", "--source", "jra", "-y", "--from-date", "20200101"])
         assert args.mode == "full"
-        assert args.source == "nar"
+        assert args.source == "jra"
         assert args.yes is True
         assert args.from_date == "20200101"
 
@@ -779,11 +641,8 @@ class TestDataSource:
     def test_jra_value(self):
         assert DataSource.JRA.value == "jra"
 
-    def test_nar_value(self):
-        assert DataSource.NAR.value == "nar"
-
     def test_enum_members(self):
-        assert len(DataSource) == 3  # JRA, NAR, ALL
+        assert len(DataSource) == 1  # JRA only
 
 
 # ============================================================
