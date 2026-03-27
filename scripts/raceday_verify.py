@@ -20,6 +20,7 @@ Usage:
     python scripts/raceday_verify.py --phase post       # 全レース終了後
     python scripts/raceday_verify.py --phase final      # 最終検証 (払戻込み)
     python scripts/raceday_verify.py --phase quickstart # quickstart.bat検証
+    python scripts/raceday_verify.py --phase auto       # 現在時刻からphaseを自動判定 (/loop向け)
 
 Exits with code 0 if checks pass, 1 if issues found, 2 if fatal error.
 """
@@ -34,6 +35,31 @@ from pathlib import Path
 
 
 DB_PATH_DEFAULT = "data/keiba.db"
+
+# ---------------------------------------------------------------------------
+# Auto phase detection (/loop support)
+# ---------------------------------------------------------------------------
+
+# JRA Saturday time → phase mapping
+_PHASE_SCHEDULE = [
+    (10 * 60,       "pre"),        # ~10:00 before races start
+    (13 * 60,       "rt-check"),   # 10:00-13:00 early races (1R~4R)
+    (16 * 60 + 30,  "nl-mid"),     # 13:00-16:30 mid races (7R~11R)
+    (18 * 60,       "post"),       # 16:30-18:00 all races done
+    (20 * 60,       "final"),      # 18:00-20:00 payouts available
+    (24 * 60,       "quickstart"), # 20:00+ end of day
+]
+
+
+def auto_detect_phase() -> str:
+    """Detect appropriate verification phase based on current time (JRA Saturday schedule)."""
+    now = datetime.now()
+    t = now.hour * 60 + now.minute
+    for threshold, phase in _PHASE_SCHEDULE:
+        if t < threshold:
+            return phase
+    return "quickstart"
+
 
 # ---------------------------------------------------------------------------
 # DB helpers
@@ -282,10 +308,15 @@ def main():
     parser.add_argument("--db", default=DB_PATH_DEFAULT)
     parser.add_argument("--date", default=None, help="YYYYMMDD (default: today)")
     parser.add_argument("--fetch", action="store_true", help="Auto-fetch missing NL_ data")
-    parser.add_argument("--phase", default="nl-mid",
-                        choices=["pre", "rt-check", "nl-mid", "post", "final", "quickstart"],
-                        help="Verification phase")
+    parser.add_argument("--phase", default="auto",
+                        choices=["pre", "rt-check", "nl-mid", "post", "final", "quickstart", "auto"],
+                        help="Verification phase (auto=現在時刻から自動判定)")
     args = parser.parse_args()
+
+    # Resolve auto phase
+    if args.phase == "auto":
+        args.phase = auto_detect_phase()
+        print(f"[auto] Detected phase: {args.phase} (based on {datetime.now().strftime('%H:%M')})")
 
     race_date = args.date or date.today().strftime("%Y%m%d")
     year = race_date[:4]
