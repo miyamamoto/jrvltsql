@@ -108,14 +108,16 @@ class RealtimeUpdater:
     # - YS, BT, CS (Change data) - Updated via YSCH, SLOP, etc.
     # - WF (WIN5), JG (重賞), WC (天候) - Not in real-time stream
 
-    def __init__(self, database: BaseDatabase):
+    def __init__(self, database: BaseDatabase, cache_manager=None):
         """Initialize real-time updater.
 
         Args:
             database: Database handler instance
+            cache_manager: Optional CacheManager for writing RT records to local cache
         """
         self.database = database
         self.parser_factory = ParserFactory()
+        self.cache_manager = cache_manager
 
         logger.info("RealtimeUpdater initialized")
 
@@ -140,6 +142,15 @@ class RealtimeUpdater:
             if not parsed_data:
                 logger.warning("Failed to parse record")
                 return None
+
+            # Write to RT cache if enabled
+            if self.cache_manager and buff:
+                from datetime import date
+                today = date.today().strftime("%Y%m%d")
+                # Use RecordSpec to determine spec_code bucket
+                spec = (parsed_data[0].get("RecordSpec") if isinstance(parsed_data, list) else parsed_data.get("RecordSpec")) if parsed_data else None
+                if spec:
+                    self.cache_manager.write_rt_record(spec, today, buff)
 
             # Full-struct parsers (H1, H6) return List[Dict]
             if isinstance(parsed_data, list):

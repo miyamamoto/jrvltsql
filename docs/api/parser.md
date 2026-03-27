@@ -1,6 +1,6 @@
 # パーサーAPI
 
-JV-Data / NV-Dataのレコードをパースするための41種類のパーサー（JRA 38種 + NAR 3種）について説明します。
+JV-Dataのレコードをパースするための38種類のパーサーについて説明します。
 
 ## ParserFactory
 
@@ -26,7 +26,7 @@ types = factory.supported_types()  # ['RA', 'SE', 'HR', ...]
 
 ## レコードタイプ
 
-### JRA 蓄積系データ (38種類)
+### 蓄積系データ (38種類)
 
 | タイプ | パーサー | 説明 |
 |--------|---------|------|
@@ -68,16 +68,6 @@ types = factory.supported_types()  # ['RA', 'SE', 'HR', ...]
 | CK | CKParser | 競走馬情報 |
 | AV | AVParser | 市場取引 |
 | HS | HSParser | 馬主履歴 |
-
-### NAR（地方競馬）データ (3種類)
-
-NV-Link（地方競馬DATA / UmaConn）から取得するデータ用のパーサーです。NVGetsで取得したShift-JISバイトデータをパースします。
-
-| タイプ | パーサー | 説明 | 対応データ種別 |
-|--------|---------|------|---------------|
-| HA | HAParser | 地方競馬 払戻 | RACE（JRA HRに相当、フォーマットは異なる） |
-| NU | NUParser | 地方競馬 競走馬登録 | DIFN（馬マスタに相当） |
-| NC | NCParser | 地方競馬 競馬場マスタ | DIFN（競馬場情報） |
 
 ## BaseParser
 

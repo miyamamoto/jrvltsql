@@ -185,11 +185,10 @@ class TestParserFactory:
     def test_factory_initialization(self):
         """Test factory initialization."""
         factory = ParserFactory()
-        assert len(factory.supported_types()) == 39  # 38 JRA + OA
+        assert len(factory.supported_types()) == 38  # 38 JRA
         assert "RA" in factory.supported_types()
         assert "SE" in factory.supported_types()
         assert "HR" in factory.supported_types()
-        assert "OA" in factory.supported_types()
 
     def test_get_parser(self):
         """Test getting parser by type."""

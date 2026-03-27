@@ -252,7 +252,7 @@ db = PostgreSQLDatabase({
 
 ### 注意事項
 
-PostgreSQLは64-bit Python環境を推奨します。32-bit Python環境（UmaConn/NAR対応）では、SQLiteの使用を推奨します。
+PostgreSQLは64-bit Python環境を推奨しますが、pg8000ドライバを使用することで32-bit Python環境でも動作します。
 
 ## エラーハンドリング
 
@@ -292,15 +292,13 @@ except DatabaseError as e:
 ```python
 from src.database.sqlite_handler import SQLiteDatabase
 from src.database.schema import create_all_tables
-from src.database.schema_nar import create_all_nar_tables
 
 # データベース初期化
 db = SQLiteDatabase({"path": "data/keiba.db"})
 
 with db:
-    # テーブル作成（JRA + NAR）
+    # テーブル作成（NL_, RT_, TS_）
     create_all_tables(db)
-    create_all_nar_tables(db)
 
     # データ挿入
     db.insert("NL_RA", {

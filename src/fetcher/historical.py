@@ -14,6 +14,15 @@ from src.utils.progress import JVLinkProgressDisplay
 logger = get_logger(__name__)
 
 
+def _extract_record_date(record: dict) -> Optional[str]:
+    """Extract YYYYMMDD from a parsed record dict."""
+    year = record.get("Year") or record.get("headYear") or record.get("KaisaiNen")
+    monthday = record.get("MonthDay") or record.get("headMonthDay") or record.get("KaisaiTsukihi")
+    if year and monthday and len(str(year)) == 4 and len(str(monthday)) == 4:
+        return str(year) + str(monthday)
+    return None
+
+
 class HistoricalFetcher(BaseFetcher):
     """Fetcher for historical JV-Data.
 
@@ -34,6 +43,10 @@ class HistoricalFetcher(BaseFetcher):
         ... ):
         ...     print(record['headRecordSpec'])
     """
+
+    def __init__(self, sid: str = "UNKNOWN", service_key: Optional[str] = None, show_progress: bool = True):
+        super().__init__(sid, service_key=service_key, show_progress=show_progress)
+        self.cache_manager = None
 
     def fetch(
         self,
@@ -174,9 +187,22 @@ class HistoricalFetcher(BaseFetcher):
                     total=read_count,
                 )
 
-            # Fetch and parse records
+            # Fetch and parse records (with optional cache write-through)
             for data in self._fetch_and_parse(fetch_task_id, to_date=to_date):
+                if self.cache_manager and "_raw" in data:
+                    rec_date = _extract_record_date(data)
+                    if rec_date:
+                        self.cache_manager.write_nl_record(data_spec, rec_date, data["_raw"])
                 yield data
+
+            # Mark cached dates as complete
+            if self.cache_manager:
+                from datetime import timedelta
+                d = datetime.strptime(from_date, "%Y%m%d").date()
+                end = datetime.strptime(to_date, "%Y%m%d").date()
+                while d <= end:
+                    self.cache_manager.mark_nl_complete(data_spec, d.strftime("%Y%m%d"))
+                    d += timedelta(days=1)
 
             # Log summary
             stats = self.get_statistics()
@@ -259,6 +285,39 @@ class HistoricalFetcher(BaseFetcher):
         to_date = end_date.strftime("%Y%m%d")
 
         yield from self.fetch(data_spec, from_date, to_date, option)
+
+    def fetch_with_cache(self, cache_manager, data_spec: str, from_date: str, to_date: str, option: int = 1) -> Iterator[dict]:
+        """Fetch records: use cache if complete, else fetch from JV-Link and populate cache.
+
+        Args:
+            cache_manager: CacheManager instance
+            data_spec: Data specification code (e.g., "RACE")
+            from_date: Start date in YYYYMMDD format
+            to_date: End date in YYYYMMDD format
+            option: JVOpen option (default: 1)
+
+        Yields:
+            Dictionary of parsed record data
+        """
+        if cache_manager.has_nl_range(data_spec, from_date, to_date):
+            # Full cache hit: yield from cache
+            from src.parser.factory import ParserFactory
+            factory = ParserFactory()
+            for raw in cache_manager.read_nl(data_spec, from_date, to_date):
+                parsed = factory.parse(raw)
+                if parsed:
+                    if isinstance(parsed, list):
+                        for p in parsed:
+                            p["_raw"] = raw
+                            yield p
+                    else:
+                        parsed["_raw"] = raw
+                        yield parsed
+        else:
+            # Cache miss: fetch from JV-Link, write to cache
+            self.cache_manager = cache_manager
+            yield from self.fetch(data_spec, from_date, to_date, option)
+            self.cache_manager = None
 
     def _wait_for_download(
         self, download_task_id: Optional[int] = None, timeout: int = 600, interval: float = 0.08

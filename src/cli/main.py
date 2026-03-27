@@ -312,8 +312,9 @@ def update(ctx, force):
 @click.option("--db", type=click.Choice(["sqlite", "postgresql"]), default=None, help="Database type (default: from config)")
 @click.option("--batch-size", default=1000, help="Batch size for imports (default: 1000)")
 @click.option("--progress/--no-progress", default=True, help="Show progress display (default: enabled)")
+@click.option("--use-cache/--no-cache", default=True, show_default=True, help="Use local cache if available")
 @click.pass_context
-def fetch(ctx, date_from, date_to, data_spec, jv_option, db, batch_size, progress):
+def fetch(ctx, date_from, date_to, data_spec, jv_option, db, batch_size, progress, use_cache):
     """Fetch historical data from JRA-VAN DataLab.
 
     JVOpen option meanings:
@@ -393,12 +394,20 @@ def fetch(ctx, date_from, date_to, data_spec, jv_option, db, batch_size, progres
 
             sid = config.get("jvlink.sid", "JLTSQL") if config else "JLTSQL"
             service_key = config.get("jvlink.service_key") if config else None
+
+            cache_mgr = None
+            if use_cache:
+                from src.cache import CacheManager
+                cache_dir = config.get("cache.directory", "data/cache") if config else "data/cache"
+                cache_mgr = CacheManager(Path(cache_dir))
+
             processor = BatchProcessor(
                 database=database,
                 sid=sid,
                 batch_size=batch_size,
                 service_key=service_key,
                 show_progress=progress,
+                cache_manager=cache_mgr,
             )
 
             if not progress:
@@ -429,6 +438,354 @@ def fetch(ctx, date_from, date_to, data_spec, jv_option, db, batch_size, progres
         console.print(f"\n[red]Error:[/red] {e}", style="bold")
         logger.error("Failed to fetch data", error=str(e), exc_info=True)
         sys.exit(1)
+
+
+# ---------------------------------------------------------------------------
+# cache command group
+# ---------------------------------------------------------------------------
+
+@cli.group()
+@click.pass_context
+def cache(ctx):
+    """Manage local JV-Data cache.
+
+    The cache stores raw JV-Data binary records locally so subsequent
+    fetch calls can skip JV-Link API calls entirely.
+
+    Cache location: data/cache/ (configurable in config.yaml)
+
+    Examples:
+      jltsql cache info
+      jltsql cache build --spec RACE --from 20260101 --to 20260328
+      jltsql cache clear --spec RACE
+    """
+    pass
+
+
+@cache.command("info")
+@click.option("--cache-dir", default="data/cache", show_default=True, help="Cache directory")
+@click.pass_context
+def cache_info(ctx, cache_dir):
+    """Show cache statistics."""
+    from src.cache import CacheManager
+    import json
+
+    mgr = CacheManager(Path(cache_dir))
+    info = mgr.info()
+
+    click.echo(f"\nCache directory: {Path(cache_dir).resolve()}")
+    click.echo(f"Total size: {info['total_size_bytes'] / 1024 / 1024:.1f} MB\n")
+
+    if info["nl"]:
+        click.echo("NL_ (蓄積系) cache:")
+        for spec, s in info["nl"].items():
+            click.echo(f"  {spec:8s}  {s['complete_dates']:4}/{s['cached_dates']:4} dates complete"
+                       f"  {s['date_range']:22s}  {s['size_bytes']/1024:.0f} KB")
+    else:
+        click.echo("NL_ cache: (empty)")
+
+    if info["rt"]:
+        click.echo("\nRT_ (速報系) cache:")
+        for spec, s in info["rt"].items():
+            click.echo(f"  {spec:6s}  {s['cached_dates']:4} dates"
+                       f"  {s['date_range']:22s}  {s['size_bytes']/1024:.0f} KB")
+    else:
+        click.echo("\nRT_ cache: (empty)")
+
+
+@cache.command("build")
+@click.option("--spec", "data_spec", required=True, help="Data spec (RACE, DIFF, DIFFU, etc.)")
+@click.option("--from", "date_from", required=True, help="Start date YYYYMMDD")
+@click.option("--to", "date_to", required=True, help="End date YYYYMMDD")
+@click.option("--option", "jv_option", type=int, default=1, show_default=True,
+              help="JVOpen option: 1=通常, 2=今週, 3=setup, 4=split-setup")
+@click.option("--also-import", is_flag=True, default=False,
+              help="Also import records into DB (default: cache only)")
+@click.option("--db", type=click.Choice(["sqlite", "postgresql"]), default=None)
+@click.option("--cache-dir", default="data/cache", show_default=True)
+@click.pass_context
+def cache_build(ctx, data_spec, date_from, date_to, jv_option, also_import, db, cache_dir):
+    """Fetch from JV-Link and save to local cache.
+
+    By default only saves to cache (no DB write). Use --also-import to
+    also write to the database.
+
+    Examples:
+      jltsql cache build --spec RACE --from 20260101 --to 20260328
+      jltsql cache build --spec DIFF --from 20260101 --to 20260328 --also-import
+    """
+    from src.cache import CacheManager
+    from src.fetcher.historical import HistoricalFetcher
+
+    config = ctx.obj.get("config", {}) if ctx.obj else {}
+    service_key = config.get("jvlink", {}).get("service_key") or os.environ.get("JVLINK_SERVICE_KEY")
+
+    mgr = CacheManager(Path(cache_dir))
+
+    # Check if already cached
+    if mgr.has_nl_range(data_spec, date_from, date_to):
+        click.echo(f"[CACHED] {data_spec} {date_from}..{date_to} already in cache.")
+        click.echo("Use 'cache rebuild' to re-fetch.")
+        return
+
+    click.echo(f"Building cache: {data_spec} {date_from}..{date_to} (option={jv_option})")
+
+    fetcher = HistoricalFetcher(sid="UNKNOWN", service_key=service_key, show_progress=True)
+    fetcher.cache_manager = mgr
+
+    if also_import:
+        # Use BatchProcessor with cache
+        from src.importer.batch import BatchProcessor
+        from src.database.sqlite_handler import SQLiteDatabase
+        from src.database.postgresql_handler import PostgreSQLDatabase
+
+        if db:
+            db_type = db
+        else:
+            db_type = config.get("database.type", "sqlite") if config else "sqlite"
+
+        if db_type == "sqlite":
+            db_config = config.get("databases.sqlite") if config else {"path": "data/keiba.db"}
+            database = SQLiteDatabase(db_config)
+        elif db_type == "postgresql":
+            if not config:
+                click.echo("Error: PostgreSQL requires configuration file.")
+                sys.exit(1)
+            database = PostgreSQLDatabase(config.get("databases.postgresql"))
+        else:
+            click.echo(f"Error: Unsupported database type: {db_type}")
+            sys.exit(1)
+
+        with database:
+            processor = BatchProcessor(
+                database=database,
+                service_key=service_key,
+                show_progress=True,
+                cache_manager=mgr,
+            )
+            stats = processor.process_date_range(data_spec, date_from, date_to, jv_option)
+            click.echo(f"\nImported: {stats.get('records_imported', 0):,} records")
+    else:
+        # Cache-only: fetch but don't import to DB
+        count = 0
+        for record in fetcher.fetch(data_spec, date_from, date_to, jv_option):
+            count += 1
+        fetcher.cache_manager = None
+        click.echo(f"\nCached: {count:,} records for {data_spec} {date_from}..{date_to}")
+
+    # Show updated cache info
+    info = mgr.info()
+    nl_info = info["nl"].get(data_spec.upper(), {})
+    click.echo(f"Cache: {nl_info.get('complete_dates', 0)} dates, "
+               f"{nl_info.get('size_bytes', 0)/1024:.0f} KB")
+
+
+@cache.command("clear")
+@click.option("--spec", default=None, help="Spec to clear (default: all)")
+@click.option("--date", "date_str", default=None, help="Specific date YYYYMMDD to clear")
+@click.option("--rt", is_flag=True, help="Clear RT_ (速報系) cache instead of NL_")
+@click.option("--cache-dir", default="data/cache", show_default=True)
+@click.confirmation_option(prompt="Clear cache data?")
+@click.pass_context
+def cache_clear(ctx, spec, date_str, rt, cache_dir):
+    """Clear local cache files.
+
+    Examples:
+      jltsql cache clear                   # clear all NL_ cache
+      jltsql cache clear --spec RACE       # clear RACE only
+      jltsql cache clear --rt              # clear all RT_ cache
+      jltsql cache clear --spec RACE --date 20260328
+    """
+    from src.cache import CacheManager
+    mgr = CacheManager(Path(cache_dir))
+    deleted = mgr.clear(spec=spec, date_str=date_str, rt=rt)
+    target = "RT_" if rt else "NL_"
+    click.echo(f"Cleared {deleted} cache file(s) from {target} cache.")
+
+
+@cache.command("rebuild")
+@click.option("--spec", "data_spec", required=True)
+@click.option("--from", "date_from", required=True)
+@click.option("--to", "date_to", required=True)
+@click.option("--option", "jv_option", type=int, default=1)
+@click.option("--cache-dir", default="data/cache", show_default=True)
+@click.pass_context
+def cache_rebuild(ctx, data_spec, date_from, date_to, jv_option, cache_dir):
+    """Clear then rebuild cache for a spec/date range.
+
+    Example:
+      jltsql cache rebuild --spec RACE --from 20260301 --to 20260328
+    """
+    from src.cache import CacheManager
+    mgr = CacheManager(Path(cache_dir))
+
+    # Clear first
+    from datetime import datetime, timedelta
+    d = datetime.strptime(date_from, "%Y%m%d").date()
+    end = datetime.strptime(date_to, "%Y%m%d").date()
+    deleted = 0
+    while d <= end:
+        deleted += mgr.clear(spec=data_spec, date_str=d.strftime("%Y%m%d"))
+        d += timedelta(days=1)
+    click.echo(f"Cleared {deleted} existing cache files.")
+
+    # Rebuild via cache build
+    ctx.invoke(cache_build, data_spec=data_spec, date_from=date_from,
+               date_to=date_to, jv_option=jv_option, also_import=False,
+               db=None, cache_dir=cache_dir)
+
+
+# ---------------------------------------------------------------------------
+# cache s3-setup: configure encrypted S3 credentials
+# ---------------------------------------------------------------------------
+
+@cache.command("s3-setup")
+@click.option("--cred-file", default="config/s3_credentials.enc", show_default=True,
+              help="Path to store encrypted credentials")
+@click.pass_context
+def cache_s3_setup(ctx, cred_file):
+    """Configure and store encrypted S3/R2 credentials.
+
+    Credentials are encrypted with AES-256-GCM using a master password
+    you choose. The encrypted file is safe to check into version control.
+
+    Supported backends:
+      - AWS S3: leave endpoint_url blank
+      - Cloudflare R2: endpoint_url = https://<account>.r2.cloudflarestorage.com
+
+    Example:
+      jltsql cache s3-setup
+    """
+    from src.cache.credentials import CredentialManager
+
+    click.echo("=== S3 / Cloudflare R2 Credential Setup ===\n")
+    click.echo("Leave endpoint_url blank for AWS S3.")
+    click.echo("For Cloudflare R2: https://<account_id>.r2.cloudflarestorage.com\n")
+
+    endpoint_url = click.prompt("endpoint_url (blank for AWS S3)", default="", show_default=False)
+    access_key_id = click.prompt("aws_access_key_id")
+    secret_key = click.prompt("aws_secret_access_key", hide_input=True)
+    bucket = click.prompt("bucket_name")
+    region = click.prompt("region_name", default="auto")
+    prefix = click.prompt("S3 key prefix", default="jrvltsql-cache")
+
+    credentials = {
+        "aws_access_key_id": access_key_id,
+        "aws_secret_access_key": secret_key,
+        "bucket_name": bucket,
+        "region_name": region,
+        "prefix": prefix,
+    }
+    if endpoint_url:
+        credentials["endpoint_url"] = endpoint_url
+
+    click.echo("\nChoose a master password to protect your credentials.")
+    password = click.prompt("Master password", hide_input=True, confirmation_prompt=True)
+
+    mgr = CredentialManager(Path(cred_file))
+    mgr.save(credentials, password)
+
+    click.echo(f"\n[OK] Credentials saved (encrypted): {Path(cred_file).resolve()}")
+    click.echo("Use this password whenever you run 'jltsql cache sync'.")
+
+    # Quick connection test
+    if click.confirm("\nTest connection now?", default=True):
+        try:
+            from src.cache.s3_sync import S3Syncer
+            syncer = S3Syncer(cache_dir=Path("data/cache"), credentials=credentials)
+            syncer.test_connection()
+            click.echo("[OK] Connection successful!")
+        except Exception as e:
+            click.echo(f"[WARN] Connection test failed: {e}")
+            click.echo("Credentials saved. Check endpoint/keys and retry.")
+
+
+# ---------------------------------------------------------------------------
+# cache sync: upload / download / bidirectional sync with S3
+# ---------------------------------------------------------------------------
+
+@cache.command("sync")
+@click.option("--upload", "direction", flag_value="upload", help="Local → S3 only")
+@click.option("--download", "direction", flag_value="download", help="S3 → local only")
+@click.option("--both", "direction", flag_value="both", default=True,
+              help="Bidirectional sync (default)")
+@click.option("--dry-run", is_flag=True, help="Show what would be transferred (no actual transfer)")
+@click.option("--cache-dir", default="data/cache", show_default=True)
+@click.option("--cred-file", default="config/s3_credentials.enc", show_default=True)
+@click.pass_context
+def cache_sync(ctx, direction, dry_run, cache_dir, cred_file):
+    """Sync local cache with S3 / Cloudflare R2.
+
+    Uses encrypted credentials from s3-setup. You will be prompted for
+    the master password each time (never stored in plaintext).
+
+    Examples:
+      jltsql cache sync                  # bidirectional
+      jltsql cache sync --upload         # local → S3
+      jltsql cache sync --download       # S3 → local
+      jltsql cache sync --dry-run        # preview only
+    """
+    from src.cache.credentials import CredentialManager
+    from src.cache.s3_sync import S3Syncer, S3SyncError
+
+    cred_mgr = CredentialManager(Path(cred_file))
+    if not cred_mgr.exists():
+        click.echo("[ERROR] S3 credentials not found. Run: jltsql cache s3-setup")
+        raise SystemExit(1)
+
+    password = click.prompt("Master password", hide_input=True)
+    try:
+        credentials = cred_mgr.load(password)
+    except ValueError as e:
+        click.echo(f"[ERROR] {e}")
+        raise SystemExit(1)
+
+    if dry_run:
+        click.echo("[DRY RUN] No files will be transferred.\n")
+
+    def on_progress(action, key, size):
+        rel = key.split("/", 1)[-1] if "/" in key else key
+        click.echo(f"  {action:8s}  {rel}  ({size/1024:.0f} KB)")
+
+    try:
+        syncer = S3Syncer(
+            cache_dir=Path(cache_dir),
+            credentials=credentials,
+            on_progress=on_progress,
+        )
+
+        click.echo(f"Bucket: {credentials['bucket_name']}  "
+                   f"Prefix: {credentials.get('prefix', 'jrvltsql-cache')}\n")
+
+        if direction == "upload":
+            stats = syncer.upload(dry_run=dry_run)
+            click.echo(f"\nUploaded: {stats['uploaded']:,} files "
+                       f"({stats['bytes']/1024/1024:.1f} MB)  "
+                       f"Skipped: {stats['skipped']:,}  Errors: {stats['errors']:,}")
+
+        elif direction == "download":
+            stats = syncer.download(dry_run=dry_run)
+            click.echo(f"\nDownloaded: {stats['downloaded']:,} files "
+                       f"({stats['bytes']/1024/1024:.1f} MB)  "
+                       f"Skipped: {stats['skipped']:,}  Errors: {stats['errors']:,}")
+
+        else:  # both
+            stats = syncer.sync(dry_run=dry_run)
+            click.echo(
+                f"\nSync complete:\n"
+                f"  Uploaded:   {stats['uploaded']:,} files "
+                f"({stats['bytes_up']/1024/1024:.1f} MB)\n"
+                f"  Downloaded: {stats['downloaded']:,} files "
+                f"({stats['bytes_down']/1024/1024:.1f} MB)\n"
+                f"  Skipped:    {stats['skipped']:,} files (same size)\n"
+                f"  Errors:     {stats['errors']:,}"
+            )
+            if stats["errors"] > 0:
+                raise SystemExit(1)
+
+    except S3SyncError as e:
+        click.echo(f"[ERROR] {e}")
+        raise SystemExit(1)
 
 
 @cli.command()

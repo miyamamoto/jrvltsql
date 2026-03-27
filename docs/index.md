@@ -4,11 +4,11 @@ JRA-VAN DataLabの競馬データをSQLiteにインポートするツール (32-
 
 ## 概要
 
-JRVLTSQLは、JRA-VAN DataLab (中央競馬) と地方競馬DATA (NAR) から提供される競馬データを効率的にデータベースに取り込むためのPythonツールです。
+JRVLTSQLは、JRA-VAN DataLab (中央競馬) から提供される競馬データを効率的にデータベースに取り込むためのPythonツールです。
 
 ### 主な機能
 
-- **中央・地方競馬対応**: JV-Link (JRA) と UmaConn (NAR) の両方をサポート
+- **JRA-VAN DataLab対応**: JV-Link COM API を使用した中央競馬データ取得
 - **SQLiteデータベース**: 32-bit Python環境で安定動作する軽量データベース
 - **高速インポート**: バッチ処理による効率的なデータ取り込み
 - **リアルタイム更新**: レース当日のオッズやレース結果をリアルタイムで取得
@@ -17,14 +17,14 @@ JRVLTSQLは、JRA-VAN DataLab (中央競馬) と地方競馬DATA (NAR) から提
 
 ### 技術要件
 
-**重要**: 地方競馬DATA (UmaConn) の安定動作のため、**Python 3.12 (32-bit)** が必須です。
+**重要**: JV-Link COM DLLは32-bitのため、**Python 3.12 (32-bit)** が必須です。
 
 | 要件 | 内容 |
 |------|------|
 | **OS** | Windows 10/11 |
 | **Python** | 3.12 (32-bit) |
 | **データベース** | SQLite（Python標準、追加インストール不要） |
-| **データソース** | JRA-VAN DataLab、地方競馬DATA |
+| **データソース** | JRA-VAN DataLab |
 
 ## クイックスタート
 

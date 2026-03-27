@@ -5,26 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- NAR（地方競馬）サポートを別リポジトリ `jrvltsql-nar`（非公開）に移管しました。本リポジトリは JRA（中央競馬）専用となります。
+
 ## [1.1.0] - 2025-02-08
 
 ### Added
-- NV-Link（地方競馬DATA）対応 — NAR 3パーサー（HA, NU, NC）
 - ワンコマンドインストーラー (`install.ps1`) — `irm ... | iex` で一発セットアップ
 - 自動アップデート機能 (`jltsql update`, `jltsql version --check`)
 - H1/H6パーサーのフルストラクト対応（28,955 / 102,900バイト）
-- NAR -502エラーの自動リトライ（日付分割ダウンロード）
-- quickstart.bat で JRA-VAN / 地方競馬DATA 契約ページの自動オープン
+- quickstart.bat で JRA-VAN 契約ページの自動オープン
 - テストカバレッジ大幅拡充（1,247件: 1,239 pass, 8 skip）
 - JRA実データテストフィクスチャ（27パーサー, 81レコード）
 
 ### Changed
 - 32-bit Python 必須に変更（64-bit非対応を明確化）
-- NV-Link ダウンロード option=3 に変更
-- NAR 認証キーを `"UNKNOWN"` に修正
 
 ### Fixed
 - H1/H6パーサーのフルストラクト解析の不具合修正
-- NV-Link -3 エラー説明の修正
 - テスト3件の失敗修正（wrapper挙動との整合性）
 
 ### Documentation
@@ -43,5 +43,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - quickstart.py 対話形式セットアップウィザード
 - CLI コマンド（fetch, status, monitor, init）
 
+[Unreleased]: https://github.com/miyamamoto/jrvltsql/compare/v1.1.0...HEAD
 [1.1.0]: https://github.com/miyamamoto/jrvltsql/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/miyamamoto/jrvltsql/releases/tag/v1.0.0
