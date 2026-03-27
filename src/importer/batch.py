@@ -46,6 +46,7 @@ class BatchProcessor:
         sid: str = "UNKNOWN",
         service_key: Optional[str] = None,
         show_progress: bool = True,
+        cache_manager=None,
     ):
         """Initialize batch processor.
 
@@ -56,6 +57,7 @@ class BatchProcessor:
             service_key: Optional service key. If provided, it will be set
                         programmatically without requiring registry configuration.
             show_progress: Show stylish progress display (default: True)
+            cache_manager: Optional CacheManager for local file cache read/write
         """
         self.fetcher = HistoricalFetcher(
             sid,
@@ -64,6 +66,7 @@ class BatchProcessor:
         )
         self.importer = DataImporter(database, batch_size)
         self.database = database
+        self.cache_manager = cache_manager
 
         logger.info(
             "BatchProcessor initialized",
@@ -123,9 +126,14 @@ class BatchProcessor:
             except Exception as e:
                 logger.debug(f"Tables might already exist: {e}")
 
-        # Fetch and import records
+        # Fetch and import records (use cache if available)
         try:
-            records = self.fetcher.fetch(data_spec, from_date, to_date, option)
+            if self.cache_manager:
+                records = self.fetcher.fetch_with_cache(
+                    self.cache_manager, data_spec, from_date, to_date, option
+                )
+            else:
+                records = self.fetcher.fetch(data_spec, from_date, to_date, option)
             import_stats = self.importer.import_records(records, auto_commit)
 
             # Combine statistics
