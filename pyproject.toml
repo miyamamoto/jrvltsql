@@ -5,14 +5,14 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "jltsql"
 version = "1.1.0"
-description = "JRA-VAN DataLab / 地方競馬DATA の競馬データをSQLite・PostgreSQLにインポートするツール"
+description = "JRA-VAN DataLab の競馬データをSQLite・PostgreSQLにインポートするツール"
 readme = "README.md"
 license = {text = "Apache-2.0"}
 authors = [
     {name = "JLTSQL Contributors"}
 ]
 requires-python = ">=3.12"
-keywords = ["jra-van", "horse-racing", "data", "sqlite", "postgresql", "nar", "umaconn"]
+keywords = ["jra-van", "horse-racing", "data", "sqlite", "postgresql", "jvlink"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",

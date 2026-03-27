@@ -15,7 +15,7 @@ JRVLTSQLコマンドラインインターフェース（CLI）の完全なリフ
 
 ## 概要
 
-JRVLTSQLは、JRA-VAN DataLab（中央競馬）/ 地方競馬DATA（地方競馬）の競馬データをSQLite/PostgreSQLにインポートするためのコマンドラインツールです。
+JRVLTSQLは、JRA-VAN DataLab（中央競馬）の競馬データをSQLite/PostgreSQLにインポートするためのコマンドラインツールです。
 
 ### 基本的な使い方
 
