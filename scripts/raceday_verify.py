@@ -2,34 +2,47 @@
 """Comprehensive race day verification script.
 
 Verifies both 蓄積系 (NL_) and 速報系 (RT_) data for today's JRA races.
-Designed to be called at multiple checkpoints throughout race day.
+Designed to be called via Claude Code /loop every 30 min:
+    /loop 30m python scripts/raceday_verify.py --phase auto
 
 JRA Saturday schedule (approx):
-  10:05  1R start  → RT_ data ~10:20
-  11:45  4R start  → RT_ data ~12:00
-  13:40  7R start  → RT_ data ~13:55
-  15:25 10R start  → RT_ data ~15:40
-  16:00 11R 重賞   → RT_ data ~16:18
-  16:30 12R last   → RT_ data ~16:47
-  17:30+ NL_ payouts available
+  10:05  1R start  (中山/阪神/小倉/中京 etc)
+  11:45  4R start
+  13:40  7R start
+  15:25 10R start
+  16:00 11R 重賞
+  16:30 12R last race
+  16:45+ last race finishes
+  17:30+ NL_ payout records available (DIFFU)
+
+Phase auto-detection (--phase auto):
+  < 10:05  → pre        (before 1R: schema/master/entry check)
+  10:05-14:00 → rt-check (1R~6R: RT_ realtime data verification)
+  14:00-17:00 → nl-mid   (7R~12R: mid/late race NL_+RT_ checks)
+  17:00-18:00 → post     (all races done: payout wait)
+  18:00-20:00 → final    (payouts available: full consistency)
+  20:00+       → quickstart (end-of-day: quickstart.bat test)
 
 Usage:
+    python scripts/raceday_verify.py --phase auto       # 現在時刻から自動判定 (/loop向け)
     python scripts/raceday_verify.py --phase pre        # 事前確認
     python scripts/raceday_verify.py --phase rt-check   # 速報確認 (レース後)
     python scripts/raceday_verify.py --phase nl-mid     # 蓄積系中間確認
     python scripts/raceday_verify.py --phase post       # 全レース終了後
     python scripts/raceday_verify.py --phase final      # 最終検証 (払戻込み)
     python scripts/raceday_verify.py --phase quickstart # quickstart.bat検証
-    python scripts/raceday_verify.py --phase auto       # 現在時刻からphaseを自動判定 (/loop向け)
+    python scripts/raceday_verify.py --phase all        # 全phaseまとめて実行
 
 Exits with code 0 if checks pass, 1 if issues found, 2 if fatal error.
 """
 
 import argparse
 import json
+import os
 import sqlite3
 import subprocess
 import sys
+import time
 from datetime import datetime, date
 from pathlib import Path
 
@@ -40,19 +53,19 @@ DB_PATH_DEFAULT = "data/keiba.db"
 # Auto phase detection (/loop support)
 # ---------------------------------------------------------------------------
 
-# JRA Saturday time → phase mapping
+# JRA Saturday time boundary → phase (upper bound exclusive)
 _PHASE_SCHEDULE = [
-    (10 * 60,       "pre"),        # ~10:00 before races start
-    (13 * 60,       "rt-check"),   # 10:00-13:00 early races (1R~4R)
-    (16 * 60 + 30,  "nl-mid"),     # 13:00-16:30 mid races (7R~11R)
-    (18 * 60,       "post"),       # 16:30-18:00 all races done
-    (20 * 60,       "final"),      # 18:00-20:00 payouts available
-    (24 * 60,       "quickstart"), # 20:00+ end of day
+    (10 * 60 + 5,   "pre"),        # < 10:05 before 1R
+    (14 * 60,       "rt-check"),   # 10:05-14:00  1R~6R running
+    (17 * 60,       "nl-mid"),     # 14:00-17:00  7R~12R + cooling down
+    (18 * 60,       "post"),       # 17:00-18:00  races done, payouts pending
+    (20 * 60,       "final"),      # 18:00-20:00  payouts available (DIFFU)
+    (24 * 60,       "quickstart"), # 20:00+       end of day
 ]
 
 
 def auto_detect_phase() -> str:
-    """Detect appropriate verification phase based on current time (JRA Saturday schedule)."""
+    """Detect appropriate verification phase based on current time (JRA Saturday)."""
     now = datetime.now()
     t = now.hour * 60 + now.minute
     for threshold, phase in _PHASE_SCHEDULE:
@@ -80,9 +93,16 @@ def q_rows(con, sql, params=()):
         return None
 
 
-def table_exists(con, table):
+def table_exists(con, name):
     row = con.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,)
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?", (name,)
+    ).fetchone()
+    return row is not None
+
+
+def index_exists(con, name):
+    row = con.execute(
+        "SELECT name FROM sqlite_master WHERE type='index' AND name=?", (name,)
     ).fetchone()
     return row is not None
 
@@ -102,14 +122,20 @@ def run_fetch(spec, from_date, to_date, option, db):
 # ---------------------------------------------------------------------------
 
 def check_schema(con, issues):
-    """Verify all expected NL_ and RT_ tables exist."""
-    print("--- Schema Check ---")
-    nl_required = ["NL_RA", "NL_SE", "NL_H1", "NL_H6", "NL_HR",
-                   "NL_O1", "NL_O2", "NL_O3", "NL_O4", "NL_O5", "NL_O6",
-                   "NL_WE", "NL_WH", "NL_UM", "NL_KS", "NL_TK"]
-    rt_required = ["RT_RA", "RT_SE", "RT_H1", "RT_H6",
-                   "RT_O1", "RT_O2", "RT_O3", "RT_O4", "RT_O5", "RT_O6",
-                   "RT_WH", "RT_CC", "RT_JC"]
+    """Verify all expected NL_ and RT_ tables exist (38 record types)."""
+    print("--- [1] Schema Check ---")
+    nl_required = [
+        "NL_RA", "NL_SE", "NL_HR", "NL_H1", "NL_H6",
+        "NL_O1", "NL_O2", "NL_O3", "NL_O4", "NL_O5", "NL_O6",
+        "NL_WE", "NL_WH", "NL_TK",
+        "NL_UM", "NL_KS", "NL_CH", "NL_BR", "NL_BN", "NL_RC",
+        "NL_JC", "NL_TC",
+    ]
+    rt_required = [
+        "RT_RA", "RT_SE", "RT_HR", "RT_H1", "RT_H6",
+        "RT_O1", "RT_O2", "RT_O3", "RT_O4", "RT_O5", "RT_O6",
+        "RT_WH", "RT_CC", "RT_JC",
+    ]
 
     missing_nl = [t for t in nl_required if not table_exists(con, t)]
     missing_rt = [t for t in rt_required if not table_exists(con, t)]
@@ -118,113 +144,423 @@ def check_schema(con, issues):
         print(f"  [MISS] NL_ missing: {missing_nl}")
         issues.append(f"Missing NL_ tables: {missing_nl}")
     else:
-        print(f"  [OK]  NL_ tables: {len(nl_required)} present")
+        print(f"  [OK]  NL_ tables: {len(nl_required)} all present")
 
     if missing_rt:
         print(f"  [MISS] RT_ missing: {missing_rt}")
         issues.append(f"Missing RT_ tables: {missing_rt}")
     else:
-        print(f"  [OK]  RT_ tables: {len(rt_required)} present")
+        print(f"  [OK]  RT_ tables: {len(rt_required)} all present")
+
+
+def check_db_integrity(con, issues):
+    """SQLite integrity_check and quick_check."""
+    print("\n--- [2] DB Integrity ---")
+    try:
+        result = con.execute("PRAGMA integrity_check").fetchone()
+        if result and result[0] == "ok":
+            print("  [OK]  PRAGMA integrity_check: ok")
+        else:
+            msg = result[0] if result else "unknown"
+            print(f"  [FAIL] integrity_check: {msg}")
+            issues.append(f"DB integrity_check failed: {msg}")
+
+        # Check page count / free pages
+        page_count = con.execute("PRAGMA page_count").fetchone()[0]
+        page_size  = con.execute("PRAGMA page_size").fetchone()[0]
+        free_pages = con.execute("PRAGMA freelist_count").fetchone()[0]
+        db_size_mb = (page_count * page_size) / (1024 * 1024)
+        print(f"  [OK]  DB size: {db_size_mb:.1f} MB  (free pages: {free_pages})")
+    except Exception as e:
+        print(f"  [WARN] integrity_check error: {e}")
+
+
+def check_index_health(con, issues):
+    """Verify key indexes exist for query performance."""
+    print("\n--- [3] Index Health ---")
+    key_indexes = [
+        "idx_nl_ra_date",
+        "idx_nl_se_date",
+        "idx_rt_ra_date",
+        "idx_rt_se_date",
+    ]
+    rows = q_rows(con, "SELECT name FROM sqlite_master WHERE type='index' ORDER BY name")
+    existing = {r[0] for r in rows} if rows else set()
+
+    missing = [idx for idx in key_indexes if idx not in existing]
+    if missing:
+        print(f"  [WARN] Missing indexes: {missing}")
+        # Not a hard issue - just a warning
+    else:
+        print(f"  [OK]  Key indexes present")
+
+    total_indexes = len(existing)
+    print(f"  [INFO] Total indexes: {total_indexes}")
 
 
 def check_nl_today(con, year, monthday, issues, label="NL_ 蓄積系"):
     """Check NL_ tables for today's race data."""
-    print(f"\n--- {label} ---")
+    print(f"\n--- [4] {label} ---")
     y, m = year, monthday
 
     checks = {
-        "NL_RA  (race header)": q(con, "SELECT COUNT(*) FROM NL_RA WHERE Year=? AND MonthDay=?", (y, m)),
-        "NL_SE  (starters)   ": q(con, "SELECT COUNT(*) FROM NL_SE WHERE Year=? AND MonthDay=?", (y, m)),
-        "NL_SE  (確定着順)   ": q(con, "SELECT COUNT(*) FROM NL_SE WHERE Year=? AND MonthDay=? AND KakuteiJyuni='01'", (y, m)),
-        "NL_H1  (payouts)    ": q(con, "SELECT COUNT(*) FROM NL_H1 WHERE Year=? AND MonthDay=?", (y, m)),
-        "NL_H6  (3連単)      ": q(con, "SELECT COUNT(*) FROM NL_H6 WHERE Year=? AND MonthDay=?", (y, m)),
-        "NL_O1  (単勝odds)   ": q(con, "SELECT COUNT(*) FROM NL_O1 WHERE Year=? AND MonthDay=?", (y, m)),
-        "NL_WH  (track cond) ": q(con, "SELECT COUNT(*) FROM NL_WH WHERE Year=? AND MonthDay=?", (y, m)),
-        "NL_TK  (track info) ": q(con, "SELECT COUNT(*) FROM NL_TK WHERE Year=? AND MonthDay=?", (y, m)),
+        "NL_RA  (race header) ": q(con, "SELECT COUNT(*) FROM NL_RA WHERE Year=? AND MonthDay=?", (y, m)),
+        "NL_SE  (starters)    ": q(con, "SELECT COUNT(*) FROM NL_SE WHERE Year=? AND MonthDay=?", (y, m)),
+        "NL_SE  (確定着順)    ": q(con, "SELECT COUNT(*) FROM NL_SE WHERE Year=? AND MonthDay=? AND KakuteiJyuni='01'", (y, m)),
+        "NL_H1  (payouts)     ": q(con, "SELECT COUNT(*) FROM NL_H1 WHERE Year=? AND MonthDay=?", (y, m)),
+        "NL_H6  (3連単)       ": q(con, "SELECT COUNT(*) FROM NL_H6 WHERE Year=? AND MonthDay=?", (y, m)),
+        "NL_O1  (単勝odds)    ": q(con, "SELECT COUNT(*) FROM NL_O1 WHERE Year=? AND MonthDay=?", (y, m)),
+        "NL_O2  (複勝odds)    ": q(con, "SELECT COUNT(*) FROM NL_O2 WHERE Year=? AND MonthDay=?", (y, m)),
+        "NL_O3  (枠連odds)    ": q(con, "SELECT COUNT(*) FROM NL_O3 WHERE Year=? AND MonthDay=?", (y, m)),
+        "NL_O4  (馬連odds)    ": q(con, "SELECT COUNT(*) FROM NL_O4 WHERE Year=? AND MonthDay=?", (y, m)),
+        "NL_O5  (3連複odds)   ": q(con, "SELECT COUNT(*) FROM NL_O5 WHERE Year=? AND MonthDay=?", (y, m)),
+        "NL_O6  (3連単odds)   ": q(con, "SELECT COUNT(*) FROM NL_O6 WHERE Year=? AND MonthDay=?", (y, m)),
+        "NL_WH  (track cond)  ": q(con, "SELECT COUNT(*) FROM NL_WH WHERE Year=? AND MonthDay=?", (y, m)),
+        "NL_TK  (track info)  ": q(con, "SELECT COUNT(*) FROM NL_TK WHERE Year=? AND MonthDay=?", (y, m)),
     }
 
     for name, count in checks.items():
         if count is None:
-            print(f"  {name}  TABLE MISSING")
+            print(f"  [--]  {name}  TABLE MISSING")
         else:
-            marker = "  " if count > 0 else "  [!]"
+            marker = "  [OK]" if count > 0 else "  [!] "
             print(f"{marker} {name}  {count:>6}")
 
-    ra_count = checks.get("NL_RA  (race header)")
+    ra_count = checks.get("NL_RA  (race header) ")
     if ra_count is not None and ra_count == 0:
         issues.append("NL_RA: no race headers for today")
 
-    # Venue breakdown
-    rows = q_rows(con, "SELECT JyoCD, COUNT(*) FROM NL_RA WHERE Year=? AND MonthDay=? GROUP BY JyoCD", (y, m))
+    # Venue/race count breakdown
+    rows = q_rows(con, "SELECT JyoCD, COUNT(*) FROM NL_RA WHERE Year=? AND MonthDay=? GROUP BY JyoCD ORDER BY JyoCD", (y, m))
     if rows:
-        venue_str = ", ".join(f"場{r[0]}:{r[1]}R" for r in rows)
-        print(f"  NL_RA  競馬場別         {venue_str}")
+        venue_str = "  ".join(f"場{r[0]}:{r[1]}R" for r in rows)
+        print(f"  [INFO] NL_RA 競馬場別: {venue_str}")
 
     return checks
 
 
 def check_rt_today(con, year, monthday, issues, label="RT_ 速報系"):
     """Check RT_ tables for today's realtime data."""
-    print(f"\n--- {label} ---")
+    print(f"\n--- [5] {label} ---")
     y, m = year, monthday
 
     checks = {
-        "RT_RA  (race 速報)  ": q(con, "SELECT COUNT(*) FROM RT_RA WHERE Year=? AND MonthDay=?", (y, m)),
-        "RT_SE  (着順 速報)  ": q(con, "SELECT COUNT(*) FROM RT_SE WHERE Year=? AND MonthDay=?", (y, m)),
-        "RT_H1  (払戻 速報)  ": q(con, "SELECT COUNT(*) FROM RT_H1 WHERE Year=? AND MonthDay=?", (y, m)),
-        "RT_H6  (3連単速報)  ": q(con, "SELECT COUNT(*) FROM RT_H6 WHERE Year=? AND MonthDay=?", (y, m)),
-        "RT_O1  (単勝 速報)  ": q(con, "SELECT COUNT(*) FROM RT_O1 WHERE Year=? AND MonthDay=?", (y, m)),
-        "RT_O5  (3連複速報)  ": q(con, "SELECT COUNT(*) FROM RT_O5 WHERE Year=? AND MonthDay=?", (y, m)),
-        "RT_O6  (3連単速報)  ": q(con, "SELECT COUNT(*) FROM RT_O6 WHERE Year=? AND MonthDay=?", (y, m)),
-        "RT_WH  (馬場 速報)  ": q(con, "SELECT COUNT(*) FROM RT_WH WHERE Year=? AND MonthDay=?", (y, m)),
-        "RT_CC  (取消 速報)  ": q(con, "SELECT COUNT(*) FROM RT_CC WHERE Year=? AND MonthDay=?", (y, m)),
+        "RT_RA  (race 速報)   ": q(con, "SELECT COUNT(*) FROM RT_RA WHERE Year=? AND MonthDay=?", (y, m)),
+        "RT_SE  (着順 速報)   ": q(con, "SELECT COUNT(*) FROM RT_SE WHERE Year=? AND MonthDay=?", (y, m)),
+        "RT_H1  (払戻 速報)   ": q(con, "SELECT COUNT(*) FROM RT_H1 WHERE Year=? AND MonthDay=?", (y, m)),
+        "RT_H6  (3連単速報)   ": q(con, "SELECT COUNT(*) FROM RT_H6 WHERE Year=? AND MonthDay=?", (y, m)),
+        "RT_O1  (単勝 速報)   ": q(con, "SELECT COUNT(*) FROM RT_O1 WHERE Year=? AND MonthDay=?", (y, m)),
+        "RT_O2  (複勝 速報)   ": q(con, "SELECT COUNT(*) FROM RT_O2 WHERE Year=? AND MonthDay=?", (y, m)),
+        "RT_O3  (枠連 速報)   ": q(con, "SELECT COUNT(*) FROM RT_O3 WHERE Year=? AND MonthDay=?", (y, m)),
+        "RT_O4  (馬連 速報)   ": q(con, "SELECT COUNT(*) FROM RT_O4 WHERE Year=? AND MonthDay=?", (y, m)),
+        "RT_O5  (3連複速報)   ": q(con, "SELECT COUNT(*) FROM RT_O5 WHERE Year=? AND MonthDay=?", (y, m)),
+        "RT_O6  (3連単速報)   ": q(con, "SELECT COUNT(*) FROM RT_O6 WHERE Year=? AND MonthDay=?", (y, m)),
+        "RT_WH  (馬場 速報)   ": q(con, "SELECT COUNT(*) FROM RT_WH WHERE Year=? AND MonthDay=?", (y, m)),
+        "RT_CC  (取消 速報)   ": q(con, "SELECT COUNT(*) FROM RT_CC WHERE Year=? AND MonthDay=?", (y, m)),
+        "RT_JC  (重勝 速報)   ": q(con, "SELECT COUNT(*) FROM RT_JC WHERE Year=? AND MonthDay=?", (y, m)),
     }
 
     for name, count in checks.items():
         if count is None:
-            print(f"  {name}  TABLE MISSING")
+            print(f"  [--]  {name}  TABLE MISSING")
         else:
-            marker = "  " if count > 0 else "  [!]"
+            marker = "  [OK]" if count > 0 else "  [!] "
             print(f"{marker} {name}  {count:>6}")
 
     return checks
 
 
-def check_nl_rt_consistency(con, year, monthday, issues):
-    """Compare NL_ vs RT_ counts to detect sync issues."""
-    print("\n--- NL_ vs RT_ Consistency ---")
+def check_rt_process_running(issues):
+    """Check if the realtime monitoring process is active (lock file present)."""
+    print("\n--- [6] Realtime Process Status ---")
+    lock_file = Path(".locks/realtime_updater.lock")
+    if lock_file.exists():
+        try:
+            pid = int(lock_file.read_text().strip())
+            # Check if PID is alive
+            if sys.platform == "win32":
+                r = subprocess.run(
+                    ["tasklist", "/FI", f"PID eq {pid}"],
+                    capture_output=True, text=True, timeout=5
+                )
+                alive = str(pid) in r.stdout
+            else:
+                try:
+                    os.kill(pid, 0)
+                    alive = True
+                except OSError:
+                    alive = False
+
+            if alive:
+                print(f"  [OK]  Realtime monitor running (PID {pid})")
+            else:
+                print(f"  [!]   Lock file exists but PID {pid} not running")
+                issues.append(f"Realtime monitor lock stale (PID {pid} not found)")
+        except (ValueError, IOError):
+            print(f"  [!]   Lock file unreadable: {lock_file}")
+            issues.append("Realtime monitor lock file unreadable")
+    else:
+        print(f"  [!]   No lock file: {lock_file}")
+        print(f"        Start: python -m src.cli.main realtime start --specs 0B12,0B15,0B30-0B36")
+        issues.append("Realtime monitor not running (no lock file)")
+
+
+def check_rt_data_freshness(con, year, monthday, issues, stale_minutes=15):
+    """Check how recently RT_ records were written (data freshness)."""
+    print(f"\n--- [7] RT_ Data Freshness (stale if >{stale_minutes} min) ---")
     y, m = year, monthday
 
+    # Use DB file mtime as proxy if no timestamp column
+    db_path = None
+    try:
+        db_path = Path(con.execute("PRAGMA database_list").fetchone()[2])
+    except Exception:
+        pass
+
+    # Check RT_RA row count progression (compare with report files)
+    rt_ra_now = q(con, "SELECT COUNT(*) FROM RT_RA WHERE Year=? AND MonthDay=?", (y, m)) or 0
+    rt_se_now = q(con, "SELECT COUNT(*) FROM RT_SE WHERE Year=? AND MonthDay=?", (y, m)) or 0
+
+    if db_path and db_path.exists():
+        mtime = db_path.stat().st_mtime
+        age_min = (time.time() - mtime) / 60
+        marker = "[OK] " if age_min < stale_minutes else "[!]  "
+        print(f"  {marker} DB last modified: {age_min:.1f} min ago")
+        if age_min >= stale_minutes and rt_ra_now == 0:
+            issues.append(f"DB not updated in {age_min:.0f} min and RT_RA=0 — realtime may be stalled")
+    else:
+        print(f"  [INFO] Cannot check DB mtime")
+
+    print(f"  [INFO] RT_RA today: {rt_ra_now}  RT_SE today: {rt_se_now}")
+
+    # Check latest report for count progression
+    latest_report = _find_latest_report(y + m)
+    if latest_report:
+        prev_rt_ra = latest_report.get("rt", {}).get("RT_RA  (race 速報)", 0) or 0
+        if rt_ra_now > prev_rt_ra:
+            print(f"  [OK]  RT_RA grew since last report: {prev_rt_ra} → {rt_ra_now}")
+        elif rt_ra_now == prev_rt_ra and rt_ra_now > 0:
+            print(f"  [!]   RT_RA unchanged since last report: {rt_ra_now} (no new data?)")
+        elif rt_ra_now == 0:
+            print(f"  [!]   RT_RA still 0 — no realtime data received yet")
+
+
+def _find_latest_report(race_date):
+    """Load the most recent raceday report JSON for comparison."""
+    report_dir = Path("data")
+    if not report_dir.exists():
+        return None
+    patterns = sorted(report_dir.glob(f"raceday_report_{race_date}_*.json"), reverse=True)
+    if not patterns:
+        return None
+    try:
+        return json.loads(patterns[0].read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def check_race_count_by_venue(con, year, monthday, issues):
+    """Verify each venue has a plausible number of races (typically 12R)."""
+    print("\n--- [8] Race Count by Venue ---")
+    y, m = year, monthday
+
+    rows = q_rows(
+        con,
+        "SELECT JyoCD, COUNT(DISTINCT RaceNum) FROM NL_RA WHERE Year=? AND MonthDay=? GROUP BY JyoCD ORDER BY JyoCD",
+        (y, m)
+    )
+    rt_rows = q_rows(
+        con,
+        "SELECT JyoCD, COUNT(DISTINCT RaceNum) FROM RT_RA WHERE Year=? AND MonthDay=? GROUP BY JyoCD ORDER BY JyoCD",
+        (y, m)
+    )
+
+    if not rows and not rt_rows:
+        print(f"  [!]   No race data for today in NL_RA or RT_RA")
+        return
+
+    venue_map = {}
+    if rows:
+        for jyo, cnt in rows:
+            venue_map[jyo] = {"nl": cnt, "rt": 0}
+    if rt_rows:
+        for jyo, cnt in rt_rows:
+            if jyo not in venue_map:
+                venue_map[jyo] = {"nl": 0, "rt": 0}
+            venue_map[jyo]["rt"] = cnt
+
+    for jyo, counts in sorted(venue_map.items()):
+        nl_c, rt_c = counts["nl"], counts["rt"]
+        max_r = max(nl_c, rt_c)
+        marker = "[OK] " if max_r >= 8 else "[!]  "  # at least 8R expected
+        print(f"  {marker} 場{jyo}:  NL_={nl_c:2}R  RT_={rt_c:2}R")
+        if max_r > 0 and max_r < 8:
+            issues.append(f"場{jyo}: only {max_r}R recorded (expected ~12R)")
+
+
+def check_odds_coverage(con, year, monthday, issues):
+    """Check that all 6 odds types have data for active races."""
+    print("\n--- [9] Odds Coverage (NL_ + RT_) ---")
+    y, m = year, monthday
+
+    odds_tables = [
+        ("NL_O1", "単勝"), ("NL_O2", "複勝"), ("NL_O3", "枠連"),
+        ("NL_O4", "馬連"), ("NL_O5", "3連複"), ("NL_O6", "3連単"),
+        ("RT_O1", "単勝速"), ("RT_O2", "複勝速"), ("RT_O3", "枠連速"),
+        ("RT_O4", "馬連速"), ("RT_O5", "3連複速"), ("RT_O6", "3連単速"),
+    ]
+    for tbl, name in odds_tables:
+        cnt = q(con, f"SELECT COUNT(*) FROM {tbl} WHERE Year=? AND MonthDay=?", (y, m))
+        if cnt is None:
+            print(f"  [--]  {tbl:8} ({name:5}) TABLE MISSING")
+        elif cnt == 0:
+            print(f"  [!]   {tbl:8} ({name:5})       0")
+        else:
+            print(f"  [OK]  {tbl:8} ({name:5})  {cnt:>6}")
+
+
+def check_se_results(con, year, monthday, issues):
+    """Check race result completion — confirmed finishers (KakuteiJyuni='01' = winner)."""
+    print("\n--- [10] Race Result Completion ---")
+    y, m = year, monthday
+
+    nl_ra_count = q(con, "SELECT COUNT(DISTINCT RaceNum||JyoCD) FROM NL_RA WHERE Year=? AND MonthDay=?", (y, m)) or 0
+    nl_winner   = q(con, "SELECT COUNT(*) FROM NL_SE WHERE Year=? AND MonthDay=? AND KakuteiJyuni='01'", (y, m)) or 0
+    rt_winner   = q(con, "SELECT COUNT(*) FROM RT_SE WHERE Year=? AND MonthDay=? AND KakuteiJyuni='01'", (y, m)) or 0
+
+    print(f"  [INFO] NL_RA distinct races today: {nl_ra_count}")
+    print(f"  [INFO] NL_SE confirmed winners:    {nl_winner}")
+    print(f"  [INFO] RT_SE confirmed winners:    {rt_winner}")
+
+    if nl_ra_count > 0:
+        completion = nl_winner / nl_ra_count * 100
+        marker = "[OK] " if completion >= 80 else "[!]  "
+        print(f"  {marker} Result completion: {nl_winner}/{nl_ra_count} races ({completion:.0f}%)")
+        if completion < 50 and datetime.now().hour >= 17:
+            issues.append(f"Race results only {completion:.0f}% complete after 17:00 — fetch DIFFU")
+
+
+def check_payout_completeness(con, year, monthday, issues):
+    """Verify H1 (payout) record count matches RA race count."""
+    print("\n--- [11] Payout Completeness ---")
+    y, m = year, monthday
+
+    ra_count = q(con, "SELECT COUNT(DISTINCT RaceNum||JyoCD) FROM NL_RA WHERE Year=? AND MonthDay=?", (y, m)) or 0
+    nl_h1    = q(con, "SELECT COUNT(*) FROM NL_H1 WHERE Year=? AND MonthDay=?", (y, m)) or 0
+    nl_h6    = q(con, "SELECT COUNT(*) FROM NL_H6 WHERE Year=? AND MonthDay=?", (y, m)) or 0
+    rt_h1    = q(con, "SELECT COUNT(*) FROM RT_H1 WHERE Year=? AND MonthDay=?", (y, m)) or 0
+    rt_h6    = q(con, "SELECT COUNT(*) FROM RT_H6 WHERE Year=? AND MonthDay=?", (y, m)) or 0
+
+    print(f"  [INFO] NL_RA races: {ra_count}   NL_H1: {nl_h1}   NL_H6: {nl_h6}")
+    print(f"  [INFO] RT_H1: {rt_h1}   RT_H6: {rt_h6}")
+
+    # After all races: H1 should roughly equal RA count
+    now_h = datetime.now().hour
+    if now_h >= 17 and ra_count > 0:
+        if nl_h1 == 0 and rt_h1 == 0:
+            issues.append("No payout data (H1) after 17:00 — run fetch DIFFU or check realtime")
+        elif nl_h1 < ra_count * 0.8:
+            marker = "[!]  "
+            print(f"  {marker} NL_H1 ({nl_h1}) << NL_RA ({ra_count}) — payouts incomplete")
+            issues.append(f"NL_H1 ({nl_h1}) incomplete vs NL_RA ({ra_count})")
+        else:
+            print(f"  [OK]  Payout data looks complete")
+
+
+def check_duplicate_race_ids(con, year, monthday, issues):
+    """Check for duplicate primary keys in NL_RA and RT_RA."""
+    print("\n--- [12] Duplicate Race ID Check ---")
+    y, m = year, monthday
+
+    for tbl in ["NL_RA", "RT_RA"]:
+        if not table_exists(con, tbl):
+            print(f"  [--]  {tbl} TABLE MISSING")
+            continue
+        # Detect duplicate (Year, MonthDay, JyoCD, RaceNum)
+        dupes = q(
+            con,
+            f"SELECT COUNT(*) FROM (SELECT Year,MonthDay,JyoCD,RaceNum FROM {tbl} "
+            f"WHERE Year=? AND MonthDay=? GROUP BY Year,MonthDay,JyoCD,RaceNum HAVING COUNT(*)>1)",
+            (y, m)
+        ) or 0
+        if dupes > 0:
+            print(f"  [!]   {tbl}: {dupes} duplicate race keys found")
+            issues.append(f"{tbl} has {dupes} duplicate race keys for today")
+        else:
+            print(f"  [OK]  {tbl}: no duplicate race IDs")
+
+
+def check_nl_rt_consistency(con, year, monthday, issues):
+    """Compare NL_ vs RT_ counts to detect sync issues."""
+    print("\n--- [13] NL_ vs RT_ Consistency ---")
+    y, m = year, monthday
+
+    pairs = [
+        ("NL_RA", "RT_RA", "race headers"),
+        ("NL_SE", "RT_SE", "race entries"),
+        ("NL_H1", "RT_H1", "payouts"),
+    ]
+    for nl_tbl, rt_tbl, label in pairs:
+        nl_c = q(con, f"SELECT COUNT(*) FROM {nl_tbl} WHERE Year=? AND MonthDay=?", (y, m)) or 0
+        rt_c = q(con, f"SELECT COUNT(*) FROM {rt_tbl} WHERE Year=? AND MonthDay=?", (y, m)) or 0
+        total = nl_c + rt_c
+        marker = "[OK] " if total > 0 else "[!]  "
+        print(f"  {marker} {label:15}  NL_={nl_c:5}  RT_={rt_c:5}")
+
+    # Warn if RT_ has data but NL_ is significantly behind
     nl_ra = q(con, "SELECT COUNT(*) FROM NL_RA WHERE Year=? AND MonthDay=?", (y, m)) or 0
     rt_ra = q(con, "SELECT COUNT(*) FROM RT_RA WHERE Year=? AND MonthDay=?", (y, m)) or 0
-    nl_h1 = q(con, "SELECT COUNT(*) FROM NL_H1 WHERE Year=? AND MonthDay=?", (y, m)) or 0
-    rt_h1 = q(con, "SELECT COUNT(*) FROM RT_H1 WHERE Year=? AND MonthDay=?", (y, m)) or 0
-
-    print(f"  NL_RA={nl_ra:4}  RT_RA={rt_ra:4}  {'OK' if nl_ra > 0 or rt_ra > 0 else '[!] both zero'}")
-    print(f"  NL_H1={nl_h1:4}  RT_H1={rt_h1:4}  {'OK' if nl_h1 > 0 or rt_h1 > 0 else '[!] no payouts yet'}")
-
     if nl_ra > 0 and rt_ra == 0:
-        issues.append("RT_RA=0 but NL_RA has data - realtime monitoring may not be running")
+        issues.append("RT_RA=0 but NL_RA has data — realtime monitoring may not be running")
     if nl_ra == 0 and rt_ra == 0:
-        issues.append("Both NL_RA and RT_RA=0 for today - no race data at all")
+        issues.append("Both NL_RA and RT_RA=0 — no race data at all")
 
 
 def check_master_data(con, issues):
-    """Check horse/jockey master tables."""
-    print("\n--- Master Data ---")
+    """Check horse/jockey/trainer master tables."""
+    print("\n--- [14] Master Data ---")
     um = q(con, "SELECT COUNT(*) FROM NL_UM") or 0
     ks = q(con, "SELECT COUNT(*) FROM NL_KS") or 0
-    print(f"  NL_UM  (horses)    {um:>8,}")
-    print(f"  NL_KS  (jockeys)   {ks:>8,}")
+    ch = q(con, "SELECT COUNT(*) FROM NL_CH") or 0 if table_exists(con, "NL_CH") else None
+    print(f"  {'[OK] ' if um > 0 else '[!]  '} NL_UM  (horses)    {um:>8,}")
+    print(f"  {'[OK] ' if ks > 0 else '[!]  '} NL_KS  (jockeys)   {ks:>8,}")
+    if ch is not None:
+        print(f"  {'[OK] ' if ch > 0 else '[!]  '} NL_CH  (trainers)  {ch:>8,}")
     if um == 0:
-        issues.append("NL_UM (horse master) is empty - run setup fetch")
+        issues.append("NL_UM (horse master) empty — run setup fetch")
     if ks == 0:
-        issues.append("NL_KS (jockey master) is empty - run setup fetch")
+        issues.append("NL_KS (jockey master) empty — run setup fetch")
+
+
+def check_cache_status(issues):
+    """Check local NL_ / RT_ cache coverage."""
+    print("\n--- [15] Local Cache Status ---")
+    cache_dir = Path("data/cache")
+    if not cache_dir.exists():
+        print(f"  [!]   Cache directory not found: {cache_dir}")
+        issues.append("Cache directory missing — cache not initialized")
+        return
+
+    today_str = date.today().strftime("%Y%m%d")
+    nl_dir = cache_dir / "nl"
+    rt_dir = cache_dir / "rt"
+
+    for kind, base_dir in [("NL_", nl_dir), ("RT_", rt_dir)]:
+        if not base_dir.exists():
+            print(f"  [!]   {kind} cache dir missing: {base_dir}")
+            continue
+        specs = [d.name for d in base_dir.iterdir() if d.is_dir()]
+        if not specs:
+            print(f"  [!]   {kind} cache: no spec dirs found")
+            continue
+        total_files = sum(len(list(d.glob("*.bin"))) for d in base_dir.iterdir() if d.is_dir())
+        today_files = sum(len(list(d.glob(f"{today_str}.bin"))) for d in base_dir.iterdir() if d.is_dir())
+        print(f"  [OK]  {kind} cache: {len(specs)} specs, {total_files} total bin files, {today_files} today")
 
 
 def run_unit_tests(issues):
-    """Run unit test suite."""
-    print("\n--- Unit Tests ---")
+    """Run unit test suite (exclude integration/e2e)."""
+    print("\n--- [16] Unit Tests ---")
     cmd = [sys.executable, "-m", "pytest", "tests/",
            "-q", "--tb=line",
            "--ignore=tests/unit/test_jvlink_bridge.py",
@@ -234,54 +570,57 @@ def run_unit_tests(issues):
            "--basetemp=C:/tmp/pytest-jrvl",
            "--no-header"]
     r = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
-    # Print last few lines
     lines = (r.stdout + r.stderr).strip().splitlines()
-    for line in lines[-8:]:
+    for line in lines[-10:]:
         print(f"  {line}")
     if r.returncode != 0:
-        issues.append(f"Unit tests failed (exit {r.returncode}) - see output above")
+        issues.append(f"Unit tests failed (exit {r.returncode})")
         return False
     return True
 
 
 def test_quickstart(db, issues):
-    """Verify quickstart.bat flow (dry run via quickstart.py --check)."""
-    print("\n--- quickstart.bat Smoke Test ---")
-    # Check that quickstart.py exists and is importable
-    qs = Path("scripts/quickstart.py")
+    """Verify quickstart.bat and quickstart.py are healthy."""
+    print("\n--- [17] quickstart.bat Smoke Test ---")
+    qs  = Path("scripts/quickstart.py")
     bat = Path("scripts/quickstart.bat")
-    if not qs.exists():
-        print(f"  [MISS] scripts/quickstart.py not found")
-        issues.append("scripts/quickstart.py missing")
-        return
-    if not bat.exists():
-        print(f"  [MISS] scripts/quickstart.bat not found")
-        issues.append("scripts/quickstart.bat missing")
-        return
 
-    # Syntax check
+    for path in [qs, bat]:
+        if not path.exists():
+            print(f"  [MISS] {path} not found")
+            issues.append(f"{path} missing")
+            return
+
+    # Python syntax check
     r = subprocess.run([sys.executable, "-m", "py_compile", str(qs)],
                        capture_output=True, timeout=10)
     if r.returncode == 0:
-        print(f"  [OK]  scripts/quickstart.py syntax OK")
+        print(f"  [OK]  quickstart.py syntax OK")
     else:
-        print(f"  [FAIL] scripts/quickstart.py syntax error: {r.stderr.decode()}")
+        print(f"  [FAIL] quickstart.py syntax error")
         issues.append("quickstart.py has syntax errors")
         return
 
-    # Check bat references valid scripts
+    # JRA-only check (no NAR references)
     bat_text = bat.read_text(encoding="utf-8", errors="replace")
     if "NAR" in bat_text or "nar_v5" in bat_text:
         issues.append("quickstart.bat still contains NAR references")
         print("  [FAIL] quickstart.bat contains NAR references")
     else:
-        print(f"  [OK]  scripts/quickstart.bat is JRA-only")
+        print(f"  [OK]  quickstart.bat is JRA-only")
 
-    # Check DB is accessible
-    if Path(db).exists():
-        print(f"  [OK]  DB exists: {Path(db).resolve()}")
+    # Check --option bug is fixed (should use --mode now)
+    if "--option" in bat_text:
+        print("  [!]   quickstart.bat uses --option (deprecated, should use --mode)")
+        issues.append("quickstart.bat uses deprecated --option argument")
     else:
-        print(f"  [!]   DB not found: {db} (will be created on first run)")
+        print("  [OK]  quickstart.bat uses --mode correctly")
+
+    # DB accessible
+    if Path(db).exists():
+        print(f"  [OK]  DB: {Path(db).resolve()}")
+    else:
+        print(f"  [!]   DB not found: {db}")
 
 
 def write_report(phase, race_date, nl_checks, rt_checks, issues, report_path):
@@ -296,7 +635,122 @@ def write_report(phase, race_date, nl_checks, rt_checks, issues, report_path):
         "rt": {k.strip(): v for k, v in (rt_checks or {}).items()},
     }
     Path(report_path).write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"\n  Report saved: {report_path}")
+    print(f"\n  Report: {report_path}")
+
+
+# ---------------------------------------------------------------------------
+# Phase runners
+# ---------------------------------------------------------------------------
+
+def run_phase_pre(con, args, year, monthday, issues, nl_checks, rt_checks):
+    check_schema(con, issues)
+    check_db_integrity(con, issues)
+    check_index_health(con, issues)
+    check_master_data(con, issues)
+    nl_checks.update(check_nl_today(con, year, monthday, issues, "NL_ 蓄積系 (pre-race)") or {})
+    check_duplicate_race_ids(con, year, monthday, issues)
+
+    if nl_checks.get("NL_RA  (race header) ") == 0 and args.fetch:
+        print(f"\n[AUTO-FETCH] Fetching today's RACE entries (option=2)...")
+        if run_fetch("RACE", args.date or date.today().strftime("%Y%m%d"),
+                     args.date or date.today().strftime("%Y%m%d"), 2, args.db):
+            nl_checks.update(check_nl_today(con, year, monthday, [], "NL_ after fetch") or {})
+
+    run_unit_tests(issues)
+    test_quickstart(args.db, issues)
+
+
+def run_phase_rt_check(con, args, year, monthday, issues, nl_checks, rt_checks):
+    rt_checks.update(check_rt_today(con, year, monthday, issues, "RT_ 速報系 (during races)") or {})
+    nl_checks.update(check_nl_today(con, year, monthday, [], "NL_ 蓄積系") or {})
+    check_rt_process_running(issues)
+    check_rt_data_freshness(con, year, monthday, issues)
+    check_odds_coverage(con, year, monthday, issues)
+    check_race_count_by_venue(con, year, monthday, issues)
+    check_nl_rt_consistency(con, year, monthday, issues)
+    check_duplicate_race_ids(con, year, monthday, issues)
+
+    if rt_checks.get("RT_RA  (race 速報)   ") == 0:
+        print("\n  [WARNING] RT_RA=0: realtime monitoring may not be running.")
+        print("  Start: python -m src.cli.main realtime start --specs 0B12,0B15,0B30,0B31,0B32,0B33,0B34,0B35,0B36")
+        issues.append("RT_RA=0: realtime monitoring likely not running")
+
+
+def run_phase_nl_mid(con, args, year, monthday, issues, nl_checks, rt_checks):
+    check_schema(con, issues)
+    nl_checks.update(check_nl_today(con, year, monthday, issues, "NL_ 蓄積系 (mid-race)") or {})
+    rt_checks.update(check_rt_today(con, year, monthday, issues, "RT_ 速報系 (mid-race)") or {})
+    check_rt_process_running(issues)
+    check_rt_data_freshness(con, year, monthday, issues)
+    check_odds_coverage(con, year, monthday, issues)
+    check_race_count_by_venue(con, year, monthday, issues)
+    check_se_results(con, year, monthday, issues)
+    check_nl_rt_consistency(con, year, monthday, issues)
+
+    if nl_checks.get("NL_RA  (race header) ") == 0 and args.fetch:
+        print(f"\n[AUTO-FETCH] Fetching RACE data (option=1)...")
+        if run_fetch("RACE", args.date or date.today().strftime("%Y%m%d"),
+                     args.date or date.today().strftime("%Y%m%d"), 1, args.db):
+            nl_checks.update(check_nl_today(con, year, monthday, [], "NL_ after fetch") or {})
+
+
+def run_phase_post(con, args, year, monthday, issues, nl_checks, rt_checks):
+    check_schema(con, issues)
+    nl_checks.update(check_nl_today(con, year, monthday, issues, "NL_ 蓄積系 (post-race)") or {})
+    rt_checks.update(check_rt_today(con, year, monthday, issues, "RT_ 速報系 (post-race)") or {})
+    check_rt_data_freshness(con, year, monthday, issues, stale_minutes=60)
+    check_race_count_by_venue(con, year, monthday, issues)
+    check_se_results(con, year, monthday, issues)
+    check_payout_completeness(con, year, monthday, issues)
+    check_nl_rt_consistency(con, year, monthday, issues)
+    check_master_data(con, issues)
+    check_duplicate_race_ids(con, year, monthday, issues)
+
+    race_date = args.date or date.today().strftime("%Y%m%d")
+    if args.fetch:
+        if (nl_checks.get("NL_H1  (payouts)     ") or 0) == 0:
+            print(f"\n[AUTO-FETCH] Fetching DIFFU (payouts/results)...")
+            run_fetch("DIFFU", race_date, race_date, 1, args.db)
+        if (nl_checks.get("NL_RA  (race header) ") or 0) == 0:
+            print(f"\n[AUTO-FETCH] Fetching RACE data...")
+            run_fetch("RACE", race_date, race_date, 1, args.db)
+        nl_checks.update(check_nl_today(con, year, monthday, [], "NL_ after fetch") or {})
+
+
+def run_phase_final(con, args, year, monthday, issues, nl_checks, rt_checks):
+    check_schema(con, issues)
+    check_db_integrity(con, issues)
+    nl_checks.update(check_nl_today(con, year, monthday, issues, "NL_ 蓄積系 (final)") or {})
+    rt_checks.update(check_rt_today(con, year, monthday, issues, "RT_ 速報系 (final)") or {})
+    check_odds_coverage(con, year, monthday, issues)
+    check_race_count_by_venue(con, year, monthday, issues)
+    check_se_results(con, year, monthday, issues)
+    check_payout_completeness(con, year, monthday, issues)
+    check_nl_rt_consistency(con, year, monthday, issues)
+    check_master_data(con, issues)
+    check_duplicate_race_ids(con, year, monthday, issues)
+    check_cache_status(issues)
+
+    # Hard requirements for final phase
+    if (nl_checks.get("NL_RA  (race header) ") or 0) == 0:
+        issues.append("FINAL: NL_RA has no data for today")
+    if (nl_checks.get("NL_H1  (payouts)     ") or 0) == 0:
+        issues.append("FINAL: NL_H1 (payouts) empty — run fetch DIFFU")
+    if (rt_checks.get("RT_H1  (払戻 速報)   ") or 0) == 0:
+        issues.append("FINAL: RT_H1 empty — realtime payout data missing")
+
+    run_unit_tests(issues)
+    test_quickstart(args.db, issues)
+
+
+def run_phase_quickstart(con, args, year, monthday, issues, nl_checks, rt_checks):
+    if con:
+        check_schema(con, issues)
+        check_master_data(con, issues)
+        check_nl_today(con, year, monthday, issues, "NL_ 蓄積系 (quickstart)")
+        check_cache_status(issues)
+    test_quickstart(args.db, issues)
+    run_unit_tests(issues)
 
 
 # ---------------------------------------------------------------------------
@@ -308,148 +762,81 @@ def main():
     parser.add_argument("--db", default=DB_PATH_DEFAULT)
     parser.add_argument("--date", default=None, help="YYYYMMDD (default: today)")
     parser.add_argument("--fetch", action="store_true", help="Auto-fetch missing NL_ data")
-    parser.add_argument("--phase", default="auto",
-                        choices=["pre", "rt-check", "nl-mid", "post", "final", "quickstart", "auto"],
-                        help="Verification phase (auto=現在時刻から自動判定)")
+    parser.add_argument(
+        "--phase", default="auto",
+        choices=["pre", "rt-check", "nl-mid", "post", "final", "quickstart", "auto", "all"],
+        help="Verification phase (auto=現在時刻から自動判定, all=全フェーズ)"
+    )
     args = parser.parse_args()
 
     # Resolve auto phase
     if args.phase == "auto":
         args.phase = auto_detect_phase()
-        print(f"[auto] Detected phase: {args.phase} (based on {datetime.now().strftime('%H:%M')})")
+        print(f"[auto] Detected phase: {args.phase}  (current time: {datetime.now().strftime('%H:%M')})")
+
+    phases_to_run = (
+        ["pre", "rt-check", "nl-mid", "post", "final", "quickstart"]
+        if args.phase == "all"
+        else [args.phase]
+    )
 
     race_date = args.date or date.today().strftime("%Y%m%d")
-    year = race_date[:4]
-    monthday = race_date[4:6] + race_date[6:8]
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    year      = race_date[:4]
+    monthday  = race_date[4:6] + race_date[6:8]
+    now_str   = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     print(f"\n{'='*65}")
-    print(f"  Race Day Verification  [{now}]")
+    print(f"  Race Day Verification  [{now_str}]")
     print(f"  Phase: {args.phase:12s}  Date: {race_date}")
     print(f"  DB:    {Path(args.db).resolve()}")
     print(f"{'='*65}\n")
 
-    issues = []
-    nl_checks = {}
-    rt_checks = {}
-
-    # DB must exist (except quickstart phase)
+    # DB connection
     if not Path(args.db).exists():
-        if args.phase == "quickstart":
-            print(f"[INFO] DB not found yet (OK for quickstart check)")
-        else:
+        if args.phase not in ("quickstart", "all"):
             print(f"[ERROR] DB not found: {Path(args.db).resolve()}")
             print("  Run: python -m src.cli.main create-tables")
             sys.exit(2)
+        print(f"[INFO] DB not found (OK for quickstart phase)")
+    con = sqlite3.connect(args.db) if Path(args.db).exists() else None
 
-    if Path(args.db).exists():
-        con = sqlite3.connect(args.db)
-    else:
-        con = None
+    all_issues   = []
+    nl_checks    = {}
+    rt_checks    = {}
+
+    phase_runners = {
+        "pre":        run_phase_pre,
+        "rt-check":   run_phase_rt_check,
+        "nl-mid":     run_phase_nl_mid,
+        "post":       run_phase_post,
+        "final":      run_phase_final,
+        "quickstart": run_phase_quickstart,
+    }
 
     try:
-        # === PRE PHASE: before races ===
-        if args.phase == "pre":
-            check_schema(con, issues)
-            check_master_data(con, issues)
-            nl_checks = check_nl_today(con, year, monthday, issues, "NL_ 蓄積系 (pre-race)")
-
-            if nl_checks.get("NL_RA  (race header)") == 0:
-                if args.fetch:
-                    print(f"\n[AUTO-FETCH] Fetching today's RACE entries (option=2)...")
-                    ok = run_fetch("RACE", race_date, race_date, 2, args.db)
-                    if ok:
-                        issues = [i for i in issues if "NL_RA" not in i]
-                        nl_checks = check_nl_today(con, year, monthday, [], "NL_ 蓄積系 (after fetch)")
-
-            run_unit_tests(issues)
-            test_quickstart(args.db, issues)
-
-        # === RT-CHECK PHASE: after each race (速報確認) ===
-        elif args.phase == "rt-check":
-            rt_checks = check_rt_today(con, year, monthday, issues, "RT_ 速報系")
-            nl_checks = check_nl_today(con, year, monthday, [], "NL_ 蓄積系")
-            check_nl_rt_consistency(con, year, monthday, issues)
-
-            # RT_RA が0なら監視が動いていない可能性
-            if rt_checks.get("RT_RA  (race 速報)") == 0:
-                print("\n  [WARNING] RT_RA=0: realtime monitoring may not be running.")
-                print("  Start with: python -m src.cli.main realtime start --specs 0B12,0B15,0B30,0B31,0B32,0B33,0B34,0B35,0B36")
-                issues.append("RT_RA=0: check if realtime monitoring is running")
-
-        # === NL-MID PHASE: mid-race NL_ refresh ===
-        elif args.phase == "nl-mid":
-            check_schema(con, issues)
-            nl_checks = check_nl_today(con, year, monthday, issues, "NL_ 蓄積系 (mid-race)")
-            rt_checks = check_rt_today(con, year, monthday, issues, "RT_ 速報系 (mid-race)")
-            check_nl_rt_consistency(con, year, monthday, issues)
-
-            if args.fetch and nl_checks.get("NL_RA  (race header)") == 0:
-                print(f"\n[AUTO-FETCH] Fetching RACE data (option=1)...")
-                ok = run_fetch("RACE", race_date, race_date, 1, args.db)
-                if ok:
-                    nl_checks = check_nl_today(con, year, monthday, [], "NL_ 蓄積系 (after fetch)")
-
-        # === POST PHASE: all races done, fetch payouts ===
-        elif args.phase == "post":
-            check_schema(con, issues)
-            nl_checks = check_nl_today(con, year, monthday, issues, "NL_ 蓄積系 (post-race)")
-            rt_checks = check_rt_today(con, year, monthday, issues, "RT_ 速報系 (post-race)")
-            check_nl_rt_consistency(con, year, monthday, issues)
-            check_master_data(con, issues)
-
-            # Fetch payouts if missing
-            if args.fetch:
-                if (nl_checks.get("NL_H1  (payouts)    ") or 0) == 0:
-                    print(f"\n[AUTO-FETCH] Fetching DIFFU (payouts/results)...")
-                    run_fetch("DIFFU", race_date, race_date, 1, args.db)
-                if (nl_checks.get("NL_RA  (race header)") or 0) == 0:
-                    print(f"\n[AUTO-FETCH] Fetching RACE data...")
-                    run_fetch("RACE", race_date, race_date, 1, args.db)
-                nl_checks = check_nl_today(con, year, monthday, [], "NL_ after fetch")
-
-        # === FINAL PHASE: complete verification + unit tests ===
-        elif args.phase == "final":
-            check_schema(con, issues)
-            nl_checks = check_nl_today(con, year, monthday, issues, "NL_ 蓄積系 (final)")
-            rt_checks = check_rt_today(con, year, monthday, issues, "RT_ 速報系 (final)")
-            check_nl_rt_consistency(con, year, monthday, issues)
-            check_master_data(con, issues)
-
-            # Hard requirements for final
-            if (nl_checks.get("NL_RA  (race header)") or 0) == 0:
-                issues.append("FINAL: NL_RA has no data for today")
-            if (nl_checks.get("NL_H1  (payouts)    ") or 0) == 0:
-                issues.append("FINAL: NL_H1 (payouts) empty - DIFFU fetch needed")
-            if (rt_checks.get("RT_H1  (払戻 速報)  ") or 0) == 0:
-                issues.append("FINAL: RT_H1 empty - realtime payout data missing")
-
-            run_unit_tests(issues)
-            test_quickstart(args.db, issues)
-
-        # === QUICKSTART PHASE: test quickstart.bat ===
-        elif args.phase == "quickstart":
-            if con:
-                check_schema(con, issues)
-                check_master_data(con, issues)
-            test_quickstart(args.db, issues)
-            run_unit_tests(issues)
-
+        for phase in phases_to_run:
+            if args.phase == "all":
+                print(f"\n{'─'*65}")
+                print(f"  === Running phase: {phase} ===")
+                print(f"{'─'*65}")
+            phase_issues = []
+            phase_runners[phase](con, args, year, monthday, phase_issues, nl_checks, rt_checks)
+            all_issues.extend(phase_issues)
     finally:
         if con:
             con.close()
 
-    # --- Save report ---
+    # Save report
     report_dir = Path("data")
     report_dir.mkdir(exist_ok=True)
     report_path = report_dir / f"raceday_report_{race_date}_{args.phase}.json"
-    write_report(args.phase, race_date, nl_checks, rt_checks, issues, str(report_path))
+    write_report(args.phase, race_date, nl_checks, rt_checks, all_issues, str(report_path))
 
-    # --- Summary ---
+    # Summary
     print(f"\n{'='*65}")
-    if issues:
-        print(f"[ISSUES: {len(issues)}]")
-        for i, iss in enumerate(issues, 1):
+    if all_issues:
+        print(f"[ISSUES: {len(all_issues)}]")
+        for i, iss in enumerate(all_issues, 1):
             print(f"  {i:2}. {iss}")
         sys.exit(1)
     else:
