@@ -3,7 +3,7 @@
 """
 全パーサーの単体テストスイート
 
-このモジュールは全41パーサー（38 JRA + 3 NAR: HA, NC, NU）に対する包括的なテストを提供します。
+このモジュールは全39パーサー（38 JRA + OA）に対する包括的なテストを提供します。
 各パーサーで以下をテスト:
 - パーサーインスタンスの作成
 - RECORD_TYPE, RECORD_LENGTHの定義確認
@@ -32,7 +32,7 @@ class TestParserFactory:
     def test_supported_types(self, parser_factory):
         """サポートされているレコードタイプの確認"""
         supported = parser_factory.supported_types()
-        assert len(supported) == 43  # 38 JRA + 5 NAR (HA, NK, NC, NU, OA)
+        assert len(supported) == 39  # 38 JRA + OA
         assert supported == ALL_RECORD_TYPES
 
     def test_get_parser_invalid_type(self, parser_factory):
@@ -73,9 +73,9 @@ class TestIndividualParsers:
             'H1': 782, 'H6': 782, 'HC': 3248, 'HN': 3248, 'HR': 3664, 'HS': 3664, 'HY': 1336,
             'JC': 252, 'JG': 251, 'KS': 282,
             'O1': 148, 'O2': 148, 'O3': 148, 'O4': 148, 'O5': 148, 'O6': 148,
+            'OA': 100,
             'RA': 856, 'RC': 1926, 'SE': 463, 'SK': 263, 'TC': 71, 'TK': 240, 'TM': 216,
             'UM': 969, 'WC': 72, 'WE': 195, 'WF': 3416, 'WH': 1356, 'YS': 424,
-            'HA': 1032, 'NC': 145, 'NU': 64
         }
 
         for record_type in ALL_RECORD_TYPES:
@@ -148,9 +148,8 @@ class TestIndividualParsers:
 
         # 共通フィールドの確認（すべてのパーサーにRecordSpecがあるはず）
         assert 'RecordSpec' in result, f"{record_type}パーサーの出力にRecordSpecがない"
-        # DataKubunはNAR (NU)パーサー以外にあるはず
-        if record_type != "NU":
-            assert 'DataKubun' in result, f"{record_type}パーサーの出力にDataKubunがない"
+        # DataKubunは基本的に全パーサーにあるはず
+        assert 'DataKubun' in result, f"{record_type}パーサーの出力にDataKubunがない"
         # MakeDateはほとんどのパーサーにあるが、一部（AV等）にはないので省略
 
     @pytest.mark.parametrize("record_type", ALL_RECORD_TYPES)
@@ -430,7 +429,7 @@ class TestAllParsersComprehensive:
         return ParserFactory()
 
     def test_all_parsers_can_be_loaded(self, parser_factory):
-        """全38パーサーが正常にロードできることを確認"""
+        """全39パーサーが正常にロードできることを確認"""
         loaded_count = 0
         failed_parsers = []
 
@@ -441,8 +440,8 @@ class TestAllParsersComprehensive:
             else:
                 failed_parsers.append(record_type)
 
-        assert loaded_count == 43, \
-            f"ロードできなかったパーサー: {failed_parsers}"  # 38 JRA + 5 NAR
+        assert loaded_count == 39, \
+            f"ロードできなかったパーサー: {failed_parsers}"  # 38 JRA + OA
         assert len(failed_parsers) == 0
 
     def test_all_parsers_have_consistent_interface(self, parser_factory):

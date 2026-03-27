@@ -6,14 +6,11 @@ This module provides the base class for fetching JV-Data from JV-Link.
 import gc
 import time
 from abc import ABC, abstractmethod
-from typing import Iterator, Optional, Union
+from typing import Iterator, Optional
 
 from src.jvlink.constants import JV_READ_NO_MORE_DATA, JV_READ_SUCCESS
 from src.jvlink.wrapper import JVLinkWrapper
-from src.nvlink.wrapper import COMBrokenError as _WrapperCOMBrokenError
-from src.nvlink.bridge import COMBrokenError as _BridgeCOMBrokenError
 from src.parser.factory import ParserFactory
-from src.utils.data_source import DataSource
 from src.utils.logger import get_logger
 from src.utils.progress import JVLinkProgressDisplay
 
@@ -45,9 +42,7 @@ class BaseFetcher(ABC):
         self,
         sid: str = "UNKNOWN",
         service_key: Optional[str] = None,
-        initialization_key: Optional[str] = None,
         show_progress: bool = True,
-        data_source: DataSource = DataSource.JRA,
     ):
         """Initialize base fetcher.
 
@@ -57,40 +52,18 @@ class BaseFetcher(ABC):
                         programmatically without requiring registry configuration.
                         If not provided, the service key must be configured in
                         JRA-VAN DataLab application or registry.
-            initialization_key: Optional NV-Link initialization key (software ID)
-                        used for NVInit when data_source is NAR.
             show_progress: Show stylish progress display (default: True)
-            data_source: Data source (DataSource.JRA or DataSource.NAR)
         """
-        self.data_source = data_source
-
-        # Select wrapper based on data source
-        if data_source == DataSource.NAR:
-            # Prefer C# NVLinkBridge over Python win32com for NAR operations.
-            # The bridge uses native COM interop that avoids E_UNEXPECTED errors
-            # caused by Python's VARIANT BYREF marshaling issues with Delphi COM.
-            from src.nvlink.bridge import NVLinkBridge, find_bridge_executable
-            bridge_exe = find_bridge_executable()
-            if bridge_exe is not None:
-                logger.info("Using NVLinkBridge (C#) for NAR", bridge_path=str(bridge_exe))
-                self.jvlink: Union[JVLinkWrapper, "NVLinkBridge", "NVLinkWrapper"] = NVLinkBridge(
-                    sid, initialization_key=initialization_key, bridge_path=bridge_exe
-                )
-            else:
-                logger.warning("NVLinkBridge not found, falling back to Python COM wrapper")
-                from src.nvlink.wrapper import NVLinkWrapper
-                self.jvlink = NVLinkWrapper(sid, initialization_key=initialization_key)
+        # Prefer C# JVLinkBridge over Python win32com for JRA operations.
+        # Eliminates 32-bit Python requirement and COM instability.
+        from src.jvlink.bridge import find_bridge_executable
+        bridge_exe = find_bridge_executable()
+        if bridge_exe is not None:
+            from src.jvlink.bridge import JVLinkBridge
+            logger.info("Using JVLinkBridge (C#) for JRA", bridge_path=str(bridge_exe))
+            self.jvlink = JVLinkBridge(sid, bridge_path=bridge_exe)
         else:
-            # Prefer C# JVLinkBridge over Python win32com for JRA operations.
-            # Eliminates 32-bit Python requirement and COM instability.
-            from src.nvlink.bridge import find_bridge_executable
-            bridge_exe = find_bridge_executable()
-            if bridge_exe is not None:
-                from src.jvlink.bridge import JVLinkBridge
-                logger.info("Using JVLinkBridge (C#) for JRA", bridge_path=str(bridge_exe))
-                self.jvlink = JVLinkBridge(sid, bridge_path=bridge_exe)
-            else:
-                self.jvlink = JVLinkWrapper(sid)
+            self.jvlink = JVLinkWrapper(sid)
 
         self.parser_factory = ParserFactory()
         self._records_fetched = 0
@@ -99,15 +72,12 @@ class BaseFetcher(ABC):
         self._files_processed = 0
         self._total_files = 0
         self._service_key = service_key
-        self._initialization_key = initialization_key
         self.show_progress = show_progress
         self.progress_display: Optional[JVLinkProgressDisplay] = None
         self._start_time = None
 
         logger.info(f"{self.__class__.__name__} initialized", sid=sid,
-                   has_service_key=service_key is not None,
-                   has_initialization_key=initialization_key is not None,
-                   data_source=data_source.value)
+                   has_service_key=service_key is not None)
 
     @abstractmethod
     def fetch(self, **kwargs) -> Iterator[dict]:
@@ -136,11 +106,8 @@ class BaseFetcher(ABC):
         """
         self._start_time = time.time()
         last_update_time = self._start_time
-        update_interval = 2.0  # 更新間隔を増やして高速化  # Update progress every 0.5 seconds (reduced to prevent flickering)
+        update_interval = 2.0  # Update progress every 2 seconds
         last_gc_time = self._start_time  # Periodic GC to free COM buffers
-
-        consecutive_downloading_errors = 0
-        max_consecutive_downloading = 1000  # -3 (downloading) が連続1000回で打ち切り
 
         while True:
             try:
@@ -187,7 +154,6 @@ class BaseFetcher(ABC):
                     continue
 
                 elif ret_code > 0:
-                    consecutive_downloading_errors = 0  # Reset on success
                     # Success with data (ret_code is data length)
                     self._records_fetched += 1
 
@@ -260,20 +226,7 @@ class BaseFetcher(ABC):
                             )
                         last_update_time = current_time
 
-                elif ret_code in (-3, -201, -202, -203, -402, -403, -502, -503):
-                    # -3 連続エラー上限チェック (未DLファイル大量時の無限ループ防止)
-                    if ret_code == -3:
-                        consecutive_downloading_errors += 1
-                        if consecutive_downloading_errors >= max_consecutive_downloading:
-                            logger.warning(
-                                f"NVRead -3 (downloading) が {max_consecutive_downloading} 回連続。"
-                                "未ダウンロードファイルが多すぎるため打ち切ります。"
-                                "UmaConn設定.exe で初期データDLを完了してから再実行してください。"
-                            )
-                            break
-                    else:
-                        consecutive_downloading_errors = 0
-
+                elif ret_code in (-201, -202, -203, -402, -403, -502, -503):
                     # Recoverable errors - delete corrupted file and continue
                     # Based on kmy-keiba's JVLinkReader.cs error handling:
                     # -201: Database busy (リトライ可能)
@@ -302,7 +255,7 @@ class BaseFetcher(ABC):
                     )
 
                     # Delete corrupted file for file-related errors
-                    if ret_code in (-3, -203, -402, -403, -502, -503) and filename and hasattr(self.jvlink, 'jv_file_delete'):
+                    if ret_code in (-203, -402, -403, -502, -503) and filename and hasattr(self.jvlink, 'jv_file_delete'):
                         try:
                             self.jvlink.jv_file_delete(filename)
                             logger.info(f"Deleted corrupted file: {filename}")
@@ -318,7 +271,7 @@ class BaseFetcher(ABC):
                     )
                     raise FetcherError(f"JVRead returned error code: {ret_code}")
 
-            except (FetcherError, _WrapperCOMBrokenError, _BridgeCOMBrokenError):
+            except FetcherError:
                 raise
             except Exception as e:
                 logger.error("Error during fetch", error=str(e))

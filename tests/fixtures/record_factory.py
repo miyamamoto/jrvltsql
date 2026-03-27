@@ -219,13 +219,3 @@ def make_bn_record(data_kubun="1", make_date="20260101", **kwargs) -> bytes:
     return bytes(data)
 
 
-def make_ra_record_nar(**kwargs) -> bytes:
-    """Create NAR RA record (same format, NAR jyo_cd)."""
-    kwargs.setdefault("jyo_cd", "55")
-    return make_ra_record(**kwargs)
-
-
-def make_h1_record_nar_full(**kwargs) -> bytes:
-    """Create NAR H1 full record (same format, NAR jyo_cd)."""
-    kwargs.setdefault("jyo_cd", "55")
-    return make_h1_record_full(**kwargs)

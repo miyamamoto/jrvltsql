@@ -16,7 +16,6 @@ from src.jvlink.constants import (
     generate_time_series_full_key,
     JYO_CODES,
 )
-from src.utils.data_source import DataSource
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -48,18 +47,13 @@ class RealtimeFetcher(BaseFetcher):
     def __init__(
         self,
         sid: str = "JLTSQL",
-        initialization_key: Optional[str] = None,
-        data_source: DataSource = DataSource.JRA,
     ):
         """Initialize realtime fetcher.
 
         Args:
             sid: Session ID for JV-Link API (default: "JLTSQL")
-            initialization_key: Optional NV-Link initialization key (software ID)
-                used for NVInit when data_source is NAR.
-            data_source: Data source (DataSource.JRA or DataSource.NAR, default: JRA)
         """
-        super().__init__(sid, initialization_key=initialization_key, data_source=data_source)
+        super().__init__(sid)
         self._stream_open = False
 
     def fetch(

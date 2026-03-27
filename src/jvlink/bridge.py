@@ -1,12 +1,10 @@
 """JV-Link Bridge Client (JRA/中央競馬).
 
-Communicates with the C# JV/NV-LinkBridge subprocess via stdin/stdout JSON protocol.
+Communicates with the C# JVLinkBridge subprocess via stdin/stdout JSON protocol.
 This replaces the Python win32com-based JVLinkWrapper, eliminating:
 - 32-bit Python requirement
 - COM threading/marshaling issues
 - win32com dependency
-
-Uses the same bridge executable as NVLinkBridge but with type="jra".
 """
 
 import base64
@@ -22,10 +20,38 @@ from src.jvlink.constants import (
     JV_READ_SUCCESS,
     BUFFER_SIZE_JVREAD,
 )
-from src.nvlink.bridge import find_bridge_executable, NVLinkBridgeError
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+# Default bridge executable locations (searched in order)
+_BRIDGE_SEARCH_PATHS = [
+    # Relative to jrvltsql repo root (build output)
+    Path("tools/jvlink-bridge/bin/x86/Release/net8.0-windows/JVLinkBridge.exe"),
+    Path("tools/jvlink-bridge/bin/Release/net8.0-windows/JVLinkBridge.exe"),
+    # Relative to jrvltsql repo root (flat copy)
+    Path("tools/jvlink-bridge/JVLinkBridge.exe"),
+    # Generic Windows locations
+    Path(r"C:\Program Files\JVLinkBridge\JVLinkBridge.exe"),
+    Path(r"C:\Program Files (x86)\JVLinkBridge\JVLinkBridge.exe"),
+]
+
+
+def find_bridge_executable() -> Optional[Path]:
+    """Find the JVLinkBridge executable.
+
+    Returns:
+        Path to JVLinkBridge.exe, or None if not found.
+    """
+    for p in _BRIDGE_SEARCH_PATHS:
+        if p.is_absolute() and p.exists():
+            return p
+        # Try relative to current working directory
+        if not p.is_absolute():
+            abs_p = Path.cwd() / p
+            if abs_p.exists():
+                return abs_p
+    return None
 
 
 class JVLinkBridgeError(Exception):
@@ -80,7 +106,7 @@ class JVLinkBridge:
         if self._bridge_path is None or not self._bridge_path.exists():
             raise JVLinkBridgeError(
                 "JVLinkBridge.exe が見つかりません。"
-                "tools/nvlink-bridge/ にビルド済みバイナリを配置してください。"
+                "tools/jvlink-bridge/ にビルド済みバイナリを配置してください。"
             )
 
         logger.info("JVLinkBridge initialized", bridge_path=str(self._bridge_path), sid=sid)

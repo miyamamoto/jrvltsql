@@ -3,9 +3,8 @@
 """エラーリカバリ E2E テスト
 
 COM API のエラーハンドリングを実データで検証:
-  1. 無効な日付範囲での挙動
-  2. 未来日のデータ取得（0件で正常終了すべき）
-  3. NAR の -502 エラーリカバリ（日分割チャンクの動作確認）
+  1. 未来日のデータ取得（0件で正常終了すべき）
+  2. JV-Link 連続初期化（リソースリーク確認）
 
 実行方法 (A6 上で VNC/RDP 経由):
   cd C:\\Users\\mitsu\\work\\jrvltsql
@@ -40,7 +39,6 @@ def main():
     from src.database.schema import create_all_tables
     from src.database.sqlite_handler import SQLiteDatabase
     from src.importer.batch import BatchProcessor
-    from src.utils.data_source import DataSource
 
     print("=" * 60)
     print("エラーリカバリ E2E テスト")
@@ -70,11 +68,11 @@ def main():
 
         # --- Test 1: 未来日のデータ取得 ---
         print("\n--- Test 1: 未来日データ取得 (0件で正常終了すべき) ---")
-        create_all_tables(db, data_source=DataSource.JRA)
+        create_all_tables(db)
 
         future_date = (datetime.now() + timedelta(days=30)).strftime("%Y%m%d")
         processor = BatchProcessor(
-            database=db, batch_size=500, show_progress=False, data_source=DataSource.JRA
+            database=db, batch_size=500, show_progress=False
         )
 
         try:
@@ -92,48 +90,13 @@ def main():
             else:
                 check("未来日: 正常終了", False, f"({e})")
 
-        # --- Test 2: NAR 日分割チャンクの動作 ---
-        print("\n--- Test 2: NAR 複数日レンジ (日分割チャンク動作確認) ---")
-
-        # DBリセット
-        if db_path.exists():
-            db_path.unlink()
-        db2 = SQLiteDatabase(config)
-        db2.connect()
-        create_all_tables(db2, data_source=DataSource.NAR)
-
-        # 3日間のレンジ → 内部で日ごとにチャンクされるはず
-        today = datetime.now()
-        end_date = (today - timedelta(days=3)).strftime("%Y%m%d")
-        start_date = (today - timedelta(days=5)).strftime("%Y%m%d")
-
-        processor_nar = BatchProcessor(
-            database=db2, batch_size=500, show_progress=False, data_source=DataSource.NAR
-        )
-
-        try:
-            t0 = time.time()
-            stats = processor_nar.process_date_range(
-                data_spec="RACE", from_date=start_date, to_date=end_date, option=1
-            )
-            elapsed = time.time() - t0
-            fetched = getattr(stats, "records_fetched", None) or getattr(stats, "fetched", 0)
-            check("NAR複数日: 正常終了", True, f"({elapsed:.1f}秒)")
-            check("NAR複数日: データあり", fetched >= 0, f"(fetched={fetched})")
-        except Exception as e:
-            err_str = str(e)
-            if "-502" in err_str:
-                check("NAR複数日: -502 スキップ", None, "(データ準備中)")
-            else:
-                check("NAR複数日: 正常終了", False, f"({e})")
-
-        # --- Test 3: JV-Link 再初期化 ---
-        print("\n--- Test 3: JV-Link 連続初期化 (リソースリーク確認) ---")
+        # --- Test 2: JV-Link 再初期化 ---
+        print("\n--- Test 2: JV-Link 連続初期化 (リソースリーク確認) ---")
         from src.fetcher.historical import HistoricalFetcher
 
         try:
             for i in range(3):
-                fetcher = HistoricalFetcher(show_progress=False, data_source=DataSource.JRA)
+                fetcher = HistoricalFetcher(show_progress=False)
                 fetcher.jvlink.jv_init()
                 fetcher.jvlink.jv_close()
             check("連続初期化/クローズ", True, "(3回成功)")

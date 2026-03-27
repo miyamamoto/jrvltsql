@@ -185,11 +185,11 @@ class TestParserFactory:
     def test_factory_initialization(self):
         """Test factory initialization."""
         factory = ParserFactory()
-        assert len(factory.supported_types()) == 43  # 38 JRA + 5 NAR record types (HA, NK, NC, NU, OA)
+        assert len(factory.supported_types()) == 39  # 38 JRA + OA
         assert "RA" in factory.supported_types()
         assert "SE" in factory.supported_types()
         assert "HR" in factory.supported_types()
-        assert "NU" in factory.supported_types()  # NAR parser
+        assert "OA" in factory.supported_types()
 
     def test_get_parser(self):
         """Test getting parser by type."""
