@@ -635,6 +635,159 @@ def cache_rebuild(ctx, data_spec, date_from, date_to, jv_option, cache_dir):
                db=None, cache_dir=cache_dir)
 
 
+# ---------------------------------------------------------------------------
+# cache s3-setup: configure encrypted S3 credentials
+# ---------------------------------------------------------------------------
+
+@cache.command("s3-setup")
+@click.option("--cred-file", default="config/s3_credentials.enc", show_default=True,
+              help="Path to store encrypted credentials")
+@click.pass_context
+def cache_s3_setup(ctx, cred_file):
+    """Configure and store encrypted S3/R2 credentials.
+
+    Credentials are encrypted with AES-256-GCM using a master password
+    you choose. The encrypted file is safe to check into version control.
+
+    Supported backends:
+      - AWS S3: leave endpoint_url blank
+      - Cloudflare R2: endpoint_url = https://<account>.r2.cloudflarestorage.com
+
+    Example:
+      jltsql cache s3-setup
+    """
+    from src.cache.credentials import CredentialManager
+
+    click.echo("=== S3 / Cloudflare R2 Credential Setup ===\n")
+    click.echo("Leave endpoint_url blank for AWS S3.")
+    click.echo("For Cloudflare R2: https://<account_id>.r2.cloudflarestorage.com\n")
+
+    endpoint_url = click.prompt("endpoint_url (blank for AWS S3)", default="", show_default=False)
+    access_key_id = click.prompt("aws_access_key_id")
+    secret_key = click.prompt("aws_secret_access_key", hide_input=True)
+    bucket = click.prompt("bucket_name")
+    region = click.prompt("region_name", default="auto")
+    prefix = click.prompt("S3 key prefix", default="jrvltsql-cache")
+
+    credentials = {
+        "aws_access_key_id": access_key_id,
+        "aws_secret_access_key": secret_key,
+        "bucket_name": bucket,
+        "region_name": region,
+        "prefix": prefix,
+    }
+    if endpoint_url:
+        credentials["endpoint_url"] = endpoint_url
+
+    click.echo("\nChoose a master password to protect your credentials.")
+    password = click.prompt("Master password", hide_input=True, confirmation_prompt=True)
+
+    mgr = CredentialManager(Path(cred_file))
+    mgr.save(credentials, password)
+
+    click.echo(f"\n[OK] Credentials saved (encrypted): {Path(cred_file).resolve()}")
+    click.echo("Use this password whenever you run 'jltsql cache sync'.")
+
+    # Quick connection test
+    if click.confirm("\nTest connection now?", default=True):
+        try:
+            from src.cache.s3_sync import S3Syncer
+            syncer = S3Syncer(cache_dir=Path("data/cache"), credentials=credentials)
+            syncer.test_connection()
+            click.echo("[OK] Connection successful!")
+        except Exception as e:
+            click.echo(f"[WARN] Connection test failed: {e}")
+            click.echo("Credentials saved. Check endpoint/keys and retry.")
+
+
+# ---------------------------------------------------------------------------
+# cache sync: upload / download / bidirectional sync with S3
+# ---------------------------------------------------------------------------
+
+@cache.command("sync")
+@click.option("--upload", "direction", flag_value="upload", help="Local → S3 only")
+@click.option("--download", "direction", flag_value="download", help="S3 → local only")
+@click.option("--both", "direction", flag_value="both", default=True,
+              help="Bidirectional sync (default)")
+@click.option("--dry-run", is_flag=True, help="Show what would be transferred (no actual transfer)")
+@click.option("--cache-dir", default="data/cache", show_default=True)
+@click.option("--cred-file", default="config/s3_credentials.enc", show_default=True)
+@click.pass_context
+def cache_sync(ctx, direction, dry_run, cache_dir, cred_file):
+    """Sync local cache with S3 / Cloudflare R2.
+
+    Uses encrypted credentials from s3-setup. You will be prompted for
+    the master password each time (never stored in plaintext).
+
+    Examples:
+      jltsql cache sync                  # bidirectional
+      jltsql cache sync --upload         # local → S3
+      jltsql cache sync --download       # S3 → local
+      jltsql cache sync --dry-run        # preview only
+    """
+    from src.cache.credentials import CredentialManager
+    from src.cache.s3_sync import S3Syncer, S3SyncError
+
+    cred_mgr = CredentialManager(Path(cred_file))
+    if not cred_mgr.exists():
+        click.echo("[ERROR] S3 credentials not found. Run: jltsql cache s3-setup")
+        raise SystemExit(1)
+
+    password = click.prompt("Master password", hide_input=True)
+    try:
+        credentials = cred_mgr.load(password)
+    except ValueError as e:
+        click.echo(f"[ERROR] {e}")
+        raise SystemExit(1)
+
+    if dry_run:
+        click.echo("[DRY RUN] No files will be transferred.\n")
+
+    def on_progress(action, key, size):
+        rel = key.split("/", 1)[-1] if "/" in key else key
+        click.echo(f"  {action:8s}  {rel}  ({size/1024:.0f} KB)")
+
+    try:
+        syncer = S3Syncer(
+            cache_dir=Path(cache_dir),
+            credentials=credentials,
+            on_progress=on_progress,
+        )
+
+        click.echo(f"Bucket: {credentials['bucket_name']}  "
+                   f"Prefix: {credentials.get('prefix', 'jrvltsql-cache')}\n")
+
+        if direction == "upload":
+            stats = syncer.upload(dry_run=dry_run)
+            click.echo(f"\nUploaded: {stats['uploaded']:,} files "
+                       f"({stats['bytes']/1024/1024:.1f} MB)  "
+                       f"Skipped: {stats['skipped']:,}  Errors: {stats['errors']:,}")
+
+        elif direction == "download":
+            stats = syncer.download(dry_run=dry_run)
+            click.echo(f"\nDownloaded: {stats['downloaded']:,} files "
+                       f"({stats['bytes']/1024/1024:.1f} MB)  "
+                       f"Skipped: {stats['skipped']:,}  Errors: {stats['errors']:,}")
+
+        else:  # both
+            stats = syncer.sync(dry_run=dry_run)
+            click.echo(
+                f"\nSync complete:\n"
+                f"  Uploaded:   {stats['uploaded']:,} files "
+                f"({stats['bytes_up']/1024/1024:.1f} MB)\n"
+                f"  Downloaded: {stats['downloaded']:,} files "
+                f"({stats['bytes_down']/1024/1024:.1f} MB)\n"
+                f"  Skipped:    {stats['skipped']:,} files (same size)\n"
+                f"  Errors:     {stats['errors']:,}"
+            )
+            if stats["errors"] > 0:
+                raise SystemExit(1)
+
+    except S3SyncError as e:
+        click.echo(f"[ERROR] {e}")
+        raise SystemExit(1)
+
+
 @cli.command()
 @click.option("--daemon", is_flag=True, help="Run in background")
 @click.option("--spec", "data_spec", default="RACE", help="Data specification (default: RACE)")
