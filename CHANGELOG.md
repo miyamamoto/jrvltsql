@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-04-17
+
+### ⚠️ Breaking Changes
+
+- **地方競馬（NAR）サポートを廃止** — NAR/NV-Link 関連機能をすべて削除。
+  地方競馬データが必要な場合は [jrvltsql-nar](https://github.com/miyamamoto/jrvltsql-nar) を使用してください。
+
+### Added
+
+- レースデー監視ツール群
+  - `scripts/raceday_verify.py` — 17項目の自動検証（スキーマ・RT_・NL_・オッズ・払戻・smoke test）
+  - `scripts/raceday_scheduler.py` — 各レース後に自動検証を実行するスケジューラ（12R + 事後チェック）
+  - `scripts/raceday_tmux.sh` — tmux 3ウィンドウ構成の一発起動スクリプト
+- Claude Code `/loop` との連携 — 検証レポートを読んで問題があれば自動でコード修正・PR作成
+- NL_SE / RT_SE インデックス追加（`idx_nl_se_date`, `idx_rt_se_date` など）
+- テストカバレッジ大幅拡充（1,256件: 1,256 pass）
+  - `test_cache_manager.py` — CacheManager 全API（NL_/RT_ 読み書き、インデックス、スレッドセーフ）
+  - `test_utils_config.py` — Config.get、環境変数展開、バリデーション
+  - `test_utils_lock_manager.py` — acquire/release、競合検出、stale lock 自動削除
+
+### Fixed
+
+- `quickstart.py`: `BatchProcessor` に削除済み `data_source` 引数を渡していたクラッシュを修正
+- `raceday_verify.py`: `--date` 引数の長さ検証を追加
+- `updater.py`: INSERT OR REPLACE で UPSERT が正常動作していたにもかかわらず誤解を招くTODOコメントを削除
+
+### Changed
+
+- `quickstart.bat`: `--option` を `--mode` に修正、S3キャッシュ同期ステップを追加
+- `pyproject.toml`: pytest `--basetemp=C:/tmp/pytest-jrvl` 追加（Windows AppData 権限エラー対策）
+
+### Documentation
+
+- README.md を全面書き直し（要件・クイックスタート・CLI・レースデーワークフロー・キャッシュ構造）
+
 ## [1.1.0] - 2025-02-08
 
 ### Added
@@ -40,6 +75,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - quickstart.py 対話形式セットアップウィザード
 - CLI コマンド（fetch, status, monitor, init）
 
-[Unreleased]: https://github.com/miyamamoto/jrvltsql/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/miyamamoto/jrvltsql/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/miyamamoto/jrvltsql/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/miyamamoto/jrvltsql/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/miyamamoto/jrvltsql/releases/tag/v1.0.0
