@@ -780,6 +780,9 @@ def main():
     )
 
     race_date = args.date or date.today().strftime("%Y%m%d")
+    if len(race_date) != 8 or not race_date.isdigit():
+        print(f"[ERROR] --date must be YYYYMMDD, got: {race_date!r}")
+        sys.exit(2)
     year      = race_date[:4]
     monthday  = race_date[4:6] + race_date[6:8]
     now_str   = datetime.now().strftime("%Y-%m-%d %H:%M:%S")

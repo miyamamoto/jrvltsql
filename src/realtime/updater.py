@@ -202,8 +202,7 @@ class RealtimeUpdater:
             elif head_data_kubun == DATA_KUBUN_DELETE:
                 return self._handle_delete_record(table_name, parsed_data)
             elif head_data_kubun in (DATA_KUBUN_REFRESH, DATA_KUBUN_REREGISTER):
-                # REFRESH(4) and REREGISTER(3) are treated as new records
-                # TODO: Implement proper UPSERT logic when PRIMARY KEY is available
+                # REFRESH(4) and REREGISTER(3): replace existing record (INSERT OR REPLACE)
                 return self._handle_new_record(table_name, parsed_data)
             elif head_data_kubun == DATA_KUBUN_ERASE:
                 # ERASE(0) is treated same as DELETE
@@ -230,8 +229,7 @@ class RealtimeUpdater:
             # Remove metadata fields
             clean_data = {k: v for k, v in data.items() if not k.startswith("_")}
 
-            # Insert into database
-            # TODO: Implement UPSERT to handle duplicates
+            # INSERT OR REPLACE handles duplicates (UPSERT semantics)
             self.database.insert(table_name, clean_data)
 
             # Note: Per-record debug logging removed to reduce verbosity during real-time processing
@@ -266,9 +264,7 @@ class RealtimeUpdater:
             # Remove metadata fields
             clean_data = {k: v for k, v in data.items() if not k.startswith("_")}
 
-            # Update record
-            # TODO: Implement proper UPDATE based on primary key
-            # For now, use INSERT (may cause duplicate key error)
+            # INSERT OR REPLACE handles the update (replaces existing row on PK match)
             self.database.insert(table_name, clean_data)
 
             # Note: Per-record debug logging removed to reduce verbosity during real-time processing
