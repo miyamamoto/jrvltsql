@@ -1,127 +1,190 @@
 # JRVLTSQL
 
-JRA-VAN DataLab の競馬データを SQLite・PostgreSQL にインポートするツール。
+JRA-VAN DataLab データを SQLite/PostgreSQL に取り込む Windows 専用パイプライン。
 
-## 特徴
+JRA（中央競馬）専用。地方競馬（NAR）は [jrvltsql-nar](https://github.com/miyamamoto/jrvltsql-nar) を使用してください。
 
-- **中央競馬 (JRA)**: JRA-VAN DataLab (JV-Link) 対応 — 38種のパーサー
-- **データベース**: SQLite（セットアップ不要）/ PostgreSQL 対応
-- **リアルタイム監視**: オッズ・速報データの自動取得
-- **quickstart.bat**: ダブルクリックで対話形式セットアップ
+---
 
 ## 必要要件
 
 | 項目 | 要件 |
 |------|------|
 | OS | Windows 10 / 11 |
-| Python | 3.12以上 **（32-bit 必須）** |
+| Python | **3.12 (32-bit)** — JV-Link COM DLL が 32-bit のため必須 |
+| JRA-VAN | DataLab 会員登録 + サービスキー |
 
-> ⚠️ **64-bit Python は非対応です。** JV-Link の COM DLL が 32-bit のため、32-bit Python が必要です。詳細は [技術詳細](docs/TECHNICAL.md) を参照してください。
->
-> ⚠️ **Windows 専用です。** JV-Link は Windows COM コンポーネントとして提供されており、macOS や Linux 上では動作しません。Wine・WSL・COM Surrogate 等による代替手段もかなり検証しましたが、現時点では安定動作に至っていません。
+> **なぜ 32-bit Python?**  
+> JV-Link (`JVDTLab.JVLink`) は 32-bit COM DLL として提供されています。64-bit + DllSurrogate は
+> セットアップモード (option=3/4) でハング等の不安定な動作が確認されているため、32-bit Python を推奨します。
 
-## 🚀 ワンコマンドインストール
-
-PowerShell で以下を実行するだけ！Python・仮想環境・依存パッケージすべて自動でセットアップされます。
-
-```powershell
-irm https://raw.githubusercontent.com/miyamamoto/jrvltsql/master/install.ps1 | iex
-```
-
-> 📦 32-bit Python の自動検出、仮想環境作成、パッケージインストールまで一括で行います。
-
-### 手動インストール
-
-```bash
-pip install git+https://github.com/miyamamoto/jrvltsql.git
-```
+---
 
 ## クイックスタート
 
-**`quickstart.bat` をダブルクリック**するだけで、対話形式のセットアップが始まります。
+```bat
+quickstart.bat
+```
 
-- 32-bit Python を自動検出（`py -3.12-32` → `py -32` → フォールバック）
-- テーブル作成 → データ取得 → リアルタイム監視まで一括実行
+`quickstart.bat` をダブルクリック（または CMD から実行）するだけで以下を自動処理します：
 
-コマンドラインオプション:
+1. Python (32-bit) の検出
+2. S3 キャッシュの事前ダウンロード（オプション）
+3. データ取得モードの選択（今週 / 差分 / フルセットアップ）
+4. JRA-VAN からのデータ取得・DB 格納
+5. S3 キャッシュのアップロード（オプション）
+6. DB 検証 (`raceday_verify --phase pre`)
+
+---
+
+## インストール
+
+```powershell
+# PowerShell（ワンライナー）
+irm https://raw.githubusercontent.com/miyamamoto/jrvltsql/master/install.ps1 | iex
+```
+
+または手動：
+
+```bat
+git clone https://github.com/miyamamoto/jrvltsql.git
+cd jrvltsql
+pip install -e .
+```
+
+---
+
+## 主な CLI コマンド
+
+```bat
+jltsql status                          # DB 状態確認
+jltsql create-tables                   # テーブル作成
+jltsql create-indexes                  # インデックス作成
+jltsql fetch --from 20260101 --to 20260417 --spec RACE --option 1
+jltsql realtime start --specs 0B12,0B15,0B30,0B31,0B32,0B33,0B34,0B35,0B36
+jltsql cache info                      # キャッシュ統計
+jltsql cache sync --download           # S3 → ローカル同期
+jltsql cache sync --upload             # ローカル → S3 同期
+```
+
+### fetch オプション
+
+| option | 内容 |
+|--------|------|
+| 1 | 通常取得（差分） |
+| 2 | セットアップ（簡易） |
+| 3 | セットアップ（標準） |
+| 4 | 分割セットアップ（全履歴、1954〜現在） |
+
+---
+
+## レースデー監視
+
+### tmux セッション起動
 
 ```bash
-python scripts/quickstart.py              # 対話形式
-python scripts/quickstart.py --years 5    # 過去5年分
-python scripts/quickstart.py --no-odds    # オッズ除外
-python scripts/quickstart.py -y           # 確認スキップ
+# WSL または Git Bash から
+bash scripts/raceday_tmux.sh           # 起動 + アタッチ
+bash scripts/raceday_tmux.sh --detach  # バックグラウンド起動
+bash scripts/raceday_tmux.sh --from 12:00  # 午後から開始
 ```
 
-## 中央競馬 (JRA) セットアップ
+tmux セッション `jrvltsql-raceday` を 3 ウィンドウで起動します：
 
-1. [JRA-VAN DataLab](https://jra-van.jp/dlb/) で会員登録し、サービスキーを取得
-2. JV-Link ソフトウェアをインストール
-3. `config/config.yaml` にサービスキーを設定:
+| ウィンドウ | 内容 |
+|-----------|------|
+| `[0] monitor` | `jltsql realtime start` — RT_ ライブストリーム |
+| `[1] scheduler` | `raceday_scheduler.py` — レースごとの自動検証（12R + 事後） |
+| `[2] status` | `jltsql status` + `cache info` (watch) |
 
-```yaml
-jvlink:
-  service_key: "XXXX-XXXX-XXXX-XXXX-X"
+### Claude Code /loop で自動修正
+
+Claude Code 内で以下を実行すると、検証レポートを読んで問題があれば自動でコードを修正・PR を作成します：
+
+```
+/loop 35m
+Run python scripts/raceday_verify.py --phase auto, read the JSON report in
+data/raceday_report_*.json, and if there are issues: diagnose the root cause,
+fix the code, create a branch and PR with gh pr create. Report what you found.
 ```
 
-4. `quickstart.bat` を実行、または:
+### 検証フェーズ
 
-```bash
-jltsql fetch --source jra --from 20240101 --to 20241231
+```bat
+python scripts/raceday_verify.py --phase pre        # 開催前 (〜10:05)
+python scripts/raceday_verify.py --phase rt-check   # レース中 RT_ 確認
+python scripts/raceday_verify.py --phase nl-mid     # 後半 NL_+RT_ 確認
+python scripts/raceday_verify.py --phase post       # 最終レース後
+python scripts/raceday_verify.py --phase final      # 払戻確定後
+python scripts/raceday_verify.py --phase quickstart # smoke test
+python scripts/raceday_verify.py --phase auto       # 時刻から自動判定
 ```
 
-## CLI コマンド
+---
 
-```bash
-jltsql status                    # ステータス確認
-jltsql fetch --spec RA           # 個別データ取得
-jltsql fetch --db postgresql     # PostgreSQL に出力
-jltsql monitor                   # リアルタイム監視
+## キャッシュ
+
+取得したレコードをバイナリ形式でローカルキャッシュします。  
+2 回目以降の取得は JV-Link を経由せずキャッシュから読み込むため高速です。
+
+```
+data/cache/nl/{SPEC}/{YYYYMMDD}.bin   # NL_ 蓄積系
+data/cache/rt/{SPEC}/{YYYYMMDD}.bin   # RT_ リアルタイム系
 ```
 
-## データベース
+S3 バックアップ設定：
 
-| DB | 説明 |
-|----|------|
-| SQLite | デフォルト。セットアップ不要。`data/keiba.db` に保存 |
-| PostgreSQL | `--db postgresql` で指定。pg8000 ドライバ使用 |
+```bat
+jltsql cache s3-setup    # S3 認証情報の設定
+jltsql cache sync        # 双方向同期
+```
 
-## 対応パーサー（38種）
+---
 
-### 中央競馬 — 38パーサー
+## ディレクトリ構成
 
-レース(RA), 競走馬(SE), 払戻(HR), 票数(H1,H6), オッズ(O1-O6), 騎手(KS), 調教師(CH), 馬主(BN), 繁殖馬(HN), 産駒(SK), 競馬場(JC), コース(CC), レコード(RC), 重勝式(WF), 他
+```
+jrvltsql/
+├── src/
+│   ├── cli/main.py          # CLI エントリポイント (jltsql コマンド)
+│   ├── fetcher/             # JV-Link データ取得
+│   ├── importer/            # DB インポート
+│   ├── parser/              # JV-Link レコードパーサー (38種)
+│   ├── realtime/            # リアルタイム監視
+│   ├── cache/               # バイナリキャッシュ管理
+│   └── database/            # SQLite / PostgreSQL ハンドラ
+├── scripts/
+│   ├── quickstart.py        # 対話型セットアップウィザード
+│   ├── raceday_verify.py    # 競馬開催日検証スクリプト
+│   ├── raceday_scheduler.py # レース時刻連動スケジューラ
+│   └── raceday_tmux.sh      # tmux レースデーセッション
+├── tests/                   # pytest (1,178 テスト)
+├── quickstart.bat           # Windows ワンクリック起動
+└── config/config.yaml       # 設定ファイル
+```
+
+---
+
+## テスト
+
+```bat
+pytest tests/ -q --ignore=tests/integration/ --ignore=tests/e2e/
+```
+
+---
 
 ## ドキュメント
 
-- [技術詳細](docs/TECHNICAL.md) — 32-bit制約、JV-Link設定、トラブルシューティング
-- [アーキテクチャ](docs/ARCHITECTURE_DESIGN.md) — 設計ドキュメント
-- [CLI リファレンス](docs/CLI.md) — コマンド詳細
-- [設定](docs/CONFIGURATION.md) — 設定ファイルの詳細
+| ドキュメント | 内容 |
+|------------|------|
+| [docs/getting-started/installation.md](docs/getting-started/installation.md) | インストール手順 |
+| [docs/getting-started/quickstart.md](docs/getting-started/quickstart.md) | クイックスタート |
+| [docs/getting-started/configuration.md](docs/getting-started/configuration.md) | 設定ファイル |
+| [docs/CLI.md](docs/CLI.md) | CLI コマンドリファレンス |
+| [CHANGELOG.md](CHANGELOG.md) | 変更履歴 |
 
-## 更新履歴
-
-詳細は [CHANGELOG.md](CHANGELOG.md) を参照してください。
-
-### v1.1.0 (2025-02-08)
-- **#43** テストカバレッジ拡充の修正
-- **#42** テスト3件の失敗修正（wrapper挙動との整合性）
-- **#41** テストカバレッジ拡充（CLI、インストーラー）
-- **#38** クロスプラットフォーム検証の注記追加
-- **#37** Windows専用であることをREADMEに明記
-- **#36** ワンコマンドインストーラーをREADMEに追加
-- **#35** v1.1.0 リリース準備
-- **#34** H1/H6パーサーのフルストラクト対応
-- **#33** ワンコマンドインストーラーと自動アップデート機能
-
-### v1.0.0 以前
-- **#28** JRA実データテストフィクスチャ（27パーサー, 81レコード）
-- **#20** quickstart.py UI文言・表示の修正
-- **#14** 32-bit Python 必須に変更
-- **#9** README 再構成、技術詳細を docs/TECHNICAL.md に分離
+---
 
 ## ライセンス
 
-- 非商用利用: Apache License 2.0
-- 商用利用: 事前にお問い合わせください → oracle.datascientist@gmail.com
-
-取得データは [JRA-VAN利用規約](https://jra-van.jp/info/rule.html) に従ってください。
+[LICENSE](LICENSE) を参照してください。
