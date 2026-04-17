@@ -145,7 +145,7 @@ class DataImporter:
             "JC": "NL_JC",  # 重量変更情報
             "HC": "NL_HC",  # 異常区分情報
             "HS": "NL_HS",  # 配当金情報
-            "HY": "NL_HY",  # 払戻情報（地方競馬）
+            "HY": "NL_HY",  # 馬名の意味由来
             "WE": "NL_WE",  # 気象情報
             "WF": "NL_WF",  # 風情報
             "WH": "NL_WH",  # 馬場情報

@@ -16,7 +16,7 @@ from src.jvlink.bridge import (
 @pytest.fixture
 def bridge(tmp_path):
     """Create bridge with mocked process."""
-    exe = tmp_path / "NVLinkBridge.exe"
+    exe = tmp_path / "JVLinkBridge.exe"
     exe.touch()
     with patch("src.jvlink.bridge.find_bridge_executable", return_value=exe):
         b = JVLinkBridge(sid="TEST", bridge_path=exe)
@@ -40,7 +40,7 @@ class TestJVLinkBridgeInit:
                 JVLinkBridge(bridge_path="/nonexistent.exe")
 
     def test_init_with_valid_path(self, tmp_path):
-        exe = tmp_path / "NVLinkBridge.exe"
+        exe = tmp_path / "JVLinkBridge.exe"
         exe.touch()
         b = JVLinkBridge(bridge_path=exe)
         assert b._bridge_path == exe
