@@ -10,8 +10,8 @@ import time
 from datetime import datetime
 
 from src.fetcher.realtime import RealtimeFetcher
-from src.fetcher.base import FetcherError
-from src.importer.importer import DataImporter
+from src.jvlink.wrapper import JVLinkError
+from src.realtime.updater import RealtimeUpdater
 from src.database.base import BaseDatabase
 from src.utils.logger import get_logger
 
@@ -220,58 +220,108 @@ class RealtimeMonitor:
     def _monitor_sequential(self):
         """Single-thread sequential round-robin over all data specs.
 
-        Opens one JVRTOpen connection per spec, drains available records,
-        closes, then moves to the next spec. Loops continuously until stopped.
+        For each spec: JVRTOpen → drain raw records via JVRead → JVClose → next.
+        Raw buffers go to RealtimeUpdater which routes to RT_ tables (not NL_).
 
-        A single RealtimeFetcher (and its COM object) is reused for all specs
-        to avoid win32com threading/apartment issues from creating/destroying
-        multiple COM objects in a background thread.
+        A single RealtimeFetcher (and its COM object) is reused throughout to
+        avoid win32com threading issues from creating multiple COM objects in a
+        background thread.
         """
-        importer = DataImporter(database=self.database, batch_size=self.batch_size)
         fetcher = RealtimeFetcher(sid=self.sid)
-        logger.info("Sequential monitoring loop started", specs=self.data_specs)
+        jvlink = fetcher.jvlink
+        updater = RealtimeUpdater(database=self.database)
+
+        # Initialize JV-Link once for the session
+        try:
+            jvlink.jv_init()
+        except Exception as e:
+            logger.error(f"JV-Link init failed: {e}")
+            return
+
+        logger.info("Sequential RT monitoring loop started", specs=self.data_specs)
 
         while not self._stop_event.is_set():
             any_data = False
+            key = datetime.now().strftime("%Y%m%d")
 
             for data_spec in list(self.data_specs):
                 if self._stop_event.is_set():
                     break
 
                 try:
-                    for record in fetcher.fetch(data_spec=data_spec, continuous=False):
-                        if self._stop_event.is_set():
-                            break
-                        success = importer.import_single_record(record)
-                        with self._lock:
-                            if success:
-                                self.status.records_imported += 1
-                                any_data = True
-                            else:
-                                self.status.records_failed += 1
+                    ret, _read_count = jvlink.jv_rt_open(data_spec, key)
 
-                except FetcherError as e:
-                    err = str(e)
-                    if "-114" in err:
-                        # 契約外データ — expected for unsubscribed specs
-                        logger.debug(f"Spec {data_spec} not subscribed, skipping")
-                    elif "-202" in err:
-                        # AlreadyOpen — should not happen in sequential mode,
-                        # but handle defensively
-                        logger.warning(f"JV-Link busy for {data_spec}, retrying next cycle")
+                    # ret == -1 means no data for this spec/date — not an error
+                    if ret == -1:
+                        logger.debug(f"No RT data for {data_spec} on {key}")
+                        jvlink.jv_close()
+                        continue
+
+                    # Drain all available records
+                    spec_records = 0
+                    while not self._stop_event.is_set():
+                        ret_code, buff, _filename = jvlink.jv_read()
+                        if ret_code == 0:  # complete
+                            break
+                        if ret_code == -1:  # file switch
+                            continue
+                        if ret_code > 0 and buff:
+                            try:
+                                result = updater.process_record(buff)
+                                with self._lock:
+                                    if result:
+                                        self.status.records_imported += 1
+                                        spec_records += 1
+                                    else:
+                                        self.status.records_failed += 1
+                            except Exception as e:
+                                logger.error(f"process_record error ({data_spec}): {e}")
+                                with self._lock:
+                                    self.status.records_failed += 1
+                        else:
+                            logger.debug(f"JVRead {ret_code} for {data_spec}, stopping drain")
+                            break
+
+                    jvlink.jv_close()
+
+                    if spec_records > 0:
+                        any_data = True
+                        try:
+                            self.database.commit()
+                        except Exception as e:
+                            logger.error(f"Commit failed after {data_spec}: {e}")
+
+                except JVLinkError as e:
+                    code = getattr(e, "error_code", None)
+                    if code == -114:
+                        logger.debug(f"Spec {data_spec} not subscribed")
+                    elif code == -202:
+                        logger.warning(f"JV-Link busy for {data_spec}, will retry next cycle")
                     else:
-                        logger.error(f"Fetch error for {data_spec}: {e}")
+                        logger.error(f"JVLink error for {data_spec}: {e}")
                         self._add_error(data_spec, str(e))
+                    try:
+                        jvlink.jv_close()
+                    except Exception:
+                        pass
 
                 except Exception as e:
                     logger.error(f"Unexpected error for {data_spec}: {e}")
                     self._add_error(data_spec, str(e))
+                    try:
+                        jvlink.jv_close()
+                    except Exception:
+                        pass
 
-            # Cycle faster when data was found (new race event), slower when idle
+            # Cycle faster when new data was seen (race events), slower when idle
             wait = 0.5 if any_data else 2.0
             self._stop_event.wait(timeout=wait)
 
-        logger.info("Sequential monitoring loop stopped")
+        logger.info("Sequential RT monitoring loop stopped")
+        try:
+            jvlink.jv_close()
+        except Exception:
+            pass
 
     def _ensure_tables(self):
         """Ensure required database tables exist."""
