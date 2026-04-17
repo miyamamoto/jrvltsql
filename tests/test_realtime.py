@@ -229,15 +229,15 @@ class TestRealtimeMonitor(unittest.TestCase):
 
         self.assertFalse(result)
 
-    @patch('src.services.realtime_monitor.threading.Thread')
-    def test_stop(self, mock_thread):
+    def test_stop(self):
         """Test stopping monitor."""
         monitor = RealtimeMonitor(database=self.mock_db)
 
-        # Simulate running state
+        # Simulate running state with a single monitoring thread
         monitor.status.is_running = True
         mock_thread_instance = MagicMock()
-        monitor._threads = [mock_thread_instance]
+        mock_thread_instance.is_alive.return_value = True
+        monitor._thread = mock_thread_instance
 
         result = monitor.stop()
 
@@ -270,27 +270,23 @@ class TestRealtimeMonitor(unittest.TestCase):
         self.assertEqual(status["records_imported"], 0)
         self.assertIn("0B12", status["monitored_specs"])
 
-    @patch('src.services.realtime_monitor.threading.Thread')
-    def test_add_data_spec(self, mock_thread):
-        """Test adding data spec to running monitor."""
+    def test_add_data_spec(self):
+        """Test adding data spec to running monitor.
+
+        The sequential monitor shares one thread, so add_data_spec only
+        updates the spec list — no new thread is created.
+        """
         monitor = RealtimeMonitor(
             database=self.mock_db,
             data_specs=["0B12"]
         )
         monitor.status.is_running = True
 
-        # Mock thread
-        mock_thread_instance = MagicMock()
-        mock_thread.return_value = mock_thread_instance
-
         result = monitor.add_data_spec("0B15")
 
         self.assertTrue(result)
         self.assertIn("0B15", monitor.status.monitored_specs)
-
-        # Verify thread was created
-        mock_thread.assert_called()
-        mock_thread_instance.start.assert_called()
+        self.assertIn("0B15", monitor.data_specs)
 
     def test_add_data_spec_not_running(self):
         """Test adding data spec when monitor not running."""
