@@ -2,7 +2,7 @@
 
 JRA-VAN DataLab データを SQLite/PostgreSQL に取り込む Windows 専用パイプライン。
 
-JRA（中央競馬）専用。地方競馬（NAR）は [jrvltsql-nar](https://github.com/miyamamoto/jrvltsql-nar) を使用してください。
+JRA（中央競馬）専用です。
 
 ---
 
