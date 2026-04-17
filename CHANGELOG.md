@@ -11,8 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### ⚠️ Breaking Changes
 
-- **地方競馬（NAR）サポートを廃止** — NAR/NV-Link 関連機能をすべて削除。
-  地方競馬データが必要な場合は [jrvltsql-nar](https://github.com/miyamamoto/jrvltsql-nar) を使用してください。
+- **地方競馬（NAR）サポートを廃止** — NAR/NV-Link 関連機能をすべて削除。本ツールは JRA（中央競馬）専用となります。
 
 ### Added
 
