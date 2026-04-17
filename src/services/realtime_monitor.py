@@ -10,6 +10,7 @@ import time
 from datetime import datetime
 
 from src.fetcher.realtime import RealtimeFetcher
+from src.fetcher.base import FetcherError
 from src.importer.importer import DataImporter
 from src.database.base import BaseDatabase
 from src.utils.logger import get_logger
@@ -53,28 +54,25 @@ class RealtimeMonitor:
     This service continuously monitors JV-Link realtime data streams
     and automatically imports new data into the database as it arrives.
 
+    JV-Link is a single-connection COM object — only one JVRTOpen call
+    can be active at a time. This monitor uses a single thread that
+    round-robins through all specs sequentially (open → drain → close → next).
+
     Examples:
         >>> from src.database.sqlite_handler import SQLiteDatabase
         >>>
-        >>> # Configure database
-        >>> db_config = {"path": "data/realtime.db"}
+        >>> db_config = {"path": "data/keiba.db"}
         >>> database = SQLiteDatabase(db_config)
         >>>
-        >>> # Configure monitor
         >>> monitor = RealtimeMonitor(
         ...     database=database,
-        ...     data_specs=["0B12", "0B15"],  # Race results and payouts
+        ...     data_specs=["0B12", "0B15", "0B30"],
         ...     sid="JLTSQL"
         ... )
         >>>
-        >>> # Start monitoring in background
         >>> monitor.start()
-        >>>
-        >>> # Check status
         >>> status = monitor.get_status()
         >>> print(f"Imported: {status['records_imported']}")
-        >>>
-        >>> # Stop monitoring
         >>> monitor.stop()
     """
 
@@ -96,17 +94,15 @@ class RealtimeMonitor:
             auto_create_tables: Automatically create missing tables
         """
         self.database = database
-        self.data_specs = data_specs or ["0B12"]  # Default: race results
+        self.data_specs = list(data_specs or ["0B12"])
         self.sid = sid
         self.batch_size = batch_size
         self.auto_create_tables = auto_create_tables
 
-        # Status tracking
         self.status = MonitorStatus()
         self.status.monitored_specs = set(self.data_specs)
 
-        # Threading
-        self._threads: List[threading.Thread] = []
+        self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
         self._lock = threading.Lock()
 
@@ -121,30 +117,23 @@ class RealtimeMonitor:
             return False
 
         try:
-            # Ensure database is connected
             if not self.database._connection:
                 self.database.connect()
 
-            # Auto-create tables if needed
             if self.auto_create_tables:
                 self._ensure_tables()
 
-            # Clear stop event
             self._stop_event.clear()
 
-            # Start monitoring threads (one per data spec)
-            for data_spec in self.data_specs:
-                thread = threading.Thread(
-                    target=self._monitor_spec,
-                    args=(data_spec,),
-                    daemon=True,
-                    name=f"Monitor-{data_spec}"
-                )
-                thread.start()
-                self._threads.append(thread)
-                logger.info(f"Started monitoring thread for {data_spec}")
+            # Single thread round-robins through all specs sequentially.
+            # JV-Link allows only one JVRTOpen connection at a time.
+            self._thread = threading.Thread(
+                target=self._monitor_sequential,
+                daemon=True,
+                name="Monitor-Sequential",
+            )
+            self._thread.start()
 
-            # Update status
             self.status.is_running = True
             self.status.started_at = datetime.now()
             self.status.stopped_at = None
@@ -152,9 +141,7 @@ class RealtimeMonitor:
             logger.info(
                 "Realtime monitor started",
                 data_specs=self.data_specs,
-                thread_count=len(self._threads)
             )
-
             return True
 
         except Exception as e:
@@ -166,7 +153,7 @@ class RealtimeMonitor:
         """Stop monitoring service.
 
         Args:
-            timeout: Maximum time to wait for threads to stop (seconds)
+            timeout: Maximum time to wait for thread to stop (seconds)
 
         Returns:
             True if stopped successfully, False otherwise
@@ -177,29 +164,21 @@ class RealtimeMonitor:
 
         try:
             logger.info("Stopping realtime monitor...")
-
-            # Signal threads to stop
             self._stop_event.set()
 
-            # Wait for threads to finish
-            for thread in self._threads:
-                thread.join(timeout=timeout / len(self._threads))
-                if thread.is_alive():
-                    logger.warning(f"Thread {thread.name} did not stop gracefully")
+            if self._thread and self._thread.is_alive():
+                self._thread.join(timeout=timeout)
+                if self._thread.is_alive():
+                    logger.warning("Monitor thread did not stop gracefully")
 
-            # Clear threads
-            self._threads.clear()
-
-            # Update status
             self.status.is_running = False
             self.status.stopped_at = datetime.now()
 
             logger.info(
                 "Realtime monitor stopped",
                 records_imported=self.status.records_imported,
-                records_failed=self.status.records_failed
+                records_failed=self.status.records_failed,
             )
-
             return True
 
         except Exception as e:
@@ -208,22 +187,20 @@ class RealtimeMonitor:
             return False
 
     def get_status(self) -> Dict:
-        """Get current monitor status.
-
-        Returns:
-            Dictionary with status information
-        """
+        """Get current monitor status."""
         with self._lock:
             return self.status.to_dict()
 
     def add_data_spec(self, data_spec: str) -> bool:
-        """Add a new data spec to monitor.
+        """Add a new data spec to monitor at runtime.
+
+        The sequential loop picks it up on the next cycle.
 
         Args:
             data_spec: Data specification code to add
 
         Returns:
-            True if added successfully, False otherwise
+            True if added, False if already present or not running
         """
         if not self.status.is_running:
             logger.warning("Cannot add data spec - monitor is not running")
@@ -233,91 +210,68 @@ class RealtimeMonitor:
             logger.warning(f"Data spec {data_spec} is already being monitored")
             return False
 
-        try:
-            # Start new monitoring thread
-            thread = threading.Thread(
-                target=self._monitor_spec,
-                args=(data_spec,),
-                daemon=True,
-                name=f"Monitor-{data_spec}"
-            )
-            thread.start()
-            self._threads.append(thread)
+        with self._lock:
+            self.data_specs.append(data_spec)
+            self.status.monitored_specs.add(data_spec)
 
-            # Update status
-            with self._lock:
-                self.status.monitored_specs.add(data_spec)
+        logger.info(f"Added {data_spec} to monitored specs")
+        return True
 
-            logger.info(f"Added monitoring for data spec: {data_spec}")
-            return True
+    def _monitor_sequential(self):
+        """Single-thread sequential round-robin over all data specs.
 
-        except Exception as e:
-            logger.error(f"Failed to add data spec {data_spec}", error=str(e))
-            self._add_error("add_spec", str(e))
-            return False
+        Opens one JVRTOpen connection per spec, drains available records,
+        closes, then moves to the next spec. Loops continuously until stopped.
 
-    def _monitor_spec(self, data_spec: str):
-        """Monitor a single data spec (runs in separate thread).
-
-        Args:
-            data_spec: Data specification code to monitor
+        A single RealtimeFetcher (and its COM object) is reused for all specs
+        to avoid win32com threading/apartment issues from creating/destroying
+        multiple COM objects in a background thread.
         """
-        logger.info(f"Starting monitoring for {data_spec}")
-
+        importer = DataImporter(database=self.database, batch_size=self.batch_size)
         fetcher = RealtimeFetcher(sid=self.sid)
-        importer = DataImporter(
-            database=self.database,
-            batch_size=self.batch_size
-        )
-
-        retry_count = 0
-        max_retries = 3
+        logger.info("Sequential monitoring loop started", specs=self.data_specs)
 
         while not self._stop_event.is_set():
-            try:
-                # Fetch realtime data continuously
-                for record in fetcher.fetch(data_spec=data_spec, continuous=True):
-                    # Check stop signal
-                    if self._stop_event.is_set():
-                        break
+            any_data = False
 
-                    # Import record
-                    success = importer.import_single_record(record)
-
-                    # Update statistics
-                    with self._lock:
-                        if success:
-                            self.status.records_imported += 1
-                        else:
-                            self.status.records_failed += 1
-
-                    # Reset retry count on success
-                    if success:
-                        retry_count = 0
-
-                # If loop exits normally, break
-                break
-
-            except Exception as e:
-                retry_count += 1
-                error_msg = f"Error monitoring {data_spec}: {e}"
-                logger.error(error_msg)
-                self._add_error(data_spec, str(e))
-
-                # Check if should retry
-                if retry_count >= max_retries:
-                    logger.error(
-                        f"Max retries reached for {data_spec}, stopping thread",
-                        retry_count=retry_count
-                    )
+            for data_spec in list(self.data_specs):
+                if self._stop_event.is_set():
                     break
 
-                # Wait before retry
-                wait_time = min(5 * retry_count, 30)  # Max 30 seconds
-                logger.info(f"Retrying {data_spec} in {wait_time} seconds...")
-                time.sleep(wait_time)
+                try:
+                    for record in fetcher.fetch(data_spec=data_spec, continuous=False):
+                        if self._stop_event.is_set():
+                            break
+                        success = importer.import_single_record(record)
+                        with self._lock:
+                            if success:
+                                self.status.records_imported += 1
+                                any_data = True
+                            else:
+                                self.status.records_failed += 1
 
-        logger.info(f"Stopped monitoring for {data_spec}")
+                except FetcherError as e:
+                    err = str(e)
+                    if "-114" in err:
+                        # 契約外データ — expected for unsubscribed specs
+                        logger.debug(f"Spec {data_spec} not subscribed, skipping")
+                    elif "-202" in err:
+                        # AlreadyOpen — should not happen in sequential mode,
+                        # but handle defensively
+                        logger.warning(f"JV-Link busy for {data_spec}, retrying next cycle")
+                    else:
+                        logger.error(f"Fetch error for {data_spec}: {e}")
+                        self._add_error(data_spec, str(e))
+
+                except Exception as e:
+                    logger.error(f"Unexpected error for {data_spec}: {e}")
+                    self._add_error(data_spec, str(e))
+
+            # Cycle faster when data was found (new race event), slower when idle
+            wait = 0.5 if any_data else 2.0
+            self._stop_event.wait(timeout=wait)
+
+        logger.info("Sequential monitoring loop stopped")
 
     def _ensure_tables(self):
         """Ensure required database tables exist."""
@@ -330,7 +284,7 @@ class RealtimeMonitor:
             if missing_tables:
                 logger.info(
                     f"Creating {len(missing_tables)} missing tables",
-                    tables=missing_tables
+                    tables=missing_tables,
                 )
                 schema_mgr.create_all_tables()
 
@@ -338,29 +292,20 @@ class RealtimeMonitor:
             logger.warning(f"Could not create tables: {e}")
 
     def _add_error(self, context: str, error: str):
-        """Add error to status tracking.
-
-        Args:
-            context: Error context (e.g., data spec or operation)
-            error: Error message
-        """
+        """Add error to status tracking."""
         with self._lock:
             self.status.errors.append({
                 "timestamp": datetime.now().isoformat(),
                 "context": context,
-                "error": error
+                "error": error,
             })
-
-            # Keep only last 100 errors
             if len(self.status.errors) > 100:
                 self.status.errors = self.status.errors[-100:]
 
     def __enter__(self):
-        """Context manager entry."""
         self.start()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit."""
         self.stop()
         return False
