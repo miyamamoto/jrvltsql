@@ -16,7 +16,7 @@ REM Store exit code for later
 set SCRIPT_EXIT_CODE=0
 
 REM ============================================================
-REM   Python Detection (32-bit preferred for UmaConn/NAR)
+REM   Python Detection (32-bit required for JV-Link COM API)
 REM ============================================================
 
 REM First try: explicit PYTHON environment variable
@@ -49,7 +49,7 @@ REM Fourth try: py launcher (any version)
 py --version >nul 2>&1
 if !errorlevel!==0 (
     echo Using: Python ^(py launcher^)
-    echo [WARNING] 64-bit Python may not support NAR/UmaConn
+    echo [WARNING] 64-bit Python may not support JV-Link COM API
     py scripts/quickstart.py %*
     set SCRIPT_EXIT_CODE=!errorlevel!
     goto :check_result
@@ -59,7 +59,7 @@ REM Fifth try: python in PATH
 python --version >nul 2>&1
 if !errorlevel!==0 (
     echo Using: Python ^(PATH^)
-    echo [WARNING] 64-bit Python may not support NAR/UmaConn
+    echo [WARNING] 64-bit Python may not support JV-Link COM API
     python scripts/quickstart.py %*
     set SCRIPT_EXIT_CODE=!errorlevel!
     goto :check_result
@@ -67,7 +67,7 @@ if !errorlevel!==0 (
 
 REM No Python found
 echo ERROR: Python not found
-echo Please install Python 3.12 (32-bit) for full NAR/UmaConn support
+echo Please install Python 3.12 (32-bit) for JV-Link COM API support
 echo Download: https://www.python.org/downloads/
 pause
 exit /b 1

@@ -131,7 +131,7 @@ class TestSEParser:
 class TestH1Parser:
     """H1 (票数1 全掛式) parser tests.
 
-    IMPORTANT: NV-Link returns the full 28,955-byte H1 struct (JV_H1_HYOSU_ZENKAKE),
+    H1 is the full 28,955-byte H1 struct (JV_H1_HYOSU_ZENKAKE),
     containing arrays for all bet combinations (28 tansho, 153 umaren, etc.).
     Our current parser expects 317-byte flat records with single entries per bet type.
 
@@ -155,7 +155,7 @@ class TestH1Parser:
         assert result["TanHyo"] == "00000012345"
 
     def test_h1_full_record_size(self):
-        """Full H1 record from NV-Link is 28,955 bytes."""
+        """Full H1 record is 28,955 bytes."""
         data = make_h1_record_full()
         assert len(data) == 28955
 
@@ -208,35 +208,6 @@ class TestH1Parser:
         # Only jyo_cd differs
         assert data_55[19:21] == b'55'
         assert data_05[19:21] == b'05'
-
-    @pytest.mark.skipif(
-        not os.path.exists(os.path.join(
-            os.path.dirname(os.path.dirname(__file__)),
-            "data", "raw_dumps", "nar_H1_001.bin"
-        )),
-        reason="Real NAR data dump not available"
-    )
-    def test_h1_real_nar_data(self, factory):
-        """Parse real NAR H1 data from NV-Link dump."""
-        dump_path = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)),
-            "data", "raw_dumps", "nar_H1_001.bin"
-        )
-        with open(dump_path, "rb") as f:
-            data = f.read()
-
-        assert len(data) == 28955
-
-        parser = factory.get_parser("H1")
-        result = parser.parse(data)
-
-        assert result is not None
-        assert isinstance(result, list)
-        first = result[0]
-        assert first["RecordSpec"] == "H1"
-        # JyoCD should be NAR range (30-57)
-        jyo = int(first["JyoCD"])
-        assert 30 <= jyo <= 57, f"NAR JyoCD should be 30-57, got {jyo}"
 
 
 class TestHRParser:
@@ -360,17 +331,12 @@ class TestJyoCodeFormatCompatibility:
             data = record_fn()
             assert data[-2:] == b'\r\n', f"{record_fn.__name__} missing CRLF"
 
-    def test_h1_format_identical(self):
-        """H1 full record format is identical between JRA and NAR."""
-        jra = make_h1_record_full(jyo_cd="05")
-        nar = make_h1_record_full(jyo_cd="55")
-
-        assert len(jra) == len(nar) == 28955
-
-        # Structure is the same, only content differs
-        # Header structure
-        assert jra[0:2] == nar[0:2] == b'H1'
-        assert jra[27:29] == nar[27:29]  # TorokuTosu at same position
+    def test_h1_format_size(self):
+        """H1 full record is 28,955 bytes."""
+        data = make_h1_record_full(jyo_cd="05")
+        assert len(data) == 28955
+        assert data[0:2] == b'H1'
+        assert len(data[27:29]) == 2  # TorokuTosu field present
 
 
 class TestH1FullStructParsing:

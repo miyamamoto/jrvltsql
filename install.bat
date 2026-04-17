@@ -6,7 +6,7 @@ title JLTSQL Installer
 echo.
 echo   ============================================
 echo     JLTSQL Installer
-echo     JRA-VAN DataLab / UmaConn -^> SQL
+echo     JRA-VAN DataLab -^> SQL
 echo   ============================================
 echo.
 

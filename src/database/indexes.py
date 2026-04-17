@@ -154,6 +154,14 @@ INDEXES = {
         "CREATE INDEX IF NOT EXISTS idx_nl_rc_venue ON NL_RC(JyoCD)",
     ],
 
+    "NL_SE": [
+        # 出馬表・成績 (Starters/Results) - frequently queried by date + race
+        "CREATE INDEX IF NOT EXISTS idx_nl_se_date ON NL_SE(Year, MonthDay)",
+        "CREATE INDEX IF NOT EXISTS idx_nl_se_venue ON NL_SE(JyoCD)",
+        "CREATE INDEX IF NOT EXISTS idx_nl_se_race ON NL_SE(RaceNum)",
+        "CREATE INDEX IF NOT EXISTS idx_nl_se_horse ON NL_SE(KettoNum)",
+    ],
+
     "NL_TC": [
         # 調教師成績 (Trainer Performance)
         "CREATE INDEX IF NOT EXISTS idx_nl_tc_date ON NL_TC(Year, MonthDay)",
@@ -204,6 +212,14 @@ INDEXES = {
         "CREATE INDEX IF NOT EXISTS idx_rt_ra_time ON RT_RA(HassoTime)",
         # Real-time specific: recent data queries
         "CREATE INDEX IF NOT EXISTS idx_rt_ra_venue_time ON RT_RA(JyoCD, HassoTime)",
+    ],
+
+    "RT_SE": [
+        # リアルタイム: 出馬表・成績
+        "CREATE INDEX IF NOT EXISTS idx_rt_se_date ON RT_SE(Year, MonthDay)",
+        "CREATE INDEX IF NOT EXISTS idx_rt_se_venue ON RT_SE(JyoCD)",
+        "CREATE INDEX IF NOT EXISTS idx_rt_se_race ON RT_SE(RaceNum)",
+        "CREATE INDEX IF NOT EXISTS idx_rt_se_horse ON RT_SE(KettoNum)",
     ],
 
     "RT_AV": [
