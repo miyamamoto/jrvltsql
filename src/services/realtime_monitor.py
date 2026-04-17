@@ -10,6 +10,7 @@ import time
 from datetime import datetime
 
 from src.fetcher.realtime import RealtimeFetcher
+from src.jvlink.constants import is_time_series_spec
 from src.jvlink.wrapper import JVLinkError
 from src.realtime.updater import RealtimeUpdater
 from src.database.base import BaseDatabase
@@ -220,18 +221,16 @@ class RealtimeMonitor:
     def _monitor_sequential(self):
         """Single-thread sequential round-robin over all data specs.
 
-        For each spec: JVRTOpen → drain raw records via JVRead → JVClose → next.
-        Raw buffers go to RealtimeUpdater which routes to RT_ tables (not NL_).
-
-        A single RealtimeFetcher (and its COM object) is reused throughout to
-        avoid win32com threading issues from creating multiple COM objects in a
-        background thread.
+        Speed-report specs (0B12, 0B15, etc.) use a date key (YYYYMMDD).
+        Time-series specs (0B20, 0B30-0B36) require a per-race key
+        (YYYYMMDDJJRR). For those specs we iterate every race in NL_RA for
+        today and poll each one, storing results in TS_O* tables with
+        timeseries=True so multiple odds snapshots are preserved.
         """
         fetcher = RealtimeFetcher(sid=self.sid)
         jvlink = fetcher.jvlink
         updater = RealtimeUpdater(database=self.database)
 
-        # Initialize JV-Link once for the session
         try:
             jvlink.jv_init()
         except Exception as e:
@@ -242,78 +241,37 @@ class RealtimeMonitor:
 
         while not self._stop_event.is_set():
             any_data = False
-            key = datetime.now().strftime("%Y%m%d")
+            today = datetime.now().strftime("%Y%m%d")
 
             for data_spec in list(self.data_specs):
                 if self._stop_event.is_set():
                     break
 
-                try:
-                    ret, _read_count = jvlink.jv_rt_open(data_spec, key)
-
-                    # ret == -1 means no data for this spec/date — not an error
-                    if ret == -1:
-                        logger.debug(f"No RT data for {data_spec} on {key}")
-                        jvlink.jv_close()
-                        continue
-
-                    # Drain all available records
-                    spec_records = 0
-                    while not self._stop_event.is_set():
-                        ret_code, buff, _filename = jvlink.jv_read()
-                        if ret_code == 0:  # complete
+                if is_time_series_spec(data_spec):
+                    # Time-series specs need YYYYMMDDJJRR keys — one per race
+                    race_keys = self._get_today_race_keys(today)
+                    for race_key in race_keys:
+                        if self._stop_event.is_set():
                             break
-                        if ret_code == -1:  # file switch
-                            continue
-                        if ret_code > 0 and buff:
-                            try:
-                                result = updater.process_record(buff)
-                                with self._lock:
-                                    if result:
-                                        self.status.records_imported += 1
-                                        spec_records += 1
-                                    else:
-                                        self.status.records_failed += 1
-                            except Exception as e:
-                                logger.error(f"process_record error ({data_spec}): {e}")
-                                with self._lock:
-                                    self.status.records_failed += 1
-                        else:
-                            logger.debug(f"JVRead {ret_code} for {data_spec}, stopping drain")
-                            break
-
-                    jvlink.jv_close()
-
-                    if spec_records > 0:
+                        n = self._drain_key(
+                            jvlink, updater, data_spec, race_key, timeseries=True
+                        )
+                        if n > 0:
+                            any_data = True
+                else:
+                    # Speed-report specs use the plain date key
+                    n = self._drain_key(
+                        jvlink, updater, data_spec, today, timeseries=False
+                    )
+                    if n > 0:
                         any_data = True
-                        try:
-                            self.database.commit()
-                        except Exception as e:
-                            logger.error(f"Commit failed after {data_spec}: {e}")
 
-                except JVLinkError as e:
-                    code = getattr(e, "error_code", None)
-                    if code == -114:
-                        logger.debug(f"Spec {data_spec} not subscribed")
-                    elif code == -202:
-                        logger.warning(f"JV-Link busy for {data_spec}, will retry next cycle")
-                    else:
-                        logger.error(f"JVLink error for {data_spec}: {e}")
-                        self._add_error(data_spec, str(e))
-                    try:
-                        jvlink.jv_close()
-                    except Exception:
-                        pass
-
+            if any_data:
+                try:
+                    self.database.commit()
                 except Exception as e:
-                    logger.error(f"Unexpected error for {data_spec}: {e}")
-                    self._add_error(data_spec, str(e))
-                    try:
-                        jvlink.jv_close()
-                    except Exception:
-                        pass
+                    logger.error(f"Commit failed: {e}")
 
-            # Cycle faster when new data was seen (race events), slower when idle
             wait = 0.5 if any_data else 2.0
             self._stop_event.wait(timeout=wait)
 
@@ -322,6 +280,86 @@ class RealtimeMonitor:
             jvlink.jv_close()
         except Exception:
             pass
+
+    def _drain_key(self, jvlink, updater, data_spec: str, key: str,
+                   timeseries: bool = False) -> int:
+        """Open spec with key, drain all records, close. Returns record count."""
+        try:
+            ret, _cnt = jvlink.jv_rt_open(data_spec, key)
+            if ret == -1:
+                return 0
+
+            n = 0
+            while not self._stop_event.is_set():
+                ret_code, buff, _fname = jvlink.jv_read()
+                if ret_code == 0:
+                    break
+                if ret_code == -1:
+                    continue
+                if ret_code > 0 and buff:
+                    try:
+                        result = updater.process_record(buff, timeseries=timeseries)
+                        with self._lock:
+                            if result:
+                                self.status.records_imported += 1
+                                n += 1
+                            else:
+                                self.status.records_failed += 1
+                    except Exception as e:
+                        logger.error(f"process_record error ({data_spec}/{key}): {e}")
+                        with self._lock:
+                            self.status.records_failed += 1
+                else:
+                    break
+
+            jvlink.jv_close()
+            return n
+
+        except JVLinkError as e:
+            code = getattr(e, "error_code", None)
+            if code == -114:
+                logger.debug(f"Spec {data_spec} not subscribed")
+            elif code == -202:
+                logger.warning(f"JV-Link busy ({data_spec}/{key}), retry next cycle")
+            else:
+                logger.error(f"JVLink error ({data_spec}/{key}): {e}")
+                self._add_error(data_spec, str(e))
+            try:
+                jvlink.jv_close()
+            except Exception:
+                pass
+            return 0
+
+        except Exception as e:
+            logger.error(f"Unexpected error ({data_spec}/{key}): {e}")
+            self._add_error(data_spec, str(e))
+            try:
+                jvlink.jv_close()
+            except Exception:
+                pass
+            return 0
+
+    def _get_today_race_keys(self, today: str) -> list:
+        """Return all YYYYMMDDJJRR race keys from NL_RA for the given date.
+
+        Args:
+            today: Date string YYYYMMDD
+
+        Returns:
+            List of keys like ['202604180301', '202604180302', ...]
+        """
+        year = today[:4]
+        md = today[4:6] + today[6:8]  # MMDD
+        try:
+            rows = self.database.fetch_all(
+                f'SELECT JyoCD, RaceNum FROM NL_RA '
+                f'WHERE Year="{year}" AND MonthDay="{md}" '
+                f'ORDER BY JyoCD, RaceNum'
+            )
+            return [f'{today}{row["JyoCD"]}{int(row["RaceNum"]):02d}' for row in rows]
+        except Exception as e:
+            logger.warning(f"Could not fetch race keys for {today}: {e}")
+            return []
 
     def _ensure_tables(self):
         """Ensure required database tables exist."""
