@@ -36,6 +36,11 @@ import time
 from datetime import datetime, date
 from pathlib import Path
 
+# Windows CP932 console can't encode Unicode characters like em dashes
+if sys.stdout.encoding and sys.stdout.encoding.lower() in ("cp932", "cp936", "cp950"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 PROJECT_ROOT = Path(__file__).parent.parent
 
 # (verify_time, phase, description)
