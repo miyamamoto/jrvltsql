@@ -159,7 +159,7 @@ class RealtimeUpdater:
                     result = self._process_single_record(item, timeseries=timeseries)
                     if result:
                         results.append(result)
-                return results[-1] if results else None
+                return results if results else None
 
             return self._process_single_record(parsed_data, timeseries=timeseries)
 

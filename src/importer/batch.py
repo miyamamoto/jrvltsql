@@ -156,6 +156,7 @@ class BatchProcessor:
         year: int,
         month: int,
         data_spec: str = "RACE",
+        option: int = 1,
         auto_commit: bool = True,
     ) -> dict:
         """Process data for a specific month.
@@ -187,12 +188,13 @@ class BatchProcessor:
 
         logger.info(f"Processing month: {year}/{month:02d}")
 
-        return self.process_date_range(data_spec, from_date, to_date, auto_commit)
+        return self.process_date_range(data_spec, from_date, to_date, option=option, auto_commit=auto_commit)
 
     def process_year(
         self,
         year: int,
         data_spec: str = "RACE",
+        option: int = 1,
         auto_commit: bool = True,
     ) -> dict:
         """Process data for a specific year.
@@ -214,7 +216,7 @@ class BatchProcessor:
 
         logger.info(f"Processing year: {year}")
 
-        return self.process_date_range(data_spec, from_date, to_date, auto_commit)
+        return self.process_date_range(data_spec, from_date, to_date, option=option, auto_commit=auto_commit)
 
     def process_multiple_specs(
         self,

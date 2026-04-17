@@ -77,7 +77,7 @@ def migrate_table_if_needed(db: BaseDatabase, table_name: str, schema_sql: str) 
         return False
 
     # Get existing columns via PRAGMA
-    existing_info = db.fetch_all(f"PRAGMA table_info({table_name})")
+    existing_info = db.fetch_all(f'PRAGMA table_info("{table_name}")')
     existing_columns = {row['name'] for row in existing_info}
 
     if existing_columns == expected_columns:
@@ -90,7 +90,7 @@ def migrate_table_if_needed(db: BaseDatabase, table_name: str, schema_sql: str) 
         f"expected={sorted(expected_columns)}. "
         f"Dropping and recreating table."
     )
-    db.execute(f"DROP TABLE {table_name}")
+    db.execute(f'DROP TABLE "{table_name}"')
     db.execute(schema_sql)
     db.commit()
     return True
