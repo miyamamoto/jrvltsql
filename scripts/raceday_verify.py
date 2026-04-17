@@ -564,7 +564,6 @@ def run_unit_tests(issues):
     cmd = [sys.executable, "-m", "pytest", "tests/",
            "-q", "--tb=line",
            "--ignore=tests/unit/test_jvlink_bridge.py",
-           "--ignore=tests/unit/test_nvlink_bridge.py",
            "--ignore=tests/integration/",
            "--ignore=tests/e2e/",
            "--basetemp=C:/tmp/pytest-jrvl",

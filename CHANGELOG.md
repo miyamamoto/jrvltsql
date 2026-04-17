@@ -7,9 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
-- NAR（地方競馬）サポートを別リポジトリ `jrvltsql-nar`（非公開）に移管しました。本リポジトリは JRA（中央競馬）専用となります。
-
 ## [1.1.0] - 2025-02-08
 
 ### Added
