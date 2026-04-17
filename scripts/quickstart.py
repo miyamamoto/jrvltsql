@@ -2249,7 +2249,6 @@ class QuickstartRunner:
             from src.fetcher.realtime import RealtimeFetcher
             from src.realtime.updater import RealtimeUpdater
             from src.jvlink.constants import JYO_CODES, generate_time_series_full_key
-            from src.utils.data_source import DataSource
 
             jyo_codes = JYO_CODES
             generate_key = generate_time_series_full_key
@@ -3180,7 +3179,6 @@ class QuickstartRunner:
         try:
             # 設定読み込み
             from src.utils.config import load_config
-            from src.utils.data_source import DataSource
             config = load_config(str(self.project_root / "config" / "config.yaml"))
 
             # データベース接続
@@ -3199,8 +3197,7 @@ class QuickstartRunner:
                     sid=config.get("jvlink.sid", "JLTSQL"),
                     batch_size=1000,
                     service_key=config.get("jvlink.service_key"),
-                    show_progress=True,  # JVLinkProgressDisplayを有効化
-                    data_source=DataSource.JRA,
+                    show_progress=True,
                 )
 
                 # データ取得実行
