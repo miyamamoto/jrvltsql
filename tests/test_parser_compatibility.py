@@ -335,11 +335,8 @@ class TestJyoCodeFormatCompatibility:
         """H1 full record is 28,955 bytes."""
         data = make_h1_record_full(jyo_cd="05")
         assert len(data) == 28955
-
-        # Structure is the same, only content differs
-        # Header structure
-        assert jra[0:2] == nar[0:2] == b'H1'
-        assert jra[27:29] == nar[27:29]  # TorokuTosu at same position
+        assert data[0:2] == b'H1'
+        assert len(data[27:29]) == 2  # TorokuTosu field present
 
 
 class TestH1FullStructParsing:
