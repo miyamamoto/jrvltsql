@@ -30,17 +30,17 @@ class TestIndexDefinitions(unittest.TestCase):
 
     def test_index_count(self):
         """Test that we have indexes for all working tables."""
-        # 35 working tables (23 NL + 12 RT)
+        # 37 working tables (25 NL + 12 RT) — NL_SE and RT_SE added
         expected_tables = {
             'NL_AV', 'NL_BN', 'NL_BR', 'NL_BT', 'NL_CC', 'NL_CH', 'NL_CS', 'NL_DM',
             'NL_HS', 'NL_HY', 'NL_JG', 'NL_KS', 'NL_O1', 'NL_O2', 'NL_O3', 'NL_O4',
-            'NL_RA', 'NL_RC', 'NL_TC', 'NL_TK', 'NL_TM', 'NL_WH', 'NL_YS',
+            'NL_RA', 'NL_RC', 'NL_SE', 'NL_TC', 'NL_TK', 'NL_TM', 'NL_WH', 'NL_YS',
             'RT_AV', 'RT_CC', 'RT_DM', 'RT_O1', 'RT_O2', 'RT_O3', 'RT_O4',
-            'RT_RA', 'RT_RC', 'RT_TC', 'RT_TM', 'RT_WH'
+            'RT_RA', 'RT_RC', 'RT_SE', 'RT_TC', 'RT_TM', 'RT_WH'
         }
 
         defined_tables = set(INDEXES.keys())
-        self.assertEqual(len(defined_tables), 35, "Should have indexes for 35 tables")
+        self.assertEqual(len(defined_tables), 37, "Should have indexes for 37 tables")
         self.assertEqual(defined_tables, expected_tables, "Should match working tables")
 
     def test_total_index_count(self):
@@ -122,10 +122,12 @@ class TestIndexManager(unittest.TestCase):
     def test_list_tables_with_indexes(self):
         """Test listing tables with index definitions."""
         tables = self.index_manager.list_tables_with_indexes()
-        self.assertEqual(len(tables), 35, "Should have 35 tables with indexes")
+        self.assertEqual(len(tables), 37, "Should have 37 tables with indexes")
         self.assertIn('NL_RA', tables)
+        self.assertIn('NL_SE', tables)
         self.assertIn('RT_RA', tables)
         self.assertIn('RT_RC', tables)
+        self.assertIn('RT_SE', tables)
 
     def test_drop_indexes(self):
         """Test dropping indexes from a table."""
