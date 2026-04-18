@@ -337,7 +337,7 @@ def check_rt_data_freshness(con, year, monthday, issues, stale_minutes=15):
         marker = "[OK] " if age_min < stale_minutes else "[!]  "
         print(f"  {marker} DB last modified: {age_min:.1f} min ago")
         if age_min >= stale_minutes and rt_ra_now == 0:
-            issues.append(f"DB not updated in {age_min:.0f} min and RT_RA=0 — realtime may be stalled")
+            issues.append(f"DB not updated in {age_min:.0f} min and RT_RA=0 -- realtime may be stalled")
     else:
         print(f"  [INFO] Cannot check DB mtime")
 
@@ -522,7 +522,7 @@ def check_se_results(con, year, monthday, issues):
         marker = "[OK] " if completion >= 80 else "[!]  "
         print(f"  {marker} Result completion: {effective_winner}/{nl_ra_count} races ({completion:.0f}%)  [{source}]")
         if completion < 50 and datetime.now().hour >= 17:
-            issues.append(f"Race results only {completion:.0f}% complete after 17:00 — fetch DIFFU")
+            issues.append(f"Race results only {completion:.0f}% complete after 17:00 -- fetch DIFFU")
 
 
 def check_payout_completeness(con, year, monthday, issues):
@@ -543,7 +543,7 @@ def check_payout_completeness(con, year, monthday, issues):
     now_h = datetime.now().hour
     if now_h >= 17 and ra_count > 0:
         if nl_h1 == 0 and rt_h1 == 0:
-            issues.append("No payout data (H1) after 17:00 — run fetch DIFFU or check realtime")
+            issues.append("No payout data (H1) after 17:00 -- run fetch DIFFU or check realtime")
         elif nl_h1 < ra_count * 0.8:
             marker = "[!]  "
             print(f"  {marker} NL_H1 ({nl_h1}) << NL_RA ({ra_count}) — payouts incomplete")
