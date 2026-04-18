@@ -1451,6 +1451,12 @@ def start(ctx, specs, db, batch_size, no_create_tables):
         if monitor.start():
             console.print("[bold green][OK] Monitoring service started![/bold green]\n")
 
+            # Write PID lock file so raceday_verify can detect the running process
+            lock_dir = Path(".locks")
+            lock_dir.mkdir(exist_ok=True)
+            lock_file = lock_dir / "realtime_updater.lock"
+            lock_file.write_text(str(os.getpid()))
+
             status = monitor.get_status()
             console.print("[bold]Status:[/bold]")
             console.print("  Running:        Yes")
@@ -1478,6 +1484,8 @@ def start(ctx, specs, db, batch_size, no_create_tables):
                 console.print("\n\n[yellow]Stopping monitoring...[/yellow]")
                 monitor.stop()
                 console.print("[green][OK] Monitoring stopped[/green]")
+            finally:
+                lock_file.unlink(missing_ok=True)
 
         else:
             console.print("[red][NG] Failed to start monitoring service[/red]")

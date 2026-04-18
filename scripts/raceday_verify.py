@@ -343,16 +343,27 @@ def check_rt_data_freshness(con, year, monthday, issues, stale_minutes=15):
 
     print(f"  [INFO] RT_RA today: {rt_ra_now}  RT_SE today: {rt_se_now}")
 
-    # Check latest report for count progression
-    latest_report = _find_latest_report(y + m)
-    if latest_report:
-        prev_rt_ra = latest_report.get("rt", {}).get("RT_RA  (race 速報)", 0) or 0
-        if rt_ra_now > prev_rt_ra:
-            print(f"  [OK]  RT_RA grew since last report: {prev_rt_ra} → {rt_ra_now}")
-        elif rt_ra_now == prev_rt_ra and rt_ra_now > 0:
-            print(f"  [!]   RT_RA unchanged since last report: {rt_ra_now} (no new data?)")
-        elif rt_ra_now == 0:
-            print(f"  [!]   RT_RA still 0 — no realtime data received yet")
+    # Check TS_O1 freshness — the best live signal (updates every ~60s during races)
+    latest_ts = q(con, "SELECT MAX(HassoTime) FROM TS_O1 WHERE Year=? AND MonthDay=?", (y, m))
+    ts_snaps  = q(con, "SELECT COUNT(DISTINCT HassoTime) FROM TS_O1 WHERE Year=? AND MonthDay=?", (y, m)) or 0
+    if latest_ts:
+        # HassoTime format MMDDHHMM: extract HH:MM for display
+        h_str = str(latest_ts)
+        hhmm = f"{h_str[4:6]}:{h_str[6:8]}" if len(h_str) >= 8 else h_str
+        print(f"  [OK]  TS_O1 latest snapshot: {hhmm}  ({ts_snaps} snapshots today)")
+    else:
+        now_h = datetime.now().hour
+        if now_h >= 10:
+            print(f"  [!]   TS_O1 no snapshots yet after 10:00 (realtime odds not flowing)")
+
+    # RT_RA count progression — only flag if actually 0 or dropped
+    nl_ra_count = q(con, "SELECT COUNT(*) FROM NL_RA WHERE Year=? AND MonthDay=?", (y, m)) or 0
+    if rt_ra_now == 0:
+        print(f"  [!]   RT_RA still 0 -- no realtime data received yet")
+    elif rt_ra_now >= nl_ra_count and nl_ra_count > 0:
+        print(f"  [OK]  RT_RA={rt_ra_now} matches NL_RA={nl_ra_count} (all races loaded)")
+    else:
+        print(f"  [INFO] RT_RA={rt_ra_now} / NL_RA={nl_ra_count}")
 
 
 def _find_latest_report(race_date):
