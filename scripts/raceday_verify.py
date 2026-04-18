@@ -136,6 +136,9 @@ def check_schema(con, issues):
         "RT_O1", "RT_O2", "RT_O3", "RT_O4", "RT_O5", "RT_O6",
         "RT_WH", "RT_CC", "RT_JC",
     ]
+    ts_required = [
+        "TS_O1", "TS_O2", "TS_O3", "TS_O4", "TS_O5", "TS_O6",
+    ]
 
     missing_nl = [t for t in nl_required if not table_exists(con, t)]
     missing_rt = [t for t in rt_required if not table_exists(con, t)]
@@ -151,6 +154,13 @@ def check_schema(con, issues):
         issues.append(f"Missing RT_ tables: {missing_rt}")
     else:
         print(f"  [OK]  RT_ tables: {len(rt_required)} all present")
+
+    missing_ts = [t for t in ts_required if not table_exists(con, t)]
+    if missing_ts:
+        print(f"  [MISS] TS_ missing: {missing_ts}")
+        issues.append(f"Missing TS_ tables: {missing_ts}")
+    else:
+        print(f"  [OK]  TS_ tables: {len(ts_required)} all present")
 
 
 def check_db_integrity(con, issues):
@@ -399,17 +409,20 @@ def check_race_count_by_venue(con, year, monthday, issues):
 
 
 def check_odds_coverage(con, year, monthday, issues):
-    """Check that all 6 odds types have data for active races."""
-    print("\n--- [9] Odds Coverage (NL_ + RT_) ---")
+    """Check that all 6 odds types have data for active races.
+
+    Note: real-time odds (0B30-0B36) go to TS_O* tables (timeseries snapshots),
+    NOT RT_O* tables. RT_O* being empty is correct during live monitoring.
+    Use check_ts_odds() to verify timeseries odds capture.
+    """
+    print("\n--- [9] Odds Coverage (NL_ final + RT_ speed-report) ---")
     y, m = year, monthday
 
-    odds_tables = [
+    nl_tables = [
         ("NL_O1", "単勝"), ("NL_O2", "複勝"), ("NL_O3", "枠連"),
         ("NL_O4", "馬連"), ("NL_O5", "3連複"), ("NL_O6", "3連単"),
-        ("RT_O1", "単勝速"), ("RT_O2", "複勝速"), ("RT_O3", "枠連速"),
-        ("RT_O4", "馬連速"), ("RT_O5", "3連複速"), ("RT_O6", "3連単速"),
     ]
-    for tbl, name in odds_tables:
+    for tbl, name in nl_tables:
         cnt = q(con, f"SELECT COUNT(*) FROM {tbl} WHERE Year=? AND MonthDay=?", (y, m))
         if cnt is None:
             print(f"  [--]  {tbl:8} ({name:5}) TABLE MISSING")
@@ -417,6 +430,63 @@ def check_odds_coverage(con, year, monthday, issues):
             print(f"  [!]   {tbl:8} ({name:5})       0")
         else:
             print(f"  [OK]  {tbl:8} ({name:5})  {cnt:>6}")
+
+    # RT_O* are intentionally empty — realtime odds route to TS_O* (timeseries)
+    rt_o_total = sum(
+        q(con, f"SELECT COUNT(*) FROM RT_O{i} WHERE Year=? AND MonthDay=?", (y, m)) or 0
+        for i in range(1, 7)
+    )
+    print(f"  [INFO] RT_O1-O6 total: {rt_o_total} (expected 0 -- odds go to TS_O* timeseries)")
+
+
+def check_ts_odds(con, year, monthday, issues):
+    """Check TS_O* timeseries odds tables — HassoTime-keyed snapshots for ML.
+
+    Real-time odds (0B30-0B36) are stored here with HassoTime as part of the
+    primary key, preserving every broadcast snapshot (typically every 1-15 min).
+    This is the primary source for ML odds-movement features.
+    """
+    print("\n--- [9b] TS_O* Timeseries Odds (ML用スナップショット) ---")
+    y, m = year, monthday
+
+    ts_tables = [
+        ("TS_O1", "単複枠"),
+        ("TS_O2", "馬連"),
+        ("TS_O3", "ワイド"),
+        ("TS_O4", "馬単"),
+        ("TS_O5", "3連複"),
+        ("TS_O6", "3連単"),
+    ]
+
+    any_data = False
+    latest_hasso = None
+    for tbl, name in ts_tables:
+        cnt = q(con, f"SELECT COUNT(*) FROM {tbl} WHERE Year=? AND MonthDay=?", (y, m))
+        if cnt is None:
+            print(f"  [--]  {tbl} ({name}) TABLE MISSING")
+            issues.append(f"TS_O* table missing: {tbl}")
+            continue
+        snaps = q(con,
+            f"SELECT COUNT(DISTINCT HassoTime) FROM {tbl} WHERE Year=? AND MonthDay=?",
+            (y, m)) or 0
+        marker = "[OK] " if cnt > 0 else "[!]  "
+        print(f"  {marker} {tbl} ({name:5})  rows={cnt:>6}  snapshots={snaps}")
+        if cnt > 0:
+            any_data = True
+            h = q(con, f"SELECT MAX(HassoTime) FROM {tbl} WHERE Year=? AND MonthDay=?", (y, m))
+            if h and (latest_hasso is None or str(h) > str(latest_hasso)):
+                latest_hasso = h
+
+    if latest_hasso:
+        print(f"  [INFO] Most recent HassoTime: {latest_hasso}")
+
+    if not any_data:
+        now_h = datetime.now().hour
+        if now_h >= 10:
+            print("  [!]   TS_O* empty after 10:00 — realtime monitor may not be running with 0B30-0B36")
+            issues.append("TS_O* timeseries odds empty after 10:00 — check realtime monitor specs")
+        else:
+            print("  [INFO] TS_O* empty (pre-race -- normal before 10:05)")
 
 
 def check_se_results(con, year, monthday, issues):
@@ -622,8 +692,23 @@ def test_quickstart(db, issues):
         print(f"  [!]   DB not found: {db}")
 
 
-def write_report(phase, race_date, nl_checks, rt_checks, issues, report_path):
+def _collect_ts_counts(con, year, monthday):
+    """Return TS_O* row/snapshot counts for the report JSON."""
+    if con is None:
+        return {}
+    y, m = year, monthday
+    out = {}
+    for i, name in enumerate(["単複枠", "馬連", "ワイド", "馬単", "3連複", "3連単"], 1):
+        tbl = f"TS_O{i}"
+        cnt = q(con, f"SELECT COUNT(*) FROM {tbl} WHERE Year=? AND MonthDay=?", (y, m)) or 0
+        snaps = q(con, f"SELECT COUNT(DISTINCT HassoTime) FROM {tbl} WHERE Year=? AND MonthDay=?", (y, m)) or 0
+        out[f"{tbl} ({name})"] = {"rows": cnt, "snapshots": snaps}
+    return out
+
+
+def write_report(phase, race_date, nl_checks, rt_checks, issues, report_path, con=None):
     """Write JSON report for this checkpoint."""
+    year, monthday = race_date[:4], race_date[4:6] + race_date[6:8]
     report = {
         "phase": phase,
         "race_date": race_date,
@@ -632,6 +717,7 @@ def write_report(phase, race_date, nl_checks, rt_checks, issues, report_path):
         "issues": issues,
         "nl": {k.strip(): v for k, v in (nl_checks or {}).items()},
         "rt": {k.strip(): v for k, v in (rt_checks or {}).items()},
+        "ts": _collect_ts_counts(con, year, monthday),
     }
     Path(report_path).write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"\n  Report: {report_path}")
@@ -665,6 +751,7 @@ def run_phase_rt_check(con, args, year, monthday, issues, nl_checks, rt_checks):
     check_rt_process_running(issues)
     check_rt_data_freshness(con, year, monthday, issues)
     check_odds_coverage(con, year, monthday, issues)
+    check_ts_odds(con, year, monthday, issues)
     check_race_count_by_venue(con, year, monthday, issues)
     check_nl_rt_consistency(con, year, monthday, issues)
     check_duplicate_race_ids(con, year, monthday, issues)
@@ -682,6 +769,7 @@ def run_phase_nl_mid(con, args, year, monthday, issues, nl_checks, rt_checks):
     check_rt_process_running(issues)
     check_rt_data_freshness(con, year, monthday, issues)
     check_odds_coverage(con, year, monthday, issues)
+    check_ts_odds(con, year, monthday, issues)
     check_race_count_by_venue(con, year, monthday, issues)
     check_se_results(con, year, monthday, issues)
     check_nl_rt_consistency(con, year, monthday, issues)
@@ -722,6 +810,7 @@ def run_phase_final(con, args, year, monthday, issues, nl_checks, rt_checks):
     nl_checks.update(check_nl_today(con, year, monthday, issues, "NL_ 蓄積系 (final)") or {})
     rt_checks.update(check_rt_today(con, year, monthday, issues, "RT_ 速報系 (final)") or {})
     check_odds_coverage(con, year, monthday, issues)
+    check_ts_odds(con, year, monthday, issues)
     check_race_count_by_venue(con, year, monthday, issues)
     check_se_results(con, year, monthday, issues)
     check_payout_completeness(con, year, monthday, issues)
@@ -824,15 +913,15 @@ def main():
             phase_issues = []
             phase_runners[phase](con, args, year, monthday, phase_issues, nl_checks, rt_checks)
             all_issues.extend(phase_issues)
+
+        # Save report while con is still open (needed for TS_O* counts)
+        report_dir = Path("data")
+        report_dir.mkdir(exist_ok=True)
+        report_path = report_dir / f"raceday_report_{race_date}_{args.phase}.json"
+        write_report(args.phase, race_date, nl_checks, rt_checks, all_issues, str(report_path), con=con)
     finally:
         if con:
             con.close()
-
-    # Save report
-    report_dir = Path("data")
-    report_dir.mkdir(exist_ok=True)
-    report_path = report_dir / f"raceday_report_{race_date}_{args.phase}.json"
-    write_report(args.phase, race_date, nl_checks, rt_checks, all_issues, str(report_path))
 
     # Summary
     print(f"\n{'='*65}")
