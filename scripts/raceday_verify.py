@@ -46,6 +46,10 @@ import time
 from datetime import datetime, date
 from pathlib import Path
 
+# Windows CP932 console can't encode em dash and other Unicode chars
+if sys.stdout.encoding and sys.stdout.encoding.lower() in ("cp932", "cp936", "cp950"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 DB_PATH_DEFAULT = "data/keiba.db"
 
@@ -494,8 +498,8 @@ def check_ts_odds(con, year, monthday, issues):
     if not any_data:
         now_h = datetime.now().hour
         if now_h >= 10:
-            print("  [!]   TS_O* empty after 10:00 — realtime monitor may not be running with 0B30-0B36")
-            issues.append("TS_O* timeseries odds empty after 10:00 — check realtime monitor specs")
+            print("  [!]   TS_O* empty after 10:00 -- realtime monitor may not be running with 0B30-0B36")
+            issues.append("TS_O* timeseries odds empty after 10:00 -- check realtime monitor specs")
         else:
             print("  [INFO] TS_O* empty (pre-race -- normal before 10:05)")
 
@@ -546,7 +550,7 @@ def check_payout_completeness(con, year, monthday, issues):
             issues.append("No payout data (H1) after 17:00 -- run fetch DIFFU or check realtime")
         elif nl_h1 < ra_count * 0.8:
             marker = "[!]  "
-            print(f"  {marker} NL_H1 ({nl_h1}) << NL_RA ({ra_count}) — payouts incomplete")
+            print(f"  {marker} NL_H1 ({nl_h1}) << NL_RA ({ra_count}) -- payouts incomplete")
             issues.append(f"NL_H1 ({nl_h1}) incomplete vs NL_RA ({ra_count})")
         else:
             print(f"  [OK]  Payout data looks complete")
@@ -596,9 +600,9 @@ def check_nl_rt_consistency(con, year, monthday, issues):
     nl_ra = q(con, "SELECT COUNT(*) FROM NL_RA WHERE Year=? AND MonthDay=?", (y, m)) or 0
     rt_ra = q(con, "SELECT COUNT(*) FROM RT_RA WHERE Year=? AND MonthDay=?", (y, m)) or 0
     if nl_ra > 0 and rt_ra == 0:
-        issues.append("RT_RA=0 but NL_RA has data — realtime monitoring may not be running")
+        issues.append("RT_RA=0 but NL_RA has data -- realtime monitoring may not be running")
     if nl_ra == 0 and rt_ra == 0:
-        issues.append("Both NL_RA and RT_RA=0 — no race data at all")
+        issues.append("Both NL_RA and RT_RA=0 -- no race data at all")
 
 
 def check_master_data(con, issues):
@@ -612,9 +616,9 @@ def check_master_data(con, issues):
     if ch is not None:
         print(f"  {'[OK] ' if ch > 0 else '[!]  '} NL_CH  (trainers)  {ch:>8,}")
     if um == 0:
-        issues.append("NL_UM (horse master) empty — run setup fetch")
+        issues.append("NL_UM (horse master) empty -- run setup fetch")
     if ks == 0:
-        issues.append("NL_KS (jockey master) empty — run setup fetch")
+        issues.append("NL_KS (jockey master) empty -- run setup fetch")
 
 
 def check_cache_status(issues):
@@ -623,7 +627,7 @@ def check_cache_status(issues):
     cache_dir = Path("data/cache")
     if not cache_dir.exists():
         print(f"  [!]   Cache directory not found: {cache_dir}")
-        issues.append("Cache directory missing — cache not initialized")
+        issues.append("Cache directory missing -- cache not initialized")
         return
 
     today_str = date.today().strftime("%Y%m%d")
@@ -838,9 +842,9 @@ def run_phase_final(con, args, year, monthday, issues, nl_checks, rt_checks):
     if (nl_checks.get("NL_RA  (race header) ") or 0) == 0:
         issues.append("FINAL: NL_RA has no data for today")
     if (nl_checks.get("NL_H1  (payouts)     ") or 0) == 0:
-        issues.append("FINAL: NL_H1 (payouts) empty — run fetch DIFFU")
+        issues.append("FINAL: NL_H1 (payouts) empty -- run fetch DIFFU")
     if (rt_checks.get("RT_H1  (払戻 速報)   ") or 0) == 0:
-        issues.append("FINAL: RT_H1 empty — realtime payout data missing")
+        issues.append("FINAL: RT_H1 empty -- realtime payout data missing")
 
     run_unit_tests(issues)
     test_quickstart(args.db, issues)
