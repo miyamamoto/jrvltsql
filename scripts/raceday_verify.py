@@ -547,7 +547,7 @@ def check_payout_completeness(con, year, monthday, issues):
     now_h = datetime.now().hour
     if now_h >= 17 and ra_count > 0:
         if nl_h1 == 0 and rt_h1 == 0:
-            issues.append("No payout data (H1) after 17:00 -- run fetch DIFFU or check realtime")
+            issues.append("No payout data (H1) after 17:00 -- run: fetch --spec DIFF --option 1")
         elif nl_h1 < ra_count * 0.8:
             marker = "[!]  "
             print(f"  {marker} NL_H1 ({nl_h1}) << NL_RA ({ra_count}) -- payouts incomplete")
@@ -636,7 +636,8 @@ def check_cache_status(issues):
 
     for kind, base_dir in [("NL_", nl_dir), ("RT_", rt_dir)]:
         if not base_dir.exists():
-            print(f"  [!]   {kind} cache dir missing: {base_dir}")
+            # RT_ cache is intentionally absent when using realtime monitoring
+            print(f"  [INFO] {kind} cache dir not present: {base_dir}")
             continue
         specs = [d.name for d in base_dir.iterdir() if d.is_dir()]
         if not specs:
