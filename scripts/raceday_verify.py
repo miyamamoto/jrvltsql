@@ -514,9 +514,13 @@ def check_se_results(con, year, monthday, issues):
     print(f"  [INFO] RT_SE confirmed winners:    {rt_winner}")
 
     if nl_ra_count > 0:
-        completion = nl_winner / nl_ra_count * 100
+        # During live racing NL_SE winners stay 0 until DIFFU fetch (~17:30).
+        # Use RT_SE as the authoritative source while racing is ongoing.
+        effective_winner = rt_winner if rt_winner > nl_winner else nl_winner
+        source = "RT_SE" if rt_winner > nl_winner else "NL_SE"
+        completion = effective_winner / nl_ra_count * 100
         marker = "[OK] " if completion >= 80 else "[!]  "
-        print(f"  {marker} Result completion: {nl_winner}/{nl_ra_count} races ({completion:.0f}%)")
+        print(f"  {marker} Result completion: {effective_winner}/{nl_ra_count} races ({completion:.0f}%)  [{source}]")
         if completion < 50 and datetime.now().hour >= 17:
             issues.append(f"Race results only {completion:.0f}% complete after 17:00 — fetch DIFFU")
 
