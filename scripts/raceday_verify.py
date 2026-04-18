@@ -815,8 +815,8 @@ def run_phase_post(con, args, year, monthday, issues, nl_checks, rt_checks):
     race_date = args.date or date.today().strftime("%Y%m%d")
     if args.fetch:
         if (nl_checks.get("NL_H1  (payouts)     ") or 0) == 0:
-            print(f"\n[AUTO-FETCH] Fetching DIFFU (payouts/results)...")
-            run_fetch("DIFFU", race_date, race_date, 1, args.db)
+            print(f"\n[AUTO-FETCH] Fetching DIFF (payouts/results)...")
+            run_fetch("DIFF", race_date, race_date, 1, args.db)
         if (nl_checks.get("NL_RA  (race header) ") or 0) == 0:
             print(f"\n[AUTO-FETCH] Fetching RACE data...")
             run_fetch("RACE", race_date, race_date, 1, args.db)
@@ -842,9 +842,11 @@ def run_phase_final(con, args, year, monthday, issues, nl_checks, rt_checks):
     if (nl_checks.get("NL_RA  (race header) ") or 0) == 0:
         issues.append("FINAL: NL_RA has no data for today")
     if (nl_checks.get("NL_H1  (payouts)     ") or 0) == 0:
-        issues.append("FINAL: NL_H1 (payouts) empty -- run fetch DIFFU")
+        issues.append("FINAL: NL_H1 (payouts) empty -- run: fetch --spec DIFF --option 1")
+    # RT_H1 is never populated by realtime monitoring; JRA only publishes
+    # payout records via DIFF batch (NL_H1), not through 0B15 realtime stream.
     if (rt_checks.get("RT_H1  (払戻 速報)   ") or 0) == 0:
-        issues.append("FINAL: RT_H1 empty -- realtime payout data missing")
+        print("  [INFO] RT_H1=0 (expected -- payout speed-reports only arrive via DIFF batch)")
 
     run_unit_tests(issues)
     test_quickstart(args.db, issues)
