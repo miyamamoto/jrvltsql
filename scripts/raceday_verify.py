@@ -842,8 +842,7 @@ def run_phase_final(con, args, year, monthday, issues, nl_checks, rt_checks):
     # Hard requirements for final phase
     if (nl_checks.get("NL_RA  (race header) ") or 0) == 0:
         issues.append("FINAL: NL_RA has no data for today")
-    if (nl_checks.get("NL_H1  (payouts)     ") or 0) == 0:
-        issues.append("FINAL: NL_H1 (payouts) empty -- run: fetch --spec DIFF --option 1")
+    # NL_H1 absence already reported by check_payout_completeness above
     # RT_H1 is never populated by realtime monitoring; JRA only publishes
     # payout records via DIFF batch (NL_H1), not through 0B15 realtime stream.
     if (rt_checks.get("RT_H1  (払戻 速報)   ") or 0) == 0:
