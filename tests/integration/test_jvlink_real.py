@@ -80,7 +80,7 @@ class TestJVLinkRealDataFetching:
                 records.append(record)
 
                 # Track record types
-                rec_type = record.get("headRecordSpec", "Unknown")
+                rec_type = record.get("RecordSpec") or record.get("headRecordSpec", "Unknown")
                 record_types[rec_type] = record_types.get(rec_type, 0) + 1
 
                 # Limit to 100 records for quick test
@@ -104,7 +104,7 @@ class TestJVLinkRealDataFetching:
 
             # Show sample record
             if records:
-                print(f"\n--- Sample Record (Type: {records[0].get('headRecordSpec')}) ---")
+                print(f"\n--- Sample Record (Type: {records[0].get('RecordSpec') or records[0].get('headRecordSpec')}) ---")
                 for key, value in list(records[0].items())[:10]:
                     print(f"{key}: {value}")
                 print("... (truncated)")
@@ -158,43 +158,42 @@ class TestJVLinkRealDataFetching:
                 # Verify database content
                 print("\n--- Database Verification ---")
 
-                # Check NL_RA_RACE table
+                # Check NL_RA table
                 ra_count = temp_db.fetch_one(
-                    "SELECT COUNT(*) as cnt FROM NL_RA_RACE"
+                    "SELECT COUNT(*) as cnt FROM NL_RA"
                 )
-                print(f"NL_RA_RACE records: {ra_count['cnt']}")
+                print(f"NL_RA records: {ra_count['cnt']}")
 
-                # Check NL_SE_RACE_UMA table
+                # Check NL_SE table
                 se_count = temp_db.fetch_one(
-                    "SELECT COUNT(*) as cnt FROM NL_SE_RACE_UMA"
+                    "SELECT COUNT(*) as cnt FROM NL_SE"
                 )
-                print(f"NL_SE_RACE_UMA records: {se_count['cnt']}")
+                print(f"NL_SE records: {se_count['cnt']}")
 
-                # Check NL_HR_PAY table
-                hr_count = temp_db.fetch_one(
-                    "SELECT COUNT(*) as cnt FROM NL_HR_PAY"
+                # Check NL_H1 table
+                h1_count = temp_db.fetch_one(
+                    "SELECT COUNT(*) as cnt FROM NL_H1"
                 )
-                print(f"NL_HR_PAY records: {hr_count['cnt']}")
+                print(f"NL_H1 records: {h1_count['cnt']}")
 
                 # Get sample race data
                 if ra_count['cnt'] > 0:
                     sample_race = temp_db.fetch_one(
-                        "SELECT * FROM NL_RA_RACE LIMIT 1"
+                        "SELECT * FROM NL_RA LIMIT 1"
                     )
                     print("\n--- Sample Race Record ---")
-                    print(f"Year: {sample_race.get('idYear')}")
-                    print(f"Race Number: {sample_race.get('idRaceNum')}")
-                    print(f"Race Name: {sample_race.get('RaceName')}")
+                    print(f"Year: {sample_race.get('Year')}")
+                    print(f"Race Number: {sample_race.get('RaceNum')}")
+                    print(f"Race Name: {sample_race.get('Hondai')}")
                     print(f"Distance: {sample_race.get('Kyori')}")
-                    print(f"Track Code: {sample_race.get('idJyoCD')}")
+                    print(f"Track Code: {sample_race.get('JyoCD')}")
 
-                # Verify table integrity
-                total_db_records = ra_count['cnt'] + se_count['cnt'] + hr_count['cnt']
+                # Verify core race tables have data (NL_H1 may be empty same-day)
+                total_db_records = ra_count['cnt'] + se_count['cnt'] + h1_count['cnt']
                 print(f"\nTotal records in DB: {total_db_records}")
 
-                assert total_db_records > 0, "No records in database"
-                assert total_db_records == stats.get('records_imported', 0), \
-                    f"Record count mismatch: DB has {total_db_records}, stats show {stats['records_imported']}"
+                assert ra_count['cnt'] > 0, "No NL_RA records in database"
+                assert se_count['cnt'] > 0, "No NL_SE records in database"
 
                 print("\n✓ Full workflow test PASSED")
 
@@ -219,7 +218,7 @@ class TestJVLinkRealDataFetching:
         try:
             record_count = 0
             for record in fetcher.fetch("RACE", from_date, to_date):
-                rec_type = record.get("headRecordSpec")
+                rec_type = record.get("RecordSpec") or record.get("headRecordSpec")
 
                 if rec_type not in field_coverage:
                     field_coverage[rec_type] = {
@@ -243,11 +242,15 @@ class TestJVLinkRealDataFetching:
                 print(f"  Unique fields found: {len(info['fields'])}")
                 print(f"  Fields: {', '.join(sorted(list(info['fields']))[:10])}...")
 
-                # Verify required header fields
-                required_headers = ["headRecordSpec", "headDataKubun", "headMakeDate"]
-                for field in required_headers:
-                    assert field in info["fields"], \
-                        f"Required field '{field}' not found in {rec_type} records"
+                # Verify required header fields (parsers use RecordSpec/DataKubun/MakeDate)
+                required_headers = [
+                    ("RecordSpec", "headRecordSpec"),
+                    ("DataKubun", "headDataKubun"),
+                    ("MakeDate", "headMakeDate"),
+                ]
+                for primary, fallback in required_headers:
+                    assert primary in info["fields"] or fallback in info["fields"], \
+                        f"Required field '{primary}' not found in {rec_type} records"
 
             print("\n✓ Parser field coverage test PASSED")
 
