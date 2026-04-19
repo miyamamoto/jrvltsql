@@ -326,28 +326,29 @@ class TestScalability(PerformanceTestBase):
         database = SQLiteDatabase({'path': str(db_path)})
         database.connect()
 
-        # Create multiple tables
-        schema_mgr = SchemaManager(database)
-        tables = ['NL_RA', 'NL_SE', 'NL_HR', 'NL_YS']
-        for table in tables:
-            schema_mgr.create_table(table)
+        try:
+            # Create multiple tables
+            schema_mgr = SchemaManager(database)
+            tables = ['NL_RA', 'NL_SE', 'NL_HR', 'NL_YS']
+            for table in tables:
+                schema_mgr.create_table(table)
 
-        # Import to different tables
-        importer = DataImporter(database, batch_size=50)
+            # Import to different tables
+            importer = DataImporter(database, batch_size=50)
 
-        total_time = 0
-        for table in tables:
-            records = self.generate_sample_records(
-                200,
-                record_type=table.replace('NL_', '')
-            )
-            _, elapsed = self.measure_time(importer.import_records, records)
-            total_time += elapsed
+            total_time = 0
+            for table in tables:
+                records = self.generate_sample_records(
+                    200,
+                    record_type=table.replace('NL_', '')
+                )
+                _, elapsed = self.measure_time(importer.import_records, records)
+                total_time += elapsed
 
-        print(f"\nMulti-table import ({len(tables)} tables): {total_time:.3f}s")
-        self.assertLess(total_time, 60.0, "Should complete in under 60 seconds")
-
-        database.disconnect()
+            print(f"\nMulti-table import ({len(tables)} tables): {total_time:.3f}s")
+            self.assertLess(total_time, 60.0, "Should complete in under 60 seconds")
+        finally:
+            database.disconnect()
 
     def test_database_growth(self):
         """Test performance as database grows."""
