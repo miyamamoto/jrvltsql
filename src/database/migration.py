@@ -76,8 +76,15 @@ def migrate_table_if_needed(db: BaseDatabase, table_name: str, schema_sql: str) 
         logger.warning(f"Could not parse schema SQL for {table_name}, skipping migration check")
         return False
 
-    # Get existing columns via PRAGMA
-    existing_info = db.fetch_all(f'PRAGMA table_info("{table_name}")')
+    # Get existing columns — PRAGMA for SQLite, information_schema for PostgreSQL
+    if db.get_db_type() == "postgresql":
+        existing_info = db.fetch_all(
+            "SELECT column_name AS name FROM information_schema.columns "
+            "WHERE table_name = ? AND table_schema = 'public'",
+            (table_name,),
+        )
+    else:
+        existing_info = db.fetch_all(f'PRAGMA table_info("{table_name}")')
     existing_columns = {row['name'] for row in existing_info}
 
     if existing_columns == expected_columns:
