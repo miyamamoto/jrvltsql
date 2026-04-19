@@ -62,7 +62,7 @@ class TestImportPerformance(PerformanceTestBase):
 
     def setUp(self):
         """Set up test fixtures."""
-        self.temp_dir = tempfile.TemporaryDirectory()
+        self.temp_dir = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         self.db_path = Path(self.temp_dir.name) / 'perf.db'
 
         self.database = SQLiteDatabase({'path': str(self.db_path)})
@@ -146,7 +146,7 @@ class TestQueryPerformance(PerformanceTestBase):
 
     def setUp(self):
         """Set up test fixtures."""
-        self.temp_dir = tempfile.TemporaryDirectory()
+        self.temp_dir = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         self.db_path = Path(self.temp_dir.name) / 'query_perf.db'
 
         self.database = SQLiteDatabase({'path': str(self.db_path)})
@@ -215,7 +215,7 @@ class TestDatabaseComparison(PerformanceTestBase):
 
     def setUp(self):
         """Set up test database."""
-        self.temp_dir = tempfile.TemporaryDirectory()
+        self.temp_dir = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
 
         # SQLite only (DuckDB not supported on 32-bit Python)
         sqlite_path = Path(self.temp_dir.name) / 'sqlite.db'
@@ -265,7 +265,7 @@ class TestMemoryUsage(PerformanceTestBase):
 
     def setUp(self):
         """Set up test fixtures."""
-        self.temp_dir = tempfile.TemporaryDirectory()
+        self.temp_dir = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         self.db_path = Path(self.temp_dir.name) / 'memory.db'
 
         self.database = SQLiteDatabase({'path': str(self.db_path)})
@@ -314,7 +314,7 @@ class TestScalability(PerformanceTestBase):
 
     def setUp(self):
         """Set up test fixtures."""
-        self.temp_dir = tempfile.TemporaryDirectory()
+        self.temp_dir = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
 
     def tearDown(self):
         """Clean up."""
