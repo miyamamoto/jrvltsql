@@ -328,8 +328,7 @@ def fetch(ctx, date_from, date_to, data_spec, jv_option, db, batch_size, progres
       jltsql fetch --from 20240101 --to 20241231 --spec RACE
       jltsql fetch --from 20240101 --to 20241231 --spec DIFF --option 3
     """
-    from src.database.sqlite_handler import SQLiteDatabase
-    from src.database.postgresql_handler import PostgreSQLDatabase
+    from src.database import create_database_from_config, DatabaseError
     from src.database.schema import create_all_tables
     from src.importer.batch import BatchProcessor
 
@@ -370,17 +369,10 @@ def fetch(ctx, date_from, date_to, data_spec, jv_option, db, batch_size, progres
 
     try:
         # Initialize database
-        if db_type == "sqlite":
-            db_config = config.get("databases.sqlite") if config else {"path": "data/keiba.db"}
-            database = SQLiteDatabase(db_config)
-        elif db_type == "postgresql":
-            if not config:
-                console.print("[red]Error:[/red] PostgreSQL requires configuration file.")
-                sys.exit(1)
-            database = PostgreSQLDatabase(config.get("databases.postgresql"))
-        else:
-            console.print(f"[red]Error:[/red] Unsupported database type: {db_type}")
-            console.print("[yellow]Note:[/yellow] Supported types: sqlite, postgresql")
+        try:
+            database = create_database_from_config(config, db_type_override=db_type)
+        except (ValueError, DatabaseError) as exc:
+            console.print(f"[red]Error:[/red] {exc}")
             sys.exit(1)
 
         # Connect to database
@@ -536,24 +528,17 @@ def cache_build(ctx, data_spec, date_from, date_to, jv_option, also_import, db, 
     if also_import:
         # Use BatchProcessor with cache
         from src.importer.batch import BatchProcessor
-        from src.database.sqlite_handler import SQLiteDatabase
-        from src.database.postgresql_handler import PostgreSQLDatabase
+        from src.database import create_database_from_config, DatabaseError
 
         if db:
             db_type = db
         else:
             db_type = config.get("database.type", "sqlite") if config else "sqlite"
 
-        if db_type == "sqlite":
-            db_config = config.get("databases.sqlite") if config else {"path": "data/keiba.db"}
-            database = SQLiteDatabase(db_config)
-        elif db_type == "postgresql":
-            if not config:
-                click.echo("Error: PostgreSQL requires configuration file.")
-                sys.exit(1)
-            database = PostgreSQLDatabase(config.get("databases.postgresql"))
-        else:
-            click.echo(f"Error: Unsupported database type: {db_type}")
+        try:
+            database = create_database_from_config(config, db_type_override=db_type)
+        except (ValueError, DatabaseError) as exc:
+            click.echo(f"Error: {exc}")
             sys.exit(1)
 
         with database:
@@ -802,8 +787,7 @@ def monitor(ctx, daemon, data_spec, interval, db):
       jltsql monitor                        # 中央競馬監視
       jltsql monitor --daemon               # バックグラウンド実行
     """
-    from src.database.sqlite_handler import SQLiteDatabase
-    from src.database.postgresql_handler import PostgreSQLDatabase
+    from src.database import create_database_from_config, DatabaseError
     from src.database.schema import create_all_tables
     from src.realtime.monitor import RealtimeMonitor
 
@@ -828,17 +812,10 @@ def monitor(ctx, daemon, data_spec, interval, db):
 
     try:
         # Initialize database
-        if db_type == "sqlite":
-            db_config = config.get("databases.sqlite") if config else {"path": "data/keiba.db"}
-            database = SQLiteDatabase(db_config)
-        elif db_type == "postgresql":
-            if not config:
-                console.print("[red]Error:[/red] PostgreSQL requires configuration file.")
-                sys.exit(1)
-            database = PostgreSQLDatabase(config.get("databases.postgresql"))
-        else:
-            console.print(f"[red]Error:[/red] Unsupported database type: {db_type}")
-            console.print("[yellow]Note:[/yellow] Supported types: sqlite, postgresql")
+        try:
+            database = create_database_from_config(config, db_type_override=db_type)
+        except (ValueError, DatabaseError) as exc:
+            console.print(f"[red]Error:[/red] {exc}")
             sys.exit(1)
 
         # Connect to database
@@ -913,9 +890,8 @@ def create_tables(ctx, db, create_all, nl_only, rt_only):
       jltsql create-tables --rt-only      # Create only RT_* tables
     """
     from rich.progress import Progress, TextColumn
+    from src.database import create_database_from_config, DatabaseError
     from src.database.schema import SCHEMAS, create_all_tables
-    from src.database.sqlite_handler import SQLiteDatabase
-    from src.database.postgresql_handler import PostgreSQLDatabase
 
     config = ctx.obj.get("config")
     if not config and not db:
@@ -932,17 +908,10 @@ def create_tables(ctx, db, create_all, nl_only, rt_only):
 
     try:
         # Initialize database
-        if db_type == "sqlite":
-            db_config = config.get("databases.sqlite") if config else {"path": "data/keiba.db"}
-            database = SQLiteDatabase(db_config)
-        elif db_type == "postgresql":
-            if not config:
-                console.print("[red]Error:[/red] PostgreSQL requires configuration file.")
-                sys.exit(1)
-            database = PostgreSQLDatabase(config.get("databases.postgresql"))
-        else:
-            console.print(f"[red]Error:[/red] Unsupported database type: {db_type}")
-            console.print("[yellow]Note:[/yellow] Supported types: sqlite, postgresql")
+        try:
+            database = create_database_from_config(config, db_type_override=db_type)
+        except (ValueError, DatabaseError) as exc:
+            console.print(f"[red]Error:[/red] {exc}")
             sys.exit(1)
 
         # Connect to database
@@ -1019,9 +988,8 @@ def create_indexes(ctx, db, table):
       jltsql create-indexes --db sqlite        # Create indexes in SQLite
       jltsql create-indexes --table NL_RA      # Create indexes for NL_RA only
     """
+    from src.database import create_database_from_config, DatabaseError
     from src.database.indexes import IndexManager
-    from src.database.sqlite_handler import SQLiteDatabase
-    from src.database.postgresql_handler import PostgreSQLDatabase
 
     config = ctx.obj.get("config")
     if not config and not db:
@@ -1038,17 +1006,10 @@ def create_indexes(ctx, db, table):
 
     try:
         # Initialize database
-        if db_type == "sqlite":
-            db_config = config.get("databases.sqlite") if config else {"path": "data/keiba.db"}
-            database = SQLiteDatabase(db_config)
-        elif db_type == "postgresql":
-            if not config:
-                console.print("[red]Error:[/red] PostgreSQL requires configuration file.")
-                sys.exit(1)
-            database = PostgreSQLDatabase(config.get("databases.postgresql"))
-        else:
-            console.print(f"[red]Error:[/red] Unsupported database type: {db_type}")
-            console.print("[yellow]Note:[/yellow] Supported types: sqlite, postgresql")
+        try:
+            database = create_database_from_config(config, db_type_override=db_type)
+        except (ValueError, DatabaseError) as exc:
+            console.print(f"[red]Error:[/red] {exc}")
             sys.exit(1)
 
         # Connect to database
@@ -1125,8 +1086,7 @@ def export(ctx, table, output_format, output, where, db):
       jltsql export --table NL_HR --format parquet --output payouts.parquet
     """
     from pathlib import Path
-    from src.database.sqlite_handler import SQLiteDatabase
-    from src.database.postgresql_handler import PostgreSQLDatabase
+    from src.database import create_database_from_config, DatabaseError
 
     config = ctx.obj.get("config")
     if not config and not db:
@@ -1149,17 +1109,10 @@ def export(ctx, table, output_format, output, where, db):
 
     try:
         # Initialize database
-        if db_type == "sqlite":
-            db_config = config.get("databases.sqlite") if config else {"path": "data/keiba.db"}
-            database = SQLiteDatabase(db_config)
-        elif db_type == "postgresql":
-            if not config:
-                console.print("[red]Error:[/red] PostgreSQL requires configuration file.")
-                sys.exit(1)
-            database = PostgreSQLDatabase(config.get("databases.postgresql"))
-        else:
-            console.print(f"[red]Error:[/red] Unsupported database type: {db_type}")
-            console.print("[yellow]Note:[/yellow] Supported types: sqlite, postgresql")
+        try:
+            database = create_database_from_config(config, db_type_override=db_type)
+        except (ValueError, DatabaseError) as exc:
+            console.print(f"[red]Error:[/red] {exc}")
             sys.exit(1)
 
         # Connect and export
@@ -1395,8 +1348,7 @@ def start(ctx, specs, db, batch_size, no_create_tables):
       jltsql realtime start --specs 0B12,0B15   # 複数データ種別
       jltsql realtime start --db sqlite         # データベース指定
     """
-    from src.database.sqlite_handler import SQLiteDatabase
-    from src.database.postgresql_handler import PostgreSQLDatabase
+    from src.database import create_database_from_config, DatabaseError
     from src.services.realtime_monitor import RealtimeMonitor
 
     config = ctx.obj.get("config")
@@ -1425,17 +1377,10 @@ def start(ctx, specs, db, batch_size, no_create_tables):
 
     try:
         # Initialize database
-        if db_type == "sqlite":
-            db_config = config.get("databases.sqlite") if config else {"path": "data/keiba.db"}
-            database = SQLiteDatabase(db_config)
-        elif db_type == "postgresql":
-            if not config:
-                console.print("[red]Error:[/red] PostgreSQL requires configuration file.")
-                sys.exit(1)
-            database = PostgreSQLDatabase(config.get("databases.postgresql"))
-        else:
-            console.print(f"[red]Error:[/red] Unsupported database type: {db_type}")
-            console.print("[yellow]Note:[/yellow] Supported types: sqlite, postgresql")
+        try:
+            database = create_database_from_config(config, db_type_override=db_type)
+        except (ValueError, DatabaseError) as exc:
+            console.print(f"[red]Error:[/red] {exc}")
             sys.exit(1)
 
         # Create monitor
@@ -1594,6 +1539,7 @@ def timeseries(ctx, spec, from_date, to_date, db, db_path):
       jltsql realtime timeseries --spec 0B31,0B32 --db-path data/keiba.db
     """
     from datetime import datetime, timedelta
+    from src.database import create_database_from_config, DatabaseError
     from src.database.sqlite_handler import SQLiteDatabase
     from src.fetcher.realtime import RealtimeFetcher
     from src.realtime.updater import RealtimeUpdater
@@ -1634,11 +1580,18 @@ def timeseries(ctx, spec, from_date, to_date, db, db_path):
     console.print()
 
     try:
-        # Initialize database for saving
-        if db_type == "postgresql":
-            from src.database.postgresql_handler import PostgreSQLDatabase
-            database = PostgreSQLDatabase(config.get("databases.postgresql"))
+        # Initialize database for saving. For 'dual' mode we also want the
+        # timeseries writes to be mirrored, so defer to the shared factory.
+        if db_type in ("postgresql", "dual"):
+            try:
+                database = create_database_from_config(
+                    config, db_type_override=db_type
+                )
+            except (ValueError, DatabaseError) as exc:
+                console.print(f"[red]Error:[/red] {exc}")
+                sys.exit(1)
         else:
+            # Legacy SQLite path with explicit per-command db_path override.
             db_config = {"path": database_path}
             database = SQLiteDatabase(db_config)
 
