@@ -19,7 +19,13 @@ nvlink:
 
 # Database Settings
 database:
-  # Default database type (sqlite, postgresql)
+  # Database mode: sqlite, postgresql, or dual
+  #   sqlite     - local SQLite file only (original behavior, single-user)
+  #   postgresql - remote PostgreSQL only (multi-user / server deployment)
+  #   dual       - write to both SQLite (primary) AND PostgreSQL (secondary).
+  #                SQLite stays authoritative; PG is a best-effort mirror.
+  #                Recommended while migrating an existing SQLite installation
+  #                to a shared PG without cutting over the source of truth.
   type: "sqlite"
 
 databases:
@@ -33,7 +39,7 @@ databases:
       cache_size: -64000  # 64MB
       temp_store: "MEMORY"
 
-  # PostgreSQL Database (for multi-user/server deployment)
+  # PostgreSQL Database (used when type=postgresql or type=dual)
   postgresql:
     enabled: false
     host: "${POSTGRES_HOST:localhost}"
