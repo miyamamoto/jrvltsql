@@ -9,11 +9,12 @@ secondary=PostgreSQLDatabase (mirror for analytics / cross-host consumers).
 Failure policy
 --------------
 The primary is the source of truth. Secondary failures (connect, create_table,
-insert, insert_many, commit) are logged as warnings and tracked via
-``self._secondary_errors`` but **do NOT raise**, preserving ingestion
-throughput if the secondary is unavailable.
+insert, insert_many, commit, DDL via execute) are logged as warnings and
+tracked via ``self._secondary_errors`` but **do NOT raise**, preserving
+ingestion throughput if the secondary is unavailable.
 """
 
+import re
 from typing import Any, Dict, List, Optional
 
 from src.utils.logger import get_logger
@@ -21,6 +22,36 @@ from src.utils.logger import get_logger
 from .base import BaseDatabase, DatabaseError
 
 logger = get_logger(__name__)
+
+# Regex identifying DDL statements that must be mirrored to the secondary
+# when routed through ``execute()``. We intentionally match the common
+# forms used throughout jrvltsql (CREATE / DROP / ALTER + TABLE / INDEX /
+# VIEW / SEQUENCE / SCHEMA). Pattern is case-insensitive and skips leading
+# whitespace or comment lines. Parameterised DML (INSERT / UPDATE / DELETE)
+# is handled via the dedicated ``insert`` / ``insert_many`` entry points
+# and therefore not mirrored here.
+_DDL_RE = re.compile(
+    r"""^\s*
+        (?:--[^\n]*\n\s*)*              # skip line comments
+        (?:CREATE|DROP|ALTER)           # DDL verbs
+        \s+
+        (?:UNIQUE\s+|IF\s+(?:NOT\s+)?EXISTS\s+|VIRTUAL\s+|TEMPORARY\s+|TEMP\s+|\s)*
+        (?:TABLE|INDEX|VIEW|SEQUENCE|SCHEMA)
+        \b
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+
+def _is_ddl(sql: str) -> bool:
+    """Return True if the SQL looks like a CREATE / DROP / ALTER DDL.
+
+    Used to decide whether a raw ``execute()`` call should also be mirrored
+    to the secondary database.
+    """
+    if not sql:
+        return False
+    return bool(_DDL_RE.match(sql))
 
 
 class DualDatabase(BaseDatabase):
@@ -98,14 +129,33 @@ class DualDatabase(BaseDatabase):
     # ------------------------------------------------------------------
 
     def execute(self, sql: str, parameters: Optional[tuple] = None) -> Any:
-        """Execute SQL on primary (reads + non-idempotent writes).
+        """Execute SQL on primary, and mirror DDL to secondary.
 
-        NOTE: arbitrary ``execute()`` calls are NOT mirrored to secondary
-        because the SQL may be reads or primary-specific statements
-        (PRAGMA, VACUUM, etc.). Use ``insert`` / ``insert_many`` /
-        ``create_table`` / ``commit`` for dual-write paths.
+        - DDL (CREATE / DROP / ALTER of TABLE / INDEX / VIEW / SEQUENCE /
+          SCHEMA) is issued against both backends so schema migrations and
+          ``create-tables`` / ``create-indexes`` commands work transparently
+          in dual mode.
+        - Everything else (SELECT, PRAGMA, VACUUM, parameterised one-off
+          writes, etc.) is executed on the primary only. Mirroring arbitrary
+          SQL is unsafe because the statement may be engine-specific
+          (``PRAGMA journal_mode`` on SQLite, ``VACUUM FULL`` on PostgreSQL,
+          etc.) and because primary-only reads do not need to round-trip to
+          the secondary.
+
+        Parameterised data writes should go through :meth:`insert` or
+        :meth:`insert_many`, which always mirror to both.
         """
-        return self._primary.execute(sql, parameters)
+        result = self._primary.execute(sql, parameters)
+        if _is_ddl(sql):
+            try:
+                self._secondary.execute(sql, parameters)
+            except Exception as e:
+                logger.warning(
+                    f"DualDatabase: secondary DDL execute failed: {e} "
+                    f"(sql={sql[:80]!r})"
+                )
+                self._secondary_errors += 1
+        return result
 
     def executemany(self, sql: str, parameters_list: List[tuple]) -> Any:
         return self._primary.executemany(sql, parameters_list)
