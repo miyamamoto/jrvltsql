@@ -355,32 +355,33 @@ class TestScalability(PerformanceTestBase):
         database = SQLiteDatabase({'path': str(db_path)})
         database.connect()
 
-        schema_mgr = SchemaManager(database)
-        schema_mgr.create_table('NL_RA')
+        try:
+            schema_mgr = SchemaManager(database)
+            schema_mgr.create_table('NL_RA')
 
-        importer = DataImporter(database, batch_size=100)
+            importer = DataImporter(database, batch_size=100)
 
-        # Import in stages, measure time each stage
-        stages = [500, 1000, 1500, 2000]
-        times = []
+            # Import in stages, measure time each stage
+            stages = [500, 1000, 1500, 2000]
+            times = []
 
-        for stage_size in stages:
-            records = self.generate_sample_records(stage_size)
-            _, elapsed = self.measure_time(importer.import_records, records)
-            times.append(elapsed)
+            for stage_size in stages:
+                records = self.generate_sample_records(stage_size)
+                _, elapsed = self.measure_time(importer.import_records, records)
+                times.append(elapsed)
 
-            print(f"Stage {stage_size} records: {elapsed:.3f}s")
+                print(f"Stage {stage_size} records: {elapsed:.3f}s")
 
-            # Clear for next stage
-            database.execute("DELETE FROM NL_RA")
+                # Clear for next stage
+                database.execute("DELETE FROM NL_RA")
 
-        # Performance shouldn't degrade significantly
-        # (Last stage should be within 3x of first)
-        if len(times) > 1:
-            ratio = times[-1] / times[0]
-            self.assertLess(ratio, 5.0, "Performance degradation too high")
-
-        database.disconnect()
+            # Performance shouldn't degrade significantly
+            # (Last stage should be within 3x of first)
+            if len(times) > 1 and times[0] > 0:
+                ratio = times[-1] / times[0]
+                self.assertLess(ratio, 5.0, "Performance degradation too high")
+        finally:
+            database.disconnect()
 
 
 if __name__ == '__main__':
