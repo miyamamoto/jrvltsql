@@ -284,9 +284,11 @@ def check_rt_today(con, year, monthday, issues, label="RT_ 速報系"):
     return checks
 
 
-def check_rt_process_running(issues):
+def check_rt_process_running(issues, race_date_str=None):
     """Check if the realtime monitoring process is active (lock file present)."""
     print("\n--- [6] Realtime Process Status ---")
+    today_str = date.today().strftime("%Y%m%d")
+    is_past_date = race_date_str is not None and race_date_str < today_str
     lock_file = Path(".locks/realtime_updater.lock")
     if lock_file.exists():
         try:
@@ -307,6 +309,8 @@ def check_rt_process_running(issues):
 
             if alive:
                 print(f"  [OK]  Realtime monitor running (PID {pid})")
+            elif is_past_date:
+                print(f"  [INFO] Lock file stale (PID {pid}) -- expected for past date {race_date_str}")
             else:
                 print(f"  [!]   Lock file exists but PID {pid} not running")
                 issues.append(f"Realtime monitor lock stale (PID {pid} not found)")
@@ -314,9 +318,12 @@ def check_rt_process_running(issues):
             print(f"  [!]   Lock file unreadable: {lock_file}")
             issues.append("Realtime monitor lock file unreadable")
     else:
-        print(f"  [!]   No lock file: {lock_file}")
-        print(f"        Start: python -m src.cli.main realtime start --specs 0B12,0B15,0B30-0B36")
-        issues.append("Realtime monitor not running (no lock file)")
+        if is_past_date:
+            print(f"  [INFO] No lock file -- expected for past date {race_date_str}")
+        else:
+            print(f"  [!]   No lock file: {lock_file}")
+            print(f"        Start: python -m src.cli.main realtime start --specs 0B12,0B15,0B30-0B36")
+            issues.append("Realtime monitor not running (no lock file)")
 
 
 def check_rt_data_freshness(con, year, monthday, issues, stale_minutes=15):
@@ -768,7 +775,7 @@ def run_phase_pre(con, args, year, monthday, issues, nl_checks, rt_checks):
 def run_phase_rt_check(con, args, year, monthday, issues, nl_checks, rt_checks):
     rt_checks.update(check_rt_today(con, year, monthday, issues, "RT_ 速報系 (during races)") or {})
     nl_checks.update(check_nl_today(con, year, monthday, [], "NL_ 蓄積系") or {})
-    check_rt_process_running(issues)
+    check_rt_process_running(issues, race_date_str=args.date)
     check_rt_data_freshness(con, year, monthday, issues)
     check_odds_coverage(con, year, monthday, issues)
     check_ts_odds(con, year, monthday, issues)
@@ -786,7 +793,7 @@ def run_phase_nl_mid(con, args, year, monthday, issues, nl_checks, rt_checks):
     check_schema(con, issues)
     nl_checks.update(check_nl_today(con, year, monthday, issues, "NL_ 蓄積系 (mid-race)") or {})
     rt_checks.update(check_rt_today(con, year, monthday, issues, "RT_ 速報系 (mid-race)") or {})
-    check_rt_process_running(issues)
+    check_rt_process_running(issues, race_date_str=args.date)
     check_rt_data_freshness(con, year, monthday, issues)
     check_odds_coverage(con, year, monthday, issues)
     check_ts_odds(con, year, monthday, issues)
