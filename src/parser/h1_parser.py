@@ -158,7 +158,7 @@ class H1Parser:
         if totals:
             total_row = dict(header)
             total_row["BetType"] = "Total"
-            total_row["Kumi"] = ""
+            total_row["Kumi"] = "TOTAL"
             total_row["Hyo"] = ""
             total_row["Ninki"] = ""
             total_row.update(totals)

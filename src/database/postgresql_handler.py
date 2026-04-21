@@ -531,27 +531,55 @@ class PostgreSQLDatabase(BaseDatabase):
             raise DatabaseError(f"Failed to commit transaction: {e}")
 
     def rollback(self) -> None:
-        """Rollback current transaction.
+        """Rollback the current transaction.
 
-        pg8000.native is always in autocommit mode and doesn't support rollback.
-        psycopg supports rollback.
+        pg8000.native maintains per-connection transaction state; after a
+        server error (e.g. NOT NULL violation) the connection stays in a
+        poisoned "in failed transaction" state until an explicit ROLLBACK.
+        We send ROLLBACK ourselves; if even that fails we close and rebuild
+        the connection so subsequent operations succeed.
 
         Raises:
-            DatabaseError: If rollback fails
+            DatabaseError: if rollback AND reconnect both fail
         """
         if not self._connection:
             raise DatabaseError("Database not connected")
 
         try:
             if DRIVER == "pg8000":
-                # pg8000.native is in autocommit mode, no rollback possible
-                logger.warning("pg8000.native doesn't support rollback (autocommit mode)")
+                try:
+                    self._connection.run("ROLLBACK")
+                    logger.debug("pg8000 ROLLBACK sent")
+                except Exception as e:
+                    logger.warning(
+                        f"pg8000 ROLLBACK failed ({e}); reconnecting"
+                    )
+                    self._reconnect()
             else:  # psycopg
                 self._connection.rollback()
                 logger.debug("Transaction rolled back")
 
+        except DatabaseError:
+            raise
         except Exception as e:
             raise DatabaseError(f"Failed to rollback transaction: {e}")
+
+    def _reconnect(self) -> None:
+        """Close and re-open the PG connection after a broken session."""
+        try:
+            if self._connection is not None:
+                try:
+                    self._connection.close()
+                except Exception:
+                    pass
+            self._connection = None
+            self._cursor = None
+            self.connect()
+            logger.info("PostgreSQL connection re-established")
+        except Exception as e:
+            self._connection = None
+            logger.error(f"PostgreSQL reconnect failed: {e}")
+            raise DatabaseError(f"PostgreSQL reconnect failed: {e}")
 
     def insert(self, table_name: str, data: Dict[str, Any], use_replace: bool = True) -> int:
         """Insert single row into table.
