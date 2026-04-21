@@ -7,26 +7,18 @@ jvlink:
   # Get from https://jra-van.jp/dlb/
   service_key: "${JVLINK_SERVICE_KEY}"
 
-# NV-Link (地方競馬DATA/UmaConn) Settings
-nvlink:
-  # Optional service key (if you want to set it programmatically)
-  # Format: XXXX-XXXX-XXXX-XXXX-X
-  service_key: "${NVLINK_SERVICE_KEY}"
-  # Initialization key (software ID) used by NVInit
-  # Example: "SA000000/SD000004" (your vendor-provided key)
-    # Must be "UNKNOWN" - other values cause -301 auth error
-  initialization_key: "UNKNOWN"
 
 # Database Settings
 database:
-  # Database mode: sqlite, postgresql, or dual
-  #   sqlite     - local SQLite file only (original behavior, single-user)
-  #   postgresql - remote PostgreSQL only (multi-user / server deployment)
+  # Database mode: postgresql, sqlite, or dual
+  #   postgresql - remote PostgreSQL only (default, single source of truth
+  #                for multi-user / analytics / production).
+  #   sqlite     - local SQLite file only (offline / single-user / dev).
   #   dual       - write to both SQLite (primary) AND PostgreSQL (secondary).
   #                SQLite stays authoritative; PG is a best-effort mirror.
-  #                Recommended while migrating an existing SQLite installation
-  #                to a shared PG without cutting over the source of truth.
-  type: "sqlite"
+  #                Useful while migrating an existing SQLite installation to
+  #                a shared PG without cutting over the source of truth.
+  type: "postgresql"
 
 databases:
   # SQLite Database (Default - recommended for single-user)
