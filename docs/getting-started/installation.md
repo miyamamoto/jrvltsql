@@ -2,38 +2,29 @@
 
 ## 必要要件
 
-- **OS**: Windows 10/11（JV-Link COM APIはWindowsのみ対応）
-- **Python**: 3.12 (32-bit) — JV-Link COM DLLは32-bitのため必須
-- **JRA-VAN**: DataLab会員登録が必要
+- **OS**: Windows 10/11
+- **Python**: 3.10 以上
+- **JRA-VAN**: DataLab 会員登録
 
-## Python 3.12 (32-bit) のインストール
+## Python の用意
 
-JV-Link COM DLLは32-bit DLLとして提供されており、**32-bit Python環境が必須**です。
+現在の Windows バッチ導線は、まず repo 内の仮想環境を探します。
 
-### インストール手順
+1. `venv32\Scripts\python.exe`
+2. `.venv\Scripts\python.exe`
+3. `PYTHON`
+4. `py`
+5. `python`
 
-1. [Python 3.12 公式サイト](https://www.python.org/downloads/)にアクセス
-2. **Windows installer (32-bit)** をダウンロード
-   - 注意: 64-bit版ではなく、必ず**32-bit版**をダウンロードしてください
-3. インストーラーを実行
-   - 「Add Python to PATH」に必ずチェック
-   - 「Install Now」をクリック
-4. インストール後、確認：
-   ```bash
-   # バージョン確認
-   python --version
-   # 出力例: Python 3.12.x
+既存の 32-bit Python 環境がある場合はそのまま利用できます。  
+新規セットアップでは、まず通常の Python 3.10+ を入れ、必要なら repo 内に `.venv` を作る運用を推奨します。
 
-   # 32-bit であることを確認
-   python -c "import struct; print(struct.calcsize('P') * 8)"
-   # 出力: 32 (32-bitの場合)
-   ```
+### インストール確認
 
-### なぜ32-bit Pythonが必要か
-
-- **JV-Link**: `JVDTLab.JVLink` — 32-bit COM DLLとして提供
-- **64-bit Python + DllSurrogate**: 理論上可能だが、セットアップモード（option=3/4）でハング等の不安定な動作を確認
-- **32-bit Python**: APIと直接通信可能で、安定動作を確認済み
+```bat
+python --version
+py --version
+```
 
 ## インストール方法
 
@@ -107,3 +98,11 @@ JVLinkError: Service key not set
 ```
 
 **解決策**: DataLabソフトウェアでサービスキーを設定してください。
+
+### 日次同期をタスク登録したい
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\install_tasks.ps1 -Force
+```
+
+`JRVLTSQL_DailySync` が毎日 `06:30` に登録されます。
