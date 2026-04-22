@@ -1,50 +1,61 @@
 # JRVLTSQL
 
-JRA-VAN DataLab データを SQLite/PostgreSQL に取り込む Windows 専用パイプライン。
-
+JRA-VAN DataLab データを SQLite / PostgreSQL に取り込む Windows 向けツールです。  
 JRA（中央競馬）専用です。
-
----
 
 ## 必要要件
 
 | 項目 | 要件 |
 |------|------|
 | OS | Windows 10 / 11 |
-| Python | **3.12 (32-bit)** — JV-Link COM DLL が 32-bit のため必須 |
+| Python | 3.10 以上 |
 | JRA-VAN | DataLab 会員登録 + サービスキー |
 
-> **なぜ 32-bit Python?**  
-> JV-Link (`JVDTLab.JVLink`) は 32-bit COM DLL として提供されています。64-bit + DllSurrogate は
-> セットアップモード (option=3/4) でハング等の不安定な動作が確認されているため、32-bit Python を推奨します。
+`quickstart.bat` と `daily_sync.bat` は、次の順で Python を探します。
 
----
+1. `venv32\\Scripts\\python.exe`
+2. `.venv\\Scripts\\python.exe`
+3. `PYTHON` 環境変数
+4. `py`
+5. `python`
 
-## クイックスタート
+JV-Link は Windows 上でのみ動作します。既存の 32-bit Python 環境がある場合はそのまま使えますが、現在のバッチ起動導線は repo 内仮想環境を優先します。
+
+## Windows での使い方
+
+### 初回セットアップ
 
 ```bat
 quickstart.bat
 ```
 
-`quickstart.bat` をダブルクリック（または CMD から実行）するだけで以下を自動処理します：
+`quickstart.bat` は対話型セットアップです。Windows 実機で起動確認済みで、`scripts/quickstart.py` を呼び出して:
 
-1. Python (32-bit) の検出
-2. S3 キャッシュの事前ダウンロード（オプション）
-3. データ取得モードの選択（今週 / 差分 / フルセットアップ）
-4. JRA-VAN からのデータ取得・DB 格納
-5. S3 キャッシュのアップロード（オプション）
-6. DB 検証 (`raceday_verify --phase pre`)
+1. Python を検出
+2. 設定と接続を確認
+3. テーブルを初期化
+4. 初回データ取得を開始
 
----
+を行います。
 
-## インストール
+### 日次同期
 
-```powershell
-# PowerShell（ワンライナー）
-irm https://raw.githubusercontent.com/miyamamoto/jrvltsql/master/install.ps1 | iex
+```bat
+daily_sync.bat
 ```
 
-または手動：
+`daily_sync.bat` は非対話の日次差分取得用です。`scripts/daily_update.py` を呼び出し、直近 7 日の `TOKU / RACE / TCVN / RCVN` を順に同期します。  
+Windows 実機では `TOKU` 取得と `RACE` 取り込みが進み、実際に PostgreSQL への insert が発生することを確認しています。
+
+### Scheduled Task 登録
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\install_tasks.ps1 -Force
+```
+
+これで `JRVLTSQL_DailySync` を毎日 `06:30` に登録または更新します。
+
+## インストール
 
 ```bat
 git clone https://github.com/miyamamoto/jrvltsql.git
@@ -177,8 +188,8 @@ pytest tests/ -q --ignore=tests/integration/ --ignore=tests/e2e/
 
 | ドキュメント | 内容 |
 |------------|------|
-| [docs/getting-started/installation.md](docs/getting-started/installation.md) | インストール手順 |
-| [docs/getting-started/quickstart.md](docs/getting-started/quickstart.md) | クイックスタート |
+| [docs/getting-started/installation.md](docs/getting-started/installation.md) | Windows インストール |
+| [docs/getting-started/quickstart.md](docs/getting-started/quickstart.md) | 初回セットアップと日次同期 |
 | [docs/getting-started/configuration.md](docs/getting-started/configuration.md) | 設定ファイル |
 | [docs/CLI.md](docs/CLI.md) | CLI コマンドリファレンス |
 | [CHANGELOG.md](CHANGELOG.md) | 変更履歴 |
