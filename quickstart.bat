@@ -2,7 +2,7 @@
 setlocal enabledelayedexpansion
 chcp 65001 >nul 2>&1
 set PYTHONIOENCODING=utf-8
-title JLTSQL Setup
+title JLTSQL Quickstart
 
 REM Move to batch file directory
 cd /d "%~dp0"
@@ -15,62 +15,50 @@ echo.
 REM Store exit code for later
 set SCRIPT_EXIT_CODE=0
 
-REM ============================================================
-REM   Python Detection (32-bit required for JV-Link COM API)
-REM ============================================================
+REM Prefer repo-local interpreters first so Windows collectors can run
+REM without relying on global PATH state.
+if exist "%~dp0venv32\Scripts\python.exe" (
+    set "PYTHON=%~dp0venv32\Scripts\python.exe"
+    goto :run
+)
+
+if exist "%~dp0.venv\Scripts\python.exe" (
+    set "PYTHON=%~dp0.venv\Scripts\python.exe"
+    goto :run
+)
 
 REM First try: explicit PYTHON environment variable
 if defined PYTHON (
-    echo Using PYTHON environment variable: %PYTHON%
-    "%PYTHON%" scripts/quickstart.py %*
-    set SCRIPT_EXIT_CODE=!errorlevel!
-    goto :check_result
+    goto :run
 )
 
-REM Second try: py launcher with 32-bit Python 3.12
-py -3.12-32 --version >nul 2>&1
-if !errorlevel!==0 (
-    echo Using: Python 3.12 ^(32-bit^)
-    py -3.12-32 scripts/quickstart.py %*
-    set SCRIPT_EXIT_CODE=!errorlevel!
-    goto :check_result
-)
-
-REM Third try: py launcher with any 32-bit Python
-py -32 --version >nul 2>&1
-if !errorlevel!==0 (
-    echo Using: Python ^(32-bit^)
-    py -32 scripts/quickstart.py %*
-    set SCRIPT_EXIT_CODE=!errorlevel!
-    goto :check_result
-)
-
-REM Fourth try: py launcher (any version)
+REM Prefer regular py launcher; JLTSQL now supports bridge-based JRA access
+REM and no longer requires a global 32-bit Python install.
 py --version >nul 2>&1
 if !errorlevel!==0 (
-    echo Using: Python ^(py launcher^)
-    echo [WARNING] 64-bit Python may not support JV-Link COM API
-    py scripts/quickstart.py %*
-    set SCRIPT_EXIT_CODE=!errorlevel!
-    goto :check_result
+    set "PYTHON=py"
+    goto :run
 )
 
-REM Fifth try: python in PATH
+REM Fallback: python in PATH
 python --version >nul 2>&1
 if !errorlevel!==0 (
-    echo Using: Python ^(PATH^)
-    echo [WARNING] 64-bit Python may not support JV-Link COM API
-    python scripts/quickstart.py %*
-    set SCRIPT_EXIT_CODE=!errorlevel!
-    goto :check_result
+    set "PYTHON=python"
+    goto :run
 )
 
 REM No Python found
 echo ERROR: Python not found
-echo Please install Python 3.12 (32-bit) for JV-Link COM API support
+echo Please install Python 3.10+ or create venv32/.venv in this repository.
 echo Download: https://www.python.org/downloads/
 pause
 exit /b 1
+
+:run
+echo Using Python: %PYTHON%
+"%PYTHON%" scripts/quickstart.py %*
+set SCRIPT_EXIT_CODE=!errorlevel!
+goto :check_result
 
 :check_result
 echo.

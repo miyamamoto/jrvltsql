@@ -118,6 +118,16 @@ class BatchProcessor:
             option=option,
         )
 
+        if self._should_split_setup_range(from_date, to_date, option):
+            return self._process_split_setup_range(
+                data_spec=data_spec,
+                from_date=from_date,
+                to_date=to_date,
+                option=option,
+                auto_commit=auto_commit,
+                ensure_tables=ensure_tables,
+            )
+
         # Ensure tables exist
         if ensure_tables:
             logger.info("Ensuring all tables exist")
@@ -150,6 +160,64 @@ class BatchProcessor:
         except Exception as e:
             logger.error("Batch processing failed", error=str(e))
             raise
+
+    @staticmethod
+    def _should_split_setup_range(from_date: str, to_date: str, option: int) -> bool:
+        if option not in (3, 4):
+            return False
+        start = datetime.strptime(from_date, "%Y%m%d")
+        end = datetime.strptime(to_date, "%Y%m%d")
+        return (end - start).days > 370
+
+    def _iter_year_chunks(self, from_date: str, to_date: str) -> Iterator[Tuple[str, str]]:
+        start = datetime.strptime(from_date, "%Y%m%d")
+        end = datetime.strptime(to_date, "%Y%m%d")
+        year = start.year
+        while year <= end.year:
+            chunk_start = max(start, datetime(year, 1, 1))
+            chunk_end = min(end, datetime(year, 12, 31))
+            yield chunk_start.strftime("%Y%m%d"), chunk_end.strftime("%Y%m%d")
+            year += 1
+
+    def _process_split_setup_range(
+        self,
+        data_spec: str,
+        from_date: str,
+        to_date: str,
+        option: int,
+        auto_commit: bool,
+        ensure_tables: bool,
+    ) -> dict:
+        logger.info(
+            "Splitting setup range into yearly chunks to avoid JVOpen memory pressure",
+            data_spec=data_spec,
+            from_date=from_date,
+            to_date=to_date,
+            option=option,
+        )
+        combined_stats: dict = {}
+        for idx, (chunk_from, chunk_to) in enumerate(self._iter_year_chunks(from_date, to_date), start=1):
+            logger.info(
+                "Processing setup chunk",
+                chunk_index=idx,
+                chunk_from=chunk_from,
+                chunk_to=chunk_to,
+                data_spec=data_spec,
+            )
+            chunk_stats = self.process_date_range(
+                data_spec=data_spec,
+                from_date=chunk_from,
+                to_date=chunk_to,
+                option=option,
+                auto_commit=auto_commit,
+                ensure_tables=ensure_tables and idx == 1,
+            )
+            for key, value in chunk_stats.items():
+                if isinstance(value, (int, float)):
+                    combined_stats[key] = combined_stats.get(key, 0) + value
+                else:
+                    combined_stats[key] = value
+        return combined_stats
 
     def process_month(
         self,
