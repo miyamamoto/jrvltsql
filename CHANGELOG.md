@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-04-22
+
+### Added
+
+- **Dual-write mode** を追加
+  - SQLite を primary としつつ PostgreSQL へ同時書き込み
+  - `src/database/dual_handler.py` を新設
+- **PostgreSQL migration support** を追加
+  - 既存 SQLite スキーマの PostgreSQL 側反映と移行経路を整備
+- migration / dual-write 向けテストを追加
+  - `tests/test_migration.py`
+
+### Fixed
+
+- DDL が dual-write 時に mirror 側へ確実に反映されない問題を修正
+- realtime / verify 周辺の false positive とメッセージ不整合を修正
+- batch importer / realtime updater の PostgreSQL 併用時の整合性を改善
+
+### Changed
+
+- CLI と database 初期化フローを dual-write / PostgreSQL mirror 前提で整理
+- realtime monitor の DB 書き込み経路を見直し
+- config example を PostgreSQL 併用前提に更新
+
 ## [1.2.0] - 2026-04-17
 
 ### ⚠️ Breaking Changes
@@ -75,6 +99,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CLI コマンド（fetch, status, monitor, init）
 
 [Unreleased]: https://github.com/miyamamoto/jrvltsql/compare/v1.2.0...HEAD
+[1.3.0]: https://github.com/miyamamoto/jrvltsql/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/miyamamoto/jrvltsql/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/miyamamoto/jrvltsql/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/miyamamoto/jrvltsql/releases/tag/v1.0.0
