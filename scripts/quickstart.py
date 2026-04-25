@@ -3345,6 +3345,10 @@ def main():
                         help="時系列オッズを取得（オッズ推移→TS_O1-O6テーブル）")
     parser.add_argument("--timeseries-months", type=int, default=12,
                         help="時系列オッズの取得期間（月数、デフォルト: 12）。12以上は非推奨")
+    parser.add_argument("--timeseries-from-date", type=str, default=None,
+                        help="時系列オッズ取得開始日 (YYYYMMDD)。指定時は--timeseries-monthsより優先")
+    parser.add_argument("--timeseries-to-date", type=str, default=None,
+                        help="時系列オッズ取得終了日 (YYYYMMDD)。指定時は--timeseries-monthsより優先")
     parser.add_argument("--include-realtime", action="store_true",
                         help="速報系データも取得（過去約1週間分）")
     parser.add_argument("--background", action="store_true",
@@ -3428,6 +3432,10 @@ def main():
         # 時系列オッズ取得オプション
         settings['include_timeseries'] = args.include_timeseries
         settings['timeseries_months'] = args.timeseries_months
+        settings['timeseries_custom'] = bool(args.timeseries_from_date or args.timeseries_to_date)
+        if settings['timeseries_custom']:
+            settings['timeseries_from_date'] = args.timeseries_from_date or settings['from_date']
+            settings['timeseries_to_date'] = args.timeseries_to_date or settings['to_date']
 
         # 速報系データ取得オプション
         settings['include_realtime'] = args.include_realtime

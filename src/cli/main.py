@@ -1303,6 +1303,9 @@ def realtime():
     pass
 
 
+TIMESERIES_ODDS_SPECS = "0B30,0B31,0B32,0B33,0B34,0B35,0B36"
+
+
 @realtime.command()
 @click.option(
     "--specs",
@@ -1491,6 +1494,7 @@ def realtime_stop(ctx):
 )
 @click.option(
     "--from-date",
+    "--from",
     "-f",
     type=str,
     default=None,
@@ -1498,6 +1502,7 @@ def realtime_stop(ctx):
 )
 @click.option(
     "--to-date",
+    "--to",
     "-t",
     type=str,
     default=None,
@@ -1552,7 +1557,8 @@ def timeseries(ctx, spec, from_date, to_date, db, db_path):
     else:
         db_type = config.get("database.type", "sqlite") if config else "sqlite"
 
-    # Determine database path
+    # Determine database path. PostgreSQL mode does not use this path for
+    # storage, but SQLite mode and legacy helpers still require a value.
     if db_path:
         database_path = db_path
     elif config:
@@ -1575,7 +1581,7 @@ def timeseries(ctx, spec, from_date, to_date, db, db_path):
 
     console.print("[bold cyan]Fetching time series odds data...[/bold cyan]\n")
     console.print(f"  Data specs:    {', '.join(specs_list)}")
-    console.print(f"  Database:      {database_path} ({db_type})")
+    console.print(f"  Database:      {database_path if db_type == 'sqlite' else 'PostgreSQL'} ({db_type})")
     console.print(f"  Date range:    {from_date} - {to_date}")
     console.print()
 
@@ -1603,7 +1609,7 @@ def timeseries(ctx, spec, from_date, to_date, db, db_path):
                 # Map spec to table name
                 table_map = {
                     "0B30": "TS_O1",
-                    "0B31": "TS_O1",  # Also has O2 data
+                    "0B31": "TS_O1",
                     "0B32": "TS_O2",
                     "0B33": "TS_O3",
                     "0B34": "TS_O4",
@@ -1629,11 +1635,17 @@ def timeseries(ctx, spec, from_date, to_date, db, db_path):
 
                 try:
                     record_count = 0
+                    pg_config = (
+                        config.get("databases.postgresql", {})
+                        if db_type in ("postgresql", "dual") and config
+                        else None
+                    )
                     for record in fetcher.fetch_time_series_batch_from_db(
                         data_spec=spec_code,
                         db_path=database_path,
                         from_date=from_date,
                         to_date=to_date,
+                        pg_config=pg_config,
                     ):
                         # Save with timeseries=True to use TS_O* tables
                         raw_buff = record.get("_raw")
@@ -1666,6 +1678,52 @@ def timeseries(ctx, spec, from_date, to_date, db, db_path):
         console.print(f"\n[red]Error:[/red] {e}", style="bold")
         logger.error("Failed to fetch time series data", error=str(e), exc_info=True)
         sys.exit(1)
+
+
+@realtime.command("odds-timeseries")
+@click.option(
+    "--from-date",
+    "--from",
+    "-f",
+    type=str,
+    default=None,
+    help="Start date in YYYYMMDD format (default: 1 year ago)",
+)
+@click.option(
+    "--to-date",
+    "--to",
+    "-t",
+    type=str,
+    default=None,
+    help="End date in YYYYMMDD format (default: today)",
+)
+@click.option(
+    "--db",
+    type=click.Choice(["sqlite", "postgresql"]),
+    default=None,
+    help="Database type (default: from config)",
+)
+@click.option(
+    "--db-path",
+    type=str,
+    default=None,
+    help="SQLite database path (overrides config)",
+)
+@click.pass_context
+def odds_timeseries(ctx, from_date, to_date, db, db_path):
+    """Fetch all JRA-VAN time-series odds specs (0B30-0B36).
+
+    Recommended for KPS closing-odds modeling because it fills TS_O1-TS_O6
+    in one operation.
+    """
+    ctx.invoke(
+        timeseries,
+        spec=TIMESERIES_ODDS_SPECS,
+        from_date=from_date,
+        to_date=to_date,
+        db=db,
+        db_path=db_path,
+    )
 
 
 @realtime.command()

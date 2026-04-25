@@ -21,7 +21,7 @@ database:
   type: "postgresql"
 
 databases:
-  # SQLite Database (Default - recommended for single-user)
+  # SQLite Database (local fallback / single-user)
   sqlite:
     enabled: true
     path: "./data/keiba.db"
@@ -33,7 +33,7 @@ databases:
 
   # PostgreSQL Database (used when type=postgresql or type=dual)
   postgresql:
-    enabled: false
+    enabled: true
     host: "${POSTGRES_HOST:localhost}"
     port: 5432
     database: "keiba"

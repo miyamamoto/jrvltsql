@@ -91,6 +91,8 @@ echo.
 echo   CLI commands:
 echo     jltsql status   - Check database status
 echo     jltsql fetch    - Fetch additional data
+echo     fetch_timeseries_postgres.bat - Fill TS_O1-TS_O6 for KPS
+echo     quickstart_kps_postgres.bat   - KPS PostgreSQL setup + TS odds
 echo     jltsql --help   - Other commands
 echo.
 echo   For Claude Code / Claude Desktop users:

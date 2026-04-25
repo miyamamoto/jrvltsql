@@ -23,6 +23,7 @@ def test_key_generation():
 
     from src.jvlink.constants import (
         generate_time_series_key,
+        generate_time_series_full_key,
         get_all_race_keys_for_date,
         JYO_CODES,
         JVRTOPEN_TIME_SERIES_SPECS,
@@ -40,6 +41,12 @@ def test_key_generation():
     print(f"generate_time_series_key('20251201', '01', 1) = '{key2}'")
     assert key2 == "202512010101", f"Expected '202512010101', got '{key2}'"
     print("  -> OK: 1レース目もゼロ埋めされる")
+
+    # DB登録済みレースからの過去時系列取得では回次・日次を含む16桁キーを使う
+    full_key = generate_time_series_full_key("20251201", "05", 5, 8, 11)
+    print(f"generate_time_series_full_key('20251201', '05', 5, 8, 11) = '{full_key}'")
+    assert full_key == "2025120105050811", f"Expected '2025120105050811', got '{full_key}'"
+    print("  -> OK: 履歴取得用の16桁キー YYYYMMDDJJKKNNRR が正しい")
 
     # 全レースキー生成（120キー）
     all_keys = get_all_race_keys_for_date("20251201")
@@ -61,8 +68,134 @@ def test_key_generation():
     return True
 
 
+def test_fetch_time_series_batch_from_db_uses_full_key():
+    """DB登録済みレースからの時系列取得が16桁キーを使うことを確認する。"""
+    import sqlite3
+    import tempfile
+    import types
+    from pathlib import Path
+
+    from src.fetcher.realtime import RealtimeFetcher
+
+    with tempfile.TemporaryDirectory(dir="/tmp") as temp_dir:
+        db_path = Path(temp_dir) / "keiba.db"
+        with sqlite3.connect(db_path) as conn:
+            conn.execute(
+                """
+                CREATE TABLE NL_RA (
+                    Year INTEGER,
+                    MonthDay INTEGER,
+                    JyoCD TEXT,
+                    Kaiji INTEGER,
+                    Nichiji INTEGER,
+                    RaceNum INTEGER
+                )
+                """
+            )
+            conn.execute("INSERT INTO NL_RA VALUES (2025, 1201, '05', 5, 8, 11)")
+
+        class FakeJVLink:
+            def __init__(self):
+                self.opened = []
+                self.closed = 0
+
+            def jv_init(self):
+                return 0
+
+            def jv_rt_open(self, data_spec, key):
+                self.opened.append((data_spec, key))
+                return 0, 1
+
+            def jv_close(self):
+                self.closed += 1
+
+        fetcher = object.__new__(RealtimeFetcher)
+        fetcher.jvlink = FakeJVLink()
+
+        def fake_fetch_and_parse(self):
+            yield {"RecordSpec": "O1", "_raw": b"O1"}
+
+        fetcher._fetch_and_parse = types.MethodType(fake_fetch_and_parse, fetcher)
+
+        records = list(
+            fetcher.fetch_time_series_batch_from_db(
+                data_spec="0B30",
+                db_path=str(db_path),
+                from_date="20251201",
+                to_date="20251201",
+            )
+        )
+
+        assert fetcher.jvlink.opened == [("0B30", "2025120105050811")]
+        assert records == [{"RecordSpec": "O1", "_raw": b"O1"}]
+
+
+def test_fetch_time_series_batch_from_postgres_uses_pg_race_keys(monkeypatch):
+    """PostgreSQL保存のNL_RAから時系列取得キーを作れることを確認する。"""
+    import types
+
+    from src.fetcher.realtime import RealtimeFetcher
+
+    captured = {}
+
+    def fake_pg_rows(query, params, pg_config):
+        captured["query"] = query
+        captured["params"] = params
+        captured["pg_config"] = pg_config
+        return [(2025, 1201, "05", 5, 8, 11)]
+
+    monkeypatch.setattr(
+        RealtimeFetcher,
+        "_fetch_time_series_race_rows_from_postgres",
+        staticmethod(fake_pg_rows),
+    )
+
+    class FakeJVLink:
+        def __init__(self):
+            self.opened = []
+
+        def jv_init(self):
+            return 0
+
+        def jv_rt_open(self, data_spec, key):
+            self.opened.append((data_spec, key))
+            return 0, 1
+
+        def jv_close(self):
+            pass
+
+    fetcher = object.__new__(RealtimeFetcher)
+    fetcher.jvlink = FakeJVLink()
+
+    def fake_fetch_and_parse(self):
+        yield {"RecordSpec": "O2", "_raw": b"O2"}
+
+    fetcher._fetch_and_parse = types.MethodType(fake_fetch_and_parse, fetcher)
+
+    records = list(
+        fetcher.fetch_time_series_batch_from_db(
+            data_spec="0B32",
+            db_path="ignored.sqlite",
+            from_date="20251201",
+            to_date="20251201",
+            pg_config={"host": "localhost", "database": "keiba"},
+        )
+    )
+
+    assert "FROM nl_ra" in captured["query"]
+    assert captured["params"] == [2025, 2025, 1201, 2025, 2025, 1201]
+    assert fetcher.jvlink.opened == [("0B32", "2025120105050811")]
+    assert records == [{"RecordSpec": "O2", "_raw": b"O2"}]
+
+
 def test_fetch_time_series_method():
     """fetch_time_series()メソッドのテスト（実際のJV-Link呼び出し）"""
+    import sys
+
+    if sys.platform != "win32":
+        print("[SKIP] JV-Link COM is only available on Windows")
+        return True
+
     print("\n" + "=" * 60)
     print("2. fetch_time_series()メソッドテスト")
     print("=" * 60)

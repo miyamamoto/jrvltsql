@@ -333,6 +333,7 @@ class RealtimeFetcher(BaseFetcher):
         db_path: str,
         from_date: Optional[str] = None,
         to_date: Optional[str] = None,
+        pg_config: Optional[dict] = None,
     ) -> Iterator[dict]:
         """Fetch time series odds for races registered in the database.
 
@@ -350,15 +351,18 @@ class RealtimeFetcher(BaseFetcher):
         Args:
             data_spec: Time series data spec code
                       - 0B30: 単勝オッズ (O1)
-                      - 0B31: 複勝・枠連オッズ (O1, O2)
+                      - 0B31: 複勝・枠連オッズ (O1)
                       - 0B32: 馬連オッズ (O2)
                       - 0B33: ワイドオッズ (O3)
                       - 0B34: 馬単オッズ (O4)
                       - 0B35: 3連複オッズ (O5)
                       - 0B36: 3連単オッズ (O6)
-            db_path: Path to SQLite database with NL_RA table
+            db_path: Path to SQLite database with NL_RA table.
+                     Ignored when pg_config is supplied.
             from_date: Start date in YYYYMMDD format (optional)
             to_date: End date in YYYYMMDD format (optional)
+            pg_config: PostgreSQL connection config. When supplied, race keys
+                       are read from public.nl_ra instead of SQLite.
 
         Yields:
             Dictionary of parsed record data
@@ -380,7 +384,6 @@ class RealtimeFetcher(BaseFetcher):
             ... ):
             ...     print(record)
         """
-        import sqlite3
         from pathlib import Path
 
         # Validate data_spec
@@ -390,50 +393,82 @@ class RealtimeFetcher(BaseFetcher):
                 f"Time series specs: {', '.join(sorted(JVRTOPEN_TIME_SERIES_SPECS.keys()))}"
             )
 
-        # Validate database path
-        db_file = Path(db_path)
-        if not db_file.exists():
-            raise FetcherError(f"Database not found: {db_path}")
-
         # Build query for race keys from NL_RA
-        query = """
-            SELECT DISTINCT
-                Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum
-            FROM NL_RA
-            WHERE 1=1
-        """
-        params = []
+        if pg_config:
+            query = """
+                SELECT DISTINCT
+                    year, monthday, jyocd, kaiji, nichiji, racenum
+                FROM nl_ra
+                WHERE 1=1
+            """
+            params = []
+            placeholder = "%s"
+        else:
+            # Validate database path
+            db_file = Path(db_path)
+            if not db_file.exists():
+                raise FetcherError(f"Database not found: {db_path}")
+            query = """
+                SELECT DISTINCT
+                    Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum
+                FROM NL_RA
+                WHERE 1=1
+            """
+            params = []
+            placeholder = "?"
 
         if from_date:
             # Convert YYYYMMDD to Year and MonthDay
             year = from_date[:4]
             monthday = from_date[4:]
-            query += " AND (Year > ? OR (Year = ? AND MonthDay >= ?))"
-            params.extend([year, year, monthday])
+            if pg_config:
+                query += (
+                    f" AND (year > {placeholder} OR "
+                    f"(year = {placeholder} AND monthday >= {placeholder}))"
+                )
+                params.extend([int(year), int(year), int(monthday)])
+            else:
+                query += f" AND (Year > {placeholder} OR (Year = {placeholder} AND MonthDay >= {placeholder}))"
+                params.extend([year, year, monthday])
 
         if to_date:
             year = to_date[:4]
             monthday = to_date[4:]
-            query += " AND (Year < ? OR (Year = ? AND MonthDay <= ?))"
-            params.extend([year, year, monthday])
+            if pg_config:
+                query += (
+                    f" AND (year < {placeholder} OR "
+                    f"(year = {placeholder} AND monthday <= {placeholder}))"
+                )
+                params.extend([int(year), int(year), int(monthday)])
+            else:
+                query += f" AND (Year < {placeholder} OR (Year = {placeholder} AND MonthDay <= {placeholder}))"
+                params.extend([year, year, monthday])
 
-        query += " ORDER BY Year, MonthDay, JyoCD, RaceNum"
+        if pg_config:
+            query += " ORDER BY year, monthday, jyocd, racenum"
+        else:
+            query += " ORDER BY Year, MonthDay, JyoCD, RaceNum"
 
         logger.info(
             "Starting batch time series fetch from database",
             data_spec=data_spec,
             spec_name=JVRTOPEN_TIME_SERIES_SPECS.get(data_spec, "Unknown"),
-            db_path=db_path,
+            db_path="postgresql" if pg_config else db_path,
             from_date=from_date,
             to_date=to_date,
         )
 
         # Get race keys from database
         try:
-            with sqlite3.connect(db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute(query, params)
-                race_rows = cursor.fetchall()
+            if pg_config:
+                race_rows = self._fetch_time_series_race_rows_from_postgres(query, params, pg_config)
+            else:
+                import sqlite3
+
+                with sqlite3.connect(db_path) as conn:
+                    cursor = conn.cursor()
+                    cursor.execute(query, params)
+                    race_rows = cursor.fetchall()
         except Exception as e:
             raise FetcherError(f"Database query failed: {e}")
 
@@ -546,6 +581,51 @@ class RealtimeFetcher(BaseFetcher):
             total_records=total_records,
         )
 
+    @staticmethod
+    def _fetch_time_series_race_rows_from_postgres(
+        query: str,
+        params: list,
+        pg_config: dict,
+    ) -> list:
+        """Fetch NL_RA race keys from PostgreSQL for time-series odds retrieval."""
+        try:
+            import pg8000.dbapi as pgdb
+
+            conn = pgdb.connect(
+                host=pg_config.get("host", "localhost"),
+                port=int(pg_config.get("port", 5432)),
+                database=pg_config.get("database", "keiba"),
+                user=pg_config.get("user", "postgres"),
+                password=pg_config.get("password", ""),
+            )
+            try:
+                cur = conn.cursor()
+                cur.execute(query, params)
+                return cur.fetchall()
+            finally:
+                conn.close()
+        except ImportError:
+            try:
+                import psycopg
+
+                conn = psycopg.connect(
+                    host=pg_config.get("host", "localhost"),
+                    port=int(pg_config.get("port", 5432)),
+                    dbname=pg_config.get("database", "keiba"),
+                    user=pg_config.get("user", "postgres"),
+                    password=pg_config.get("password", ""),
+                )
+                try:
+                    with conn.cursor() as cur:
+                        cur.execute(query, params)
+                        return cur.fetchall()
+                finally:
+                    conn.close()
+            except ImportError as exc:
+                raise FetcherError(
+                    "PostgreSQL driver not installed. Install pg8000 or psycopg."
+                ) from exc
+
     def fetch_time_series_batch(
         self,
         data_spec: str,
@@ -580,7 +660,7 @@ class RealtimeFetcher(BaseFetcher):
             data_spec: Time series data spec code
                       - 0B20: 票数情報 (H1, H6)
                       - 0B30: 単勝オッズ (O1)
-                      - 0B31: 複勝・枠連オッズ (O1, O2)
+                      - 0B31: 複勝・枠連オッズ (O1)
                       - 0B32: 馬連オッズ (O2)
                       - 0B33: ワイドオッズ (O3)
                       - 0B34: 馬単オッズ (O4)
