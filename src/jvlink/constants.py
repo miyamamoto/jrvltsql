@@ -172,11 +172,11 @@ def is_valid_jvrtopen_spec(data_spec: str) -> bool:
 
 
 def generate_time_series_key(date: str, jyo_code: str, race_num: int) -> str:
-    """Generate YYYYMMDDJJRR format key for time series data (simplified format).
+    """Generate YYYYMMDDJJRR format key for time series data.
 
-    NOTE: This simplified format (12 digits) may not work for batch retrieval.
-    For batch retrieval of time series odds, use generate_time_series_full_key()
-    which includes Kaiji and Nichiji (16 digits).
+    JVRTOpen odds time-series retrieval uses this 12-digit key. Kaiji/Nichiji
+    are useful for identifying a race in NL_RA but are not part of the key
+    passed to JVRTOpen for 0B30-0B36.
 
     Args:
         date: Date in YYYYMMDD format (e.g., "20251130")
@@ -215,10 +215,11 @@ def generate_time_series_full_key(
     nichiji: int,
     race_num: int
 ) -> str:
-    """Generate YYYYMMDDJJKKNNNRR format key for time series data (full format).
+    """Generate YYYYMMDDJJKKNNRR format key for legacy diagnostics.
 
-    Based on JVLinkToSQLite implementation, this is the correct key format
-    for JVRTOpen batch retrieval of time series odds.
+    This helper is kept for compatibility with earlier probes and external
+    callers. The production JVRTOpen time-series odds fetch path uses
+    generate_time_series_key().
 
     Format: YYYYMMDD + JyoCD + Kaiji + Nichiji + RaceNum
     Example: 20251130 + 05 + 05 + 08 + 11 = 2025113005050811

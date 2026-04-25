@@ -13,7 +13,6 @@ from src.jvlink.constants import (
     is_valid_jvrtopen_spec,
     is_time_series_spec,
     generate_time_series_key,
-    generate_time_series_full_key,
     JYO_CODES,
 )
 from src.utils.logger import get_logger
@@ -337,12 +336,11 @@ class RealtimeFetcher(BaseFetcher):
     ) -> Iterator[dict]:
         """Fetch time series odds for races registered in the database.
 
-        Based on JVLinkToSQLite implementation: JVRTOpen requires a full key
-        with Kaiji (回次) and Nichiji (日次), which can only be obtained from
-        previously fetched race data in NL_RA table.
+        Race targets are loaded from NL_RA so only actual races are queried.
+        JVRTOpen odds time-series retrieval uses a 12-digit key.
 
-        Key format: YYYYMMDD + JyoCD + Kaiji + Nichiji + RaceNum (16 digits)
-        Example: 2025113005050811
+        Key format: YYYYMMDD + JyoCD + RaceNum (12 digits)
+        Example: 202511300511
 
         公式情報:
         - 提供期間: 過去1年間
@@ -497,16 +495,13 @@ class RealtimeFetcher(BaseFetcher):
                 # Build date string: YYYYMMDD
                 date_str = f"{year}{monthday:04d}" if isinstance(monthday, int) else f"{year}{monthday}"
 
-                # Convert values to proper types
-                kaiji_int = int(kaiji) if kaiji else 1
-                nichiji_int = int(nichiji) if nichiji else 1
+                # Convert values to proper types. Kaiji/Nichiji are selected
+                # from NL_RA for auditability, but JVRTOpen odds time-series
+                # keys use the 12-digit YYYYMMDDJJRR form.
                 race_num_int = int(race_num) if race_num else 1
 
-                # Generate full 16-digit key
                 try:
-                    key = generate_time_series_full_key(
-                        date_str, jyo_cd, kaiji_int, nichiji_int, race_num_int
-                    )
+                    key = generate_time_series_key(date_str, jyo_cd, race_num_int)
                 except ValueError as e:
                     logger.warning(f"Invalid key parameters: {e}")
                     error_keys += 1

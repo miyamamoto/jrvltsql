@@ -64,9 +64,9 @@ jltsql realtime odds-timeseries --from 20250425 --to 20260425 --db postgresql
 ```
 
 - JRA-VAN 公式提供範囲は過去1年分です。
-- コマンドは `NL_RA` に登録済みのレースから回次・日次を取得し、JVRTOpen に `YYYYMMDDJJKKNNRR` 形式のキーを渡します。
+- コマンドは `NL_RA` に登録済みのレースを対象にし、JVRTOpen に `YYYYMMDDJJRR` 形式のキーを渡します。
 - 保存先は `TS_O1` から `TS_O6` です。
-- KPS の締切オッズ予測では `odds-timeseries` を使い、0B30〜0B36 を一括取得します。
+- KPS の締切オッズ予測では `odds-timeseries` を使い、0B30 から O1〜O6 スナップショットを一括取得します。
 
 単一 spec を調査する場合だけ `timeseries --spec` を使います。
 

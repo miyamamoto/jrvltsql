@@ -1303,7 +1303,10 @@ def realtime():
     pass
 
 
-TIMESERIES_ODDS_SPECS = "0B30,0B31,0B32,0B33,0B34,0B35,0B36"
+# 0B30 returns O1-O6 snapshots for a race when opened with YYYYMMDDJJRR.
+# Opening 0B31-0B36 separately duplicates the same logical fetch path and is
+# kept available only for single-spec diagnostics via `realtime timeseries`.
+TIMESERIES_ODDS_SPECS = "0B30"
 
 
 @realtime.command()
@@ -1711,10 +1714,10 @@ def timeseries(ctx, spec, from_date, to_date, db, db_path):
 )
 @click.pass_context
 def odds_timeseries(ctx, from_date, to_date, db, db_path):
-    """Fetch all JRA-VAN time-series odds specs (0B30-0B36).
+    """Fetch JRA-VAN time-series odds via 0B30.
 
-    Recommended for KPS closing-odds modeling because it fills TS_O1-TS_O6
-    in one operation.
+    Recommended for KPS closing-odds modeling because 0B30 returns O1-O6
+    snapshots and fills TS_O1-TS_O6 in one operation.
     """
     ctx.invoke(
         timeseries,

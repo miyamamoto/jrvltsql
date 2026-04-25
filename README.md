@@ -71,7 +71,7 @@ jltsql status                          # DB 状態確認
 jltsql create-tables                   # テーブル作成
 jltsql create-indexes                  # インデックス作成
 jltsql fetch --from 20260101 --to 20260417 --spec RACE --option 1
-jltsql realtime start --specs 0B12,0B15,0B30,0B31,0B32,0B33,0B34,0B35,0B36
+jltsql realtime start --specs 0B12,0B15,0B30
 jltsql realtime odds-timeseries --from 20250426 --to 20260412 --db postgresql
 jltsql cache info                      # キャッシュ統計
 jltsql cache sync --download           # S3 → ローカル同期
@@ -104,7 +104,7 @@ fetch_timeseries_postgres.bat
 jltsql realtime odds-timeseries --from <FROM> --to <TO> --db postgresql
 ```
 
-`odds-timeseries` は `0B30〜0B36` を一括取得し、`TS_O1〜TS_O6` に保存します。従来の `realtime timeseries --spec ...` も残していますが、KPS では `odds-timeseries` を使います。
+`odds-timeseries` は `0B30` で `O1〜O6` スナップショットを一括取得し、`TS_O1〜TS_O6` に保存します。従来の `realtime timeseries --spec ...` も残していますが、KPS では `odds-timeseries` を使います。
 
 ### fetch オプション
 

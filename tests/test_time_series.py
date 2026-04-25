@@ -42,11 +42,11 @@ def test_key_generation():
     assert key2 == "202512010101", f"Expected '202512010101', got '{key2}'"
     print("  -> OK: 1レース目もゼロ埋めされる")
 
-    # DB登録済みレースからの過去時系列取得では回次・日次を含む16桁キーを使う
+    # 16桁キー生成は互換用ヘルパーとして残す
     full_key = generate_time_series_full_key("20251201", "05", 5, 8, 11)
     print(f"generate_time_series_full_key('20251201', '05', 5, 8, 11) = '{full_key}'")
     assert full_key == "2025120105050811", f"Expected '2025120105050811', got '{full_key}'"
-    print("  -> OK: 履歴取得用の16桁キー YYYYMMDDJJKKNNRR が正しい")
+    print("  -> OK: 互換用16桁キー YYYYMMDDJJKKNNRR が正しい")
 
     # 全レースキー生成（120キー）
     all_keys = get_all_race_keys_for_date("20251201")
@@ -68,8 +68,8 @@ def test_key_generation():
     return True
 
 
-def test_fetch_time_series_batch_from_db_uses_full_key():
-    """DB登録済みレースからの時系列取得が16桁キーを使うことを確認する。"""
+def test_fetch_time_series_batch_from_db_uses_simple_key():
+    """DB登録済みレースからの時系列取得が12桁キーを使うことを確認する。"""
     import sqlite3
     import tempfile
     import types
@@ -126,7 +126,7 @@ def test_fetch_time_series_batch_from_db_uses_full_key():
             )
         )
 
-        assert fetcher.jvlink.opened == [("0B30", "2025120105050811")]
+        assert fetcher.jvlink.opened == [("0B30", "202512010511")]
         assert records == [{"RecordSpec": "O1", "_raw": b"O1"}]
 
 
@@ -184,7 +184,7 @@ def test_fetch_time_series_batch_from_postgres_uses_pg_race_keys(monkeypatch):
 
     assert "FROM nl_ra" in captured["query"]
     assert captured["params"] == [2025, 2025, 1201, 2025, 2025, 1201]
-    assert fetcher.jvlink.opened == [("0B32", "2025120105050811")]
+    assert fetcher.jvlink.opened == [("0B32", "202512010511")]
     assert records == [{"RecordSpec": "O2", "_raw": b"O2"}]
 
 

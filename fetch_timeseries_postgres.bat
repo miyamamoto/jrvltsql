@@ -20,7 +20,7 @@ echo   JRA-VAN Time-Series Odds - PostgreSQL
 echo ============================================================
 echo.
 echo Date range: %FROM_DATE% - %TO_DATE%
-echo Specs:      0B30,0B31,0B32,0B33,0B34,0B35,0B36
+echo Specs:      0B30 ^(returns O1-O6 snapshots^)
 echo Database:   PostgreSQL ^(config/config.yaml^)
 echo.
 
