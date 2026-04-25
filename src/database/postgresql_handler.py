@@ -581,6 +581,36 @@ class PostgreSQLDatabase(BaseDatabase):
             logger.error(f"PostgreSQL reconnect failed: {e}")
             raise DatabaseError(f"PostgreSQL reconnect failed: {e}")
 
+    @staticmethod
+    def _normalize_insert_value(table_name: str, column: str, value: Any) -> Any:
+        """Normalize parser output before PostgreSQL binding.
+
+        JV-Data parsers preserve blank numeric fields as empty strings for
+        SQLite compatibility. PostgreSQL rejects '' for INTEGER/BIGINT/REAL, so
+        convert only blank numeric fields to NULL and leave text fields intact.
+        """
+        if value != "":
+            return value
+
+        try:
+            from src.database.schema_types import get_column_type
+
+            column_type = get_column_type(table_name, column)
+        except Exception:
+            column_type = None
+
+        if column_type in ("INTEGER", "BIGINT", "REAL"):
+            return None
+        return value
+
+    @classmethod
+    def _normalize_insert_data(cls, table_name: str, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Normalize a row dictionary for PostgreSQL inserts."""
+        return {
+            column: cls._normalize_insert_value(table_name, column, value)
+            for column, value in data.items()
+        }
+
     def insert(self, table_name: str, data: Dict[str, Any], use_replace: bool = True) -> int:
         """Insert single row into table.
 
@@ -600,6 +630,7 @@ class PostgreSQLDatabase(BaseDatabase):
         if not data:
             raise DatabaseError("No data provided for insert")
 
+        data = self._normalize_insert_data(table_name, data)
         columns = list(data.keys())
         values = list(data.values())
         placeholders = ", ".join(["?" for _ in columns])
@@ -649,6 +680,8 @@ class PostgreSQLDatabase(BaseDatabase):
         """
         if not data_list:
             raise DatabaseError("No data provided for insert")
+
+        data_list = [self._normalize_insert_data(table_name, row) for row in data_list]
 
         # Use first row to determine columns
         columns = list(data_list[0].keys())

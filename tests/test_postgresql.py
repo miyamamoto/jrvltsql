@@ -26,6 +26,26 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 
+def test_normalize_blank_numeric_insert_values():
+    """PostgreSQL inserts convert blank numeric JV-Data fields to NULL."""
+    from src.database.postgresql_handler import PostgreSQLDatabase
+
+    data = PostgreSQLDatabase._normalize_insert_data(
+        "TS_O1",
+        {
+            "RecordSpec": "O1",
+            "Year": "2026",
+            "TanVote": "",
+            "FukuVote": "123",
+            "JyoCD": "",
+        },
+    )
+
+    assert data["TanVote"] is None
+    assert data["FukuVote"] == "123"
+    assert data["JyoCD"] == ""
+
+
 def print_installation_guide():
     """PostgreSQLのインストールガイドを表示"""
     print("""
