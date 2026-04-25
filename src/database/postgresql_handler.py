@@ -686,6 +686,7 @@ class PostgreSQLDatabase(BaseDatabase):
         # Use first row to determine columns
         columns = list(data_list[0].keys())
         placeholders = ", ".join(["?" for _ in columns])
+        row_placeholders = f"({placeholders})"
         # Quote column names (lowercase for PostgreSQL)
         quoted_columns = [self._quote_identifier(col) for col in columns]
 
