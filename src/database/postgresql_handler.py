@@ -633,7 +633,7 @@ class PostgreSQLDatabase(BaseDatabase):
         data = self._normalize_insert_data(table_name, data)
         columns = list(data.keys())
         values = list(data.values())
-        placeholders = ", ".join(["?" for _ in columns])
+        row_placeholders = "(" + ", ".join(["?" for _ in columns]) + ")"
         # Quote column names (lowercase for PostgreSQL)
         quoted_columns = [self._quote_identifier(col) for col in columns]
 
@@ -700,21 +700,32 @@ class PostgreSQLDatabase(BaseDatabase):
                 if update_columns:
                     update_set = ", ".join([f"{col} = EXCLUDED.{col}" for col in update_columns])
                     pk_list = ", ".join(pk_columns)
-                    sql = f"INSERT INTO {table_name} ({', '.join(quoted_columns)}) VALUES ({placeholders}) ON CONFLICT ({pk_list}) DO UPDATE SET {update_set}"
+                    conflict_sql = f" ON CONFLICT ({pk_list}) DO UPDATE SET {update_set}"
                 else:
                     # All columns are primary keys, just use DO NOTHING
                     pk_list = ", ".join(pk_columns)
-                    sql = f"INSERT INTO {table_name} ({', '.join(quoted_columns)}) VALUES ({placeholders}) ON CONFLICT ({pk_list}) DO NOTHING"
+                    conflict_sql = f" ON CONFLICT ({pk_list}) DO NOTHING"
             else:
                 # No primary key found, fall back to DO NOTHING to avoid errors
                 logger.warning(f"No primary key found for {table_name}, using DO NOTHING")
-                sql = f"INSERT INTO {table_name} ({', '.join(quoted_columns)}) VALUES ({placeholders}) ON CONFLICT DO NOTHING"
+                conflict_sql = " ON CONFLICT DO NOTHING"
         else:
-            sql = f"INSERT INTO {table_name} ({', '.join(quoted_columns)}) VALUES ({placeholders})"
+            conflict_sql = ""
 
-        # Extract values in correct order for each row
-        parameters_list = [
-            tuple(row.get(col) for col in columns) for row in data_list
-        ]
+        inserted = 0
+        max_params = 30000
+        chunk_size = max(1, max_params // max(1, len(columns)))
+        for start in range(0, len(data_list), chunk_size):
+            chunk = data_list[start:start + chunk_size]
+            values_sql = ", ".join([row_placeholders] * len(chunk))
+            sql = (
+                f"INSERT INTO {table_name} ({', '.join(quoted_columns)}) "
+                f"VALUES {values_sql}{conflict_sql}"
+            )
+            flat_values = []
+            for row in chunk:
+                flat_values.extend(row.get(col) for col in columns)
+            self.execute(sql, tuple(flat_values))
+            inserted += len(chunk)
 
-        return self.executemany(sql, parameters_list)
+        return inserted
