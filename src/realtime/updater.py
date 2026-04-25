@@ -176,6 +176,47 @@ class RealtimeUpdater:
 
         return self._process_single_record(parsed_data, timeseries=timeseries)
 
+    def process_parsed_records_batch(self, records: list[Dict], timeseries: bool = False) -> Dict:
+        """Insert already parsed records in batches grouped by target table."""
+        from src.database.schema_types import get_table_column_types
+
+        grouped: dict[str, list[Dict]] = {}
+        errors = 0
+        for record in records:
+            record_type = record.get("RecordSpec")
+            table_name = (
+                self.TIMESERIES_RECORD_TYPE_TABLE.get(record_type)
+                if timeseries and record_type in self.TIMESERIES_RECORD_TYPE_TABLE
+                else self.RECORD_TYPE_TABLE.get(record_type)
+            )
+            if not table_name:
+                logger.warning(f"Unknown record type: {record_type}")
+                errors += 1
+                continue
+
+            clean_data = {k: v for k, v in record.items() if not k.startswith("_")}
+            schema_columns = get_table_column_types(table_name)
+            if schema_columns:
+                clean_data = {column: clean_data.get(column) for column in schema_columns}
+            grouped.setdefault(table_name, []).append(clean_data)
+
+        inserted = 0
+        for table_name, rows in grouped.items():
+            try:
+                self.database.insert_many(table_name, rows)
+                inserted += len(rows)
+            except Exception as e:
+                logger.error(f"Failed to batch insert records into {table_name}: {e}")
+                errors += len(rows)
+
+        return {
+            "operation": "batch_insert",
+            "success": errors == 0,
+            "inserted": inserted,
+            "errors": errors,
+            "tables": sorted(grouped),
+        }
+
     def _process_single_record(self, parsed_data: Dict, timeseries: bool = False) -> Optional[Dict]:
         """Process a single parsed record dict."""
         try:

@@ -1633,12 +1633,22 @@ def timeseries(ctx, spec, from_date, to_date, db, db_path):
             total_records = 0
             total_success = 0
             total_errors = 0
+            save_batch_size = 5000
+
+            def flush_batch(records_batch):
+                nonlocal total_success, total_errors
+                if not records_batch:
+                    return
+                result = updater.process_parsed_records_batch(records_batch, timeseries=True)
+                total_success += int(result.get("inserted", 0))
+                total_errors += int(result.get("errors", 0))
 
             for spec_code in specs_list:
                 console.print(f"\n[bold]Processing {spec_code}...[/bold]")
 
                 try:
                     record_count = 0
+                    records_batch = []
                     pg_config = (
                         config.get("databases.postgresql", {})
                         if db_type in ("postgresql", "dual") and config
@@ -1655,18 +1665,18 @@ def timeseries(ctx, spec, from_date, to_date, db, db_path):
                         # dictionaries. Save parsed rows directly to avoid
                         # re-processing the same raw record repeatedly.
                         clean_record = {k: v for k, v in record.items() if not k.startswith("_")}
-                        result = updater.process_parsed_record(clean_record, timeseries=True)
-                        if result and result.get("success"):
-                            total_success += 1
-                        else:
-                            total_errors += 1
+                        records_batch.append(clean_record)
                         record_count += 1
                         total_records += 1
+                        if len(records_batch) >= save_batch_size:
+                            flush_batch(records_batch)
+                            records_batch = []
 
                         # Progress indicator
                         if record_count % 100 == 0:
                             console.print(f"\r  Processed: {record_count:,} records", end="")
 
+                    flush_batch(records_batch)
                     console.print(f"\r  [green]✓[/green] {spec_code}: {record_count:,} records processed")
 
                 except Exception as e:
