@@ -1611,7 +1611,7 @@ def timeseries(ctx, spec, from_date, to_date, db, db_path):
             for spec_code in specs_list:
                 # Map spec to table name
                 table_map = {
-                    "0B30": "TS_O1",
+                    "0B30": "TS_O1,TS_O2,TS_O3,TS_O4,TS_O5,TS_O6",
                     "0B31": "TS_O1",
                     "0B32": "TS_O2",
                     "0B33": "TS_O3",
@@ -1619,10 +1619,11 @@ def timeseries(ctx, spec, from_date, to_date, db, db_path):
                     "0B35": "TS_O5",
                     "0B36": "TS_O6",
                 }
-                table_name = table_map.get(spec_code)
-                if table_name and table_name in schema_registry:
-                    database.create_table(table_name, schema_registry[table_name])
-                    console.print(f"  [green]✓[/green] Table {table_name} ready")
+                table_names = table_map.get(spec_code, "")
+                for table_name in [name for name in table_names.split(",") if name]:
+                    if table_name in schema_registry:
+                        database.create_table(table_name, schema_registry[table_name])
+                        console.print(f"  [green]✓[/green] Table {table_name} ready")
 
             # Initialize fetcher and updater
             sid = config.get("jvlink.sid", "JLTSQL") if config else "JLTSQL"
@@ -1650,14 +1651,15 @@ def timeseries(ctx, spec, from_date, to_date, db, db_path):
                         to_date=to_date,
                         pg_config=pg_config,
                     ):
-                        # Save with timeseries=True to use TS_O* tables
-                        raw_buff = record.get("_raw")
-                        if raw_buff:
-                            result = updater.process_record(raw_buff, timeseries=True)
-                            if result and result.get("success"):
-                                total_success += 1
-                            else:
-                                total_errors += 1
+                        # The fetcher already expands O1-O6 arrays into row
+                        # dictionaries. Save parsed rows directly to avoid
+                        # re-processing the same raw record repeatedly.
+                        clean_record = {k: v for k, v in record.items() if not k.startswith("_")}
+                        result = updater.process_parsed_record(clean_record, timeseries=True)
+                        if result and result.get("success"):
+                            total_success += 1
+                        else:
+                            total_errors += 1
                         record_count += 1
                         total_records += 1
 

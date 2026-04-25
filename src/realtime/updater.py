@@ -152,20 +152,29 @@ class RealtimeUpdater:
                 if spec:
                     self.cache_manager.write_rt_record(spec, today, buff)
 
-            # Full-struct parsers (H1, H6) return List[Dict]
-            if isinstance(parsed_data, list):
-                results = []
-                for item in parsed_data:
-                    result = self._process_single_record(item, timeseries=timeseries)
-                    if result:
-                        results.append(result)
-                return results if results else None
-
-            return self._process_single_record(parsed_data, timeseries=timeseries)
+            return self.process_parsed_record(parsed_data, timeseries=timeseries)
 
         except Exception as e:
             logger.error(f"Error processing record: {e}", exc_info=True)
             raise
+
+    def process_parsed_record(self, parsed_data, timeseries: bool = False) -> Optional[Dict]:
+        """Process already parsed JV-Data.
+
+        Batch time-series fetchers may expand one raw JV-Link record into many
+        odds rows. Re-processing the raw buffer would duplicate work and insert
+        the same expanded record repeatedly, so callers can save the parsed rows
+        directly through this method.
+        """
+        if isinstance(parsed_data, list):
+            results = []
+            for item in parsed_data:
+                result = self._process_single_record(item, timeseries=timeseries)
+                if result:
+                    results.append(result)
+            return results if results else None
+
+        return self._process_single_record(parsed_data, timeseries=timeseries)
 
     def _process_single_record(self, parsed_data: Dict, timeseries: bool = False) -> Optional[Dict]:
         """Process a single parsed record dict."""
