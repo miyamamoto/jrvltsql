@@ -188,6 +188,42 @@ def test_fetch_time_series_batch_from_postgres_uses_pg_race_keys(monkeypatch):
     assert records == [{"RecordSpec": "O2", "_raw": b"O2"}]
 
 
+def test_odds_parsers_expand_combination_arrays():
+    """O1-O6 parsers should expand embedded odds arrays into row lists."""
+    from src.parser.o1_parser import O1Parser
+    from src.parser.o2_parser import O2Parser
+    from src.parser.o6_parser import O6Parser
+
+    header_o1 = b"O1" + b"4" + b"20260419" + b"2026" + b"0419" + b"06" + b"03" + b"08" + b"11" + b"04191549" + b"18" + b"18" + b"777" + b"3"
+    tan = b"01012301" + b"02045602" + b"0" * (26 * 8)
+    fuku = b"010010002001" + b"020030004002" + b"0" * (26 * 12)
+    wakuren = b"120123401" + b"130567802" + b"0" * (34 * 9)
+    raw_o1 = header_o1 + tan + fuku + wakuren + b"000000001230000000045600000000789\r\n"
+    rows_o1 = O1Parser().parse(raw_o1)
+    assert len(rows_o1) == 4
+    assert rows_o1[0]["Umaban"] == "01"
+    assert rows_o1[0]["TanOdds"] == "0123"
+    assert rows_o1[0]["FukuOddsHigh"] == "0020"
+    assert rows_o1[-1]["Kumi"] == "13"
+    assert rows_o1[-1]["Umaban"] == "0"
+
+    header_combo = b"O2" + b"4" + b"20260419" + b"2026" + b"0419" + b"06" + b"03" + b"08" + b"11" + b"04191549" + b"18" + b"18" + b"7"
+    raw_o2 = header_combo + b"0102000123010" + b"0103000456020" + b"0" * 13 + b"00000000999\r\n"
+    rows_o2 = O2Parser().parse(raw_o2)
+    assert [(r["Kumi"], r["Odds"], r["Ninki"], r["Vote"]) for r in rows_o2] == [
+        ("0102", "000123", "010", "00000000999"),
+        ("0103", "000456", "020", "00000000999"),
+    ]
+
+    header_o6 = b"O6" + header_combo[2:]
+    raw_o6 = header_o6 + b"01020300012340010" + b"01020400045670020" + b"0" * 17 + b"00000000888\r\n"
+    rows_o6 = O6Parser().parse(raw_o6)
+    assert [(r["Kumi"], r["Odds"], r["Ninki"], r["Vote"]) for r in rows_o6] == [
+        ("010203", "0001234", "0010", "00000000888"),
+        ("010204", "0004567", "0020", "00000000888"),
+    ]
+
+
 def test_fetch_time_series_method():
     """fetch_time_series()メソッドのテスト（実際のJV-Link呼び出し）"""
     import sys

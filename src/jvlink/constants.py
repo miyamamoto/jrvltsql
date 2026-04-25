@@ -469,8 +469,10 @@ ENCODING_JVDATA = "cp932"  # JV-Data encoding (Windows-31J / Shift_JIS with exte
 ENCODING_DATABASE = "utf-8"  # Database encoding
 
 # Buffer Sizes
-BUFFER_SIZE_JVREAD = 50000  # JVRead buffer size (bytes)
-MAX_RECORD_LENGTH = 20000  # Maximum record length
+# O6（三連単） can exceed 80KB for full 18-horse fields. Keep the JVRead
+# buffer comfortably above the largest time-series odds record.
+BUFFER_SIZE_JVREAD = 262144  # JVRead buffer size (bytes)
+MAX_RECORD_LENGTH = 262144  # Maximum record length
 
 
 # Error Messages Dictionary

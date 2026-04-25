@@ -2091,7 +2091,7 @@ SCHEMAS = {
             TanVote BIGINT,
             FukuVote BIGINT,
             WakurenVote BIGINT,
-            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban, HassoTime)
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban, Kumi, HassoTime)
         )
     """,
     "TS_O2": """
