@@ -587,11 +587,9 @@ class PostgreSQLDatabase(BaseDatabase):
 
         JV-Data parsers preserve blank numeric fields as empty strings for
         SQLite compatibility. PostgreSQL rejects '' for INTEGER/BIGINT/REAL, so
-        convert only blank numeric fields to NULL and leave text fields intact.
+        convert only blank/placeholder numeric fields to NULL and leave text
+        fields intact. Odds records use '*' placeholders for unavailable odds.
         """
-        if value != "":
-            return value
-
         try:
             from src.database.schema_types import get_column_type
 
@@ -599,7 +597,28 @@ class PostgreSQLDatabase(BaseDatabase):
         except Exception:
             column_type = None
 
-        if column_type in ("INTEGER", "BIGINT", "REAL"):
+        if column_type not in ("INTEGER", "BIGINT", "REAL"):
+            return value
+
+        if value is None:
+            return None
+
+        if isinstance(value, str):
+            text = value.strip()
+            if not text or set(text) <= {"*"}:
+                return None
+            if column_type in ("INTEGER", "BIGINT"):
+                try:
+                    return int(text)
+                except ValueError:
+                    return None
+            if column_type == "REAL":
+                try:
+                    return float(text)
+                except ValueError:
+                    return None
+
+        if value == "":
             return None
         return value
 

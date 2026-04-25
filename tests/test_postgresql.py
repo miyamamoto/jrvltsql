@@ -42,8 +42,16 @@ def test_normalize_blank_numeric_insert_values():
     )
 
     assert data["TanVote"] is None
-    assert data["FukuVote"] == "123"
+    assert data["FukuVote"] == 123
     assert data["JyoCD"] == ""
+
+    odds_data = PostgreSQLDatabase._normalize_insert_data(
+        "TS_O2",
+        {"Odds": "******", "Ninki": "***", "Vote": "100"},
+    )
+    assert odds_data["Odds"] is None
+    assert odds_data["Ninki"] is None
+    assert odds_data["Vote"] == 100
 
 
 def print_installation_guide():
