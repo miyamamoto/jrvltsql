@@ -3,7 +3,7 @@
 This module provides realtime data fetching from JV-Link.
 """
 
-from typing import Iterator, Optional, List
+from typing import Callable, Iterator, Optional, List
 
 from src.fetcher.base import BaseFetcher, FetcherError
 from src.jvlink.constants import (
@@ -333,6 +333,7 @@ class RealtimeFetcher(BaseFetcher):
         from_date: Optional[str] = None,
         to_date: Optional[str] = None,
         pg_config: Optional[dict] = None,
+        progress_callback: Optional[Callable[[dict], None]] = None,
     ) -> Iterator[dict]:
         """Fetch time series odds for races registered in the database.
 
@@ -361,6 +362,8 @@ class RealtimeFetcher(BaseFetcher):
             to_date: End date in YYYYMMDD format (optional)
             pg_config: PostgreSQL connection config. When supplied, race keys
                        are read from public.nl_ra instead of SQLite.
+            progress_callback: Optional callback called after each race key is
+                               attempted. Receives counters and key status.
 
         Yields:
             Dictionary of parsed record data
@@ -489,7 +492,10 @@ class RealtimeFetcher(BaseFetcher):
         total_records = 0
 
         try:
+            processed_keys = 0
+
             for row in race_rows:
+                processed_keys += 1
                 year, monthday, jyo_cd, kaiji, nichiji, race_num = row
 
                 # Build date string: YYYYMMDD
@@ -505,13 +511,28 @@ class RealtimeFetcher(BaseFetcher):
                 except ValueError as e:
                     logger.warning(f"Invalid key parameters: {e}")
                     error_keys += 1
+                    if progress_callback:
+                        progress_callback({
+                            "status": "invalid_key",
+                            "key": None,
+                            "processed_keys": processed_keys,
+                            "total_keys": total_keys,
+                            "success_keys": success_keys,
+                            "no_data_keys": no_data_keys,
+                            "error_keys": error_keys,
+                            "records_for_key": 0,
+                            "total_records": total_records,
+                        })
                     continue
 
+                records_for_key = 0
+                key_status = "error"
                 try:
                     ret, read_count = self.jvlink.jv_rt_open(data_spec, key)
 
                     if ret == -1:
                         no_data_keys += 1
+                        key_status = "no_data"
                         logger.debug(
                             "No data for key",
                             key=key,
@@ -522,6 +543,7 @@ class RealtimeFetcher(BaseFetcher):
 
                     if ret != JV_RT_SUCCESS:
                         error_keys += 1
+                        key_status = f"error:{ret}"
                         logger.warning(
                             "JVRTOpen error",
                             key=key,
@@ -531,7 +553,7 @@ class RealtimeFetcher(BaseFetcher):
 
                     # Read all records for this key
                     success_keys += 1
-                    records_for_key = 0
+                    key_status = "success"
 
                     for record in self._fetch_and_parse():
                         records_for_key += 1
@@ -546,19 +568,30 @@ class RealtimeFetcher(BaseFetcher):
                         records=records_for_key,
                     )
 
-                    # Close stream before opening next
-                    self.jvlink.jv_close()
-
                 except Exception as e:
                     error_keys += 1
+                    key_status = "exception"
                     if '-114' in str(e):
                         logger.debug("Not subscribed for key", key=key, error=str(e))
                     else:
                         logger.warning("Error fetching key", key=key, error=str(e))
+                finally:
                     try:
                         self.jvlink.jv_close()
                     except Exception:
                         pass
+                    if progress_callback:
+                        progress_callback({
+                            "status": key_status,
+                            "key": key,
+                            "processed_keys": processed_keys,
+                            "total_keys": total_keys,
+                            "success_keys": success_keys,
+                            "no_data_keys": no_data_keys,
+                            "error_keys": error_keys,
+                            "records_for_key": records_for_key,
+                            "total_records": total_records,
+                        })
 
         finally:
             try:

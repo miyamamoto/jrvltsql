@@ -1649,6 +1649,38 @@ def timeseries(ctx, spec, from_date, to_date, db, db_path):
                 try:
                     record_count = 0
                     records_batch = []
+                    key_progress = {
+                        "processed_keys": 0,
+                        "total_keys": 0,
+                        "success_keys": 0,
+                        "no_data_keys": 0,
+                        "error_keys": 0,
+                        "total_records": 0,
+                    }
+
+                    def report_key_progress(progress):
+                        key_progress.update(progress)
+                        processed = int(progress.get("processed_keys", 0))
+                        total = int(progress.get("total_keys", 0))
+                        status = str(progress.get("status", ""))
+                        should_print = (
+                            processed == total
+                            or status == "success"
+                            or processed % 25 == 0
+                        )
+                        if not should_print:
+                            return
+                        console.print(
+                            "\r  Keys: "
+                            f"{processed:,}/{total:,} "
+                            f"ok={progress.get('success_keys', 0):,} "
+                            f"no_data={progress.get('no_data_keys', 0):,} "
+                            f"errors={progress.get('error_keys', 0):,} "
+                            f"records={progress.get('total_records', 0):,} "
+                            f"last={progress.get('key') or '-'}:{status}",
+                            end="",
+                        )
+
                     pg_config = (
                         config.get("databases.postgresql", {})
                         if db_type in ("postgresql", "dual") and config
@@ -1660,6 +1692,7 @@ def timeseries(ctx, spec, from_date, to_date, db, db_path):
                         from_date=from_date,
                         to_date=to_date,
                         pg_config=pg_config,
+                        progress_callback=report_key_progress,
                     ):
                         # The fetcher already expands O1-O6 arrays into row
                         # dictionaries. Save parsed rows directly to avoid
@@ -1677,7 +1710,16 @@ def timeseries(ctx, spec, from_date, to_date, db, db_path):
                             console.print(f"\r  Processed: {record_count:,} records", end="")
 
                     flush_batch(records_batch)
-                    console.print(f"\r  [green]✓[/green] {spec_code}: {record_count:,} records processed")
+                    if key_progress["processed_keys"]:
+                        console.print(
+                            "\r  Keys: "
+                            f"{key_progress['processed_keys']:,}/{key_progress['total_keys']:,} "
+                            f"ok={key_progress['success_keys']:,} "
+                            f"no_data={key_progress['no_data_keys']:,} "
+                            f"errors={key_progress['error_keys']:,} "
+                            f"records={key_progress['total_records']:,}"
+                        )
+                    console.print(f"  [green]✓[/green] {spec_code}: {record_count:,} records processed")
 
                 except Exception as e:
                     console.print(f"  [red]✗[/red] {spec_code}: Error - {e}")
