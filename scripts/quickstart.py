@@ -2874,7 +2874,7 @@ class QuickstartRunner:
 
         try:
             from src.fetcher.realtime import RealtimeFetcher
-            from src.importer.importer import DataImporter
+            from src.realtime.updater import RealtimeUpdater
 
             # データベース接続
             db = self._create_database()
@@ -2889,7 +2889,10 @@ class QuickstartRunner:
 
             with db:
                 fetcher = RealtimeFetcher(sid="JLTSQL")
-                importer = DataImporter(db, batch_size=1000)
+                # RealtimeUpdater は record_type を RT_*（速報系）/ TS_O*（時系列）に
+                # 正しくルーティングする。DataImporter を使うと NL_* に書き込まれ
+                # 速報系テーブルが空になる。
+                updater = RealtimeUpdater(db)
 
                 for date_str in race_dates:
                     # 時系列データはレース単位のキーが必要
@@ -2899,10 +2902,21 @@ class QuickstartRunner:
                         keys = [date_str]  # 速報系は日付単位
 
                     for key in keys:
-                        records = []
                         try:
                             for record in fetcher.fetch(data_spec=spec, key=key, continuous=False):
-                                records.append(record)
+                                raw_buff = record.get("_raw")
+                                if not raw_buff:
+                                    continue
+                                result = updater.process_record(raw_buff, timeseries=is_time_series)
+                                if result is None:
+                                    continue
+                                # process_record は dict または list[dict] を返す
+                                if isinstance(result, list):
+                                    total_records += sum(
+                                        1 for r in result if r and r.get("success")
+                                    )
+                                elif result.get("success"):
+                                    total_records += 1
                         except Exception as e:
                             error_str = str(e)
                             # 契約外チェック
@@ -2912,11 +2926,6 @@ class QuickstartRunner:
                             if '-1' in error_str or 'no data' in error_str.lower():
                                 continue
                             raise
-
-                        if records:
-                            # インポート
-                            import_stats = importer.import_records(iter(records), auto_commit=True)
-                            total_records += import_stats.get('records_imported', len(records))
 
                 details['records_saved'] = total_records
 
@@ -3156,10 +3165,12 @@ class QuickstartRunner:
         # option=3/4（セットアップモード）は一部のスペックのみ対応
         # RACE, DIFF, BLOD等の主要スペックはoption=2対応
         # COMM, PARA等の補助スペックはoption=1のみ対応
+        # DIFN（マスタデータ: UM, KS, CH）はoption=4が必要（差分では不十分）
         OPTION_4_SUPPORTED_SPECS = {
             "RACE", "DIFF", "BLOD", "SNAP", "SLOP", "WOOD",
             "YSCH", "HOSE", "HOYU", "CHOK", "KISI", "BRDR",
             "TOKU", "MING", "O1", "O2", "O3", "O4", "O5", "O6",
+            "DIFN",  # Master data (horses, jockeys, trainers)
         }
 
         # option=1（差分データ）はJV-Link側の「最終取得時刻」以降のデータのみ返す
