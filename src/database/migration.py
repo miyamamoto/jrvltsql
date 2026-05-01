@@ -78,10 +78,12 @@ def migrate_table_if_needed(db: BaseDatabase, table_name: str, schema_sql: str) 
 
     # Get existing columns — PRAGMA for SQLite, information_schema for PostgreSQL
     if db.get_db_type() == "postgresql":
+        # PostgreSQL stores unquoted identifiers in lowercase; information_schema
+        # also stores them lowercased, so we must lowercase the lookup key.
         existing_info = db.fetch_all(
             "SELECT column_name AS name FROM information_schema.columns "
             "WHERE table_name = ? AND table_schema = 'public'",
-            (table_name,),
+            (table_name.lower(),),
         )
     else:
         existing_info = db.fetch_all(f'PRAGMA table_info("{table_name}")')
@@ -97,7 +99,13 @@ def migrate_table_if_needed(db: BaseDatabase, table_name: str, schema_sql: str) 
         f"expected={sorted(expected_columns)}. "
         f"Dropping and recreating table."
     )
-    db.execute(f'DROP TABLE "{table_name}"')
+    # PostgreSQL stores unquoted identifiers in lowercase. Quoting the uppercase
+    # name (e.g. "NL_BN") makes the DROP case-sensitive and fail with
+    # "relation does not exist". Use unquoted/lowercase for PostgreSQL.
+    if db.get_db_type() == "postgresql":
+        db.execute(f'DROP TABLE IF EXISTS {table_name.lower()}')
+    else:
+        db.execute(f'DROP TABLE IF EXISTS "{table_name}"')
     db.execute(schema_sql)
     db.commit()
     return True

@@ -215,6 +215,18 @@ class RealtimeUpdater:
             logger.error(f"Error processing single record: {e}", exc_info=True)
             raise
 
+    def _prepare_data_for_db(self, table_name: str, data: Dict) -> Dict:
+        """Strip metadata and coerce JV-Data sentinel values.
+
+        Mirrors importer.py's _convert_record so that "*", "****", "0103*****"
+        etc. become NULL instead of failing PostgreSQL's INTEGER/BIGINT/REAL
+        validation. Required because RealtimeUpdater bypasses DataImporter.
+        """
+        from src.importer.importer import convert_record_types
+
+        clean_data = {k: v for k, v in data.items() if not k.startswith("_")}
+        return convert_record_types(clean_data, table_name)
+
     def _handle_new_record(self, table_name: str, data: Dict) -> Dict:
         """Handle new record insertion.
 
@@ -226,8 +238,7 @@ class RealtimeUpdater:
             Result dictionary with operation details
         """
         try:
-            # Remove metadata fields
-            clean_data = {k: v for k, v in data.items() if not k.startswith("_")}
+            clean_data = self._prepare_data_for_db(table_name, data)
 
             # INSERT OR REPLACE handles duplicates (UPSERT semantics)
             self.database.insert(table_name, clean_data)
@@ -261,8 +272,7 @@ class RealtimeUpdater:
             Result dictionary with operation details
         """
         try:
-            # Remove metadata fields
-            clean_data = {k: v for k, v in data.items() if not k.startswith("_")}
+            clean_data = self._prepare_data_for_db(table_name, data)
 
             # INSERT OR REPLACE handles the update (replaces existing row on PK match)
             self.database.insert(table_name, clean_data)
