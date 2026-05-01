@@ -1905,6 +1905,39 @@ class QuickstartRunner:
             db_config = {"path": str(self.db_path)}
             return SQLiteDatabase(db_config)
 
+    def _snapshot_table_counts(self, database) -> dict:
+        """全 NL_*/RT_*/TS_* テーブルの行数を取得（永続化検証用）.
+
+        Returns:
+            dict: {table_name(lower): row_count}
+        """
+        counts: dict = {}
+        try:
+            db_type = database.get_db_type()
+            if db_type == "postgresql":
+                rows = database.fetch_all(
+                    "SELECT table_name FROM information_schema.tables "
+                    "WHERE table_schema='public' "
+                    "AND (table_name LIKE 'nl_%' OR table_name LIKE 'rt_%' OR table_name LIKE 'ts_%')"
+                )
+                tables = [r["table_name"] for r in rows]
+            else:
+                rows = database.fetch_all(
+                    "SELECT name FROM sqlite_master WHERE type='table' "
+                    "AND (name LIKE 'NL_%' OR name LIKE 'RT_%' OR name LIKE 'TS_%')"
+                )
+                tables = [r["name"] for r in rows]
+            for t in tables:
+                try:
+                    r = database.fetch_all(f"SELECT COUNT(*) AS c FROM {t}")
+                    if r:
+                        counts[t.lower()] = r[0].get("c") or r[0].get("C") or 0
+                except Exception as e:
+                    logger.debug(f"count failed for {t}: {e}")
+        except Exception as e:
+            logger.warning(f"snapshot_table_counts failed: {e}")
+        return counts
+
     def run(self) -> int:
         """完全自動セットアップ実行"""
         if RICH_AVAILABLE:
@@ -2970,39 +3003,34 @@ class QuickstartRunner:
             return False
 
     def _run_create_tables(self) -> bool:
-        """テーブル作成"""
+        """テーブル作成
+
+        subprocess経由でCLIを呼ぶと、CLIはconfig.yamlを読み込むため
+        環境変数(POSTGRES_USER/PASSWORD)が未設定だと認証失敗する。
+        quickstartは設定をsettingsで持っているので、直接呼び出す。
+        """
         try:
-            result = subprocess.run(
-                [sys.executable, "-m", "src.cli.main", "create-tables"],
-                cwd=self.project_root,
-                capture_output=True,
-                text=True,
-                encoding='utf-8',
-                errors='replace',
-                timeout=60,
-            )
-            if result.returncode != 0:
-                self.errors.append(f"テーブル作成失敗: {result.stderr}")
-            return result.returncode == 0
+            from src.database.schema import create_all_tables
+            database = self._create_database()
+            with database:
+                create_all_tables(database)
+            return True
         except Exception as e:
             self.errors.append(f"テーブル作成エラー: {e}")
             return False
 
     def _run_create_indexes(self) -> bool:
-        """インデックス作成"""
+        """インデックス作成
+
+        テーブル作成と同様、settingsから直接DBに接続する。
+        """
         try:
-            result = subprocess.run(
-                [sys.executable, "-m", "src.cli.main", "create-indexes"],
-                cwd=self.project_root,
-                capture_output=True,
-                text=True,
-                encoding='utf-8',
-                errors='replace',
-                timeout=120,
-            )
-            if result.returncode != 0:
-                self.errors.append(f"インデックス作成失敗: {result.stderr}")
-            return result.returncode == 0
+            from src.database.indexes import IndexManager
+            database = self._create_database()
+            with database:
+                manager = IndexManager(database)
+                manager.create_all_indexes()
+            return True
         except Exception as e:
             self.errors.append(f"インデックス作成エラー: {e}")
             return False
@@ -3211,6 +3239,9 @@ class QuickstartRunner:
                     show_progress=True,
                 )
 
+                # 取得前のテーブル行数スナップショット（DBに実際に書き込まれたか検証用）
+                counts_before = self._snapshot_table_counts(database)
+
                 # データ取得実行
                 result = processor.process_date_range(
                     data_spec=spec,
@@ -3219,10 +3250,40 @@ class QuickstartRunner:
                     option=option,
                 )
 
+                # 取得後のテーブル行数スナップショット → デルタを計算
+                counts_after = self._snapshot_table_counts(database)
+                deltas = {
+                    t: counts_after.get(t, 0) - counts_before.get(t, 0)
+                    for t in set(counts_before) | set(counts_after)
+                }
+                non_zero_deltas = {t: d for t, d in deltas.items() if d != 0}
+                total_delta = sum(non_zero_deltas.values())
+
+                records_imported = result.get('records_imported', 0)
+                logger.info(
+                    "DB persistence check",
+                    spec=spec,
+                    records_imported=records_imported,
+                    db_row_delta=total_delta,
+                    per_table_delta=non_zero_deltas,
+                )
+                # 不一致の場合は警告（records_imported > 0 なのに実際にDBに増えていない）
+                if records_imported > 0 and total_delta == 0:
+                    logger.warning(
+                        "PERSISTENCE GAP: importer reported rows but DB unchanged",
+                        spec=spec,
+                        records_imported=records_imported,
+                    )
+                    self.warnings.append(
+                        f"{spec}: importer reported {records_imported} rows but DB row count unchanged"
+                    )
+
                 # 結果をdetailsに反映
                 details['records_fetched'] = result.get('records_fetched', 0)
                 details['records_parsed'] = result.get('records_parsed', 0)
-                details['records_saved'] = result.get('records_imported', 0)
+                details['records_saved'] = records_imported
+                details['db_row_delta'] = total_delta
+                details['per_table_delta'] = non_zero_deltas
 
                 # 成功判定
                 if result.get('records_fetched', 0) == 0:
