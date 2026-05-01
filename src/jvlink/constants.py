@@ -73,7 +73,7 @@ DATA_SPEC_O6 = "O6"  # 3連単オッズ
 
 # Real-time Data Specifications (JVRTOpen用)
 # 速報系データ: レース確定情報（結果が確定したら更新）
-# 時系列データ: 継続更新情報（レース中に随時更新）
+# オッズ系データ: レース単位キーで取得する速報オッズ/時系列オッズ
 
 # 速報系データ (0B1x系) - JRA-VAN公式仕様に基づく
 # 参照: JV-Data仕様書、EveryDB2マニュアル表5.1-1
@@ -86,35 +86,35 @@ JVRTOPEN_SPEED_REPORT_SPECS = {
     "0B15": "速報レース情報",          # RA, SE, HR: 出走馬名表～
     "0B16": "速報開催情報・変更",       # WE, AV, JC, TC, CC: 騎手変更等
     "0B17": "対戦型データマイニング予想", # TM: 対戦型データマイニング
-    "0B41": "騎手変更情報",            # RC: 騎手変更（個別）
-    "0B42": "調教師変更情報",          # TC: 調教師変更（個別）
     "0B51": "コース情報",              # CS: コース情報
 }
-# 注意: 0B30, 0B31 はオッズデータで、YYYYMMDDJJRR形式のkeyが必要（時系列データ）
-# 速報系のYYYYMMDD形式では-114エラーになるため、時系列専用として定義
+# 注意: 0B30〜0B36 はオッズデータで、YYYYMMDDJJRR形式のkeyが必要
+# 速報系の日付のみキーでは -114 になるため、レース単位キーで取得する。
 
-# 時系列データ (0B2x-0B3x系) - 継続更新オッズ・票数
-# 注意: 時系列データはYYYYMMDDJJRR形式のkeyが必要（レース単位）
+# 時系列/速報オッズデータ - 継続更新オッズ・票数
+# 注意: オッズ系データはYYYYMMDDJJRR形式のkeyが必要（レース単位）
 #
-# 公式情報 (https://developer.jra-van.jp/t/topic/112):
-#   - 公式提供期間: 過去1年間
-#   - 実際の遡及可能期間: 2003年10月4日まで（保証外）
-#   - JV-Link速報系データ: 1週間分のみ保存
-#   - 多くのユーザーは独自に蓄積している
+# 公式仕様（JV-Data仕様書 データ種別一覧）:
+#   - 0B30〜0B36 は「速報オッズ」。提供単位はレース毎、保存期間は1週間
+#   - 0B41 は「時系列オッズ（単複枠）」、0B42 は「時系列オッズ（馬連）」
+#   - 0B41/0B42 の保存期間は1年間
+#   - ワイド/馬単/三連複/三連単の長期時系列は公式仕様上 0B41/0B42 では取得できない
 JVRTOPEN_TIME_SERIES_SPECS = {
     "0B20": "票数情報",           # H1, H6: 票数
-    "0B30": "単勝オッズ",         # O1: 単勝
-    "0B31": "複勝・枠連オッズ",    # O1: 複勝+枠連
-    "0B32": "馬連オッズ",         # O2: 馬連  ※O3ではない
-    "0B33": "ワイドオッズ",       # O3: ワイド ※O4ではない
-    "0B34": "馬単オッズ",         # O4: 馬単  ※O5ではない
-    "0B35": "3連複オッズ",        # O5: 3連複 ※O6ではない
-    "0B36": "3連単オッズ",        # O6: 3連単
+    "0B30": "速報オッズ（全賭式）",  # O1-O6: 全賭式、保存期間1週間
+    "0B31": "速報オッズ（単複枠）",  # O1
+    "0B32": "速報オッズ（馬連）",    # O2
+    "0B33": "速報オッズ（ワイド）",  # O3
+    "0B34": "速報オッズ（馬単）",    # O4
+    "0B35": "速報オッズ（3連複）",   # O5
+    "0B36": "速報オッズ（3連単）",   # O6
+    "0B41": "時系列オッズ（単複枠）", # O1: 保存期間1年間
+    "0B42": "時系列オッズ（馬連）",   # O2: 保存期間1年間
 }
 
 # JVRTOpen keyパラメータ形式
 # 速報系(0B1x): YYYYMMDD形式（日付単位）
-# 時系列(0B2x-0B3x): YYYYMMDDJJRR形式（レース単位）
+# オッズ系(0B20, 0B30-0B36, 0B41-0B42): YYYYMMDDJJRR形式（レース単位）
 #   - JJ: 競馬場コード (01=札幌, 02=函館, 03=福島, 04=新潟, 05=東京, 06=中山, 07=中京, 08=京都, 09=阪神, 10=小倉)
 #   - RR: レース番号 (01-12)
 JVRTOPEN_KEY_FORMAT_DATE = "YYYYMMDD"      # 速報系用（8桁）
@@ -134,15 +134,11 @@ JYO_CODES = {
     "10": "小倉",
 }
 
-# 変更情報データ (0B4x系) - 騎手・調教師変更
-# Row D, E 両方で利用可能
-JVRTOPEN_CHANGE_SPECS = {
-    "0B41": "騎手変更情報",        # RC: 騎手変更
-    "0B42": "調教師変更情報",      # TC: 調教師変更
-}
+# 0B41/0B42 は旧コメントで変更情報として扱っていたが、公式仕様上は
+# 時系列オッズである。後方互換の名前だけ残し、中身は空にする。
+JVRTOPEN_CHANGE_SPECS = {}
 
 # 全JVRTOpenデータ種別 (後方互換性のため残す)
-# Note: 0B41, 0B42 は SPEED_REPORT に含まれているため、重複を避ける
 JVRTOPEN_DATA_SPECS = (
     list(JVRTOPEN_SPEED_REPORT_SPECS.keys()) +
     list(JVRTOPEN_TIME_SERIES_SPECS.keys())
@@ -152,7 +148,9 @@ JVRTOPEN_DATA_SPECS = (
 DATA_SPEC_RT_RACE = "0B12"     # 速報レース情報・払戻
 DATA_SPEC_RT_WEIGHT = "0B11"   # 速報馬体重 (WH)
 DATA_SPEC_RT_EVENT = "0B14"    # 速報開催情報・一括
-DATA_SPEC_RT_ODDS = "0B30"     # 時系列オッズ（単勝）
+DATA_SPEC_RT_ODDS = "0B30"     # 速報オッズ（全賭式、1週間）
+DATA_SPEC_RT_HISTORICAL_ODDS_O1 = "0B41"  # 時系列オッズ（単複枠、1年間）
+DATA_SPEC_RT_HISTORICAL_ODDS_O2 = "0B42"  # 時系列オッズ（馬連、1年間）
 DATA_SPEC_RT_VOTES = "0B20"    # 時系列票数
 
 
@@ -174,9 +172,9 @@ def is_valid_jvrtopen_spec(data_spec: str) -> bool:
 def generate_time_series_key(date: str, jyo_code: str, race_num: int) -> str:
     """Generate YYYYMMDDJJRR format key for time series data.
 
-    JVRTOpen odds time-series retrieval uses this 12-digit key. Kaiji/Nichiji
+    JVRTOpen odds retrieval uses this 12-digit key. Kaiji/Nichiji
     are useful for identifying a race in NL_RA but are not part of the key
-    passed to JVRTOpen for 0B30-0B36.
+    passed to JVRTOpen for 0B30-0B36 and 0B41-0B42.
 
     Args:
         date: Date in YYYYMMDD format (e.g., "20251130")

@@ -27,6 +27,8 @@ jltsql realtime odds-timeseries --from 20250425 --to 20260425 --db postgresql
 ## 注意
 
 - JRA-VAN の実データ取得は Windows + JV-Link 環境が必要です。
-- 時系列オッズは JRA-VAN 公式では過去1年分が提供範囲です。
-- KPS の締切オッズ予測では `quickstart_kps_postgres.bat` または `fetch_timeseries_postgres.bat` で PostgreSQL に `TS_O1〜TS_O6` を投入します。
+- `0B41/0B42` は公式1年保持の時系列オッズで、`TS_O1/TS_O2` に保存します。
+- 0B30〜0B36 は速報オッズで、公式仕様上の保存期間は 1週間です。
+- KPS の長期締切オッズ予測では `quickstart_kps_postgres.bat` または `fetch_timeseries_postgres.bat` で PostgreSQL に `TS_O1/TS_O2` を投入します。
+- ワイド・馬単・三連複・三連単の締切前オッズは、開催週に `odds-sokuho-timeseries` で継続蓄積してください。
 - 古い設計メモや未実装機能のドキュメントは削除しています。

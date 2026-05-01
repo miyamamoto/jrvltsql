@@ -66,12 +66,12 @@ class RealtimeUpdater:
         # 0B17: 対戦型データマイニング予想
         "TM": "RT_TM",  # データマイニング（対戦型）
 
-        # === 時系列データ (Time Series - 0B2x-0B3x) ===
+        # === オッズ/票数データ ===
         # 0B20: 票数情報
         "H1": "RT_H1",  # 票数（単勝・複勝等）
         "H6": "RT_H6",  # 票数（３連単）
 
-        # 0B30-0B36: オッズ情報
+        # 0B30-0B36: 速報オッズ、0B41/0B42: 公式1年保持の時系列オッズ
         "O1": "RT_O1",  # オッズ（単勝・複勝）
         "O2": "RT_O2",  # オッズ（枠連）
         "O3": "RT_O3",  # オッズ（馬連）
@@ -81,13 +81,11 @@ class RealtimeUpdater:
 
         # === その他 (成績データ) ===
         "JC": "RT_JC",  # 騎手成績
-        "TC": "RT_TC",  # 調教師成績/調教師変更情報 (0B42)
+        "TC": "RT_TC",  # 調教師成績/調教師変更情報
         "CC": "RT_CC",  # 競走馬成績
 
-        # === 変更情報データ (0B4x) ===
-        # 0B41: 騎手変更情報
+        # === 変更情報データ ===
         "RC": "RT_RC",  # 騎手変更情報 (Row D, E両方)
-        # 0B42: 調教師変更情報 - TCで対応済み
     }
 
     # 時系列オッズ専用テーブルマッピング (TS_O1-O6)
@@ -202,12 +200,9 @@ class RealtimeUpdater:
 
         inserted = 0
         for table_name, rows in grouped.items():
-            try:
-                self.database.insert_many(table_name, rows)
-                inserted += len(rows)
-            except Exception as e:
-                logger.error(f"Failed to batch insert records into {table_name}: {e}")
-                errors += len(rows)
+            inserted_rows, failed_rows = self._insert_rows_resilient(table_name, rows)
+            inserted += inserted_rows
+            errors += failed_rows
 
         return {
             "operation": "batch_insert",
@@ -216,6 +211,74 @@ class RealtimeUpdater:
             "errors": errors,
             "tables": sorted(grouped),
         }
+
+    def _insert_rows_resilient(
+        self,
+        table_name: str,
+        rows: list[Dict],
+        reconnected: bool = False,
+    ) -> tuple[int, int]:
+        """Insert rows, splitting batches on timeout/driver failures.
+
+        PostgreSQL can time out on very large TS_O* upserts. Dropping a whole
+        5,000-row odds batch silently corrupts later strategy evaluation, so
+        recursively split failed batches and only count irreducible single-row
+        failures as errors.
+        """
+        if not rows:
+            return 0, 0
+
+        try:
+            self.database.insert_many(table_name, rows)
+            return len(rows), 0
+        except Exception as exc:
+            if not reconnected and self._reconnect_database_after_insert_error(exc):
+                return self._insert_rows_resilient(
+                    table_name,
+                    rows,
+                    reconnected=True,
+                )
+
+            if len(rows) == 1:
+                logger.error(f"Failed to insert row into {table_name}: {exc}")
+                return 0, 1
+
+            midpoint = len(rows) // 2
+            logger.warning(
+                f"Batch insert failed for {table_name}; retrying split batches "
+                f"({len(rows)} -> {midpoint}+{len(rows) - midpoint}): {exc}"
+            )
+            left_inserted, left_failed = self._insert_rows_resilient(table_name, rows[:midpoint])
+            right_inserted, right_failed = self._insert_rows_resilient(table_name, rows[midpoint:])
+            return left_inserted + right_inserted, left_failed + right_failed
+
+    def _reconnect_database_after_insert_error(self, exc: Exception) -> bool:
+        """Reconnect once after driver/network failures before retrying rows."""
+        message = str(exc).lower()
+        connection_error_markers = (
+            "not connected",
+            "timed out",
+            "timeout",
+            "connection",
+            "socket",
+            "closed",
+        )
+        if not any(marker in message for marker in connection_error_markers):
+            return False
+
+        reconnect = getattr(self.database, "_reconnect", None)
+        if reconnect is None:
+            reconnect = getattr(self.database, "connect", None)
+        if reconnect is None:
+            return False
+
+        try:
+            logger.warning(f"Database insert failed with connection error; reconnecting: {exc}")
+            reconnect()
+            return True
+        except Exception as reconnect_exc:
+            logger.error(f"Database reconnect failed after insert error: {reconnect_exc}")
+            return False
 
     def _process_single_record(self, parsed_data: Dict, timeseries: bool = False) -> Optional[Dict]:
         """Process a single parsed record dict."""
@@ -368,7 +431,7 @@ class RealtimeUpdater:
             "RT_H1": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum"],
             "RT_H6": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "Kumi"],
 
-            # Change data - 騎手変更情報 (0B41)
+            # Change data - 騎手変更情報
             "RT_RC": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "Umaban"],
 
             # 時系列オッズ (HassoTimeを含むPRIMARY KEY)

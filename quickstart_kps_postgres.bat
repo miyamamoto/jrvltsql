@@ -40,7 +40,7 @@ echo ============================================================
 echo.
 echo PostgreSQL: %POSTGRES_USER%@%POSTGRES_HOST%:%POSTGRES_PORT%/%POSTGRES_DATABASE%
 echo Date range: %FROM_DATE% - %TO_DATE%
-echo Includes:   RACE data + TS_O1-TS_O6 time-series odds
+echo Includes:   RACE data + official TS_O1/TS_O2 time-series odds
 echo.
 
 set "SCRIPT_EXIT_CODE=0"

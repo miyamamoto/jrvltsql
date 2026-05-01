@@ -47,13 +47,15 @@ jltsql realtime specs
 |------|------|
 | 0B12 | レース情報・払戻 |
 | 0B15 | レース情報 |
-| 0B30 | 単勝時系列オッズ |
-| 0B31 | 複勝・枠連時系列オッズ |
-| 0B32 | 馬連時系列オッズ |
-| 0B33 | ワイド時系列オッズ |
-| 0B34 | 馬単時系列オッズ |
-| 0B35 | 三連複時系列オッズ |
-| 0B36 | 三連単時系列オッズ |
+| 0B30 | 速報オッズ（全賭式、1週間） |
+| 0B31 | 速報オッズ（単複枠、1週間） |
+| 0B32 | 速報オッズ（馬連、1週間） |
+| 0B33 | 速報オッズ（ワイド、1週間） |
+| 0B34 | 速報オッズ（馬単、1週間） |
+| 0B35 | 速報オッズ（三連複、1週間） |
+| 0B36 | 速報オッズ（三連単、1週間） |
+| 0B41 | 時系列オッズ（単複枠、1年） |
+| 0B42 | 時系列オッズ（馬連、1年） |
 
 ## 過去時系列オッズ
 
@@ -63,20 +65,24 @@ KPS 向けには `odds-timeseries` を使います。
 jltsql realtime odds-timeseries --from 20250425 --to 20260425 --db postgresql
 ```
 
-- JRA-VAN 公式提供範囲は過去1年分です。
+- `odds-timeseries` は `0B41/0B42` を取得し、`TS_O1/TS_O2` に保存します。
+- `0B41/0B42` は公式仕様上の保存期間が 1年間です。
+- 0B30〜0B36 は速報オッズで、公式仕様上の保存期間は 1週間です。
 - コマンドは `NL_RA` に登録済みのレースを対象にし、JVRTOpen に `YYYYMMDDJJRR` 形式のキーを渡します。
-- 保存先は `TS_O1` から `TS_O6` です。
-- KPS の締切オッズ予測では `odds-timeseries` を使い、0B30 から O1〜O6 スナップショットを一括取得します。
+- `0B30` は全賭式を返すため、JVRead の各レコード先頭 `O1`〜`O6` を見て `TS_O1`〜`TS_O6` へ振り分けます。ただし過去取得は1週間までです。
+- 特定時刻を指定して取得することはできません。全時系列を取得し、保存後に `HassoTime` で必要時刻を抽出します。
+- ワイド・馬単・三連複・三連単の長期締切前オッズ評価に使う場合は、開催週に `odds-sokuho-timeseries` で継続蓄積してください。
 
 単一 spec を調査する場合だけ `timeseries --spec` を使います。
 
 ```bat
-jltsql realtime timeseries --spec 0B30 --from 20250425 --to 20260425 --db-path data/keiba.db
+jltsql realtime timeseries --spec 0B41,0B42 --from 20250425 --to 20260425 --db-path data/keiba.db
+jltsql realtime odds-sokuho-timeseries --from 20260418 --to 20260419 --db postgresql
 ```
 
 ## KPS quickstart
 
-PostgreSQL に RACE と TS_O1〜TS_O6 を投入します。
+PostgreSQL に RACE と公式1年保持の TS_O1/TS_O2 を投入します。
 
 ```bat
 quickstart_kps_postgres.bat 20250426 20260412

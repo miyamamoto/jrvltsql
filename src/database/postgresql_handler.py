@@ -630,6 +630,34 @@ class PostgreSQLDatabase(BaseDatabase):
             for column, value in data.items()
         }
 
+    @staticmethod
+    def _dedupe_rows_by_primary_key(
+        rows: List[Dict[str, Any]],
+        pk_columns: List[str],
+    ) -> List[Dict[str, Any]]:
+        """Deduplicate one VALUES batch by primary key before PostgreSQL upsert.
+
+        PostgreSQL rejects INSERT ... ON CONFLICT DO UPDATE when two rows in the
+        same statement target the same conflict key. Keeping the last row matches
+        sequential upsert semantics for odds snapshots.
+        """
+        if not rows or not pk_columns:
+            return rows
+
+        column_by_lower = {column.lower(): column for column in rows[0].keys()}
+        resolved_pk_columns = [column_by_lower.get(column.lower()) for column in pk_columns]
+        if any(column is None for column in resolved_pk_columns):
+            return rows
+
+        deduped: Dict[tuple, Dict[str, Any]] = {}
+        order: List[tuple] = []
+        for row in rows:
+            key = tuple(row.get(column) for column in resolved_pk_columns)
+            if key not in deduped:
+                order.append(key)
+            deduped[key] = row
+        return [deduped[key] for key in order]
+
     def insert(self, table_name: str, data: Dict[str, Any], use_replace: bool = True) -> int:
         """Insert single row into table.
 
@@ -652,7 +680,7 @@ class PostgreSQLDatabase(BaseDatabase):
         data = self._normalize_insert_data(table_name, data)
         columns = list(data.keys())
         values = list(data.values())
-        row_placeholders = "(" + ", ".join(["?" for _ in columns]) + ")"
+        placeholders = ", ".join(["?" for _ in columns])
         # Quote column names (lowercase for PostgreSQL)
         quoted_columns = [self._quote_identifier(col) for col in columns]
 
@@ -712,6 +740,7 @@ class PostgreSQLDatabase(BaseDatabase):
         if use_replace:
             # Get primary key columns for this table
             pk_columns = self._get_primary_key_columns(table_name)
+            data_list = self._dedupe_rows_by_primary_key(data_list, pk_columns)
 
             if pk_columns:
                 # Build ON CONFLICT DO UPDATE clause

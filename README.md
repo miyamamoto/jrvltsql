@@ -43,7 +43,7 @@ KPS 運用（PostgreSQL + 時系列オッズ）:
 quickstart_kps_postgres.bat 20250426 20260412
 ```
 
-`quickstart_kps_postgres.bat` は、KPS が必要とする `RACE` データと `TS_O1〜TS_O6` 時系列オッズを PostgreSQL に投入します。
+`quickstart_kps_postgres.bat` は、KPS が必要とする `RACE` データと、公式1年保持の `TS_O1/TS_O2` 時系列オッズを PostgreSQL に投入します。
 
 ---
 
@@ -80,7 +80,7 @@ jltsql cache sync --upload             # ローカル → S3 同期
 
 ### KPS向け: PostgreSQL投入
 
-KPS の締切オッズ予測では `TS_O1〜TS_O6` を PostgreSQL に入れてから DuckDB へ取り込みます。初回または期間を指定してまとめて投入する場合:
+KPS の締切オッズ予測では、公式1年保持の `TS_O1/TS_O2` を PostgreSQL に入れてから DuckDB へ取り込みます。初回または期間を指定してまとめて投入する場合:
 
 ```bat
 quickstart_kps_postgres.bat 20250426 20260412
@@ -104,7 +104,7 @@ fetch_timeseries_postgres.bat
 jltsql realtime odds-timeseries --from <FROM> --to <TO> --db postgresql
 ```
 
-`odds-timeseries` は `0B30` で `O1〜O6` スナップショットを一括取得し、`TS_O1〜TS_O6` に保存します。従来の `realtime timeseries --spec ...` も残していますが、KPS では `odds-timeseries` を使います。
+`odds-timeseries` は `0B41/0B42` で公式1年保持の単複枠・馬連時系列を取得し、`TS_O1/TS_O2` に保存します。`0B30` の全賭式速報オッズは1週間保持なので、開催週に蓄積する場合だけ `realtime odds-sokuho-timeseries` を使います。
 
 ### fetch オプション
 

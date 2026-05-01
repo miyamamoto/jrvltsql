@@ -56,7 +56,7 @@ class SchemaParserValidator:
         # So we exclude RT_RC from validation since it uses a different schema by design
         rt_types = ['RA', 'SE', 'HR', 'O1', 'O2', 'O3', 'O4', 'O5', 'O6',
                     'H1', 'H6', 'WE', 'WH', 'JC', 'CC', 'TC', 'TM', 'DM', 'AV']
-        # RT_RC excluded: uses different format (騎手変更情報 via JVRTOpen 0B41)
+        # RT_RC excluded: uses different format (騎手変更情報)
         for record_type in rt_types:
             rt_table_name = f"RT_{record_type}"
             rt_record_type = f"RT_{record_type}"
@@ -271,7 +271,7 @@ class SchemaParserValidator:
         all_types_to_check = set(self.all_record_types)
 
         # RT_タイプも追加
-        # Note: RT_RC excluded - uses different format (騎手変更情報 via JVRTOpen 0B41)
+        # Note: RT_RC excluded - uses different format (騎手変更情報)
         rt_types = ['RA', 'SE', 'HR', 'O1', 'O2', 'O3', 'O4', 'O5', 'O6',
                     'H1', 'H6', 'WE', 'WH', 'JC', 'CC', 'TC', 'TM', 'DM', 'AV']
         for rt_type in rt_types:

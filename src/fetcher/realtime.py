@@ -343,19 +343,22 @@ class RealtimeFetcher(BaseFetcher):
         Key format: YYYYMMDD + JyoCD + RaceNum (12 digits)
         Example: 202511300511
 
-        公式情報:
-        - 提供期間: 過去1年間
-        - データ提供開始: 2003年10月4日以降（保証外）
+        公式仕様:
+        - 0B30〜0B36 は速報オッズで、提供単位はレース毎、保存期間は1週間
+        - 0B41/0B42 は時系列オッズで、単複枠/馬連のみ、保存期間は1年間
+        - ワイド以降の長期時系列は、開催週に0B30をTS_O3〜TS_O6へ蓄積する
 
         Args:
             data_spec: Time series data spec code
-                      - 0B30: 単勝オッズ (O1)
-                      - 0B31: 複勝・枠連オッズ (O1)
-                      - 0B32: 馬連オッズ (O2)
-                      - 0B33: ワイドオッズ (O3)
-                      - 0B34: 馬単オッズ (O4)
-                      - 0B35: 3連複オッズ (O5)
-                      - 0B36: 3連単オッズ (O6)
+                      - 0B30: 速報オッズ全賭式 (O1-O6, 1週間)
+                      - 0B31: 速報オッズ単複枠 (O1, 1週間)
+                      - 0B32: 速報オッズ馬連 (O2, 1週間)
+                      - 0B33: 速報オッズワイド (O3, 1週間)
+                      - 0B34: 速報オッズ馬単 (O4, 1週間)
+                      - 0B35: 速報オッズ3連複 (O5, 1週間)
+                      - 0B36: 速報オッズ3連単 (O6, 1週間)
+                      - 0B41: 時系列オッズ単複枠 (O1, 1年間)
+                      - 0B42: 時系列オッズ馬連 (O2, 1年間)
             db_path: Path to SQLite database with NL_RA table.
                      Ignored when pg_config is supplied.
             from_date: Start date in YYYYMMDD format (optional)
@@ -446,6 +449,17 @@ class RealtimeFetcher(BaseFetcher):
                 params.extend([year, year, monthday])
 
         if pg_config:
+            query += (
+                " AND LPAD(CAST(jyocd AS TEXT), 2, '0') "
+                "IN ('01','02','03','04','05','06','07','08','09','10')"
+            )
+        else:
+            query += (
+                " AND printf('%02d', CAST(JyoCD AS INTEGER)) "
+                "IN ('01','02','03','04','05','06','07','08','09','10')"
+            )
+
+        if pg_config:
             query += " ORDER BY year, monthday, jyocd, racenum"
         else:
             query += " ORDER BY Year, MonthDay, JyoCD, RaceNum"
@@ -465,8 +479,9 @@ class RealtimeFetcher(BaseFetcher):
                 race_rows = self._fetch_time_series_race_rows_from_postgres(query, params, pg_config)
             else:
                 import sqlite3
+                from contextlib import closing
 
-                with sqlite3.connect(db_path) as conn:
+                with closing(sqlite3.connect(db_path)) as conn:
                     cursor = conn.cursor()
                     cursor.execute(query, params)
                     race_rows = cursor.fetchall()
@@ -673,11 +688,10 @@ class RealtimeFetcher(BaseFetcher):
         support date range queries, so this method loops through individual
         race keys (YYYYMMDDJJRR format).
 
-        公式情報 (https://developer.jra-van.jp/t/topic/112):
-        - 公式提供期間: 過去1年間
-        - 実際の遡及可能期間: 2003年10月4日まで（保証外）
-        - JV-Link速報系データ: 1週間分のみ保存
-        - 多くのユーザーは独自に蓄積している
+        公式仕様:
+        - 0B30〜0B36 は速報オッズで、提供単位はレース毎、保存期間は1週間
+        - 0B41/0B42 は時系列オッズで、単複枠/馬連のみ、保存期間は1年間
+        - ワイド以降の長期時系列は、開催週に0B30をTS_O3〜TS_O6へ蓄積する
 
         時系列オッズの蓄積について:
         - TS_O1-O6テーブル（HassoTimeをPKに含む）を使用して蓄積可能
@@ -687,13 +701,15 @@ class RealtimeFetcher(BaseFetcher):
         Args:
             data_spec: Time series data spec code
                       - 0B20: 票数情報 (H1, H6)
-                      - 0B30: 単勝オッズ (O1)
-                      - 0B31: 複勝・枠連オッズ (O1)
-                      - 0B32: 馬連オッズ (O2)
-                      - 0B33: ワイドオッズ (O3)
-                      - 0B34: 馬単オッズ (O4)
-                      - 0B35: 3連複オッズ (O5)
-                      - 0B36: 3連単オッズ (O6)
+                      - 0B30: 速報オッズ全賭式 (O1-O6, 1週間)
+                      - 0B31: 速報オッズ単複枠 (O1, 1週間)
+                      - 0B32: 速報オッズ馬連 (O2, 1週間)
+                      - 0B33: 速報オッズワイド (O3, 1週間)
+                      - 0B34: 速報オッズ馬単 (O4, 1週間)
+                      - 0B35: 速報オッズ3連複 (O5, 1週間)
+                      - 0B36: 速報オッズ3連単 (O6, 1週間)
+                      - 0B41: 時系列オッズ単複枠 (O1, 1年間)
+                      - 0B42: 時系列オッズ馬連 (O2, 1年間)
             from_date: Start date in YYYYMMDD format
             to_date: End date in YYYYMMDD format
             jyo_codes: List of track codes to fetch. If None, fetches all 10 tracks.
@@ -711,7 +727,7 @@ class RealtimeFetcher(BaseFetcher):
             - JVRTOpen returns -1 for "no data" (race not held), which is normal
             - Data availability depends on JRA-VAN server, not local setup
             - For best results, use dates with known race events
-            - 提供期間外（1年以上前）のデータは取得できない可能性があります
+            - 保存期間外の時系列データは取得できない可能性があります
 
         Examples:
             >>> # Fetch Win odds for all tracks on a specific day

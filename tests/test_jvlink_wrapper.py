@@ -192,13 +192,13 @@ class TestJVLinkWrapper:
 
         wrapper = JVLinkWrapper(sid="TEST")
 
-        # Test 0B41 (騎手変更情報)
+        # Test 0B41 (時系列オッズ 単複枠)
         mock_com.JVRTOpen.return_value = (0, 5)
         result, count = wrapper.jv_rt_open("0B41")
         assert result == JV_RT_SUCCESS
         assert count == 5
 
-        # Test 0B42 (調教師変更情報)
+        # Test 0B42 (時系列オッズ 馬連)
         mock_com.JVRTOpen.return_value = (0, 3)
         result, count = wrapper.jv_rt_open("0B42")
         assert result == JV_RT_SUCCESS

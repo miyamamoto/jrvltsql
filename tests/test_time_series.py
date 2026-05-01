@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """時系列データ取得テスト
 
-時系列データ（0B20, 0B30-0B36）のキー生成とfetch_time_series()をテストします。
+時系列データ（0B20, 0B30-0B36, 0B41-0B42）のキー生成とfetch_time_series()をテストします。
 """
 
 import sys
@@ -58,6 +58,8 @@ def test_key_generation():
     print(f"\nJVRTOPEN_TIME_SERIES_SPECS: {list(JVRTOPEN_TIME_SERIES_SPECS.keys())}")
     assert is_time_series_spec("0B30") == True
     assert is_time_series_spec("0B36") == True
+    assert is_time_series_spec("0B41") == True
+    assert is_time_series_spec("0B42") == True
     assert is_time_series_spec("0B12") == False
     print("  -> OK: is_time_series_spec() が正しく判定")
 
@@ -70,6 +72,7 @@ def test_key_generation():
 
 def test_fetch_time_series_batch_from_db_uses_simple_key():
     """DB登録済みレースからの時系列取得が12桁キーを使うことを確認する。"""
+    from contextlib import closing
     import sqlite3
     import tempfile
     import types
@@ -79,7 +82,7 @@ def test_fetch_time_series_batch_from_db_uses_simple_key():
 
     with tempfile.TemporaryDirectory(dir="/tmp") as temp_dir:
         db_path = Path(temp_dir) / "keiba.db"
-        with sqlite3.connect(db_path) as conn:
+        with closing(sqlite3.connect(db_path)) as conn:
             conn.execute(
                 """
                 CREATE TABLE NL_RA (
@@ -93,6 +96,7 @@ def test_fetch_time_series_batch_from_db_uses_simple_key():
                 """
             )
             conn.execute("INSERT INTO NL_RA VALUES (2025, 1201, '05', 5, 8, 11)")
+            conn.commit()
 
         class FakeJVLink:
             def __init__(self):
@@ -133,6 +137,7 @@ def test_fetch_time_series_batch_from_db_uses_simple_key():
 
 def test_fetch_time_series_batch_from_db_closes_no_data_stream():
     """JVRTOpenがno-dataを返しても次キー前にJVCloseする。"""
+    from contextlib import closing
     import sqlite3
     import tempfile
     from pathlib import Path
@@ -141,7 +146,7 @@ def test_fetch_time_series_batch_from_db_closes_no_data_stream():
 
     with tempfile.TemporaryDirectory(dir="/tmp") as temp_dir:
         db_path = Path(temp_dir) / "keiba.db"
-        with sqlite3.connect(db_path) as conn:
+        with closing(sqlite3.connect(db_path)) as conn:
             conn.execute(
                 """
                 CREATE TABLE NL_RA (
@@ -156,6 +161,7 @@ def test_fetch_time_series_batch_from_db_closes_no_data_stream():
             )
             conn.execute("INSERT INTO NL_RA VALUES (2025, 1201, '05', 5, 8, 11)")
 
+            conn.commit()
         class FakeJVLink:
             def __init__(self):
                 self.opened = []
@@ -237,7 +243,7 @@ def test_fetch_time_series_batch_from_postgres_uses_pg_race_keys(monkeypatch):
 
     records = list(
         fetcher.fetch_time_series_batch_from_db(
-            data_spec="0B32",
+            data_spec="0B42",
             db_path="ignored.sqlite",
             from_date="20251201",
             to_date="20251201",
@@ -247,7 +253,7 @@ def test_fetch_time_series_batch_from_postgres_uses_pg_race_keys(monkeypatch):
 
     assert "FROM nl_ra" in captured["query"]
     assert captured["params"] == [2025, 2025, 1201, 2025, 2025, 1201]
-    assert fetcher.jvlink.opened == [("0B32", "202512010511")]
+    assert fetcher.jvlink.opened == [("0B42", "202512010511")]
     assert records == [{"RecordSpec": "O2", "_raw": b"O2"}]
 
 
