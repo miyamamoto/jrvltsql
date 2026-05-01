@@ -89,7 +89,11 @@ def migrate_table_if_needed(db: BaseDatabase, table_name: str, schema_sql: str) 
         existing_info = db.fetch_all(f'PRAGMA table_info("{table_name}")')
     existing_columns = {row['name'] for row in existing_info}
 
-    if existing_columns == expected_columns:
+    # PostgreSQL lowercases all unquoted identifiers, so compare case-insensitively.
+    # Without this, every PG run sees a "mismatch" between schema.py's CamelCase
+    # column names and information_schema's lowercased names, triggering a DROP+
+    # recreate on every call to create_all_tables() — which silently wipes data.
+    if {c.lower() for c in existing_columns} == {c.lower() for c in expected_columns}:
         return False
 
     # Schema mismatch detected
