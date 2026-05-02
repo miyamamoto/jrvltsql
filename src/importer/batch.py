@@ -75,6 +75,14 @@ class BatchProcessor:
             show_progress=show_progress,
         )
 
+    def __del__(self):
+        """Release JV-Link COM/bridge resources when processor is garbage-collected."""
+        try:
+            if hasattr(self.fetcher, 'jvlink') and hasattr(self.fetcher.jvlink, 'cleanup'):
+                self.fetcher.jvlink.cleanup()
+        except Exception:
+            pass
+
     def process_date_range(
         self,
         data_spec: str,

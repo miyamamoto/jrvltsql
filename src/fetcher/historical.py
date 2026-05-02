@@ -225,19 +225,18 @@ class HistoricalFetcher(BaseFetcher):
             raise FetcherError(f"Historical fetch failed: {e}")
 
         finally:
-            # Close stream
+            # Close stream (JVClose) — releases the current open session so
+            # the next jv_init()/jv_open() call in a subsequent chunk works.
             try:
                 self.jvlink.jv_close()
                 logger.info("Data stream closed")
             except Exception as e:
                 logger.warning(f"Failed to close stream: {e}")
 
-            # Explicitly cleanup COM resources
-            if hasattr(self.jvlink, 'cleanup'):
-                try:
-                    self.jvlink.cleanup()
-                except Exception:
-                    pass
+            # Do NOT call cleanup() here: cleanup() destroys the COM object
+            # (self._jvlink = None + CoUninitialize), so subsequent chunks
+            # would hit 'NoneType' object has no attribute 'JVInit'.
+            # cleanup() is called by BatchProcessor.__del__ / explicit close.
 
             # Stop progress display
             if self.progress_display:
