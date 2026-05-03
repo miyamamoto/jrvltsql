@@ -23,7 +23,7 @@ NAR / 地方競馬はこのリポジトリの対象外です。
 | `src/database/` | SQLite / PostgreSQL ハンドラ、スキーマ、テーブル対応を管理します。 |
 | `src/realtime/` | JVRTOpen 速報・時系列データの保存処理を担当します。 |
 | `scripts/quickstart.py` | 対話・非対話の初期セットアップと更新処理をまとめます。 |
-| `quickstart.bat` | Windows 向けの通常 quickstart です。必要に応じて PostgreSQL 時系列オッズ導線へ進めます。 |
+| `quickstart.bat` | Windows 向けの通常 quickstart です。既定は SQLite で、`--include-timeseries` により SQLite に公式時系列オッズも保存できます。 |
 | `quickstart_postgres_timeseries.bat` | PostgreSQL へ RACE と公式時系列オッズを投入し、最後にタスク登録を確認します。 |
 | `daily_sync.bat` | Windows タスクスケジューラから実行する日次同期です。 |
 | `install_tasks.ps1` | `daily_sync.bat` の Windows タスク登録・更新を行います。 |

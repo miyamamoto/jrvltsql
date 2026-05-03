@@ -14,7 +14,8 @@
 ### Changed
 
 - 公開ドキュメントを日本語表記へ統一
-- `quickstart.bat` から PostgreSQL 時系列オッズのクイックスタートを続けて実行できる導線を追加
+- `quickstart.bat` は SQLite 既定の通常セットアップに戻し、PostgreSQL 専用の `quickstart_postgres_timeseries.bat` 呼び出しを削除
+- SQLite でも `quickstart.bat --include-timeseries` または `jltsql realtime odds-timeseries --db sqlite` で公式 `TS_O1/TS_O2` を保存できることを明記
 - `quickstart_postgres_timeseries.bat` 完了時に Windows タスクスケジューラ登録を確認するよう変更
 - `install_tasks.ps1` で `daily_sync.bat` の DB 種別・日付窓・PostgreSQL 環境変数永続化を指定可能に変更
 

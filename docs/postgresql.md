@@ -32,8 +32,9 @@ quickstart_postgres_timeseries.bat 20250426 20260412
 ```
 
 このコマンドは、RACE データと公式1年保持の `TS_O1/TS_O2` 時系列オッズを
-PostgreSQL に投入します。通常の `quickstart.bat` からも、セットアップ完了後に
-この PostgreSQL 時系列オッズ投入へ進めます。
+PostgreSQL に投入します。通常の `quickstart.bat` からは呼びません。
+SQLite と PostgreSQL の導線を分けるため、PostgreSQL 運用を始める場合は
+この batch を直接実行してください。
 
 `quickstart_postgres_timeseries.bat` の最後では、`daily_sync.bat` を
 Windows タスクスケジューラへ登録するか確認します。PostgreSQL 接続情報を
