@@ -23,6 +23,7 @@ nav:
   - Home: index.md
   - Architecture: architecture.md
   - CLI: CLI.md
+  - Supported data: data_support.md
   - PostgreSQL: postgresql.md
   - Time-series odds: timeseries_odds.md
   - Scripts: scripts.md

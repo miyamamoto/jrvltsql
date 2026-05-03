@@ -135,9 +135,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File install_tasks.ps1 -DbType po
 | option | 内容 |
 |--------|------|
 | 1 | 通常取得（差分） |
-| 2 | セットアップ（簡易） |
-| 3 | セットアップ（標準） |
-| 4 | 分割セットアップ（全履歴、1954〜現在） |
+| 2 | 今週データ |
+| 3 | セットアップ |
+| 4 | 分割セットアップ |
 
 ---
 
@@ -145,6 +145,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File install_tasks.ps1 -DbType po
 
 - [Architecture](docs/architecture.md)
 - [CLI](docs/CLI.md)
+- [Supported data](docs/data_support.md)
 - [PostgreSQL](docs/postgresql.md)
 - [Time-series odds](docs/timeseries_odds.md)
 - [Scripts](docs/scripts.md)

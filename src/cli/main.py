@@ -1343,11 +1343,12 @@ def start(ctx, specs, db, batch_size, no_create_tables):
 
     \b
     Common data specs:
-      0B12 - Race results (default)
-      0B15 - Payouts
-      0B31 - Odds
-      0B33 - Horse numbers
-      0B35 - Weather/track conditions
+      0B11 - Horse weight
+      0B12 - Race results and payouts after result confirmation (default)
+      0B14 - Weather, track condition, scratch, jockey/time/course changes
+      0B15 - Race-card/race updates from entry-list stage onward
+      0B30 - All-bet realtime odds, race-key based, one-week retention
+      0B41/0B42 - Official one-year odds time-series; prefer the timeseries command
 
     \b
     Examples:
