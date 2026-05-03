@@ -1771,9 +1771,8 @@ def timeseries(ctx, spec, from_date, to_date, db, db_path):
 def odds_timeseries(ctx, from_date, to_date, db, db_path):
     """Fetch official one-year JRA-VAN historical odds time-series.
 
-    Recommended for KPS long-horizon closing-odds modeling. Official historical
-    time-series odds are available for single/place/bracket (0B41 -> TS_O1)
-    and quinella (0B42 -> TS_O2).
+    Official historical time-series odds are available for single/place/bracket
+    (0B41 -> TS_O1) and quinella (0B42 -> TS_O2).
     """
     ctx.invoke(
         timeseries,

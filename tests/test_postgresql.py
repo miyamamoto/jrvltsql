@@ -54,6 +54,27 @@ def test_normalize_blank_numeric_insert_values():
     assert odds_data["Vote"] == 100
 
 
+def test_dedupe_rows_by_primary_key_keeps_last_row():
+    """PostgreSQL multi-row upsert must not contain duplicate conflict keys."""
+    from src.database.postgresql_handler import PostgreSQLDatabase
+
+    rows = [
+        {"Year": 2026, "MonthDay": 426, "JyoCD": "03", "RaceNum": 1, "Kumi": "01-02", "HassoTime": "1000", "Odds": 10.0},
+        {"Year": 2026, "MonthDay": 426, "JyoCD": "03", "RaceNum": 1, "Kumi": "01-02", "HassoTime": "1000", "Odds": 10.5},
+        {"Year": 2026, "MonthDay": 426, "JyoCD": "03", "RaceNum": 1, "Kumi": "01-03", "HassoTime": "1000", "Odds": 20.0},
+    ]
+
+    deduped = PostgreSQLDatabase._dedupe_rows_by_primary_key(
+        rows,
+        ["year", "monthday", "jyocd", "racenum", "kumi", "hassotime"],
+    )
+
+    assert len(deduped) == 2
+    assert deduped[0]["Kumi"] == "01-02"
+    assert deduped[0]["Odds"] == 10.5
+    assert deduped[1]["Kumi"] == "01-03"
+
+
 def print_installation_guide():
     """PostgreSQLのインストールガイドを表示"""
     print("""

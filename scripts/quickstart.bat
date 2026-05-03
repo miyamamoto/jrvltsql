@@ -9,11 +9,11 @@ echo.
 
 cd /d "%~dp0.."
 
-REM Try 64-bit Python first, fall back to hardcoded path
+REM Try Python from PATH first, then the py launcher.
 set PYTHON=python
 where python >nul 2>&1
 if errorlevel 1 (
-    set PYTHON=C:\Users\mitsu\AppData\Local\Programs\Python\Python313\python.exe
+    set PYTHON=py
 )
 
 %PYTHON% --version >nul 2>&1

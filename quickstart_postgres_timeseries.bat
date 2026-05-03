@@ -2,7 +2,7 @@
 setlocal enabledelayedexpansion
 chcp 65001 >nul 2>&1
 set PYTHONIOENCODING=utf-8
-title JLTSQL KPS PostgreSQL Quickstart
+title JLTSQL PostgreSQL Time-Series Quickstart
 
 cd /d "%~dp0"
 
@@ -26,16 +26,14 @@ if "%POSTGRES_DATABASE%"=="" (
     )
 )
 if "%POSTGRES_USER%"=="" set "POSTGRES_USER=ingestion_writer"
-if "%POSTGRES_PASSWORD%"=="" set "POSTGRES_PASSWORD=%KEIBA_INGESTION_PASSWORD%"
-
 if "%POSTGRES_PASSWORD%"=="" (
-    echo [ERROR] POSTGRES_PASSWORD or KEIBA_INGESTION_PASSWORD is required.
+    echo [ERROR] POSTGRES_PASSWORD is required.
     echo Set it before running this batch.
     exit /b 1
 )
 
 echo ============================================================
-echo   JLTSQL KPS PostgreSQL Quickstart
+echo   JLTSQL PostgreSQL Time-Series Quickstart
 echo ============================================================
 echo.
 echo PostgreSQL: %POSTGRES_USER%@%POSTGRES_HOST%:%POSTGRES_PORT%/%POSTGRES_DATABASE%
@@ -84,12 +82,9 @@ exit /b 1
 :check_result
 echo.
 if not "%SCRIPT_EXIT_CODE%"=="0" (
-    echo [ERROR] KPS PostgreSQL quickstart failed. Exit code: %SCRIPT_EXIT_CODE%
+    echo [ERROR] PostgreSQL time-series quickstart failed. Exit code: %SCRIPT_EXIT_CODE%
     exit /b %SCRIPT_EXIT_CODE%
 )
 
-echo [OK] KPS PostgreSQL quickstart completed.
-echo.
-echo Next on KPS host:
-echo   bash scripts/run_closing_odds_experiments.sh %FROM_DATE% %TO_DATE%
+echo [OK] PostgreSQL time-series quickstart completed.
 exit /b 0

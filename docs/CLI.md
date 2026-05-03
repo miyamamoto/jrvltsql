@@ -59,7 +59,7 @@ jltsql realtime specs
 
 ## 過去時系列オッズ
 
-KPS 向けには `odds-timeseries` を使います。
+公式1年保持の単複枠・馬連時系列オッズは `odds-timeseries` で取得します。
 
 ```bat
 jltsql realtime odds-timeseries --from 20250425 --to 20260425 --db postgresql
@@ -80,12 +80,12 @@ jltsql realtime timeseries --spec 0B41,0B42 --from 20250425 --to 20260425 --db-p
 jltsql realtime odds-sokuho-timeseries --from 20260418 --to 20260419 --db postgresql
 ```
 
-## KPS quickstart
+## PostgreSQL time-series quickstart
 
 PostgreSQL に RACE と公式1年保持の TS_O1/TS_O2 を投入します。
 
 ```bat
-quickstart_kps_postgres.bat 20250426 20260412
+quickstart_postgres_timeseries.bat 20250426 20260412
 ```
 
 既に RACE / NL_RA がある場合は、時系列オッズだけ追加します。

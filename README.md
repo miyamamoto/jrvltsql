@@ -37,13 +37,14 @@ quickstart.bat
 5. S3 キャッシュのアップロード（オプション）
 6. DB 検証 (`raceday_verify --phase pre`)
 
-KPS 運用（PostgreSQL + 時系列オッズ）:
+PostgreSQL + 時系列オッズ:
 
 ```bat
-quickstart_kps_postgres.bat 20250426 20260412
+quickstart_postgres_timeseries.bat 20250426 20260412
 ```
 
-`quickstart_kps_postgres.bat` は、KPS が必要とする `RACE` データと、公式1年保持の `TS_O1/TS_O2` 時系列オッズを PostgreSQL に投入します。
+`quickstart_postgres_timeseries.bat` は、`RACE` データと公式1年保持の
+`TS_O1/TS_O2` 時系列オッズを PostgreSQL に投入します。
 
 ---
 
@@ -78,12 +79,12 @@ jltsql cache sync --download           # S3 → ローカル同期
 jltsql cache sync --upload             # ローカル → S3 同期
 ```
 
-### KPS向け: PostgreSQL投入
+### PostgreSQL投入
 
-KPS の締切オッズ予測では、公式1年保持の `TS_O1/TS_O2` を PostgreSQL に入れてから DuckDB へ取り込みます。初回または期間を指定してまとめて投入する場合:
+公式1年保持の `TS_O1/TS_O2` を PostgreSQL にまとめて投入する場合:
 
 ```bat
-quickstart_kps_postgres.bat 20250426 20260412
+quickstart_postgres_timeseries.bat 20250426 20260412
 ```
 
 既に `NL_RA` が入っていて時系列オッズだけを追加する場合:
@@ -114,6 +115,16 @@ jltsql realtime odds-timeseries --from <FROM> --to <TO> --db postgresql
 | 2 | セットアップ（簡易） |
 | 3 | セットアップ（標準） |
 | 4 | 分割セットアップ（全履歴、1954〜現在） |
+
+---
+
+## ドキュメント
+
+- [Architecture](docs/architecture.md)
+- [CLI](docs/CLI.md)
+- [PostgreSQL](docs/postgresql.md)
+- [Time-series odds](docs/timeseries_odds.md)
+- [Scripts](docs/scripts.md)
 
 ---
 
