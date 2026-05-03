@@ -4,6 +4,15 @@ jrvltsql は SQLite だけでなく PostgreSQL へ直接保存できます。複
 コレクタのデータを共有する場合や、下流の分析基盤へ渡す場合は PostgreSQL
 運用を推奨します。
 
+## PostgreSQL で何が入るか
+
+| 操作 | 入るデータ | 入らないデータ |
+| --- | --- | --- |
+| `quickstart_postgres_timeseries.bat <FROM> <TO>` | `RACE` 系データ、公式1年保持の `TS_O1` / `TS_O2` | `TS_O3`〜`TS_O6` の長期蓄積 |
+| `fetch_timeseries_postgres.bat <FROM> <TO>` | 公式1年保持の `TS_O1` / `TS_O2` | `RACE` 系データ、`TS_O3`〜`TS_O6` |
+| `daily_sync.bat --db postgresql` | 直近の通常データ | 時系列オッズ |
+| `jltsql realtime odds-sokuho-timeseries --db postgresql` | 開催週の `TS_O1`〜`TS_O6` | JRA-VAN 側の保持期間を過ぎた速報オッズ |
+
 ## 必要な環境変数
 
 ```bat
