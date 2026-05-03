@@ -9,11 +9,11 @@ JRVLTSQL は JRA-VAN DataLab のデータを SQLite / PostgreSQL に取り込む
 | 目的 | 実行するもの | 結果 |
 | --- | --- | --- |
 | まず SQLite で JRA データを作る | `quickstart.bat` | 主要な蓄積系データを SQLite に取り込みます。 |
-| SQLite に公式時系列オッズも入れる | `quickstart.bat --include-timeseries` | `TS_O1` / `TS_O2` を SQLite に保存します。 |
+| SQLite に公式時系列オッズも入れる | `quickstart.bat` で時系列オッズ取得を選択、または `quickstart.bat --yes --include-timeseries` | `TS_O1` / `TS_O2` を SQLite に保存します。 |
 | PostgreSQL で運用を始める | `quickstart_postgres_timeseries.bat <FROM> <TO>` | `RACE` 系データと公式1年保持の `TS_O1` / `TS_O2` を PostgreSQL に投入します。 |
 | 公式時系列オッズだけ追加する | `fetch_timeseries_postgres.bat <FROM> <TO>` | 既存 PostgreSQL に `TS_O1` / `TS_O2` を追加します。 |
 | 三連複・三連単を含む全賭式の締切前オッズを蓄積する | `jltsql realtime odds-sokuho-timeseries --from <FROM> --to <TO> --db postgresql` | 開催週の速報オッズを `TS_O1`〜`TS_O6` に保存します。`--db sqlite` も指定できます。 |
-| 日次同期を自動化する | `install_tasks.ps1` | `daily_sync.bat` を Windows タスクスケジューラへ登録します。 |
+| 日次同期を自動化する | `quickstart.bat` / `quickstart_postgres_timeseries.bat` の最後で登録、または `install_tasks.ps1` | SQLite / PostgreSQL 用の `daily_sync.bat` を Windows タスクスケジューラへ登録します。 |
 
 ## どこまでできるか
 
@@ -54,8 +54,10 @@ jltsql realtime odds-timeseries --from 20250425 --to 20260425 --db postgresql
 - `0B41/0B42` は公式1年保持の時系列オッズで、`TS_O1/TS_O2` に保存します。
 - 0B30〜0B36 は速報オッズで、公式仕様上の保存期間は 1週間です。
 - `quickstart.bat` は通常セットアップ用です。PostgreSQL 専用セットアップは呼びません。
-- SQLite に公式時系列オッズを入れる場合は `quickstart.bat --include-timeseries` を使います。
+- SQLite に公式時系列オッズを入れる場合は、対話形式で時系列オッズ取得を選ぶか、非対話では `quickstart.bat --yes --include-timeseries` を使います。
 - PostgreSQL へ `RACE` と `TS_O1/TS_O2` をまとめて投入する場合は `quickstart_postgres_timeseries.bat` を使います。
+- `daily_sync.bat` は `--db sqlite` / `--db postgresql` の両方に対応します。
+- `quickstart.bat` の最後では SQLite 用の日次同期タスク登録を確認します。
 - `quickstart_postgres_timeseries.bat` の最後で、`daily_sync.bat` を Windows タスクスケジューラに登録するか確認します。
 - `daily_sync.bat` は通常データの更新用です。公式時系列オッズや全賭式速報オッズの蓄積は別コマンドで行います。
 - ワイド・馬単・三連複・三連単の締切前オッズは、開催週に `odds-sokuho-timeseries` で継続蓄積してください。
