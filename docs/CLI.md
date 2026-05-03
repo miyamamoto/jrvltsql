@@ -84,17 +84,17 @@ jltsql realtime odds-sokuho-timeseries --from 20260418 --to 20260419 --db postgr
 jltsql realtime odds-sokuho-timeseries --from 20260418 --to 20260419 --db sqlite --db-path data/keiba.db
 ```
 
-## PostgreSQL 時系列オッズ quickstart
+## 範囲指定つき時系列オッズ quickstart
 
-PostgreSQL に指定範囲の通常データと公式1年保持の TS_O1/TS_O2 を投入します。
+SQLite / PostgreSQL に、指定範囲の通常データと公式1年保持の TS_O1/TS_O2 を投入します。
 
 ```bat
-quickstart_postgres_timeseries.bat 20250426 20260412
+quickstart_timeseries.bat --db postgresql --from 20250426 --to 20260412
+quickstart_timeseries.bat --db sqlite --from 20250426 --to 20260412
 ```
 
-`quickstart.bat` からこの PostgreSQL 専用処理は呼びません。
-PostgreSQL 運用を始める場合は、この batch を直接実行してください。
-`quickstart_postgres_timeseries.bat` の最後では、`daily_sync.bat` を
+範囲指定つき時系列 quickstart は SQLite / PostgreSQL とも `quickstart_timeseries.bat` を使います。
+`quickstart_timeseries.bat` の最後では、`daily_sync.bat` を
 Windows タスクスケジューラに登録するか確認します。
 
 SQLite に公式時系列オッズを保存する場合は、通常 quickstart に

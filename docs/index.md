@@ -20,8 +20,8 @@ Windows 向けツールです。NAR / 地方競馬は対象外です。
 | 目的 | コマンド |
 | --- | --- |
 | SQLite でまず作る | `quickstart.bat` |
-| SQLite に公式時系列オッズも入れる | `quickstart.bat --yes --include-timeseries` |
-| PostgreSQL で始める | `quickstart_postgres_timeseries.bat <FROM> <TO>` |
+| SQLite に公式時系列オッズも入れる | `quickstart_timeseries.bat --db sqlite --from <FROM> --to <TO>` |
+| PostgreSQL で始める | `quickstart_timeseries.bat --db postgresql --from <FROM> --to <TO>` |
 | 既存 PostgreSQL に公式時系列だけ足す | `fetch_timeseries_postgres.bat <FROM> <TO>` |
 | 開催週の全賭式速報オッズを蓄積する | `jltsql realtime odds-sokuho-timeseries --from <FROM> --to <TO> --db postgresql` |
 | DB 状態を確認する | `jltsql status` |
