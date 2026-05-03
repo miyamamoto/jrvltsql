@@ -86,7 +86,7 @@ jltsql realtime odds-sokuho-timeseries --from 20260418 --to 20260419 --db sqlite
 
 ## PostgreSQL 時系列オッズ quickstart
 
-PostgreSQL に RACE と公式1年保持の TS_O1/TS_O2 を投入します。
+PostgreSQL に指定範囲の通常データと公式1年保持の TS_O1/TS_O2 を投入します。
 
 ```bat
 quickstart_postgres_timeseries.bat 20250426 20260412

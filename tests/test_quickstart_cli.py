@@ -25,6 +25,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--mode", choices=["simple", "standard", "full", "update"], default=None)
     parser.add_argument("--include-timeseries", action="store_true")
     parser.add_argument("--timeseries-months", type=int, default=12)
+    parser.add_argument("--timeseries-from-date", type=str, default=None)
+    parser.add_argument("--timeseries-to-date", type=str, default=None)
     parser.add_argument("--include-realtime", action="store_true")
     parser.add_argument("--background", action="store_true")
     parser.add_argument("-y", "--yes", action="store_true")
@@ -42,7 +44,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-odds", action="store_true")
     parser.add_argument("--no-monitor", action="store_true")
     parser.add_argument("--log-file", type=str, default=None)
-    parser.add_argument("--source", type=str, choices=["jra", "nar", "all"], default="jra")
+    parser.add_argument("--source", type=str, choices=["jra"], default="jra")
     return parser
 
 
@@ -68,13 +70,13 @@ class TestQuickstartArgParsing:
         args = parser.parse_args(["--source", "jra"])
         assert args.source == "jra"
 
-    def test_nar_only(self, parser):
-        args = parser.parse_args(["--source", "nar"])
-        assert args.source == "nar"
+    def test_nar_source_rejected(self, parser):
+        with pytest.raises(SystemExit):
+            parser.parse_args(["--source", "nar"])
 
-    def test_all_sources(self, parser):
-        args = parser.parse_args(["--source", "all"])
-        assert args.source == "all"
+    def test_all_sources_rejected(self, parser):
+        with pytest.raises(SystemExit):
+            parser.parse_args(["--source", "all"])
 
     def test_invalid_source_rejected(self, parser):
         with pytest.raises(SystemExit):
@@ -139,7 +141,7 @@ class TestQuickstartArgParsing:
     def test_combined_flags(self, parser):
         args = parser.parse_args([
             "--mode", "standard",
-            "--source", "nar",
+            "--source", "jra",
             "--from-date", "20230101",
             "-y",
             "--include-timeseries",
@@ -148,7 +150,7 @@ class TestQuickstartArgParsing:
             "--log-file", "/tmp/test.log",
         ])
         assert args.mode == "standard"
-        assert args.source == "nar"
+        assert args.source == "jra"
         assert args.from_date == "20230101"
         assert args.yes is True
         assert args.include_timeseries is True
@@ -214,3 +216,33 @@ class TestQuickstartBatchRoles:
         assert "-DbType sqlite" in text
         assert "SKIP_SCHEDULER_FOR_YES" in text
         assert 'if not "%~1"==""' in text
+
+    def test_postgresql_timeseries_batch_role(self):
+        batch = Path(__file__).resolve().parents[1] / "quickstart_postgres_timeseries.bat"
+        text = batch.read_text(encoding="utf-8")
+
+        assert "POSTGRES_PASSWORD is required" in text
+        assert "--mode update --yes --db-type postgresql" in text
+        assert "--include-timeseries" in text
+        assert "--timeseries-from-date" in text
+        assert "--timeseries-to-date" in text
+        assert "-DbType postgresql" in text
+
+    def test_daily_sync_is_normal_data_only(self):
+        batch = Path(__file__).resolve().parents[1] / "daily_sync.bat"
+        text = batch.read_text(encoding="utf-8")
+
+        assert 'set "DB_TYPE=postgresql"' in text
+        assert "--db-type postgresql" in text
+        assert "--db-type sqlite" in text
+        assert "scripts/quickstart.py --mode update --yes" in text
+        assert "--include-timeseries" not in text
+
+    def test_install_tasks_registers_daily_sync_with_db_type(self):
+        script = Path(__file__).resolve().parents[1] / "install_tasks.ps1"
+        text = script.read_text(encoding="utf-8")
+
+        assert "daily_sync.bat" in text
+        assert "--db" in text
+        assert "$DbType" in text
+        assert "PersistPostgresEnvironment" in text
