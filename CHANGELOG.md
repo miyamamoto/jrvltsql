@@ -10,10 +10,12 @@
 ### Added
 
 - JVOpen/JVRTOpen の対応データ種別、レコード種別、保存先テーブル、運用コマンドをまとめた `docs/data_support.md` を追加
+- 初回ユーザー向けの実行順序をまとめた `docs/getting_started.md` を追加
 
 ### Changed
 
 - 公開ドキュメントを日本語表記へ統一
+- README と MkDocs ホームを、初回導線・目的別コマンド・重要なデータ区分が一目で分かる構成へ整理
 - `quickstart.bat` は SQLite 既定の通常セットアップに戻し、PostgreSQL 専用の `quickstart_postgres_timeseries.bat` 呼び出しを削除
 - SQLite でも `quickstart.bat --yes --include-timeseries` または `jltsql realtime odds-timeseries --db sqlite` で公式 `TS_O1/TS_O2` を保存できることを明記
 - `quickstart.bat` 完了時に SQLite 用 `daily_sync.bat` の Windows タスクスケジューラ登録を確認するよう変更

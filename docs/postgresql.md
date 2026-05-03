@@ -8,7 +8,7 @@ jrvltsql は SQLite だけでなく PostgreSQL へ直接保存できます。複
 
 | 操作 | 入るデータ | 入らないデータ |
 | --- | --- | --- |
-| `quickstart_postgres_timeseries.bat <FROM> <TO>` | `RACE` 系データ、公式1年保持の `TS_O1` / `TS_O2` | `TS_O3`〜`TS_O6` の長期蓄積 |
+| `quickstart_postgres_timeseries.bat <FROM> <TO>` | 指定範囲の通常データ、公式1年保持の `TS_O1` / `TS_O2` | `TS_O3`〜`TS_O6` の長期蓄積 |
 | `fetch_timeseries_postgres.bat <FROM> <TO>` | 公式1年保持の `TS_O1` / `TS_O2` | `RACE` 系データ、`TS_O3`〜`TS_O6` |
 | `daily_sync.bat --db postgresql` | 直近の通常データ | 時系列オッズ |
 | `jltsql realtime odds-sokuho-timeseries --db postgresql` | 開催週の `TS_O1`〜`TS_O6` | JRA-VAN 側の保持期間を過ぎた速報オッズ |
@@ -31,7 +31,7 @@ set POSTGRES_PASSWORD=<password>
 quickstart_postgres_timeseries.bat 20250426 20260412
 ```
 
-このコマンドは、RACE データと公式1年保持の `TS_O1/TS_O2` 時系列オッズを
+このコマンドは、指定範囲の通常データと公式1年保持の `TS_O1/TS_O2` 時系列オッズを
 PostgreSQL に投入します。通常の `quickstart.bat` からは呼びません。
 SQLite と PostgreSQL の導線を分けるため、PostgreSQL 運用を始める場合は
 この batch を直接実行してください。

@@ -21,11 +21,12 @@ markdown_extensions:
 
 nav:
   - ホーム: index.md
-  - アーキテクチャ: architecture.md
-  - CLI: CLI.md
-  - 対応データ種別一覧: data_support.md
-  - PostgreSQL: postgresql.md
+  - はじめに: getting_started.md
   - 時系列オッズ: timeseries_odds.md
+  - PostgreSQL: postgresql.md
+  - 対応データ種別一覧: data_support.md
+  - CLI: CLI.md
   - スクリプト一覧: scripts.md
+  - アーキテクチャ: architecture.md
 
 copyright: Copyright &copy; 2024 JRVLTSQL コントリビューター

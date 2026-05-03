@@ -37,7 +37,7 @@ jltsql realtime odds-sokuho-timeseries --from 20260418 --to 20260419 --db postgr
 jltsql realtime odds-sokuho-timeseries --from 20260418 --to 20260419 --db sqlite --db-path data/keiba.db
 ```
 
-PostgreSQL へ RACE と公式 `TS_O1/TS_O2` をまとめて投入:
+PostgreSQL へ通常データと公式 `TS_O1/TS_O2` をまとめて投入:
 
 ```bat
 quickstart_postgres_timeseries.bat 20250426 20260412
@@ -49,6 +49,9 @@ quickstart_postgres_timeseries.bat 20250426 20260412
 PostgreSQL にまとめて入れる場合は `quickstart_postgres_timeseries.bat` を
 直接実行してください。`quickstart_postgres_timeseries.bat` の最後では、
 `daily_sync.bat` を Windows タスクスケジューラへ登録するか確認します。
+
+`jltsql realtime odds-timeseries` / `odds-sokuho-timeseries` は、既存 DB の
+レース情報を使って JVRTOpen のキーを作ります。先に通常データを投入してください。
 
 ## 重要な制約
 
