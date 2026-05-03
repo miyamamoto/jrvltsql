@@ -26,6 +26,55 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 
+def test_normalize_blank_numeric_insert_values():
+    """PostgreSQL inserts convert blank numeric JV-Data fields to NULL."""
+    from src.database.postgresql_handler import PostgreSQLDatabase
+
+    data = PostgreSQLDatabase._normalize_insert_data(
+        "TS_O1",
+        {
+            "RecordSpec": "O1",
+            "Year": "2026",
+            "TanVote": "",
+            "FukuVote": "123",
+            "JyoCD": "",
+        },
+    )
+
+    assert data["TanVote"] is None
+    assert data["FukuVote"] == 123
+    assert data["JyoCD"] == ""
+
+    odds_data = PostgreSQLDatabase._normalize_insert_data(
+        "TS_O2",
+        {"Odds": "******", "Ninki": "***", "Vote": "100"},
+    )
+    assert odds_data["Odds"] is None
+    assert odds_data["Ninki"] is None
+    assert odds_data["Vote"] == 100
+
+
+def test_dedupe_rows_by_primary_key_keeps_last_row():
+    """PostgreSQL multi-row upsert must not contain duplicate conflict keys."""
+    from src.database.postgresql_handler import PostgreSQLDatabase
+
+    rows = [
+        {"Year": 2026, "MonthDay": 426, "JyoCD": "03", "RaceNum": 1, "Kumi": "01-02", "HassoTime": "1000", "Odds": 10.0},
+        {"Year": 2026, "MonthDay": 426, "JyoCD": "03", "RaceNum": 1, "Kumi": "01-02", "HassoTime": "1000", "Odds": 10.5},
+        {"Year": 2026, "MonthDay": 426, "JyoCD": "03", "RaceNum": 1, "Kumi": "01-03", "HassoTime": "1000", "Odds": 20.0},
+    ]
+
+    deduped = PostgreSQLDatabase._dedupe_rows_by_primary_key(
+        rows,
+        ["year", "monthday", "jyocd", "racenum", "kumi", "hassotime"],
+    )
+
+    assert len(deduped) == 2
+    assert deduped[0]["Kumi"] == "01-02"
+    assert deduped[0]["Odds"] == 10.5
+    assert deduped[1]["Kumi"] == "01-03"
+
+
 def print_installation_guide():
     """PostgreSQLのインストールガイドを表示"""
     print("""

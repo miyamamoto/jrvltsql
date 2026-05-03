@@ -91,6 +91,8 @@ echo.
 echo   CLI commands:
 echo     jltsql status   - Check database status
 echo     jltsql fetch    - Fetch additional data
+echo     fetch_timeseries_postgres.bat       - Fill TS_O1/TS_O2 historical odds
+echo     quickstart_postgres_timeseries.bat  - PostgreSQL setup + TS odds
 echo     jltsql --help   - Other commands
 echo.
 echo   For Claude Code / Claude Desktop users:

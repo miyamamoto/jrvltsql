@@ -289,11 +289,11 @@ def update(ctx, force):
     if success:
         new_version = get_current_version()
         console.print()
-        console.print(f"[bold green]✓ Update complete![/bold green]")
+        console.print(f"[bold green][OK] Update complete![/bold green]")
         console.print(f"  Version: {new_version}")
     else:
         console.print()
-        console.print("[bold red]✗ Update failed.[/bold red]")
+        console.print("[bold red][ERROR] Update failed.[/bold red]")
         console.print("Try manually: git pull && pip install -e .")
         sys.exit(1)
 
@@ -1303,6 +1303,13 @@ def realtime():
     pass
 
 
+# 0B41/0B42 are the official one-year historical time-series odds specs.
+# They cover O1(単複枠) and O2(馬連). 0B30 is a one-week速報 all-bets snapshot
+# source and is kept for current-week/future accumulation.
+HISTORICAL_TIMESERIES_ODDS_SPECS = "0B41,0B42"
+SOKUHO_TIMESERIES_ODDS_SPECS = "0B30"
+
+
 @realtime.command()
 @click.option(
     "--specs",
@@ -1486,11 +1493,12 @@ def realtime_stop(ctx):
 @click.option(
     "--spec",
     "-s",
-    default="0B30",
-    help="Data spec code (0B30-0B36, default: 0B30 for 単勝オッズ)",
+    default=HISTORICAL_TIMESERIES_ODDS_SPECS,
+    help="Data spec code (default: 0B41,0B42 for official 1-year odds time-series)",
 )
 @click.option(
     "--from-date",
+    "--from",
     "-f",
     type=str,
     default=None,
@@ -1498,6 +1506,7 @@ def realtime_stop(ctx):
 )
 @click.option(
     "--to-date",
+    "--to",
     "-t",
     type=str,
     default=None,
@@ -1519,24 +1528,21 @@ def realtime_stop(ctx):
 def timeseries(ctx, spec, from_date, to_date, db, db_path):
     """Fetch time series odds data from JV-Link.
 
-    Fetches historical time series odds data for races already in the database.
-    JV-Link provides up to 1 year of historical odds data.
+    Fetches odds time-series data for races already in the database.
+    Official one-year historical odds are available only for 0B41/0B42.
 
     \b
     Data specs:
-      0B30 - 単勝オッズ (Win odds)
-      0B31 - 複勝・枠連オッズ (Place/Bracket quinella odds)
-      0B32 - 馬連オッズ (Quinella odds)
-      0B33 - ワイドオッズ (Wide odds)
-      0B34 - 馬単オッズ (Exacta odds)
-      0B35 - 3連複オッズ (Trio odds)
-      0B36 - 3連単オッズ (Trifecta odds)
+      0B41 - 時系列オッズ（単複枠）: O1, 1年間
+      0B42 - 時系列オッズ（馬連）: O2, 1年間
+      0B30 - 速報オッズ（全賭式）: O1-O6, 1週間
+      0B31-0B36 - 速報オッズ（個別賭式）: 1週間
 
     \b
     Examples:
       jltsql realtime timeseries
-      jltsql realtime timeseries --spec 0B30 --from-date 20241201
-      jltsql realtime timeseries --spec 0B31,0B32 --db-path data/keiba.db
+      jltsql realtime timeseries --spec 0B41,0B42 --from-date 20250426
+      jltsql realtime timeseries --spec 0B30 --from-date 20260418
     """
     from datetime import datetime, timedelta
     from src.database import create_database_from_config, DatabaseError
@@ -1552,7 +1558,8 @@ def timeseries(ctx, spec, from_date, to_date, db, db_path):
     else:
         db_type = config.get("database.type", "sqlite") if config else "sqlite"
 
-    # Determine database path
+    # Determine database path. PostgreSQL mode does not use this path for
+    # storage, but SQLite mode and legacy helpers still require a value.
     if db_path:
         database_path = db_path
     elif config:
@@ -1575,7 +1582,7 @@ def timeseries(ctx, spec, from_date, to_date, db, db_path):
 
     console.print("[bold cyan]Fetching time series odds data...[/bold cyan]\n")
     console.print(f"  Data specs:    {', '.join(specs_list)}")
-    console.print(f"  Database:      {database_path} ({db_type})")
+    console.print(f"  Database:      {database_path if db_type == 'sqlite' else 'PostgreSQL'} ({db_type})")
     console.print(f"  Date range:    {from_date} - {to_date}")
     console.print()
 
@@ -1602,18 +1609,21 @@ def timeseries(ctx, spec, from_date, to_date, db, db_path):
             for spec_code in specs_list:
                 # Map spec to table name
                 table_map = {
-                    "0B30": "TS_O1",
-                    "0B31": "TS_O1",  # Also has O2 data
+                    "0B30": "TS_O1,TS_O2,TS_O3,TS_O4,TS_O5,TS_O6",
+                    "0B31": "TS_O1",
                     "0B32": "TS_O2",
                     "0B33": "TS_O3",
                     "0B34": "TS_O4",
                     "0B35": "TS_O5",
                     "0B36": "TS_O6",
+                    "0B41": "TS_O1",
+                    "0B42": "TS_O2",
                 }
-                table_name = table_map.get(spec_code)
-                if table_name and table_name in schema_registry:
-                    database.create_table(table_name, schema_registry[table_name])
-                    console.print(f"  [green]✓[/green] Table {table_name} ready")
+                table_names = table_map.get(spec_code, "")
+                for table_name in [name for name in table_names.split(",") if name]:
+                    if table_name in schema_registry:
+                        database.create_table(table_name, schema_registry[table_name])
+                        console.print(f"  [green][OK][/green] Table {table_name} ready")
 
             # Initialize fetcher and updater
             sid = config.get("jvlink.sid", "JLTSQL") if config else "JLTSQL"
@@ -1623,37 +1633,97 @@ def timeseries(ctx, spec, from_date, to_date, db, db_path):
             total_records = 0
             total_success = 0
             total_errors = 0
+            default_save_batch_size = 100 if db_type in ("postgresql", "dual") else 5000
+            save_batch_size = int(os.getenv("JRVLTSQL_TS_SAVE_BATCH_SIZE", str(default_save_batch_size)))
+
+            def flush_batch(records_batch):
+                nonlocal total_success, total_errors
+                if not records_batch:
+                    return
+                result = updater.process_parsed_records_batch(records_batch, timeseries=True)
+                total_success += int(result.get("inserted", 0))
+                total_errors += int(result.get("errors", 0))
 
             for spec_code in specs_list:
                 console.print(f"\n[bold]Processing {spec_code}...[/bold]")
 
                 try:
                     record_count = 0
+                    records_batch = []
+                    key_progress = {
+                        "processed_keys": 0,
+                        "total_keys": 0,
+                        "success_keys": 0,
+                        "no_data_keys": 0,
+                        "error_keys": 0,
+                        "total_records": 0,
+                    }
+
+                    def report_key_progress(progress):
+                        key_progress.update(progress)
+                        processed = int(progress.get("processed_keys", 0))
+                        total = int(progress.get("total_keys", 0))
+                        status = str(progress.get("status", ""))
+                        should_print = (
+                            processed == total
+                            or status == "success"
+                            or processed % 25 == 0
+                        )
+                        if not should_print:
+                            return
+                        console.print(
+                            "\r  Keys: "
+                            f"{processed:,}/{total:,} "
+                            f"ok={progress.get('success_keys', 0):,} "
+                            f"no_data={progress.get('no_data_keys', 0):,} "
+                            f"errors={progress.get('error_keys', 0):,} "
+                            f"records={progress.get('total_records', 0):,} "
+                            f"last={progress.get('key') or '-'}:{status}",
+                            end="",
+                        )
+
+                    pg_config = (
+                        config.get("databases.postgresql", {})
+                        if db_type in ("postgresql", "dual") and config
+                        else None
+                    )
                     for record in fetcher.fetch_time_series_batch_from_db(
                         data_spec=spec_code,
                         db_path=database_path,
                         from_date=from_date,
                         to_date=to_date,
+                        pg_config=pg_config,
+                        progress_callback=report_key_progress,
                     ):
-                        # Save with timeseries=True to use TS_O* tables
-                        raw_buff = record.get("_raw")
-                        if raw_buff:
-                            result = updater.process_record(raw_buff, timeseries=True)
-                            if result and result.get("success"):
-                                total_success += 1
-                            else:
-                                total_errors += 1
+                        # The fetcher already expands O1-O6 arrays into row
+                        # dictionaries. Save parsed rows directly to avoid
+                        # re-processing the same raw record repeatedly.
+                        clean_record = {k: v for k, v in record.items() if not k.startswith("_")}
+                        records_batch.append(clean_record)
                         record_count += 1
                         total_records += 1
+                        if len(records_batch) >= save_batch_size:
+                            flush_batch(records_batch)
+                            records_batch = []
 
                         # Progress indicator
                         if record_count % 100 == 0:
                             console.print(f"\r  Processed: {record_count:,} records", end="")
 
-                    console.print(f"\r  [green]✓[/green] {spec_code}: {record_count:,} records processed")
+                    flush_batch(records_batch)
+                    if key_progress["processed_keys"]:
+                        console.print(
+                            "\r  Keys: "
+                            f"{key_progress['processed_keys']:,}/{key_progress['total_keys']:,} "
+                            f"ok={key_progress['success_keys']:,} "
+                            f"no_data={key_progress['no_data_keys']:,} "
+                            f"errors={key_progress['error_keys']:,} "
+                            f"records={key_progress['total_records']:,}"
+                        )
+                    console.print(f"  [green][OK][/green] {spec_code}: {record_count:,} records processed")
 
                 except Exception as e:
-                    console.print(f"  [red]✗[/red] {spec_code}: Error - {e}")
+                    console.print(f"  [red][ERROR][/red] {spec_code}: Error - {e}")
                     logger.error(f"Error processing {spec_code}", error=str(e), exc_info=True)
 
             console.print()
@@ -1666,6 +1736,99 @@ def timeseries(ctx, spec, from_date, to_date, db, db_path):
         console.print(f"\n[red]Error:[/red] {e}", style="bold")
         logger.error("Failed to fetch time series data", error=str(e), exc_info=True)
         sys.exit(1)
+
+
+@realtime.command("odds-timeseries")
+@click.option(
+    "--from-date",
+    "--from",
+    "-f",
+    type=str,
+    default=None,
+    help="Start date in YYYYMMDD format (default: 1 year ago)",
+)
+@click.option(
+    "--to-date",
+    "--to",
+    "-t",
+    type=str,
+    default=None,
+    help="End date in YYYYMMDD format (default: today)",
+)
+@click.option(
+    "--db",
+    type=click.Choice(["sqlite", "postgresql"]),
+    default=None,
+    help="Database type (default: from config)",
+)
+@click.option(
+    "--db-path",
+    type=str,
+    default=None,
+    help="SQLite database path (overrides config)",
+)
+@click.pass_context
+def odds_timeseries(ctx, from_date, to_date, db, db_path):
+    """Fetch official one-year JRA-VAN historical odds time-series.
+
+    Official historical time-series odds are available for single/place/bracket
+    (0B41 -> TS_O1) and quinella (0B42 -> TS_O2).
+    """
+    ctx.invoke(
+        timeseries,
+        spec=HISTORICAL_TIMESERIES_ODDS_SPECS,
+        from_date=from_date,
+        to_date=to_date,
+        db=db,
+        db_path=db_path,
+    )
+
+
+@realtime.command("odds-sokuho-timeseries")
+@click.option(
+    "--from-date",
+    "--from",
+    "-f",
+    type=str,
+    default=None,
+    help="Start date in YYYYMMDD format (default: 1 year ago)",
+)
+@click.option(
+    "--to-date",
+    "--to",
+    "-t",
+    type=str,
+    default=None,
+    help="End date in YYYYMMDD format (default: today)",
+)
+@click.option(
+    "--db",
+    type=click.Choice(["sqlite", "postgresql"]),
+    default=None,
+    help="Database type (default: from config)",
+)
+@click.option(
+    "--db-path",
+    type=str,
+    default=None,
+    help="SQLite database path (overrides config)",
+)
+@click.pass_context
+def odds_sokuho_timeseries(ctx, from_date, to_date, db, db_path):
+    """Fetch current-week速報 all-bets odds snapshots via 0B30.
+
+    0B30 returns O1-O6 and fills TS_O1-TS_O6, but JRA-VAN officially retains
+    it for about one week. Use this command for current race-week collection
+    and future accumulation of wide/exacta/trio/trifecta decision odds.
+    """
+    ctx.invoke(
+        timeseries,
+        spec=SOKUHO_TIMESERIES_ODDS_SPECS,
+        from_date=from_date,
+        to_date=to_date,
+        db=db,
+        db_path=db_path,
+    )
 
 
 @realtime.command()

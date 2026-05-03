@@ -400,7 +400,7 @@ class TestRealtimeUpdater(unittest.TestCase):
             "TC": "RT_TC",  # Trainer results
             "CC": "RT_CC",  # Horse results
             # Change info (0B4x)
-            "RC": "RT_RC",  # Jockey change info (NEW - 0B41)
+            "RC": "RT_RC",  # Jockey change info
         }
 
         for record_type, expected_table in expected_mappings.items():
@@ -520,7 +520,7 @@ class TestRealtimeUpdater(unittest.TestCase):
 
     @patch('src.realtime.updater.ParserFactory')
     def test_process_record_rc_mapping(self, mock_factory_class):
-        """Test RC record type maps to RT_RC table (0B41 jockey change info)."""
+        """Test RC record type maps to RT_RC table."""
         # Setup mock parser
         mock_parser = MagicMock()
         mock_parser.parse.return_value = {

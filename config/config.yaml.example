@@ -11,17 +11,17 @@ jvlink:
 # Database Settings
 database:
   # Database mode: postgresql, sqlite, or dual
-  #   postgresql - remote PostgreSQL only (default, single source of truth
+  #   postgresql - remote PostgreSQL only (shared source of truth
   #                for multi-user / analytics / production).
   #   sqlite     - local SQLite file only (offline / single-user / dev).
   #   dual       - write to both SQLite (primary) AND PostgreSQL (secondary).
   #                SQLite stays authoritative; PG is a best-effort mirror.
   #                Useful while migrating an existing SQLite installation to
   #                a shared PG without cutting over the source of truth.
-  type: "postgresql"
+  type: "sqlite"
 
 databases:
-  # SQLite Database (Default - recommended for single-user)
+  # SQLite Database (local fallback / single-user)
   sqlite:
     enabled: true
     path: "./data/keiba.db"
@@ -33,7 +33,7 @@ databases:
 
   # PostgreSQL Database (used when type=postgresql or type=dual)
   postgresql:
-    enabled: false
+    enabled: true
     host: "${POSTGRES_HOST:localhost}"
     port: 5432
     database: "keiba"

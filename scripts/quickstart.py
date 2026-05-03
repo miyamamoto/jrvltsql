@@ -1027,9 +1027,9 @@ def _interactive_setup_rich() -> dict:
         "[cyan]取得条件:[/cyan]\n"
         f"  - データソース: {source_name}\n"
         "  - 公式サポート期間: 過去1年間\n"
-        "  - TS_O1〜O6テーブルに保存\n\n"
-        "[yellow]注: 1年以上前のデータも保存されている場合がありますが、\n"
-        "公式サポート外のため取得できない可能性があります。[/yellow]\n\n"
+        "  - 公式1年保持の TS_O1/TS_O2 に保存\n"
+        "  - ワイド以降の速報オッズは開催週の継続蓄積が必要\n\n"
+        "[yellow]注: 1年以上前の時系列オッズは公式サポート外です。[/yellow]\n\n"
         f"[dim]時系列オッズ取得には回次・日次情報（{table_name}）が必要です。\n"
         f"{table_name}が不足している場合は、必要な期間のRACEデータを自動取得します。[/dim]",
         border_style="blue",
@@ -1554,7 +1554,8 @@ def _interactive_setup_simple() -> dict:
     print("   │ 取得条件:                                              │")
     print(f"   │   - データソース: {source_name:<33}│")
     print("   │   - 公式サポート期間: 過去1年間                        │")
-    print("   │   - TS_O1〜O6テーブルに保存                            │")
+    print("   │   - 公式1年保持のTS_O1/TS_O2テーブルに保存             │")
+    print("   │   - ワイド以降は開催週の速報オッズ蓄積が必要           │")
     print(f"   │   - {table_name}不足時は自動でRACEデータを取得{' ' * (22 - len(table_name))}│")
     print("   │                                                        │")
     print("   │ 注: 1年以上前のデータも保存されている場合がありますが、│")
@@ -1826,8 +1827,8 @@ class QuickstartRunner:
     # JVRTOpenデータスペック（速報系・時系列）
     # 注意: JVRTOpenは蓄積系(JVOpen)とは異なるAPI
 
-    # 速報系データ (0B1x, 0B4x, 0B5x) - レース確定情報・変更情報
-    # 表5.1-1 JVRTOpen対応: 0B11, 0B12, 0B13, 0B14, 0B15, 0B17, 0B41, 0B42, 0B51
+    # 速報系データ (0B1x, 0B5x) - レース確定情報・変更情報
+    # 0B41/0B42 は公式仕様上、変更情報ではなく時系列オッズ。
     SPEED_REPORT_SPECS = [
         ("0B11", "開催情報"),              # WE
         ("0B12", "レース情報"),            # RA, SE
@@ -1835,21 +1836,22 @@ class QuickstartRunner:
         ("0B14", "出走取消・競走除外"),     # AV
         ("0B15", "払戻情報"),              # HR
         ("0B17", "対戦型データマイニング予想"),  # TM
-        ("0B41", "騎手変更情報"),          # RC
-        ("0B42", "調教師変更情報"),        # TC
         ("0B51", "コース情報"),            # CC
     ]
 
-    # 時系列データ (0B2x-0B3x) - 継続更新オッズ・票数
-    # 表5.1-1 JVRTOpen対応: 0B20, 0B31, 0B32, 0B33, 0B34, 0B35, 0B36
+    # オッズ/票数データ - レース単位キー(YYYYMMDDJJRR)を使用
+    # 0B30-0B36 は速報オッズ(1週間)、0B41/0B42 は公式1年保持の時系列オッズ。
     TIME_SERIES_SPECS = [
         ("0B20", "票数情報"),              # H1, H6
-        ("0B31", "複勝・枠連オッズ"),       # O1, O2
-        ("0B32", "馬連オッズ"),            # O3
-        ("0B33", "ワイドオッズ"),          # O4
-        ("0B34", "馬単オッズ"),            # O5
-        ("0B35", "3連複オッズ"),           # O6
-        ("0B36", "3連単オッズ"),           # O6
+        ("0B30", "速報オッズ（全賭式）"),  # O1-O6
+        ("0B31", "速報オッズ（単複枠）"),  # O1
+        ("0B32", "速報オッズ（馬連）"),    # O2
+        ("0B33", "速報オッズ（ワイド）"),  # O3
+        ("0B34", "速報オッズ（馬単）"),    # O4
+        ("0B35", "速報オッズ（3連複）"),   # O5
+        ("0B36", "速報オッズ（3連単）"),   # O6
+        ("0B41", "時系列オッズ（単複枠）"), # O1
+        ("0B42", "時系列オッズ（馬連）"),   # O2
     ]
 
     # 全リアルタイムスペック（後方互換性のため残す）
@@ -2086,6 +2088,7 @@ class QuickstartRunner:
                         FROM {table_name}
                         WHERE (year || lpad(monthday::text, 4, '0')) >= :from_date
                           AND (year || lpad(monthday::text, 4, '0')) <= :to_date
+                          AND lpad(jyocd::text, 2, '0') IN ('01','02','03','04','05','06','07','08','09','10')
                         ORDER BY race_date, jyocd, racenum
                     """
                 else:
@@ -2099,6 +2102,7 @@ class QuickstartRunner:
                         FROM {table_name_upper}
                         WHERE (Year || printf('%04d', CAST(MonthDay AS INTEGER))) >= ?
                           AND (Year || printf('%04d', CAST(MonthDay AS INTEGER))) <= ?
+                          AND printf('%02d', CAST(JyoCD AS INTEGER)) IN ('01','02','03','04','05','06','07','08','09','10')
                         ORDER BY race_date, JyoCD, RaceNum
                     """
                 # PostgreSQLでは辞書形式、SQLiteではタプル形式でパラメータを渡す
@@ -2138,7 +2142,7 @@ class QuickstartRunner:
     def _run_fetch_timeseries_rich(self) -> bool:
         """時系列オッズ取得（Rich UI）
 
-        時系列オッズをTS_O1-O6テーブルに保存。
+        時系列オッズをTS_O1/TS_O2テーブルに保存。
         NL_RAから実際の開催情報を取得して、開催があるレースのみを対象に取得。
         蓄積系データ取得（_run_fetch_all_rich）と同じUIデザイン（JVLinkProgressDisplay）を使用。
         """
@@ -2168,15 +2172,10 @@ class QuickstartRunner:
             else:
                 period_text = f"過去{months}ヶ月"
 
-        # 時系列オッズスペック（0B30-0B36）
+        # 公式1年保持の時系列オッズスペック（0B41/0B42）
         timeseries_specs = [
-            ("0B30", "単勝オッズ"),
-            ("0B31", "複勝・枠連オッズ"),
-            ("0B32", "馬連オッズ"),
-            ("0B33", "ワイドオッズ"),
-            ("0B34", "馬単オッズ"),
-            ("0B35", "3連複オッズ"),
-            ("0B36", "3連単オッズ"),
+            ("0B41", "時系列オッズ（単複枠）"),
+            ("0B42", "時系列オッズ（馬連）"),
         ]
 
         # NL_RAから実際の開催レースを取得（Kaiji/Nichiji含む）
@@ -2248,10 +2247,10 @@ class QuickstartRunner:
         try:
             from src.fetcher.realtime import RealtimeFetcher
             from src.realtime.updater import RealtimeUpdater
-            from src.jvlink.constants import JYO_CODES, generate_time_series_full_key
+            from src.jvlink.constants import JYO_CODES, generate_time_series_key
 
             jyo_codes = JYO_CODES
-            generate_key = generate_time_series_full_key
+            generate_key = generate_time_series_key
 
             db = self._create_database()
 
@@ -2310,13 +2309,12 @@ class QuickstartRunner:
                                 )
 
                                 try:
-                                    # 16桁フルキーを生成して取得
-                                    full_key = generate_key(
-                                        race_date, jyo_code, kaiji, nichiji, race_num
-                                    )
+                                    # JVRTOpenのオッズ系キーはYYYYMMDDJJRRの12桁。
+                                    # Kaiji/NichijiはNL_RA側の監査用で、キーには含めない。
+                                    odds_key = generate_key(race_date, jyo_code, race_num)
                                     for record in fetcher.fetch(
                                         data_spec=spec,
-                                        key=full_key,
+                                        key=odds_key,
                                         continuous=False,
                                     ):
                                         raw_buff = record.get("_raw", "")
@@ -2422,8 +2420,8 @@ class QuickstartRunner:
         specs_to_fetch = self._get_specs_for_mode()
 
         historical_specs = len(specs_to_fetch)
-        # 時系列オッズを含む場合は+7（0B30-0B36の7スペック）
-        timeseries_specs = 7 if self._should_fetch_timeseries() else 0
+        # 時系列オッズを含む場合は+2（0B41/0B42の2スペック）
+        timeseries_specs = 2 if self._should_fetch_timeseries() else 0
         total_specs = historical_specs + timeseries_specs
 
         console.print()
@@ -3342,9 +3340,13 @@ def main():
     parser.add_argument("--mode", choices=["simple", "standard", "full", "update"], default=None,
                         help="セットアップモード: simple(簡易), standard(標準), full(フル), update(更新)")
     parser.add_argument("--include-timeseries", action="store_true",
-                        help="時系列オッズを取得（オッズ推移→TS_O1-O6テーブル）")
+                        help="公式1年保持の時系列オッズを取得（0B41/0B42→TS_O1/TS_O2）")
     parser.add_argument("--timeseries-months", type=int, default=12,
                         help="時系列オッズの取得期間（月数、デフォルト: 12）。12以上は非推奨")
+    parser.add_argument("--timeseries-from-date", type=str, default=None,
+                        help="時系列オッズ取得開始日 (YYYYMMDD)。指定時は--timeseries-monthsより優先")
+    parser.add_argument("--timeseries-to-date", type=str, default=None,
+                        help="時系列オッズ取得終了日 (YYYYMMDD)。指定時は--timeseries-monthsより優先")
     parser.add_argument("--include-realtime", action="store_true",
                         help="速報系データも取得（過去約1週間分）")
     parser.add_argument("--background", action="store_true",
@@ -3428,6 +3430,10 @@ def main():
         # 時系列オッズ取得オプション
         settings['include_timeseries'] = args.include_timeseries
         settings['timeseries_months'] = args.timeseries_months
+        settings['timeseries_custom'] = bool(args.timeseries_from_date or args.timeseries_to_date)
+        if settings['timeseries_custom']:
+            settings['timeseries_from_date'] = args.timeseries_from_date or settings['from_date']
+            settings['timeseries_to_date'] = args.timeseries_to_date or settings['to_date']
 
         # 速報系データ取得オプション
         settings['include_realtime'] = args.include_realtime

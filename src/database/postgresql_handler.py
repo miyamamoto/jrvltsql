@@ -581,6 +581,83 @@ class PostgreSQLDatabase(BaseDatabase):
             logger.error(f"PostgreSQL reconnect failed: {e}")
             raise DatabaseError(f"PostgreSQL reconnect failed: {e}")
 
+    @staticmethod
+    def _normalize_insert_value(table_name: str, column: str, value: Any) -> Any:
+        """Normalize parser output before PostgreSQL binding.
+
+        JV-Data parsers preserve blank numeric fields as empty strings for
+        SQLite compatibility. PostgreSQL rejects '' for INTEGER/BIGINT/REAL, so
+        convert only blank/placeholder numeric fields to NULL and leave text
+        fields intact. Odds records use '*' placeholders for unavailable odds.
+        """
+        try:
+            from src.database.schema_types import get_column_type
+
+            column_type = get_column_type(table_name, column)
+        except Exception:
+            column_type = None
+
+        if column_type not in ("INTEGER", "BIGINT", "REAL"):
+            return value
+
+        if value is None:
+            return None
+
+        if isinstance(value, str):
+            text = value.strip()
+            if not text or set(text) <= {"*"}:
+                return None
+            if column_type in ("INTEGER", "BIGINT"):
+                try:
+                    return int(text)
+                except ValueError:
+                    return None
+            if column_type == "REAL":
+                try:
+                    return float(text)
+                except ValueError:
+                    return None
+
+        if value == "":
+            return None
+        return value
+
+    @classmethod
+    def _normalize_insert_data(cls, table_name: str, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Normalize a row dictionary for PostgreSQL inserts."""
+        return {
+            column: cls._normalize_insert_value(table_name, column, value)
+            for column, value in data.items()
+        }
+
+    @staticmethod
+    def _dedupe_rows_by_primary_key(
+        rows: List[Dict[str, Any]],
+        pk_columns: List[str],
+    ) -> List[Dict[str, Any]]:
+        """Deduplicate one VALUES batch by primary key before PostgreSQL upsert.
+
+        PostgreSQL rejects INSERT ... ON CONFLICT DO UPDATE when two rows in the
+        same statement target the same conflict key. Keeping the last row matches
+        sequential upsert semantics for odds snapshots.
+        """
+        if not rows or not pk_columns:
+            return rows
+
+        column_by_lower = {column.lower(): column for column in rows[0].keys()}
+        resolved_pk_columns = [column_by_lower.get(column.lower()) for column in pk_columns]
+        if any(column is None for column in resolved_pk_columns):
+            return rows
+
+        deduped: Dict[tuple, Dict[str, Any]] = {}
+        order: List[tuple] = []
+        for row in rows:
+            key = tuple(row.get(column) for column in resolved_pk_columns)
+            if key not in deduped:
+                order.append(key)
+            deduped[key] = row
+        return [deduped[key] for key in order]
+
     def insert(self, table_name: str, data: Dict[str, Any], use_replace: bool = True) -> int:
         """Insert single row into table.
 
@@ -600,6 +677,7 @@ class PostgreSQLDatabase(BaseDatabase):
         if not data:
             raise DatabaseError("No data provided for insert")
 
+        data = self._normalize_insert_data(table_name, data)
         columns = list(data.keys())
         values = list(data.values())
         placeholders = ", ".join(["?" for _ in columns])
@@ -650,15 +728,19 @@ class PostgreSQLDatabase(BaseDatabase):
         if not data_list:
             raise DatabaseError("No data provided for insert")
 
+        data_list = [self._normalize_insert_data(table_name, row) for row in data_list]
+
         # Use first row to determine columns
         columns = list(data_list[0].keys())
         placeholders = ", ".join(["?" for _ in columns])
+        row_placeholders = f"({placeholders})"
         # Quote column names (lowercase for PostgreSQL)
         quoted_columns = [self._quote_identifier(col) for col in columns]
 
         if use_replace:
             # Get primary key columns for this table
             pk_columns = self._get_primary_key_columns(table_name)
+            data_list = self._dedupe_rows_by_primary_key(data_list, pk_columns)
 
             if pk_columns:
                 # Build ON CONFLICT DO UPDATE clause
@@ -667,21 +749,32 @@ class PostgreSQLDatabase(BaseDatabase):
                 if update_columns:
                     update_set = ", ".join([f"{col} = EXCLUDED.{col}" for col in update_columns])
                     pk_list = ", ".join(pk_columns)
-                    sql = f"INSERT INTO {table_name} ({', '.join(quoted_columns)}) VALUES ({placeholders}) ON CONFLICT ({pk_list}) DO UPDATE SET {update_set}"
+                    conflict_sql = f" ON CONFLICT ({pk_list}) DO UPDATE SET {update_set}"
                 else:
                     # All columns are primary keys, just use DO NOTHING
                     pk_list = ", ".join(pk_columns)
-                    sql = f"INSERT INTO {table_name} ({', '.join(quoted_columns)}) VALUES ({placeholders}) ON CONFLICT ({pk_list}) DO NOTHING"
+                    conflict_sql = f" ON CONFLICT ({pk_list}) DO NOTHING"
             else:
                 # No primary key found, fall back to DO NOTHING to avoid errors
                 logger.warning(f"No primary key found for {table_name}, using DO NOTHING")
-                sql = f"INSERT INTO {table_name} ({', '.join(quoted_columns)}) VALUES ({placeholders}) ON CONFLICT DO NOTHING"
+                conflict_sql = " ON CONFLICT DO NOTHING"
         else:
-            sql = f"INSERT INTO {table_name} ({', '.join(quoted_columns)}) VALUES ({placeholders})"
+            conflict_sql = ""
 
-        # Extract values in correct order for each row
-        parameters_list = [
-            tuple(row.get(col) for col in columns) for row in data_list
-        ]
+        inserted = 0
+        max_params = 30000
+        chunk_size = max(1, max_params // max(1, len(columns)))
+        for start in range(0, len(data_list), chunk_size):
+            chunk = data_list[start:start + chunk_size]
+            values_sql = ", ".join([row_placeholders] * len(chunk))
+            sql = (
+                f"INSERT INTO {table_name} ({', '.join(quoted_columns)}) "
+                f"VALUES {values_sql}{conflict_sql}"
+            )
+            flat_values = []
+            for row in chunk:
+                flat_values.extend(row.get(col) for col in columns)
+            self.execute(sql, tuple(flat_values))
+            inserted += len(chunk)
 
-        return self.executemany(sql, parameters_list)
+        return inserted

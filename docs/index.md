@@ -1,64 +1,42 @@
-# JRVLTSQL
+# JRVLTSQL Docs
 
-JRA-VAN DataLabの競馬データをSQLiteにインポートするツール (32-bit Python対応)
+JRVLTSQL は JRA-VAN DataLab のデータを SQLite / PostgreSQL に取り込む Windows 向けツールです。
 
-## 概要
+この `docs/` は、現在の運用に必要な最小限の情報だけを残しています。詳細な運用手順は `README.md`、CLI の引数確認は `jltsql --help` と [CLI.md](CLI.md) を参照してください。
 
-JRVLTSQLは、JRA-VAN DataLab (中央競馬) から提供される競馬データを効率的にデータベースに取り込むためのPythonツールです。
+## 対象
 
-### 主な機能
+- JRA / 中央競馬のみ
+- Windows 10 / 11
+- JRA-VAN DataLab + JV-Link
+- SQLite / PostgreSQL
 
-- **JRA-VAN DataLab対応**: JV-Link COM API を使用した中央競馬データ取得
-- **SQLiteデータベース**: 32-bit Python環境で安定動作する軽量データベース
-- **高速インポート**: バッチ処理による効率的なデータ取り込み
-- **リアルタイム更新**: レース当日のオッズやレース結果をリアルタイムで取得
-- **64テーブル対応**: JV-Data仕様に準拠した完全なスキーマ
-- **CLIとAPI**: コマンドラインツールとPython APIの両方を提供
+## 基本コマンド
 
-### 技術要件
-
-**重要**: JV-Link COM DLLは32-bitのため、**Python 3.12 (32-bit)** が必須です。
-
-| 要件 | 内容 |
-|------|------|
-| **OS** | Windows 10/11 |
-| **Python** | 3.12 (32-bit) |
-| **データベース** | SQLite（Python標準、追加インストール不要） |
-| **データソース** | JRA-VAN DataLab |
-
-## クイックスタート
-
-### インストール
-
-```bash
-pip install git+https://github.com/miyamamoto/jrvltsql.git
+```bat
+quickstart.bat
+quickstart_postgres_timeseries.bat 20250426 20260412
+jltsql status
+jltsql create-tables
+jltsql create-indexes
+jltsql fetch --from 20260101 --to 20260417 --spec RACE --option 1
+jltsql realtime start --specs 0B12,0B15,0B30
+jltsql realtime odds-timeseries --from 20250425 --to 20260425 --db postgresql
 ```
 
-### 基本的な使い方
+## 注意
 
-```bash
-# quickstartで対話形式のセットアップ
-python scripts/quickstart.py
+- JRA-VAN の実データ取得は Windows + JV-Link 環境が必要です。
+- `0B41/0B42` は公式1年保持の時系列オッズで、`TS_O1/TS_O2` に保存します。
+- 0B30〜0B36 は速報オッズで、公式仕様上の保存期間は 1週間です。
+- PostgreSQL へ `RACE` と `TS_O1/TS_O2` をまとめて投入する場合は `quickstart_postgres_timeseries.bat` を使います。
+- ワイド・馬単・三連複・三連単の締切前オッズは、開催週に `odds-sokuho-timeseries` で継続蓄積してください。
+- 古い設計メモや未実装機能のドキュメントは削除しています。
 
-# または個別コマンド
-jltsql init                           # 初期化
-jltsql create-tables                  # テーブル作成
-jltsql fetch --from 20240101 --to 20241231 --spec RACE  # データ取得
-```
+## Documents
 
-## テーブル構成
-
-JRVLTSQLは64テーブルを管理します：
-
-- **NL_テーブル (38)**: 蓄積系データ（レース、馬、騎手など）
-- **RT_テーブル (20)**: 速報系データ（リアルタイムオッズなど）
-- **TS_テーブル (6)**: 時系列オッズデータ
-
-詳細は[テーブル一覧](reference/tables.md)を参照してください。
-
-## ライセンス
-
-- 非商用利用: Apache License 2.0
-- 商用利用: 事前にお問い合わせください → oracle.datascientist@gmail.com
-
-取得データは[JRA-VAN利用規約](https://jra-van.jp/info/rule.html)に従ってください。
+- [Architecture](architecture.md)
+- [CLI](CLI.md)
+- [PostgreSQL](postgresql.md)
+- [Time-series odds](timeseries_odds.md)
+- [Scripts](scripts.md)

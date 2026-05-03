@@ -201,7 +201,7 @@ pip install pytest
 ### Import errors
 ```bash
 # プロジェクトルートから実行
-cd C:\Users\mitsu\work\jrvltsql
+cd %USERPROFILE%\work\jrvltsql
 pytest tests/test_integration.py -v
 ```
 

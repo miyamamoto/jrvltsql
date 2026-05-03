@@ -3,7 +3,7 @@
 This module provides realtime data fetching from JV-Link.
 """
 
-from typing import Iterator, Optional, List
+from typing import Callable, Iterator, Optional, List
 
 from src.fetcher.base import BaseFetcher, FetcherError
 from src.jvlink.constants import (
@@ -13,7 +13,6 @@ from src.jvlink.constants import (
     is_valid_jvrtopen_spec,
     is_time_series_spec,
     generate_time_series_key,
-    generate_time_series_full_key,
     JYO_CODES,
 )
 from src.utils.logger import get_logger
@@ -333,32 +332,41 @@ class RealtimeFetcher(BaseFetcher):
         db_path: str,
         from_date: Optional[str] = None,
         to_date: Optional[str] = None,
+        pg_config: Optional[dict] = None,
+        progress_callback: Optional[Callable[[dict], None]] = None,
     ) -> Iterator[dict]:
         """Fetch time series odds for races registered in the database.
 
-        Based on JVLinkToSQLite implementation: JVRTOpen requires a full key
-        with Kaiji (回次) and Nichiji (日次), which can only be obtained from
-        previously fetched race data in NL_RA table.
+        Race targets are loaded from NL_RA so only actual races are queried.
+        JVRTOpen odds time-series retrieval uses a 12-digit key.
 
-        Key format: YYYYMMDD + JyoCD + Kaiji + Nichiji + RaceNum (16 digits)
-        Example: 2025113005050811
+        Key format: YYYYMMDD + JyoCD + RaceNum (12 digits)
+        Example: 202511300511
 
-        公式情報:
-        - 提供期間: 過去1年間
-        - データ提供開始: 2003年10月4日以降（保証外）
+        公式仕様:
+        - 0B30〜0B36 は速報オッズで、提供単位はレース毎、保存期間は1週間
+        - 0B41/0B42 は時系列オッズで、単複枠/馬連のみ、保存期間は1年間
+        - ワイド以降の長期時系列は、開催週に0B30をTS_O3〜TS_O6へ蓄積する
 
         Args:
             data_spec: Time series data spec code
-                      - 0B30: 単勝オッズ (O1)
-                      - 0B31: 複勝・枠連オッズ (O1, O2)
-                      - 0B32: 馬連オッズ (O2)
-                      - 0B33: ワイドオッズ (O3)
-                      - 0B34: 馬単オッズ (O4)
-                      - 0B35: 3連複オッズ (O5)
-                      - 0B36: 3連単オッズ (O6)
-            db_path: Path to SQLite database with NL_RA table
+                      - 0B30: 速報オッズ全賭式 (O1-O6, 1週間)
+                      - 0B31: 速報オッズ単複枠 (O1, 1週間)
+                      - 0B32: 速報オッズ馬連 (O2, 1週間)
+                      - 0B33: 速報オッズワイド (O3, 1週間)
+                      - 0B34: 速報オッズ馬単 (O4, 1週間)
+                      - 0B35: 速報オッズ3連複 (O5, 1週間)
+                      - 0B36: 速報オッズ3連単 (O6, 1週間)
+                      - 0B41: 時系列オッズ単複枠 (O1, 1年間)
+                      - 0B42: 時系列オッズ馬連 (O2, 1年間)
+            db_path: Path to SQLite database with NL_RA table.
+                     Ignored when pg_config is supplied.
             from_date: Start date in YYYYMMDD format (optional)
             to_date: End date in YYYYMMDD format (optional)
+            pg_config: PostgreSQL connection config. When supplied, race keys
+                       are read from public.nl_ra instead of SQLite.
+            progress_callback: Optional callback called after each race key is
+                               attempted. Receives counters and key status.
 
         Yields:
             Dictionary of parsed record data
@@ -380,7 +388,6 @@ class RealtimeFetcher(BaseFetcher):
             ... ):
             ...     print(record)
         """
-        import sqlite3
         from pathlib import Path
 
         # Validate data_spec
@@ -390,50 +397,94 @@ class RealtimeFetcher(BaseFetcher):
                 f"Time series specs: {', '.join(sorted(JVRTOPEN_TIME_SERIES_SPECS.keys()))}"
             )
 
-        # Validate database path
-        db_file = Path(db_path)
-        if not db_file.exists():
-            raise FetcherError(f"Database not found: {db_path}")
-
         # Build query for race keys from NL_RA
-        query = """
-            SELECT DISTINCT
-                Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum
-            FROM NL_RA
-            WHERE 1=1
-        """
-        params = []
+        if pg_config:
+            query = """
+                SELECT DISTINCT
+                    year, monthday, jyocd, kaiji, nichiji, racenum
+                FROM nl_ra
+                WHERE 1=1
+            """
+            params = []
+            placeholder = "%s"
+        else:
+            # Validate database path
+            db_file = Path(db_path)
+            if not db_file.exists():
+                raise FetcherError(f"Database not found: {db_path}")
+            query = """
+                SELECT DISTINCT
+                    Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum
+                FROM NL_RA
+                WHERE 1=1
+            """
+            params = []
+            placeholder = "?"
 
         if from_date:
             # Convert YYYYMMDD to Year and MonthDay
             year = from_date[:4]
             monthday = from_date[4:]
-            query += " AND (Year > ? OR (Year = ? AND MonthDay >= ?))"
-            params.extend([year, year, monthday])
+            if pg_config:
+                query += (
+                    f" AND (year > {placeholder} OR "
+                    f"(year = {placeholder} AND monthday >= {placeholder}))"
+                )
+                params.extend([int(year), int(year), int(monthday)])
+            else:
+                query += f" AND (Year > {placeholder} OR (Year = {placeholder} AND MonthDay >= {placeholder}))"
+                params.extend([year, year, monthday])
 
         if to_date:
             year = to_date[:4]
             monthday = to_date[4:]
-            query += " AND (Year < ? OR (Year = ? AND MonthDay <= ?))"
-            params.extend([year, year, monthday])
+            if pg_config:
+                query += (
+                    f" AND (year < {placeholder} OR "
+                    f"(year = {placeholder} AND monthday <= {placeholder}))"
+                )
+                params.extend([int(year), int(year), int(monthday)])
+            else:
+                query += f" AND (Year < {placeholder} OR (Year = {placeholder} AND MonthDay <= {placeholder}))"
+                params.extend([year, year, monthday])
 
-        query += " ORDER BY Year, MonthDay, JyoCD, RaceNum"
+        if pg_config:
+            query += (
+                " AND LPAD(CAST(jyocd AS TEXT), 2, '0') "
+                "IN ('01','02','03','04','05','06','07','08','09','10')"
+            )
+        else:
+            query += (
+                " AND printf('%02d', CAST(JyoCD AS INTEGER)) "
+                "IN ('01','02','03','04','05','06','07','08','09','10')"
+            )
+
+        if pg_config:
+            query += " ORDER BY year, monthday, jyocd, racenum"
+        else:
+            query += " ORDER BY Year, MonthDay, JyoCD, RaceNum"
 
         logger.info(
             "Starting batch time series fetch from database",
             data_spec=data_spec,
             spec_name=JVRTOPEN_TIME_SERIES_SPECS.get(data_spec, "Unknown"),
-            db_path=db_path,
+            db_path="postgresql" if pg_config else db_path,
             from_date=from_date,
             to_date=to_date,
         )
 
         # Get race keys from database
         try:
-            with sqlite3.connect(db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute(query, params)
-                race_rows = cursor.fetchall()
+            if pg_config:
+                race_rows = self._fetch_time_series_race_rows_from_postgres(query, params, pg_config)
+            else:
+                import sqlite3
+                from contextlib import closing
+
+                with closing(sqlite3.connect(db_path)) as conn:
+                    cursor = conn.cursor()
+                    cursor.execute(query, params)
+                    race_rows = cursor.fetchall()
         except Exception as e:
             raise FetcherError(f"Database query failed: {e}")
 
@@ -456,32 +507,47 @@ class RealtimeFetcher(BaseFetcher):
         total_records = 0
 
         try:
+            processed_keys = 0
+
             for row in race_rows:
+                processed_keys += 1
                 year, monthday, jyo_cd, kaiji, nichiji, race_num = row
 
                 # Build date string: YYYYMMDD
                 date_str = f"{year}{monthday:04d}" if isinstance(monthday, int) else f"{year}{monthday}"
 
-                # Convert values to proper types
-                kaiji_int = int(kaiji) if kaiji else 1
-                nichiji_int = int(nichiji) if nichiji else 1
+                # Convert values to proper types. Kaiji/Nichiji are selected
+                # from NL_RA for auditability, but JVRTOpen odds time-series
+                # keys use the 12-digit YYYYMMDDJJRR form.
                 race_num_int = int(race_num) if race_num else 1
 
-                # Generate full 16-digit key
                 try:
-                    key = generate_time_series_full_key(
-                        date_str, jyo_cd, kaiji_int, nichiji_int, race_num_int
-                    )
+                    key = generate_time_series_key(date_str, jyo_cd, race_num_int)
                 except ValueError as e:
                     logger.warning(f"Invalid key parameters: {e}")
                     error_keys += 1
+                    if progress_callback:
+                        progress_callback({
+                            "status": "invalid_key",
+                            "key": None,
+                            "processed_keys": processed_keys,
+                            "total_keys": total_keys,
+                            "success_keys": success_keys,
+                            "no_data_keys": no_data_keys,
+                            "error_keys": error_keys,
+                            "records_for_key": 0,
+                            "total_records": total_records,
+                        })
                     continue
 
+                records_for_key = 0
+                key_status = "error"
                 try:
                     ret, read_count = self.jvlink.jv_rt_open(data_spec, key)
 
                     if ret == -1:
                         no_data_keys += 1
+                        key_status = "no_data"
                         logger.debug(
                             "No data for key",
                             key=key,
@@ -492,6 +558,7 @@ class RealtimeFetcher(BaseFetcher):
 
                     if ret != JV_RT_SUCCESS:
                         error_keys += 1
+                        key_status = f"error:{ret}"
                         logger.warning(
                             "JVRTOpen error",
                             key=key,
@@ -501,7 +568,7 @@ class RealtimeFetcher(BaseFetcher):
 
                     # Read all records for this key
                     success_keys += 1
-                    records_for_key = 0
+                    key_status = "success"
 
                     for record in self._fetch_and_parse():
                         records_for_key += 1
@@ -516,19 +583,30 @@ class RealtimeFetcher(BaseFetcher):
                         records=records_for_key,
                     )
 
-                    # Close stream before opening next
-                    self.jvlink.jv_close()
-
                 except Exception as e:
                     error_keys += 1
+                    key_status = "exception"
                     if '-114' in str(e):
                         logger.debug("Not subscribed for key", key=key, error=str(e))
                     else:
                         logger.warning("Error fetching key", key=key, error=str(e))
+                finally:
                     try:
                         self.jvlink.jv_close()
                     except Exception:
                         pass
+                    if progress_callback:
+                        progress_callback({
+                            "status": key_status,
+                            "key": key,
+                            "processed_keys": processed_keys,
+                            "total_keys": total_keys,
+                            "success_keys": success_keys,
+                            "no_data_keys": no_data_keys,
+                            "error_keys": error_keys,
+                            "records_for_key": records_for_key,
+                            "total_records": total_records,
+                        })
 
         finally:
             try:
@@ -545,6 +623,51 @@ class RealtimeFetcher(BaseFetcher):
             error_keys=error_keys,
             total_records=total_records,
         )
+
+    @staticmethod
+    def _fetch_time_series_race_rows_from_postgres(
+        query: str,
+        params: list,
+        pg_config: dict,
+    ) -> list:
+        """Fetch NL_RA race keys from PostgreSQL for time-series odds retrieval."""
+        try:
+            import pg8000.dbapi as pgdb
+
+            conn = pgdb.connect(
+                host=pg_config.get("host", "localhost"),
+                port=int(pg_config.get("port", 5432)),
+                database=pg_config.get("database", "keiba"),
+                user=pg_config.get("user", "postgres"),
+                password=pg_config.get("password", ""),
+            )
+            try:
+                cur = conn.cursor()
+                cur.execute(query, params)
+                return cur.fetchall()
+            finally:
+                conn.close()
+        except ImportError:
+            try:
+                import psycopg
+
+                conn = psycopg.connect(
+                    host=pg_config.get("host", "localhost"),
+                    port=int(pg_config.get("port", 5432)),
+                    dbname=pg_config.get("database", "keiba"),
+                    user=pg_config.get("user", "postgres"),
+                    password=pg_config.get("password", ""),
+                )
+                try:
+                    with conn.cursor() as cur:
+                        cur.execute(query, params)
+                        return cur.fetchall()
+                finally:
+                    conn.close()
+            except ImportError as exc:
+                raise FetcherError(
+                    "PostgreSQL driver not installed. Install pg8000 or psycopg."
+                ) from exc
 
     def fetch_time_series_batch(
         self,
@@ -565,11 +688,10 @@ class RealtimeFetcher(BaseFetcher):
         support date range queries, so this method loops through individual
         race keys (YYYYMMDDJJRR format).
 
-        公式情報 (https://developer.jra-van.jp/t/topic/112):
-        - 公式提供期間: 過去1年間
-        - 実際の遡及可能期間: 2003年10月4日まで（保証外）
-        - JV-Link速報系データ: 1週間分のみ保存
-        - 多くのユーザーは独自に蓄積している
+        公式仕様:
+        - 0B30〜0B36 は速報オッズで、提供単位はレース毎、保存期間は1週間
+        - 0B41/0B42 は時系列オッズで、単複枠/馬連のみ、保存期間は1年間
+        - ワイド以降の長期時系列は、開催週に0B30をTS_O3〜TS_O6へ蓄積する
 
         時系列オッズの蓄積について:
         - TS_O1-O6テーブル（HassoTimeをPKに含む）を使用して蓄積可能
@@ -579,13 +701,15 @@ class RealtimeFetcher(BaseFetcher):
         Args:
             data_spec: Time series data spec code
                       - 0B20: 票数情報 (H1, H6)
-                      - 0B30: 単勝オッズ (O1)
-                      - 0B31: 複勝・枠連オッズ (O1, O2)
-                      - 0B32: 馬連オッズ (O2)
-                      - 0B33: ワイドオッズ (O3)
-                      - 0B34: 馬単オッズ (O4)
-                      - 0B35: 3連複オッズ (O5)
-                      - 0B36: 3連単オッズ (O6)
+                      - 0B30: 速報オッズ全賭式 (O1-O6, 1週間)
+                      - 0B31: 速報オッズ単複枠 (O1, 1週間)
+                      - 0B32: 速報オッズ馬連 (O2, 1週間)
+                      - 0B33: 速報オッズワイド (O3, 1週間)
+                      - 0B34: 速報オッズ馬単 (O4, 1週間)
+                      - 0B35: 速報オッズ3連複 (O5, 1週間)
+                      - 0B36: 速報オッズ3連単 (O6, 1週間)
+                      - 0B41: 時系列オッズ単複枠 (O1, 1年間)
+                      - 0B42: 時系列オッズ馬連 (O2, 1年間)
             from_date: Start date in YYYYMMDD format
             to_date: End date in YYYYMMDD format
             jyo_codes: List of track codes to fetch. If None, fetches all 10 tracks.
@@ -603,7 +727,7 @@ class RealtimeFetcher(BaseFetcher):
             - JVRTOpen returns -1 for "no data" (race not held), which is normal
             - Data availability depends on JRA-VAN server, not local setup
             - For best results, use dates with known race events
-            - 提供期間外（1年以上前）のデータは取得できない可能性があります
+            - 保存期間外の時系列データは取得できない可能性があります
 
         Examples:
             >>> # Fetch Win odds for all tracks on a specific day

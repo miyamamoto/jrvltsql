@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-05-03
+
+### Added
+
+- PostgreSQL 向け JRA-VAN 時系列オッズ取得導線を追加
+  - `quickstart_postgres_timeseries.bat`
+  - `fetch_timeseries_postgres.bat`
+  - `daily_sync.bat`
+- 公式1年保持の `0B41/0B42` を `TS_O1/TS_O2` に保存する導線を整理
+- 開催週の速報オッズ `0B30` 系から `TS_O1`〜`TS_O6` を蓄積する導線を追加
+- expanded odds rows の直接保存と multi-row PostgreSQL insert を追加
+- JRA collector 単体の architecture / PostgreSQL / time-series odds / scripts docs を追加
+
+### Fixed
+
+- JRA-VAN time-series odds key の生成を修正
+- 空欄・未発売系オッズ値を PostgreSQL 保存前に正規化
+- O1〜O6 の expanded parser output をテスト側でも正しく扱うよう修正
+- PostgreSQL multi-row placeholder generation を修正
+
+### Changed
+
+- PostgreSQL time-series quickstart 名を collector 汎用名へ変更
+  - new name: `quickstart_postgres_timeseries.bat`
+- 古い script README を削除し、現行 docs へ集約
+- 公開 docs から downstream system 固有の表現と内部パス例を削除
+
 ## [1.3.0] - 2026-04-22
 
 ### Added
@@ -98,7 +125,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - quickstart.py 対話形式セットアップウィザード
 - CLI コマンド（fetch, status, monitor, init）
 
-[Unreleased]: https://github.com/miyamamoto/jrvltsql/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/miyamamoto/jrvltsql/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/miyamamoto/jrvltsql/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/miyamamoto/jrvltsql/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/miyamamoto/jrvltsql/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/miyamamoto/jrvltsql/compare/v1.0.0...v1.1.0

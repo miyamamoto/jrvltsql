@@ -1972,8 +1972,8 @@ SCHEMAS = {
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
         )
     """,
-    # RT_RC: 騎手変更情報 (0B41) - リアルタイム用
-    # NL_RCはレコード情報だが、JVRTOpenの0B41は騎手変更情報として別フォーマット
+    # RT_RC: 騎手変更情報 - リアルタイム用
+    # 0B41/0B42は公式仕様上は時系列オッズ。変更情報は0B14/0B16等で扱う。
     "RT_RC": """
         CREATE TABLE IF NOT EXISTS RT_RC (
             RecordSpec TEXT,
@@ -2091,7 +2091,7 @@ SCHEMAS = {
             TanVote BIGINT,
             FukuVote BIGINT,
             WakurenVote BIGINT,
-            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban, HassoTime)
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban, Kumi, HassoTime)
         )
     """,
     "TS_O2": """

@@ -1,7 +1,8 @@
 """Parser for RT_RC record - Jockey Change Information (Real-time).
 
-RT_RC (0B41): リアルタイム騎手変更情報
+RT_RC: リアルタイム騎手変更情報
 This is different from NL_RC which is course record information.
+0B41 is official historical odds time-series, not jockey change data.
 """
 
 from typing import List
@@ -25,7 +26,7 @@ class RTRCParser(BaseParser):
     def _define_fields(self) -> List[FieldDef]:
         """Define field positions for RT_RC record.
 
-        Field structure based on JV-Data specification for 0B41 (騎手変更情報):
+        Field structure for realtime jockey-change records:
         - RecordSpec (2): Record type "RC"
         - DataKubun (1): Data classification
         - MakeDate (8): Data creation date (YYYYMMDD)
