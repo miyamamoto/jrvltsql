@@ -1,6 +1,8 @@
 # Time-Series Odds
 
 This repository supports two different JRA-VAN realtime odds paths.
+For the full supported-data matrix, including non-odds data specs, see
+[Supported data](data_support.md).
 
 | Purpose | JVRTOpen spec | Stored tables | Retention | Notes |
 | --- | --- | --- | --- | --- |

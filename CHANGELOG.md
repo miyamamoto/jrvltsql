@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- JVOpen/JVRTOpen の対応 data spec、レコード種別、保存先テーブル、運用コマンドをまとめた `docs/data_support.md` を追加
+
 ### Changed
 
 - `quickstart.bat` から PostgreSQL time-series quickstart を続けて実行できる導線を追加

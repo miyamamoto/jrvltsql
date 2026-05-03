@@ -28,6 +28,9 @@ NAR data is outside this repository.
 | `daily_sync.bat` | Recent race-card/result sync for scheduled Windows tasks. |
 | `install_tasks.ps1` | Windows Task Scheduler registration for `daily_sync.bat`. |
 
+The supported `JVOpen` / `JVRTOpen` spec matrix is documented in
+[Supported data](data_support.md).
+
 ## Data Stores
 
 | Store | Use |

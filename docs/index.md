@@ -11,6 +11,9 @@ JRVLTSQL は JRA-VAN DataLab のデータを SQLite / PostgreSQL に取り込む
 - JRA-VAN DataLab + JV-Link
 - SQLite / PostgreSQL
 
+対応済みの JVOpen / JVRTOpen データ種別、保存先テーブル、運用コマンドは
+[Supported data](data_support.md) に集約しています。
+
 ## 基本コマンド
 
 ```bat
@@ -39,6 +42,7 @@ jltsql realtime odds-timeseries --from 20250425 --to 20260425 --db postgresql
 
 - [Architecture](architecture.md)
 - [CLI](CLI.md)
+- [Supported data](data_support.md)
 - [PostgreSQL](postgresql.md)
 - [Time-series odds](timeseries_odds.md)
 - [Scripts](scripts.md)

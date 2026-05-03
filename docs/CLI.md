@@ -16,13 +16,16 @@ jltsql create-indexes
 jltsql fetch --from 20260101 --to 20260417 --spec RACE --option 1
 ```
 
+対応済みの `JVOpen` / `JVRTOpen` spec、保存先テーブル、運用コマンドは
+[Supported data](data_support.md) を参照してください。
+
 主な `option`:
 
 | option | 用途 |
 |--------|------|
-| 1 | 通常取得 |
-| 2 | セットアップ簡易 |
-| 3 | セットアップ標準 |
+| 1 | 通常取得（差分） |
+| 2 | 今週データ |
+| 3 | セットアップ |
 | 4 | 分割セットアップ |
 
 主な `spec`:

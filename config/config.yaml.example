@@ -70,15 +70,15 @@ data_fetch:
     enabled: true
     interval_seconds: 60
     # Real-time data spec codes
-    # 0B12: Race results
-    # 0B15: Horse weights
-    # 0B20: Odds updates
-    # 0B31: Payouts
+    # 0B11: Horse weights
+    # 0B12: Race results and payouts after result confirmation
+    # 0B14: Weather/track/scratch/jockey/time/course changes
+    # 0B15: Race-card/race updates from entry-list stage onward
+    # 0B30-0B36: Realtime odds (race-key based, about one-week retention)
+    # 0B41-0B42: Official one-year odds time-series
     data_specs:
       - "0B12"      # Race results
-      - "0B15"      # Horse weights
-      - "0B20"      # Odds updates
-      - "0B31"      # Payouts
+      - "0B15"      # Race-card/race updates
 
 # Performance Settings
 performance:
