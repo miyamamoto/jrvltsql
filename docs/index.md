@@ -29,7 +29,9 @@ jltsql realtime odds-timeseries --from 20250425 --to 20260425 --db postgresql
 - JRA-VAN の実データ取得は Windows + JV-Link 環境が必要です。
 - `0B41/0B42` は公式1年保持の時系列オッズで、`TS_O1/TS_O2` に保存します。
 - 0B30〜0B36 は速報オッズで、公式仕様上の保存期間は 1週間です。
+- `quickstart.bat` は通常セットアップ完了後に PostgreSQL + 時系列オッズ投入を続けるか確認します。
 - PostgreSQL へ `RACE` と `TS_O1/TS_O2` をまとめて投入する場合は `quickstart_postgres_timeseries.bat` を使います。
+- `quickstart_postgres_timeseries.bat` の最後で、`daily_sync.bat` を Windows Task Scheduler に登録するか確認します。
 - ワイド・馬単・三連複・三連単の締切前オッズは、開催週に `odds-sokuho-timeseries` で継続蓄積してください。
 - 古い設計メモや未実装機能のドキュメントは削除しています。
 
