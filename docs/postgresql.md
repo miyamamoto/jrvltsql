@@ -1,8 +1,10 @@
 # PostgreSQL
 
-jrvltsql can write directly to PostgreSQL for shared collection.
+jrvltsql は SQLite だけでなく PostgreSQL へ直接保存できます。複数マシンで
+コレクタのデータを共有する場合や、下流の分析基盤へ渡す場合は PostgreSQL
+運用を推奨します。
 
-## Required Environment
+## 必要な環境変数
 
 ```bat
 set POSTGRES_HOST=<host>
@@ -12,40 +14,39 @@ set POSTGRES_USER=<user>
 set POSTGRES_PASSWORD=<password>
 ```
 
-`POSTGRES_DB` is also accepted by some scripts as an alias for
-`POSTGRES_DATABASE`.
+一部の script では `POSTGRES_DATABASE` の別名として `POSTGRES_DB` も使えます。
 
-## Quickstart
+## クイックスタート
 
 ```bat
 quickstart_postgres_timeseries.bat 20250426 20260412
 ```
 
-This loads race data and official one-year `TS_O1/TS_O2` odds into PostgreSQL.
-`quickstart.bat` also offers this PostgreSQL time-series step after the normal
-setup completes.
+このコマンドは、RACE データと公式1年保持の `TS_O1/TS_O2` 時系列オッズを
+PostgreSQL に投入します。通常の `quickstart.bat` からも、セットアップ完了後に
+この PostgreSQL 時系列オッズ投入へ進めます。
 
-At the end of `quickstart_postgres_timeseries.bat`, the script asks whether to
-register `daily_sync.bat` in Windows Task Scheduler. If PostgreSQL connection
-values are only set in the current shell, choose the prompt that persists the
-current `POSTGRES_*` values to the Windows user environment, or configure those
-environment variables manually before relying on the scheduled task.
+`quickstart_postgres_timeseries.bat` の最後では、`daily_sync.bat` を
+Windows タスクスケジューラへ登録するか確認します。PostgreSQL 接続情報を
+現在の CMD セッションだけに設定している場合、タスク実行時には見えません。
+登録時の確認で現在の `POSTGRES_*` を Windows ユーザー環境変数へ保存するか、
+事前に永続的な環境変数として設定してください。
 
-## Daily Sync
+## 日次同期
 
 ```bat
 daily_sync.bat --db postgresql --days-back 7 --days-forward 3
 ```
 
-This keeps recent race cards, results, and related ordinary data current.
+このコマンドは、直近のレース番組、結果、関連する通常データを更新します。
 
-Register or update the daily task manually:
+手動で Windows タスクを登録・更新する場合:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File install_tasks.ps1 -DbType postgresql -Time 06:30
 ```
 
-## SQLite Fallback
+## SQLite フォールバック
 
-The example config defaults to SQLite. Use SQLite for local single-user work or
-when PostgreSQL is not available.
+`config/config.yaml.example` の既定は SQLite です。PostgreSQL を使えない
+ローカル検証や単一ユーザー運用では SQLite を使えます。

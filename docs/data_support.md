@@ -1,21 +1,20 @@
-# Supported Data Matrix
+# 対応データ種別一覧
 
-This page lists the JRA-VAN data families that jrvltsql currently supports.
-It is intended to make the collection scope explicit in the same operational
-style as update-data matrices in tools such as EveryDB2.
+このページでは、jrvltsql が対応している JRA-VAN DataLab / JV-Link の
+データ種別、レコード種別、保存先テーブル、運用コマンドをまとめます。
 
-jrvltsql is JRA-only. NAR data is outside this repository.
+jrvltsql は JRA / 中央競馬専用です。NAR / 地方競馬はこのリポジトリの対象外です。
 
-## Reading This Page
+## 表の見方
 
-| Mark | Meaning |
+| 表記 | 意味 |
 | --- | --- |
-| Supported | Parser, schema, and importer/updater path exist. |
-| Operational | A maintained command or batch file is provided. |
-| Parser/schema only | Record parser and table exist, but no recommended operational flow is documented. |
-| Not supported | Outside the current jrvltsql scope. |
+| 対応済み | パーサー、スキーマ、importer / updater の保存経路があります。 |
+| 運用導線あり | 保守している CLI コマンドまたは batch ファイルがあります。 |
+| パーサー・スキーマのみ | レコードのパーサーとテーブルはありますが、推奨運用フローは未整備です。 |
+| 非対応 | 現在の jrvltsql の対象外です。 |
 
-The implementation source of truth is:
+実装上の正本は以下です。
 
 - `src/jvlink/constants.py`
 - `src/parser/factory.py`
@@ -23,82 +22,81 @@ The implementation source of truth is:
 - `src/database/schema.py`
 - `src/cli/main.py`
 
-## Acquisition Families
+## 取得系統
 
-| Family | JV-Link API | Option/spec | Operational command | Key/range | Status |
+| 系統 | JV-Link API | option / データ種別 | 運用コマンド | キー / 範囲 | 対応状況 |
 | --- | --- | --- | --- | --- | --- |
-| Normal accumulated data | `JVOpen` | option `1` | `jltsql fetch --spec <SPEC> --option 1` | `FromTime` style date range | Supported |
-| This-week data | `JVOpen` | option `2` | `quickstart.bat`, `daily_sync.bat`, `jltsql fetch --option 2` | Current race week | Supported for `TOKU`, `RACE`, `TCVN`, `RCVN` |
-| Setup data | `JVOpen` | option `3` / `4` | `quickstart.bat`, `jltsql fetch --option 3/4` | Initial historical setup | Supported for the accumulated specs listed below |
-| Realtime race/event data | `JVRTOpen` | `0B11` to `0B17` | `jltsql realtime start --specs <SPEC>` | `YYYYMMDD` | Supported for listed record types |
-| Realtime odds/votes | `JVRTOpen` | `0B20`, `0B30` to `0B36` | `jltsql realtime timeseries --spec <SPEC>` | `YYYYMMDDJJRR` | Supported, one-week JRA-VAN retention |
-| Official historical odds time-series | `JVRTOpen` | `0B41`, `0B42` | `quickstart_postgres_timeseries.bat`, `fetch_timeseries_postgres.bat`, `jltsql realtime odds-timeseries` | `YYYYMMDDJJRR` | Supported, about one-year JRA-VAN retention |
+| 蓄積系 通常データ | `JVOpen` | option `1` | `jltsql fetch --spec <SPEC> --option 1` | FromTime 形式の日付範囲 | 対応済み |
+| 今週データ | `JVOpen` | option `2` | `quickstart.bat`, `daily_sync.bat`, `jltsql fetch --option 2` | 今週開催分 | `TOKU`, `RACE`, `TCVN`, `RCVN` に対応 |
+| セットアップデータ | `JVOpen` | option `3` / `4` | `quickstart.bat`, `jltsql fetch --option 3/4` | 初期構築用の過去範囲 | 下記の蓄積系 spec に対応 |
+| 速報レース・開催情報 | `JVRTOpen` | `0B11`〜`0B17` | `jltsql realtime start --specs <SPEC>` | `YYYYMMDD` | 下記レコードに対応 |
+| 速報オッズ・票数 | `JVRTOpen` | `0B20`, `0B30`〜`0B36` | `jltsql realtime timeseries --spec <SPEC>` | `YYYYMMDDJJRR` | 対応済み。JRA-VAN 側の保持は約1週間 |
+| 公式時系列オッズ | `JVRTOpen` | `0B41`, `0B42` | `quickstart_postgres_timeseries.bat`, `fetch_timeseries_postgres.bat`, `jltsql realtime odds-timeseries` | `YYYYMMDDJJRR` | 対応済み。JRA-VAN 側の保持は約1年 |
 
-## JVOpen Accumulated Data
+## JVOpen 蓄積系データ
 
-| Data spec | Alias | Description | Main record types | Stored tables | Option 1 | Option 2 | Option 3/4 | Notes |
+| データ種別 | 別名 | 内容 | 主なレコード種別 | 保存先テーブル | option 1 | option 2 | option 3/4 | 備考 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `TOKU` | - | Special registration | `TK` | `NL_TK` | Yes | Yes | Yes | Included in standard/full quickstart. |
-| `RACE` | - | Race card, results, payouts, final odds, votes, WIN5, exclusions | `RA`, `SE`, `HR`, `H1`, `H6`, `O1`-`O6`, `WF`, `JG` | `NL_RA`, `NL_SE`, `NL_HR`, `NL_H1`, `NL_H6`, `NL_O1`-`NL_O6`, `NL_WF`, `NL_JG` | Yes | Yes | Yes | Core race data. Final odds are stored here, not decision-time odds. |
-| `DIFF` | `DIFN` | Accumulated master diffs | `UM`, `KS`, `CH`, `BR`, `BN`, `RC` | `NL_UM`, `NL_KS`, `NL_CH`, `NL_BR`, `NL_BN`, `NL_RC` | Yes | No | Yes | `DIFN` is accepted as the current alias. |
-| `BLOD` | `BLDN` | Bloodline data | `HN`, `SK`, `BT` | `NL_HN`, `NL_SK`, `NL_BT` | Yes | No | Yes | `BLDN` is accepted as the current alias. |
-| `MING` | - | Data-mining predictions | `DM`, `TM` | `NL_DM`, `NL_TM` | Yes | No | Yes | Included in full quickstart. |
-| `SLOP` | - | Hill-training related data | `HC` | `NL_HC` | Yes | No | Yes | Included in standard/full quickstart. |
-| `WOOD` | - | Woodchip-training related data | `WC` | `NL_WC` | Yes | No | Yes | Included in standard/full quickstart. |
-| `YSCH` | - | Race schedule | `YS` | `NL_YS` | Yes | No | Yes | Used for race calendar maintenance. |
-| `HOSE` | `HOSN` | Sales price data | `HS` | `NL_HS` | Yes | No | Yes | `HOSN` is accepted as the current alias. |
-| `HOYU` | - | Horse-name meaning/origin | `HY` | `NL_HY` | Yes | No | Yes | Included in standard/full quickstart. |
-| `COMM` | - | Course/commentary information | `CS` | `NL_CS` | Yes | No | Yes | Included in full quickstart. |
-| `SNAP` | - | Race-card snapshot data | Returned record types vary | Existing `NL_*` tables by record type | Yes | No | Yes | Accepted by validation; not used by default quickstart. |
-| `O1`-`O6` | - | Final odds by bet type | `O1`-`O6` | `NL_O1`-`NL_O6` | Yes | No | Yes | Usually obtained through `RACE`; use time-series commands for decision-time odds. |
-| `TCVN` | - | Special-registration supplementation | Multiple master/race records | Existing `NL_*` tables by record type | No | Yes | No | Used by this-week update mode. |
-| `RCVN` | - | Race-info supplementation | Multiple master/race records | Existing `NL_*` tables by record type | No | Yes | No | Used by this-week update mode. |
+| `TOKU` | - | 特別登録馬 | `TK` | `NL_TK` | はい | はい | はい | standard / full quickstart に含めています。 |
+| `RACE` | - | レース、出走馬、払戻、確定オッズ、票数、WIN5、除外情報 | `RA`, `SE`, `HR`, `H1`, `H6`, `O1`〜`O6`, `WF`, `JG` | `NL_RA`, `NL_SE`, `NL_HR`, `NL_H1`, `NL_H6`, `NL_O1`〜`NL_O6`, `NL_WF`, `NL_JG` | はい | はい | はい | 中核データです。`NL_O*` は確定オッズで、投資判断時点のオッズではありません。 |
+| `DIFF` | `DIFN` | 蓄積系マスタ差分 | `UM`, `KS`, `CH`, `BR`, `BN`, `RC` | `NL_UM`, `NL_KS`, `NL_CH`, `NL_BR`, `NL_BN`, `NL_RC` | はい | いいえ | はい | 現在は `DIFN` も受け付けます。 |
+| `BLOD` | `BLDN` | 血統情報 | `HN`, `SK`, `BT` | `NL_HN`, `NL_SK`, `NL_BT` | はい | いいえ | はい | 現在は `BLDN` も受け付けます。 |
+| `MING` | - | データマイニング予想 | `DM`, `TM` | `NL_DM`, `NL_TM` | はい | いいえ | はい | full quickstart に含めています。 |
+| `SLOP` | - | 坂路調教関連 | `HC` | `NL_HC` | はい | いいえ | はい | standard / full quickstart に含めています。 |
+| `WOOD` | - | ウッドチップ調教関連 | `WC` | `NL_WC` | はい | いいえ | はい | standard / full quickstart に含めています。 |
+| `YSCH` | - | 開催スケジュール | `YS` | `NL_YS` | はい | いいえ | はい | 開催カレンダー保守に使います。 |
+| `HOSE` | `HOSN` | 競走馬市場取引価格 | `HS` | `NL_HS` | はい | いいえ | はい | 現在は `HOSN` も受け付けます。 |
+| `HOYU` | - | 馬名の意味由来 | `HY` | `NL_HY` | はい | いいえ | はい | standard / full quickstart に含めています。 |
+| `COMM` | - | 各種解説・コース情報 | `CS` | `NL_CS` | はい | いいえ | はい | full quickstart に含めています。 |
+| `SNAP` | - | 出馬表スナップショット | 返却レコードは状況依存 | レコード種別に応じた既存 `NL_*` テーブル | はい | いいえ | はい | validation 上は対応。既定 quickstart では使っていません。 |
+| `O1`〜`O6` | - | 賭式別の確定オッズ | `O1`〜`O6` | `NL_O1`〜`NL_O6` | はい | いいえ | はい | 通常は `RACE` 経由で取得します。投資判断時点のオッズは時系列コマンドを使います。 |
+| `TCVN` | - | 特別登録馬情報補填 | 複数のマスタ・レース系レコード | レコード種別に応じた既存 `NL_*` テーブル | いいえ | はい | いいえ | 今週データ更新で使います。 |
+| `RCVN` | - | レース情報補填 | 複数のマスタ・レース系レコード | レコード種別に応じた既存 `NL_*` テーブル | いいえ | はい | いいえ | 今週データ更新で使います。 |
 
-## JVRTOpen Realtime Race/Event Data
+## JVRTOpen 速報レース・開催情報
 
-| Data spec | Description | Expected record types | Stored tables | Key format | Status |
+| データ種別 | 内容 | 想定レコード種別 | 保存先テーブル | キー形式 | 対応状況 |
 | --- | --- | --- | --- | --- | --- |
-| `0B11` | Realtime horse weight | `WH` | `RT_WH` | `YYYYMMDD` | Supported |
-| `0B12` | Realtime race result / payout updates after result confirmation | `RA`, `SE`, `HR` | `RT_RA`, `RT_SE`, `RT_HR` | `YYYYMMDD` | Supported |
-| `0B13` | Realtime time-type data-mining prediction | `DM` | `RT_DM` | `YYYYMMDD` | Supported |
-| `0B14` | Realtime event/weather/track-change bundle | `WE`, `AV`, `JC`, `TC`, `CC` | `RT_WE`, `RT_AV`, `RT_JC`, `RT_TC`, `RT_CC` | `YYYYMMDD` | Supported |
-| `0B15` | Realtime race-card/race updates from entry-list stage onward | `RA`, `SE`, `HR` | `RT_RA`, `RT_SE`, `RT_HR` | `YYYYMMDD` | Supported |
-| `0B16` | Realtime event-change stream | `WE`, `AV`, `JC`, `TC`, `CC` | `RT_WE`, `RT_AV`, `RT_JC`, `RT_TC`, `RT_CC` | `YYYYMMDD` | Supported if provided by JV-Link for the event |
-| `0B17` | Realtime match-type data-mining prediction | `TM` | `RT_TM` | `YYYYMMDD` | Supported |
-| `0B51` | Realtime WIN5 | `WF` | `NL_WF` parser/schema exists; no `RT_WF` operational table | `YYYYMMDD` or WIN5 event key | Parser/schema only |
+| `0B11` | 速報馬体重 | `WH` | `RT_WH` | `YYYYMMDD` | 対応済み |
+| `0B12` | 成績確定後の速報レース・払戻 | `RA`, `SE`, `HR` | `RT_RA`, `RT_SE`, `RT_HR` | `YYYYMMDD` | 対応済み |
+| `0B13` | 速報タイム型データマイニング予想 | `DM` | `RT_DM` | `YYYYMMDD` | 対応済み |
+| `0B14` | 速報開催情報一括 | `WE`, `AV`, `JC`, `TC`, `CC` | `RT_WE`, `RT_AV`, `RT_JC`, `RT_TC`, `RT_CC` | `YYYYMMDD` | 対応済み |
+| `0B15` | 出走馬名表以降の速報レース情報 | `RA`, `SE`, `HR` | `RT_RA`, `RT_SE`, `RT_HR` | `YYYYMMDD` | 対応済み |
+| `0B16` | 速報開催情報変更 | `WE`, `AV`, `JC`, `TC`, `CC` | `RT_WE`, `RT_AV`, `RT_JC`, `RT_TC`, `RT_CC` | `YYYYMMDD` | JV-Link から提供される場合に対応 |
+| `0B17` | 速報対戦型データマイニング予想 | `TM` | `RT_TM` | `YYYYMMDD` | 対応済み |
+| `0B51` | 速報重勝式 WIN5 | `WF` | `NL_WF` のパーサー・スキーマは存在。`RT_WF` 運用テーブルは未整備 | `YYYYMMDD` または WIN5 開催キー | パーサー・スキーマのみ |
 
-## JVRTOpen Odds And Votes
+## JVRTOpen オッズ・票数
 
-| Data spec | Description | Expected record types | Stored tables in normal realtime mode | Stored tables in time-series mode | Key format | JRA-VAN retention | Operational command |
+| データ種別 | 内容 | 想定レコード種別 | 通常速報モードの保存先 | 時系列モードの保存先 | キー形式 | JRA-VAN 側の保持 | 運用コマンド |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `0B20` | Realtime vote counts | `H1`, `H6` | `RT_H1`, `RT_H6` | Not applicable | `YYYYMMDDJJRR` | About one week | Parser/schema supported; no recommended batch helper |
-| `0B30` | Realtime odds, all bet types | `O1`-`O6` | `RT_O1`-`RT_O6` | `TS_O1`-`TS_O6` | `YYYYMMDDJJRR` | About one week | `jltsql realtime odds-sokuho-timeseries` |
-| `0B31` | Realtime odds, win/place/bracket | `O1` | `RT_O1` | `TS_O1` | `YYYYMMDDJJRR` | About one week | `jltsql realtime timeseries --spec 0B31` |
-| `0B32` | Realtime odds, quinella | `O2` | `RT_O2` | `TS_O2` | `YYYYMMDDJJRR` | About one week | `jltsql realtime timeseries --spec 0B32` |
-| `0B33` | Realtime odds, wide | `O3` | `RT_O3` | `TS_O3` | `YYYYMMDDJJRR` | About one week | `jltsql realtime timeseries --spec 0B33` |
-| `0B34` | Realtime odds, exacta | `O4` | `RT_O4` | `TS_O4` | `YYYYMMDDJJRR` | About one week | `jltsql realtime timeseries --spec 0B34` |
-| `0B35` | Realtime odds, trio | `O5` | `RT_O5` | `TS_O5` | `YYYYMMDDJJRR` | About one week | `jltsql realtime timeseries --spec 0B35` |
-| `0B36` | Realtime odds, trifecta | `O6` | `RT_O6` | `TS_O6` | `YYYYMMDDJJRR` | About one week | `jltsql realtime timeseries --spec 0B36` |
-| `0B41` | Official historical odds time-series, win/place/bracket | `O1` | Not recommended | `TS_O1` | `YYYYMMDDJJRR` | About one year | `jltsql realtime odds-timeseries` |
-| `0B42` | Official historical odds time-series, quinella | `O2` | Not recommended | `TS_O2` | `YYYYMMDDJJRR` | About one year | `jltsql realtime odds-timeseries` |
+| `0B20` | 速報票数 | `H1`, `H6` | `RT_H1`, `RT_H6` | 対象外 | `YYYYMMDDJJRR` | 約1週間 | パーサー・スキーマ対応。推奨 batch helper は未整備 |
+| `0B30` | 全賭式の速報オッズ | `O1`〜`O6` | `RT_O1`〜`RT_O6` | `TS_O1`〜`TS_O6` | `YYYYMMDDJJRR` | 約1週間 | `jltsql realtime odds-sokuho-timeseries` |
+| `0B31` | 単勝・複勝・枠連の速報オッズ | `O1` | `RT_O1` | `TS_O1` | `YYYYMMDDJJRR` | 約1週間 | `jltsql realtime timeseries --spec 0B31` |
+| `0B32` | 馬連の速報オッズ | `O2` | `RT_O2` | `TS_O2` | `YYYYMMDDJJRR` | 約1週間 | `jltsql realtime timeseries --spec 0B32` |
+| `0B33` | ワイドの速報オッズ | `O3` | `RT_O3` | `TS_O3` | `YYYYMMDDJJRR` | 約1週間 | `jltsql realtime timeseries --spec 0B33` |
+| `0B34` | 馬単の速報オッズ | `O4` | `RT_O4` | `TS_O4` | `YYYYMMDDJJRR` | 約1週間 | `jltsql realtime timeseries --spec 0B34` |
+| `0B35` | 三連複の速報オッズ | `O5` | `RT_O5` | `TS_O5` | `YYYYMMDDJJRR` | 約1週間 | `jltsql realtime timeseries --spec 0B35` |
+| `0B36` | 三連単の速報オッズ | `O6` | `RT_O6` | `TS_O6` | `YYYYMMDDJJRR` | 約1週間 | `jltsql realtime timeseries --spec 0B36` |
+| `0B41` | 単勝・複勝・枠連の公式時系列オッズ | `O1` | 非推奨 | `TS_O1` | `YYYYMMDDJJRR` | 約1年 | `jltsql realtime odds-timeseries` |
+| `0B42` | 馬連の公式時系列オッズ | `O2` | 非推奨 | `TS_O2` | `YYYYMMDDJJRR` | 約1年 | `jltsql realtime odds-timeseries` |
 
-Important operational constraints:
+運用上の重要事項:
 
-- `0B41` and `0B42` are the only official long-retention historical
-  time-series odds feeds.
-- Wide, exacta, trio, and trifecta decision-time odds require race-week
-  accumulation through `0B30` or `0B33` to `0B36`.
-- Time-series odds commands save expanded one-row-per-combination rows in
-  `TS_O*` tables and preserve `HassoTime`.
-- `NL_O*` tables contain final odds. They are useful for historical reference
-  but must not be treated as decision-time odds.
+- 公式に長期保持される時系列オッズは `0B41` と `0B42` です。
+- ワイド、馬単、三連複、三連単の投資判断時点オッズは、開催週に
+  `0B30` または `0B33`〜`0B36` を継続蓄積する必要があります。
+- 時系列オッズコマンドは、組み合わせ単位に展開した行を `TS_O*` に保存し、
+  `HassoTime` を保持します。
+- `NL_O*` は確定オッズです。過去参照には使えますが、投資判断時点の
+  オッズとして扱ってはいけません。
 
-## Parser And Table Coverage
+## パーサー・テーブル対応
 
-jrvltsql currently has parser and schema coverage for these 38 JRA record
-types:
+jrvltsql は現在、以下 38 種類の JRA レコード種別に対してパーサーと
+スキーマを持っています。
 
-| Record types | Stored tables |
+| レコード種別 | 保存先テーブル |
 | --- | --- |
 | `RA`, `SE`, `HR` | `NL_RA`, `NL_SE`, `NL_HR` |
 | `UM`, `KS`, `CH`, `BR`, `BN` | `NL_UM`, `NL_KS`, `NL_CH`, `NL_BR`, `NL_BN` |
@@ -110,17 +108,13 @@ types:
 | `DM`, `TM`, `WF`, `JG` | `NL_DM`, `NL_TM`, `NL_WF`, `NL_JG` |
 | `HC`, `HS`, `HY`, `WC`, `CK` | `NL_HC`, `NL_HS`, `NL_HY`, `NL_WC`, `NL_CK` |
 
-Realtime mirrors exist for the supported realtime record families as `RT_*`.
-Odds time-series mirrors exist as `TS_O1` to `TS_O6`.
+対応済みの速報系レコードは `RT_*` にも保存できます。オッズ時系列は
+`TS_O1`〜`TS_O6` に保存します。
 
-## Out Of Scope
+## 対象外
 
-| Item | Status | Reason |
+| 項目 | 状況 | 理由 |
 | --- | --- | --- |
-| NAR / local racing | Not supported | This repository is JRA-only. Use a separate NAR collector/repository. |
-| Long-retention historical time-series for wide/exacta/trio/trifecta | Not available from JRA-VAN official long-history specs | Must be accumulated during the current race week via `0B30` or `0B33`-`0B36`. |
-| Investment decision snapshots | Downstream concern | jrvltsql stores raw/final/time-series records; strategy systems choose decision timing from stored data. |
-
-## Reference
-
-- [EveryDB2 manual: update data type settings](https://everydb.iwinz.net/edb2_manual/05-UpdateData.html)
+| NAR / 地方競馬 | 非対応 | このリポジトリは JRA 専用です。地方競馬は別コレクタ / 別リポジトリの対象です。 |
+| ワイド・馬単・三連複・三連単の長期公式時系列 | JRA-VAN の長期公式 spec では取得不可 | 開催週に `0B30` または `0B33`〜`0B36` で蓄積する必要があります。 |
+| 投資判断スナップショット | 下流システム側の責務 | jrvltsql は raw / 確定 / 時系列データを保存します。投資判断時刻は保存済みデータから利用側が選びます。 |

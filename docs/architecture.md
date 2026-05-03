@@ -1,65 +1,68 @@
-# Architecture
+# アーキテクチャ
 
-jrvltsql is a Windows collector for JRA-VAN DataLab. It stores JRA data in
-SQLite or PostgreSQL and can optionally mirror data into a shared PostgreSQL
-database for downstream analytics.
+jrvltsql は、JRA-VAN DataLab のデータを SQLite または PostgreSQL に保存する
+Windows 向け JRA データコレクタです。共有分析基盤向けに PostgreSQL へ
+直接保存できます。
 
-## Scope
+## 対象範囲
 
-- JRA only.
-- Windows 10/11.
-- JRA-VAN DataLab and JV-Link.
-- 32-bit Python is recommended because JV-Link is a 32-bit COM component.
+- JRA / 中央競馬のみ
+- Windows 10 / 11
+- JRA-VAN DataLab + JV-Link
+- JV-Link COM コンポーネントが 32-bit のため、32-bit Python を推奨
 
-NAR data is outside this repository.
+NAR / 地方競馬はこのリポジトリの対象外です。
 
-## Components
+## 主要コンポーネント
 
-| Component | Responsibility |
+| コンポーネント | 役割 |
 | --- | --- |
-| `src/cli/main.py` | Click CLI entry point (`jltsql`). |
-| `src/jvlink/` | JV-Link COM access and constants. |
-| `src/parser/` | JRA-VAN record parsers. |
-| `src/database/` | SQLite/PostgreSQL handlers and schemas. |
-| `src/realtime/` | Realtime data collection. |
-| `scripts/quickstart.py` | Non-interactive and interactive setup/update orchestration. |
-| `quickstart.bat` | General SQLite-first quickstart with optional PostgreSQL time-series follow-up. |
-| `quickstart_postgres_timeseries.bat` | PostgreSQL + official time-series odds setup, followed by optional task registration. |
-| `daily_sync.bat` | Recent race-card/result sync for scheduled Windows tasks. |
-| `install_tasks.ps1` | Windows Task Scheduler registration for `daily_sync.bat`. |
+| `src/cli/main.py` | Click ベースの CLI エントリポイントです。コマンド名は `jltsql` です。 |
+| `src/jvlink/` | JV-Link COM へのアクセス、データ種別定数、キー生成を担当します。 |
+| `src/parser/` | JRA-VAN レコードのパーサー群です。 |
+| `src/database/` | SQLite / PostgreSQL ハンドラ、スキーマ、テーブル対応を管理します。 |
+| `src/realtime/` | JVRTOpen 速報・時系列データの保存処理を担当します。 |
+| `scripts/quickstart.py` | 対話・非対話の初期セットアップと更新処理をまとめます。 |
+| `quickstart.bat` | Windows 向けの通常 quickstart です。必要に応じて PostgreSQL 時系列オッズ導線へ進めます。 |
+| `quickstart_postgres_timeseries.bat` | PostgreSQL へ RACE と公式時系列オッズを投入し、最後にタスク登録を確認します。 |
+| `daily_sync.bat` | Windows タスクスケジューラから実行する日次同期です。 |
+| `install_tasks.ps1` | `daily_sync.bat` の Windows タスク登録・更新を行います。 |
 
-The supported `JVOpen` / `JVRTOpen` spec matrix is documented in
-[Supported data](data_support.md).
+対応している `JVOpen` / `JVRTOpen` spec、保存先テーブル、運用コマンドは
+[対応データ種別一覧](data_support.md) にまとめています。
 
-## Data Stores
+## データ保存先
 
-| Store | Use |
+| 保存先 | 用途 |
 | --- | --- |
-| SQLite | Local single-user storage and fallback. |
-| PostgreSQL | Shared storage for multi-host analytics and downstream systems. |
-| Binary cache | Local cache to avoid unnecessary JV-Link reads. |
+| SQLite | 単一ユーザー・ローカル検証・PostgreSQL がない環境でのフォールバック |
+| PostgreSQL | 複数ホストで共有するコレクタ / 分析基盤 |
+| バイナリキャッシュ | JV-Link 読み出しの再実行を減らすためのローカルキャッシュ |
 
-`config/config.yaml.example` defaults to SQLite. PostgreSQL mode is selected
-through CLI options or a local config file.
+`config/config.yaml.example` の既定は SQLite です。PostgreSQL を使う場合は
+CLI 引数またはローカル設定で切り替えます。
 
-## Time-Series Odds
+## 時系列オッズ
 
-JRA-VAN long-retention time-series odds are:
+JRA-VAN の公式長期保持時系列オッズは以下です。
 
-| JVRTOpen spec | Stored tables | Coverage |
+| JVRTOpen spec | 保存先テーブル | 対象 |
 | --- | --- | --- |
-| `0B41` | `TS_O1` | Win/place/bracket, one-year retention. |
-| `0B42` | `TS_O2` | Quinella, one-year retention. |
+| `0B41` | `TS_O1` | 単勝・複勝・枠連。保持は約1年です。 |
+| `0B42` | `TS_O2` | 馬連。保持は約1年です。 |
 
-Full-ticket realtime odds are `0B30` to `0B36`. They cover the race-week
-retention window only. To evaluate wide, exacta, trio, and trifecta with
-decision-time odds, keep collecting these specs during the racing week.
+全賭式の速報オッズは `0B30`〜`0B36` です。こちらは開催週の約1週間保持です。
+ワイド、馬単、三連複、三連単を投資判断時点オッズで評価するには、
+開催週に継続蓄積してください。
 
-## Scheduling
+## スケジューリング
 
-Use Windows Task Scheduler to run `daily_sync.bat` for ordinary race data.
-`quickstart_postgres_timeseries.bat` prompts for this registration at the end
-of the PostgreSQL time-series setup. The scheduled task needs persistent
-`POSTGRES_*` environment variables when PostgreSQL is used.
-Use a separate realtime task or service for race-day `0B30` to `0B36`
-collection when full-ticket decision odds are required.
+通常データの同期は、Windows タスクスケジューラで `daily_sync.bat` を
+日次実行します。`quickstart_postgres_timeseries.bat` は、PostgreSQL
+時系列オッズ投入完了後にこのタスク登録を確認します。
+
+PostgreSQL 接続をタスクから行う場合、`POSTGRES_*` 環境変数は Windows
+ユーザー環境変数など永続的に参照できる場所へ設定してください。
+
+開催週の `0B30`〜`0B36` 継続蓄積は、通常の日次同期とは別に race-day 用の
+リアルタイムタスクまたはサービスとして運用します。

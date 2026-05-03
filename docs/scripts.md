@@ -1,23 +1,23 @@
-# Scripts
+# スクリプト一覧
 
-This page lists the current operational scripts. Older script catalogues were
-removed because they described non-current options.
+現在の運用で使うスクリプトだけを記載します。古い設計や現在使っていない導線の
+スクリプト一覧は削除しています。
 
-| Script | Use |
+| スクリプト | 用途 |
 | --- | --- |
-| `quickstart.bat` | General Windows quickstart, SQLite-first. |
-| `quickstart_postgres_timeseries.bat` | PostgreSQL setup/update plus official `TS_O1/TS_O2` odds. |
-| `fetch_timeseries_postgres.bat` | Add official `TS_O1/TS_O2` odds to an existing PostgreSQL installation. |
-| `daily_sync.bat` | Scheduled recent data sync. |
-| `install_tasks.ps1` | Register or update the Windows Task Scheduler entry for `daily_sync.bat`. |
-| `scripts/quickstart.py` | Python orchestration used by the batch wrappers. |
-| `scripts/raceday_verify.py` | Race-day data health checks. |
-| `tools/export_timeseries_csv.py` | Export stored time-series odds for inspection. |
+| `quickstart.bat` | Windows 向けの通常 quickstart です。既定は SQLite です。 |
+| `quickstart_postgres_timeseries.bat` | PostgreSQL へ RACE と公式 `TS_O1/TS_O2` 時系列オッズを投入します。 |
+| `fetch_timeseries_postgres.bat` | 既存 PostgreSQL 環境へ公式 `TS_O1/TS_O2` 時系列オッズだけを追加します。 |
+| `daily_sync.bat` | Windows タスクスケジューラから実行する日次同期です。 |
+| `install_tasks.ps1` | `daily_sync.bat` の Windows タスク登録・更新を行います。 |
+| `scripts/quickstart.py` | バッチファイルから呼ばれる Python 側のセットアップ・更新処理です。 |
+| `scripts/raceday_verify.py` | レース開催日のデータ健全性チェックです。 |
+| `tools/export_timeseries_csv.py` | 保存済み時系列オッズを確認用 CSV として出力します。 |
 
-For exact CLI options, run each script with `--help` where supported or use
-`jltsql --help`.
+正確な CLI 引数は、実行環境で `--help` が使えるスクリプトでは `--help` を確認し、
+それ以外は `jltsql --help` を参照してください。
 
-`quickstart.bat` asks whether to continue into
-`quickstart_postgres_timeseries.bat` after the ordinary setup. The PostgreSQL
-time-series quickstart then asks whether to register `daily_sync.bat` as a
-daily Windows scheduled task.
+`quickstart.bat` は通常セットアップ完了後に
+`quickstart_postgres_timeseries.bat` を続けて実行するか確認します。
+PostgreSQL 時系列オッズ投入が終わると、`daily_sync.bat` を日次 Windows
+タスクとして登録するか確認します。

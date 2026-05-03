@@ -1,4 +1,4 @@
-# JRVLTSQL Docs
+# JRVLTSQL ドキュメント
 
 JRVLTSQL は JRA-VAN DataLab のデータを SQLite / PostgreSQL に取り込む Windows 向けツールです。
 
@@ -12,7 +12,7 @@ JRVLTSQL は JRA-VAN DataLab のデータを SQLite / PostgreSQL に取り込む
 - SQLite / PostgreSQL
 
 対応済みの JVOpen / JVRTOpen データ種別、保存先テーブル、運用コマンドは
-[Supported data](data_support.md) に集約しています。
+[対応データ種別一覧](data_support.md) に集約しています。
 
 ## 基本コマンド
 
@@ -34,15 +34,15 @@ jltsql realtime odds-timeseries --from 20250425 --to 20260425 --db postgresql
 - 0B30〜0B36 は速報オッズで、公式仕様上の保存期間は 1週間です。
 - `quickstart.bat` は通常セットアップ完了後に PostgreSQL + 時系列オッズ投入を続けるか確認します。
 - PostgreSQL へ `RACE` と `TS_O1/TS_O2` をまとめて投入する場合は `quickstart_postgres_timeseries.bat` を使います。
-- `quickstart_postgres_timeseries.bat` の最後で、`daily_sync.bat` を Windows Task Scheduler に登録するか確認します。
+- `quickstart_postgres_timeseries.bat` の最後で、`daily_sync.bat` を Windows タスクスケジューラに登録するか確認します。
 - ワイド・馬単・三連複・三連単の締切前オッズは、開催週に `odds-sokuho-timeseries` で継続蓄積してください。
 - 古い設計メモや未実装機能のドキュメントは削除しています。
 
-## Documents
+## ドキュメント
 
-- [Architecture](architecture.md)
+- [アーキテクチャ](architecture.md)
 - [CLI](CLI.md)
-- [Supported data](data_support.md)
+- [対応データ種別一覧](data_support.md)
 - [PostgreSQL](postgresql.md)
-- [Time-series odds](timeseries_odds.md)
-- [Scripts](scripts.md)
+- [時系列オッズ](timeseries_odds.md)
+- [スクリプト一覧](scripts.md)

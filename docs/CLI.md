@@ -1,4 +1,4 @@
-# CLI Reference
+# CLI リファレンス
 
 現在使うコマンドだけを記載します。正確なオプション一覧は、実行環境で `jltsql --help` または各サブコマンドの `--help` を確認してください。
 
@@ -17,7 +17,7 @@ jltsql fetch --from 20260101 --to 20260417 --spec RACE --option 1
 ```
 
 対応済みの `JVOpen` / `JVRTOpen` spec、保存先テーブル、運用コマンドは
-[Supported data](data_support.md) を参照してください。
+[対応データ種別一覧](data_support.md) を参照してください。
 
 主な `option`:
 
@@ -83,7 +83,7 @@ jltsql realtime timeseries --spec 0B41,0B42 --from 20250425 --to 20260425 --db-p
 jltsql realtime odds-sokuho-timeseries --from 20260418 --to 20260419 --db postgresql
 ```
 
-## PostgreSQL time-series quickstart
+## PostgreSQL 時系列オッズ quickstart
 
 PostgreSQL に RACE と公式1年保持の TS_O1/TS_O2 を投入します。
 
@@ -93,7 +93,7 @@ quickstart_postgres_timeseries.bat 20250426 20260412
 
 `quickstart.bat` からも通常セットアップ完了後にこの処理を続けて実行できます。
 `quickstart_postgres_timeseries.bat` の最後では、`daily_sync.bat` を
-Windows Task Scheduler に登録するか確認します。
+ Windows タスクスケジューラに登録するか確認します。
 
 既に RACE / NL_RA がある場合は、時系列オッズだけ追加します。
 

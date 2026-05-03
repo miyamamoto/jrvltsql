@@ -71,12 +71,12 @@ DATA_SPEC_O4 = "O4"  # 馬単オッズ
 DATA_SPEC_O5 = "O5"  # 3連複オッズ
 DATA_SPEC_O6 = "O6"  # 3連単オッズ
 
-# Real-time Data Specifications (JVRTOpen用)
+# リアルタイムデータ種別 (JVRTOpen用)
 # 速報系データ: レース確定情報（結果が確定したら更新）
 # オッズ系データ: レース単位キーで取得する速報オッズ/時系列オッズ
 
 # 速報系データ (0B1x系) - JRA-VAN公式仕様に基づく
-# 参照: JV-Data仕様書、EveryDB2マニュアル表5.1-1
+# 参照: JV-Data仕様書
 # 注意: 速報系はYYYYMMDD形式のkeyを使用（日付単位）
 JVRTOPEN_SPEED_REPORT_SPECS = {
     "0B11": "速報馬体重",              # WH: 馬体重情報

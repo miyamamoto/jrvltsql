@@ -1,20 +1,21 @@
-# Changelog
+# 変更履歴
 
-All notable changes to this project will be documented in this file.
+このプロジェクトの主な変更点をこのファイルに記録します。
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+形式は [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) を参考にし、
+バージョン番号は [Semantic Versioning](https://semver.org/spec/v2.0.0.html) に従います。
 
 ## [Unreleased]
 
 ### Added
 
-- JVOpen/JVRTOpen の対応 data spec、レコード種別、保存先テーブル、運用コマンドをまとめた `docs/data_support.md` を追加
+- JVOpen/JVRTOpen の対応データ種別、レコード種別、保存先テーブル、運用コマンドをまとめた `docs/data_support.md` を追加
 
 ### Changed
 
-- `quickstart.bat` から PostgreSQL time-series quickstart を続けて実行できる導線を追加
-- `quickstart_postgres_timeseries.bat` 完了時に Windows Task Scheduler 登録を確認するよう変更
+- 公開ドキュメントを日本語表記へ統一
+- `quickstart.bat` から PostgreSQL 時系列オッズのクイックスタートを続けて実行できる導線を追加
+- `quickstart_postgres_timeseries.bat` 完了時に Windows タスクスケジューラ登録を確認するよう変更
 - `install_tasks.ps1` で `daily_sync.bat` の DB 種別・日付窓・PostgreSQL 環境変数永続化を指定可能に変更
 
 ## [1.4.0] - 2026-05-03
@@ -27,31 +28,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `daily_sync.bat`
 - 公式1年保持の `0B41/0B42` を `TS_O1/TS_O2` に保存する導線を整理
 - 開催週の速報オッズ `0B30` 系から `TS_O1`〜`TS_O6` を蓄積する導線を追加
-- expanded odds rows の直接保存と multi-row PostgreSQL insert を追加
-- JRA collector 単体の architecture / PostgreSQL / time-series odds / scripts docs を追加
+- 展開済みオッズ行の直接保存と PostgreSQL 複数行 INSERT を追加
+- JRA データコレクタ単体のアーキテクチャ / PostgreSQL / 時系列オッズ / スクリプトのドキュメントを追加
 
 ### Fixed
 
-- JRA-VAN time-series odds key の生成を修正
+- JRA-VAN 時系列オッズキーの生成を修正
 - 空欄・未発売系オッズ値を PostgreSQL 保存前に正規化
-- O1〜O6 の expanded parser output をテスト側でも正しく扱うよう修正
-- PostgreSQL multi-row placeholder generation を修正
+- O1〜O6 の展開済みパーサー出力をテスト側でも正しく扱うよう修正
+- PostgreSQL 複数行 INSERT のプレースホルダ生成を修正
 
 ### Changed
 
-- PostgreSQL time-series quickstart 名を collector 汎用名へ変更
-  - new name: `quickstart_postgres_timeseries.bat`
-- 古い script README を削除し、現行 docs へ集約
-- 公開 docs から downstream system 固有の表現と内部パス例を削除
+- PostgreSQL 時系列オッズのクイックスタート名をデータコレクタ汎用名へ変更
+  - 新しい名前: `quickstart_postgres_timeseries.bat`
+- 古いスクリプト README を削除し、現行ドキュメントへ集約
+- 公開ドキュメントから下流システム固有の表現と内部パス例を削除
 
 ## [1.3.0] - 2026-04-22
 
 ### Added
 
-- **Dual-write mode** を追加
+- **二重書き込みモード** を追加
   - SQLite を primary としつつ PostgreSQL へ同時書き込み
   - `src/database/dual_handler.py` を新設
-- **PostgreSQL migration support** を追加
+- **PostgreSQL 移行支援** を追加
   - 既存 SQLite スキーマの PostgreSQL 側反映と移行経路を整備
 - migration / dual-write 向けテストを追加
   - `tests/test_migration.py`
@@ -123,7 +124,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Windows専用であることを明確化
 - ワンコマンドインストーラーをREADMEに追加
 - クロスプラットフォーム検証の注記追加
-- Getting Started / Reference / UserGuide を最新仕様に更新
+- 入門 / リファレンス / ユーザーガイドを最新仕様に更新
 
 ## [1.0.0] - 2025-02-07
 
