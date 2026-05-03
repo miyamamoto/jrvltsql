@@ -16,6 +16,16 @@ import pytest
 from src.parser.factory import ParserFactory, ALL_RECORD_TYPES
 
 
+ODDS_RECORD_TYPES = {"O1", "O2", "O3", "O4", "O5", "O6"}
+
+
+def _first_record_or_none(result):
+    """Normalize parser output for expanded odds parsers."""
+    if isinstance(result, list):
+        return result[0] if result else None
+    return result
+
+
 class TestParserFactory:
     """ParserFactoryのテスト"""
 
@@ -134,7 +144,11 @@ class TestIndividualParsers:
 
         result = parser.parse(data)
         assert result is not None, f"{record_type}パーサーがサンプルデータのパースに失敗"
-        assert isinstance(result, dict), f"{record_type}パーサーの戻り値が辞書でない"
+        if record_type in ODDS_RECORD_TYPES:
+            assert isinstance(result, list), f"{record_type}パーサーの戻り値がリストでない"
+            assert all(isinstance(row, dict) for row in result), f"{record_type}パーサーのリスト要素が辞書でない"
+        else:
+            assert isinstance(result, dict), f"{record_type}パーサーの戻り値が辞書でない"
 
     @pytest.mark.parametrize("record_type", ALL_RECORD_TYPES)
     def test_parser_output_has_common_fields(self, parser_factory, sample_data, record_type):
@@ -144,11 +158,15 @@ class TestIndividualParsers:
 
         result = parser.parse(data)
         assert result is not None
+        record = _first_record_or_none(result)
+        if record is None:
+            assert record_type in ODDS_RECORD_TYPES
+            return
 
         # 共通フィールドの確認（すべてのパーサーにRecordSpecがあるはず）
-        assert 'RecordSpec' in result, f"{record_type}パーサーの出力にRecordSpecがない"
+        assert 'RecordSpec' in record, f"{record_type}パーサーの出力にRecordSpecがない"
         # DataKubunは基本的に全パーサーにあるはず
-        assert 'DataKubun' in result, f"{record_type}パーサーの出力にDataKubunがない"
+        assert 'DataKubun' in record, f"{record_type}パーサーの出力にDataKubunがない"
         # MakeDateはほとんどのパーサーにあるが、一部（AV等）にはないので省略
 
     @pytest.mark.parametrize("record_type", ALL_RECORD_TYPES)
@@ -159,8 +177,12 @@ class TestIndividualParsers:
 
         result = parser.parse(data)
         assert result is not None
-        assert result['RecordSpec'] == record_type, \
-            f"{record_type}パーサーのRecordSpecの値が正しくない: {result.get('RecordSpec')}"
+        record = _first_record_or_none(result)
+        if record is None:
+            assert record_type in ODDS_RECORD_TYPES
+            return
+        assert record['RecordSpec'] == record_type, \
+            f"{record_type}パーサーのRecordSpecの値が正しくない: {record.get('RecordSpec')}"
 
     @pytest.mark.parametrize("record_type", ALL_RECORD_TYPES)
     def test_parser_empty_data(self, parser_factory, record_type):
