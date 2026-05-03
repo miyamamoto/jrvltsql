@@ -13,6 +13,7 @@ JRA（中央競馬）専用です。
 | 目的 | まず実行 | 到達点 |
 |------|----------|--------|
 | SQLite で試す | `quickstart.bat` | JRA の主要データがローカル DB に入ります。 |
+| SQLite に公式時系列オッズも入れる | `quickstart.bat --include-timeseries` | SQLite の `TS_O1` / `TS_O2` に公式1年保持の単複枠・馬連時系列オッズが入ります。 |
 | PostgreSQL 運用を始める | `quickstart_postgres_timeseries.bat 20250426 20260412` | `RACE` 系データと公式 `TS_O1` / `TS_O2` が入り、日次同期タスク登録まで進めます。 |
 | 公式時系列オッズだけ足す | `fetch_timeseries_postgres.bat 20250426 20260412` | 既存 PostgreSQL に `TS_O1` / `TS_O2` だけ追加します。 |
 | 三連複・三連単の締切前オッズを残す | `jltsql realtime odds-sokuho-timeseries --from 20260418 --to 20260419 --db postgresql` | 開催週の全賭式オッズが `TS_O1`〜`TS_O6` に入ります。 |
@@ -28,7 +29,7 @@ JRA（中央競馬）専用です。
 | JRA の出馬表・成績・払戻 | 対応済み | `NL_RA`, `NL_SE`, `NL_HR` など | `quickstart.bat` / `quickstart_postgres_timeseries.bat` で取得します。 |
 | 確定オッズ 全賭式 | 対応済み | `NL_O1`〜`NL_O6` | レース後の確定オッズです。投資判断時点のオッズではありません。 |
 | 単複枠・馬連の公式時系列オッズ | 対応済み | `TS_O1`, `TS_O2` | `0B41` / `0B42`。JRA-VAN 側の保持は約1年です。 |
-| ワイド・馬単・三連複・三連単の締切前オッズ | 開催週の蓄積で対応 | `TS_O3`〜`TS_O6` | `0B30` または `0B33`〜`0B36`。JRA-VAN 側の保持は約1週間です。 |
+| ワイド・馬単・三連複・三連単の締切前オッズ | 開催週の蓄積で対応 | `TS_O3`〜`TS_O6` | `0B30` または `0B33`〜`0B36`。SQLite / PostgreSQL どちらにも保存できます。JRA-VAN 側の保持は約1週間です。 |
 | NAR / 地方競馬 | 非対応 | - | このリポジトリは JRA 専用です。 |
 
 ---
@@ -63,7 +64,13 @@ quickstart.bat
 4. JRA-VAN からのデータ取得・DB 格納
 5. S3 キャッシュのアップロード（オプション）
 6. DB 検証 (`raceday_verify --phase pre`)
-7. PostgreSQL + 公式時系列オッズ投入の実行確認（オプション）
+
+対話形式では、公式1年保持の時系列オッズを取得するか確認されます。
+非対話で SQLite に `TS_O1/TS_O2` を入れる場合は以下です。
+
+```bat
+quickstart.bat --include-timeseries
+```
 
 PostgreSQL + 時系列オッズ:
 
@@ -118,8 +125,9 @@ jltsql cache sync --upload             # ローカル → S3 同期
 quickstart_postgres_timeseries.bat 20250426 20260412
 ```
 
-通常の `quickstart.bat` からも、セットアップ完了後にこの PostgreSQL +
-時系列オッズ投入を続けて実行できます。
+`quickstart.bat` から PostgreSQL 専用セットアップは呼びません。SQLite と
+PostgreSQL の導線を分けるため、PostgreSQL 運用を始める場合は
+`quickstart_postgres_timeseries.bat` を直接実行してください。
 
 既に `NL_RA` が入っていて時系列オッズだけを追加する場合:
 
@@ -137,6 +145,12 @@ fetch_timeseries_postgres.bat
 
 ```bat
 jltsql realtime odds-timeseries --from <FROM> --to <TO> --db postgresql
+```
+
+SQLite に保存する場合:
+
+```bat
+jltsql realtime odds-timeseries --from <FROM> --to <TO> --db sqlite --db-path data/keiba.db
 ```
 
 `odds-timeseries` は `0B41/0B42` で公式1年保持の単複枠・馬連時系列を取得し、`TS_O1/TS_O2` に保存します。`0B30` の全賭式速報オッズは1週間保持なので、開催週に蓄積する場合だけ `realtime odds-sokuho-timeseries` を使います。

@@ -81,6 +81,7 @@ jltsql realtime odds-timeseries --from 20250425 --to 20260425 --db postgresql
 ```bat
 jltsql realtime timeseries --spec 0B41,0B42 --from 20250425 --to 20260425 --db-path data/keiba.db
 jltsql realtime odds-sokuho-timeseries --from 20260418 --to 20260419 --db postgresql
+jltsql realtime odds-sokuho-timeseries --from 20260418 --to 20260419 --db sqlite --db-path data/keiba.db
 ```
 
 ## PostgreSQL 時系列オッズ quickstart
@@ -91,9 +92,18 @@ PostgreSQL に RACE と公式1年保持の TS_O1/TS_O2 を投入します。
 quickstart_postgres_timeseries.bat 20250426 20260412
 ```
 
-`quickstart.bat` からも通常セットアップ完了後にこの処理を続けて実行できます。
+`quickstart.bat` からこの PostgreSQL 専用処理は呼びません。
+PostgreSQL 運用を始める場合は、この batch を直接実行してください。
 `quickstart_postgres_timeseries.bat` の最後では、`daily_sync.bat` を
- Windows タスクスケジューラに登録するか確認します。
+Windows タスクスケジューラに登録するか確認します。
+
+SQLite に公式時系列オッズを保存する場合は、通常 quickstart に
+`--include-timeseries` を付けるか、CLI で `--db sqlite` を指定します。
+
+```bat
+quickstart.bat --include-timeseries
+jltsql realtime odds-timeseries --from 20250426 --to 20260412 --db sqlite --db-path data/keiba.db
+```
 
 既に RACE / NL_RA がある場合は、時系列オッズだけ追加します。
 

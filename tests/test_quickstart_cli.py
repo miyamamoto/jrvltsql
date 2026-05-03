@@ -6,6 +6,7 @@ Tests argument parser behaviour without running the full quickstart flow.
 import argparse
 import sys
 from datetime import datetime, timedelta
+from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 import pytest
@@ -198,3 +199,15 @@ class TestQuickstartInteractiveDetection:
         args = parser.parse_args(["-i", "--mode", "full"])
         use_interactive = args.interactive or (args.mode is None and not args.yes)
         assert use_interactive is True
+
+
+class TestQuickstartBatchRoles:
+    """Test Windows batch role separation."""
+
+    def test_quickstart_does_not_chain_postgresql_timeseries(self):
+        batch = Path(__file__).resolve().parents[1] / "quickstart.bat"
+        text = batch.read_text(encoding="utf-8")
+
+        assert ":prompt_postgres_timeseries" not in text
+        assert 'call "%~dp0quickstart_postgres_timeseries.bat"' not in text
+        assert "quickstart.bat --include-timeseries" in text
