@@ -64,6 +64,22 @@ quickstart.bat
 quickstart.bat --yes --include-timeseries
 ```
 
+この場合の既定範囲:
+
+| データ | 既定範囲 |
+| --- | --- |
+| 通常データ | `19860101` から今日まで |
+| 公式時系列オッズ `TS_O1` / `TS_O2` | 今日から過去12か月 |
+
+範囲を明示したい場合は、SQLite / PostgreSQL 共通の `quickstart_timeseries.bat` を使ってください。
+
+```bat
+quickstart_timeseries.bat --db sqlite --from 20250426 --to 20260412
+```
+
+`quickstart_timeseries.bat` の最後では、指定した DB 種別の日次同期タスクを登録するか確認されます。
+`--from` / `--to` を省略した場合は、通常データも公式時系列オッズも今日から過去365日分を対象にします。
+
 実行後に入るデータ:
 
 | データ | 保存先 |
@@ -92,10 +108,10 @@ set POSTGRES_USER=ingestion_writer
 set POSTGRES_PASSWORD=<password>
 ```
 
-次に PostgreSQL 用 quickstart を実行します。
+次に PostgreSQL 用 quickstart を実行します。SQLite と同じ形で範囲指定できます。
 
 ```bat
-quickstart_postgres_timeseries.bat 20250426 20260412
+quickstart_timeseries.bat --db postgresql --from 20250426 --to 20260412
 ```
 
 実行後にできること:
@@ -106,8 +122,9 @@ quickstart_postgres_timeseries.bat 20250426 20260412
 
 注意:
 
-- `quickstart.bat` から PostgreSQL 用 quickstart は呼びません。
-- SQLite と PostgreSQL は導線を分けています。
+- `quickstart_timeseries.bat --db sqlite|postgresql --from <FROM> --to <TO>` が、範囲指定つき時系列 quickstart の推奨導線です。
+- `--from` / `--to` を省略した場合は、通常データも公式時系列オッズも今日から過去365日分を対象にします。
+- `quickstart_postgres_timeseries.bat <FROM> <TO>` は後方互換の旧導線として残しています。
 - タスクから PostgreSQL に接続する場合は、`POSTGRES_*` を Windows ユーザー環境変数として保存する必要があります。
 
 ## 5. ルートD: 三連複・三連単を含む締切前オッズを残す
@@ -168,7 +185,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File install_tasks.ps1 -DbType po
 | 混同しやすい点 | 正しい理解 |
 | --- | --- |
 | `quickstart.bat` は PostgreSQL も設定するのか | しません。SQLite 既定の通常 quickstart です。 |
-| `quickstart_postgres_timeseries.bat` は SQLite にも使うのか | 使いません。PostgreSQL 専用です。 |
+| SQLite と PostgreSQL で時系列 quickstart のコマンド形は違うのか | 推奨導線は同じです。`quickstart_timeseries.bat --db sqlite|postgresql --from <FROM> --to <TO>` を使います。 |
+| `quickstart_postgres_timeseries.bat` は SQLite にも使うのか | 使いません。PostgreSQL 専用の後方互換 batch です。 |
 | `daily_sync.bat` は SQLite / PostgreSQL の両方で使えるのか | 使えます。`--db sqlite` または `--db postgresql` を指定します。 |
 | `daily_sync.bat` で時系列オッズも入るのか | 入りません。通常データ更新だけです。 |
 | 確定オッズ `NL_O*` は投資判断時点のオッズか | 違います。レース後の確定オッズです。 |

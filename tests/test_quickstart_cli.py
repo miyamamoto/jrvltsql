@@ -228,6 +228,25 @@ class TestQuickstartBatchRoles:
         assert "--timeseries-to-date" in text
         assert "-DbType postgresql" in text
 
+    def test_unified_timeseries_batch_supports_sqlite_and_postgresql(self):
+        batch = Path(__file__).resolve().parents[1] / "quickstart_timeseries.bat"
+        text = batch.read_text(encoding="utf-8")
+
+        assert 'set "DB_TYPE=sqlite"' in text
+        assert 'if /I "%~1"=="--db"' in text
+        assert 'if /I "%~1"=="--from"' in text
+        assert 'if /I "%~1"=="--to"' in text
+        assert "--mode update --yes" in text
+        assert "--db-type postgresql" in text
+        assert "--db-type sqlite" in text
+        assert "--include-timeseries" in text
+        assert "--timeseries-from-date" in text
+        assert "--timeseries-to-date" in text
+        assert "POSTGRES_PASSWORD is required for PostgreSQL" in text
+        assert "install_tasks.ps1" in text
+        assert '-DbType "%DB_TYPE%"' in text
+        assert "PersistPostgresEnvironment" in text
+
     def test_daily_sync_is_normal_data_only(self):
         batch = Path(__file__).resolve().parents[1] / "daily_sync.bat"
         text = batch.read_text(encoding="utf-8")

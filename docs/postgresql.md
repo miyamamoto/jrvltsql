@@ -8,7 +8,8 @@ jrvltsql は SQLite だけでなく PostgreSQL へ直接保存できます。複
 
 | 操作 | 入るデータ | 入らないデータ |
 | --- | --- | --- |
-| `quickstart_postgres_timeseries.bat <FROM> <TO>` | 指定範囲の通常データ、公式1年保持の `TS_O1` / `TS_O2` | `TS_O3`〜`TS_O6` の長期蓄積 |
+| `quickstart_timeseries.bat --db postgresql --from <FROM> --to <TO>` | 指定範囲の通常データ、公式1年保持の `TS_O1` / `TS_O2` | `TS_O3`〜`TS_O6` の長期蓄積 |
+| `quickstart_postgres_timeseries.bat <FROM> <TO>` | 同上。PostgreSQL 専用の後方互換 batch | SQLite 保存 |
 | `fetch_timeseries_postgres.bat <FROM> <TO>` | 公式1年保持の `TS_O1` / `TS_O2` | `RACE` 系データ、`TS_O3`〜`TS_O6` |
 | `daily_sync.bat --db postgresql` | 直近の通常データ | 時系列オッズ |
 | `jltsql realtime odds-sokuho-timeseries --db postgresql` | 開催週の `TS_O1`〜`TS_O6` | JRA-VAN 側の保持期間を過ぎた速報オッズ |
@@ -28,15 +29,17 @@ set POSTGRES_PASSWORD=<password>
 ## クイックスタート
 
 ```bat
-quickstart_postgres_timeseries.bat 20250426 20260412
+quickstart_timeseries.bat --db postgresql --from 20250426 --to 20260412
 ```
 
 このコマンドは、指定範囲の通常データと公式1年保持の `TS_O1/TS_O2` 時系列オッズを
 PostgreSQL に投入します。通常の `quickstart.bat` からは呼びません。
-SQLite と PostgreSQL の導線を分けるため、PostgreSQL 運用を始める場合は
-この batch を直接実行してください。
+SQLite と PostgreSQL の範囲指定つき時系列 quickstart は、同じ
+`quickstart_timeseries.bat --db <sqlite|postgresql> --from <FROM> --to <TO>` に統一しています。
+`--from` / `--to` を省略した場合は、通常データも公式時系列オッズも今日から過去365日分を対象にします。
+`quickstart_postgres_timeseries.bat <FROM> <TO>` は後方互換の旧導線として残しています。
 
-`quickstart_postgres_timeseries.bat` の最後では、`daily_sync.bat` を
+`quickstart_timeseries.bat` と `quickstart_postgres_timeseries.bat` の最後では、`daily_sync.bat` を
 Windows タスクスケジューラへ登録するか確認します。PostgreSQL 接続情報を
 現在の CMD セッションだけに設定している場合、タスク実行時には見えません。
 登録時の確認で現在の `POSTGRES_*` を Windows ユーザー環境変数へ保存するか、
