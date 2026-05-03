@@ -38,6 +38,7 @@ quickstart.bat
 4. JRA-VAN からのデータ取得・DB 格納
 5. S3 キャッシュのアップロード（オプション）
 6. DB 検証 (`raceday_verify --phase pre`)
+7. PostgreSQL + 公式時系列オッズ投入の実行確認（オプション）
 
 PostgreSQL + 時系列オッズ:
 
@@ -46,7 +47,10 @@ quickstart_postgres_timeseries.bat 20250426 20260412
 ```
 
 `quickstart_postgres_timeseries.bat` は、`RACE` データと公式1年保持の
-`TS_O1/TS_O2` 時系列オッズを PostgreSQL に投入します。
+`TS_O1/TS_O2` 時系列オッズを PostgreSQL に投入します。完了時に
+Windows Task Scheduler へ `daily_sync.bat` を登録するか確認します。
+タスクから PostgreSQL に接続する場合は、現在の `POSTGRES_*` 接続情報を
+Windows ユーザー環境変数へ保存するかも確認されます。
 
 ---
 
@@ -89,6 +93,9 @@ jltsql cache sync --upload             # ローカル → S3 同期
 quickstart_postgres_timeseries.bat 20250426 20260412
 ```
 
+通常の `quickstart.bat` からも、セットアップ完了後にこの PostgreSQL +
+時系列オッズ投入を続けて実行できます。
+
 既に `NL_RA` が入っていて時系列オッズだけを追加する場合:
 
 ```bat
@@ -108,6 +115,20 @@ jltsql realtime odds-timeseries --from <FROM> --to <TO> --db postgresql
 ```
 
 `odds-timeseries` は `0B41/0B42` で公式1年保持の単複枠・馬連時系列を取得し、`TS_O1/TS_O2` に保存します。`0B30` の全賭式速報オッズは1週間保持なので、開催週に蓄積する場合だけ `realtime odds-sokuho-timeseries` を使います。
+
+### Windows タスク登録
+
+PostgreSQL 運用では、`quickstart_postgres_timeseries.bat` の最後に
+`daily_sync.bat` を Windows Task Scheduler に登録するか確認されます。
+手動で登録する場合は以下を実行します。
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File install_tasks.ps1 -DbType postgresql -Time 06:30
+```
+
+`POSTGRES_PASSWORD` などを現在の CMD セッションだけで設定している場合、
+タスク実行時には見えません。登録時の確認で `POSTGRES_*` を Windows
+ユーザー環境変数へ保存するか、あらかじめ永続的な環境変数として設定してください。
 
 ### fetch オプション
 

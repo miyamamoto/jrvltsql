@@ -88,6 +88,10 @@ PostgreSQL に RACE と公式1年保持の TS_O1/TS_O2 を投入します。
 quickstart_postgres_timeseries.bat 20250426 20260412
 ```
 
+`quickstart.bat` からも通常セットアップ完了後にこの処理を続けて実行できます。
+`quickstart_postgres_timeseries.bat` の最後では、`daily_sync.bat` を
+Windows Task Scheduler に登録するか確認します。
+
 既に RACE / NL_RA がある場合は、時系列オッズだけ追加します。
 
 ```bat

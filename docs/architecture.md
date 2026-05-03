@@ -23,9 +23,10 @@ NAR data is outside this repository.
 | `src/database/` | SQLite/PostgreSQL handlers and schemas. |
 | `src/realtime/` | Realtime data collection. |
 | `scripts/quickstart.py` | Non-interactive and interactive setup/update orchestration. |
-| `quickstart.bat` | General SQLite-first quickstart. |
-| `quickstart_postgres_timeseries.bat` | PostgreSQL + official time-series odds setup. |
+| `quickstart.bat` | General SQLite-first quickstart with optional PostgreSQL time-series follow-up. |
+| `quickstart_postgres_timeseries.bat` | PostgreSQL + official time-series odds setup, followed by optional task registration. |
 | `daily_sync.bat` | Recent race-card/result sync for scheduled Windows tasks. |
+| `install_tasks.ps1` | Windows Task Scheduler registration for `daily_sync.bat`. |
 
 ## Data Stores
 
@@ -54,5 +55,8 @@ decision-time odds, keep collecting these specs during the racing week.
 ## Scheduling
 
 Use Windows Task Scheduler to run `daily_sync.bat` for ordinary race data.
+`quickstart_postgres_timeseries.bat` prompts for this registration at the end
+of the PostgreSQL time-series setup. The scheduled task needs persistent
+`POSTGRES_*` environment variables when PostgreSQL is used.
 Use a separate realtime task or service for race-day `0B30` to `0B36`
 collection when full-ticket decision odds are required.

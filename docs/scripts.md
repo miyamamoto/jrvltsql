@@ -9,9 +9,15 @@ removed because they described non-current options.
 | `quickstart_postgres_timeseries.bat` | PostgreSQL setup/update plus official `TS_O1/TS_O2` odds. |
 | `fetch_timeseries_postgres.bat` | Add official `TS_O1/TS_O2` odds to an existing PostgreSQL installation. |
 | `daily_sync.bat` | Scheduled recent data sync. |
+| `install_tasks.ps1` | Register or update the Windows Task Scheduler entry for `daily_sync.bat`. |
 | `scripts/quickstart.py` | Python orchestration used by the batch wrappers. |
 | `scripts/raceday_verify.py` | Race-day data health checks. |
 | `tools/export_timeseries_csv.py` | Export stored time-series odds for inspection. |
 
 For exact CLI options, run each script with `--help` where supported or use
 `jltsql --help`.
+
+`quickstart.bat` asks whether to continue into
+`quickstart_postgres_timeseries.bat` after the ordinary setup. The PostgreSQL
+time-series quickstart then asks whether to register `daily_sync.bat` as a
+daily Windows scheduled task.

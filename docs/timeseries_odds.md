@@ -29,6 +29,10 @@ PostgreSQL quickstart for race data plus official `TS_O1/TS_O2`:
 quickstart_postgres_timeseries.bat 20250426 20260412
 ```
 
+`quickstart.bat` can run this PostgreSQL time-series quickstart as an optional
+follow-up after the ordinary setup. The PostgreSQL time-series quickstart also
+asks whether to register `daily_sync.bat` in Windows Task Scheduler.
+
 ## Important Constraints
 
 - JRA-VAN does not provide long-retention historical time-series odds for every

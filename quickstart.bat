@@ -88,6 +88,22 @@ echo   To view data:
 echo     - Use DB Browser for SQLite
 echo     - Python: sqlite3.connect('data/keiba.db')
 echo.
+call :prompt_postgres_timeseries
+if !errorlevel! neq 0 (
+    set "SCRIPT_EXIT_CODE=!errorlevel!"
+    echo.
+    echo ============================================================
+    echo   PostgreSQL Time-Series Setup Failed
+    echo ============================================================
+    echo.
+    echo   Exit Code: !SCRIPT_EXIT_CODE!
+    echo.
+    echo   Press Enter to close...
+    set /p dummy=
+    endlocal & exit /b !SCRIPT_EXIT_CODE!
+)
+
+echo.
 echo   CLI commands:
 echo     jltsql status   - Check database status
 echo     jltsql fetch    - Fetch additional data
@@ -103,3 +119,26 @@ echo   Press Enter to close...
 set /p dummy=
 endlocal
 exit /b 0
+
+:prompt_postgres_timeseries
+if /I "!JLTSQL_SKIP_POSTGRES_TIMESERIES_PROMPT!"=="1" exit /b 0
+if not exist "%~dp0quickstart_postgres_timeseries.bat" exit /b 0
+
+echo.
+echo ============================================================
+echo   Optional PostgreSQL Time-Series Odds Setup
+echo ============================================================
+echo.
+echo   This runs quickstart_postgres_timeseries.bat to load RACE data
+echo   and official one-year TS_O1/TS_O2 odds into PostgreSQL.
+echo.
+set /p RUN_PG_TS="  Run PostgreSQL time-series quickstart now? [y/N]: "
+if /I not "!RUN_PG_TS!"=="y" exit /b 0
+
+echo.
+set /p PG_TS_FROM_DATE="  From date YYYYMMDD [blank = today-365d]: "
+set /p PG_TS_TO_DATE="  To date YYYYMMDD [blank = today]: "
+echo.
+
+call "%~dp0quickstart_postgres_timeseries.bat" "!PG_TS_FROM_DATE!" "!PG_TS_TO_DATE!"
+exit /b !errorlevel!

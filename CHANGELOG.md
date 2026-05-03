@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `quickstart.bat` から PostgreSQL time-series quickstart を続けて実行できる導線を追加
+- `quickstart_postgres_timeseries.bat` 完了時に Windows Task Scheduler 登録を確認するよう変更
+- `install_tasks.ps1` で `daily_sync.bat` の DB 種別・日付窓・PostgreSQL 環境変数永続化を指定可能に変更
+
 ## [1.4.0] - 2026-05-03
 
 ### Added

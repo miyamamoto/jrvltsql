@@ -87,4 +87,50 @@ if not "%SCRIPT_EXIT_CODE%"=="0" (
 )
 
 echo [OK] PostgreSQL time-series quickstart completed.
+call :prompt_scheduler
+if !errorlevel! neq 0 exit /b !errorlevel!
+exit /b 0
+
+:prompt_scheduler
+if /I "!JLTSQL_SKIP_SCHEDULER_PROMPT!"=="1" exit /b 0
+
+echo.
+echo ============================================================
+echo   Optional Windows Task Scheduler Registration
+echo ============================================================
+echo.
+echo   This registers daily_sync.bat as a Windows scheduled task.
+echo   Default task: JRVLTSQL_DailySync, daily at 06:30.
+echo.
+set /p REGISTER_TASK="  Register or update the scheduled task now? [y/N]: "
+if /I not "!REGISTER_TASK!"=="y" (
+    echo [INFO] Scheduled task registration skipped.
+    exit /b 0
+)
+
+set "TASK_TIME=06:30"
+set /p TASK_TIME_INPUT="  Daily run time HH:mm [06:30]: "
+if not "!TASK_TIME_INPUT!"=="" set "TASK_TIME=!TASK_TIME_INPUT!"
+
+set "PERSIST_ENV_ARG="
+echo.
+echo   PostgreSQL scheduled tasks need persistent POSTGRES_* environment variables.
+echo   Saving them stores the current connection values in your Windows user environment.
+echo.
+set /p SAVE_PG_ENV="  Save current POSTGRES_* values for the scheduled task? [y/N]: "
+if /I "!SAVE_PG_ENV!"=="y" set "PERSIST_ENV_ARG=-PersistPostgresEnvironment"
+
+if not exist "%~dp0install_tasks.ps1" (
+    echo [ERROR] install_tasks.ps1 not found.
+    exit /b 1
+)
+
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0install_tasks.ps1" -Time "!TASK_TIME!" -DbType postgresql !PERSIST_ENV_ARG!
+set "TASK_EXIT_CODE=!errorlevel!"
+if not "!TASK_EXIT_CODE!"=="0" (
+    echo [ERROR] Scheduled task registration failed. Exit code: !TASK_EXIT_CODE!
+    exit /b !TASK_EXIT_CODE!
+)
+
+echo [OK] Scheduled task registration completed.
 exit /b 0
