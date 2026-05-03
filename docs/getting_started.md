@@ -124,7 +124,7 @@ quickstart_timeseries.bat --db postgresql --from 20250426 --to 20260412
 
 - `quickstart_timeseries.bat --db sqlite|postgresql --from <FROM> --to <TO>` が、範囲指定つき時系列 quickstart の推奨導線です。
 - `--from` / `--to` を省略した場合は、通常データも公式時系列オッズも今日から過去365日分を対象にします。
-- `quickstart_postgres_timeseries.bat <FROM> <TO>` は後方互換の旧導線として残しています。
+- PostgreSQL 専用バッチ `quickstart_postgres_timeseries.bat <FROM> <TO>` もありますが、新規利用では共通コマンドを使ってください。
 - タスクから PostgreSQL に接続する場合は、`POSTGRES_*` を Windows ユーザー環境変数として保存する必要があります。
 
 ## 5. ルートD: 三連複・三連単を含む締切前オッズを残す
@@ -186,7 +186,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File install_tasks.ps1 -DbType po
 | --- | --- |
 | `quickstart.bat` は PostgreSQL も設定するのか | しません。SQLite 既定の通常 quickstart です。 |
 | SQLite と PostgreSQL で時系列 quickstart のコマンド形は違うのか | 推奨導線は同じです。`quickstart_timeseries.bat --db sqlite|postgresql --from <FROM> --to <TO>` を使います。 |
-| `quickstart_postgres_timeseries.bat` は SQLite にも使うのか | 使いません。PostgreSQL 専用の後方互換 batch です。 |
+| `quickstart_postgres_timeseries.bat` は SQLite にも使うのか | 使いません。PostgreSQL 専用 batch です。 |
 | `daily_sync.bat` は SQLite / PostgreSQL の両方で使えるのか | 使えます。`--db sqlite` または `--db postgresql` を指定します。 |
 | `daily_sync.bat` で時系列オッズも入るのか | 入りません。通常データ更新だけです。 |
 | 確定オッズ `NL_O*` は投資判断時点のオッズか | 違います。レース後の確定オッズです。 |
