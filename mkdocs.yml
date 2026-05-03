@@ -1,6 +1,6 @@
-site_name: JRVLTSQL Documentation
-site_description: JRA-VAN DataLab data import tool for SQLite/PostgreSQL
-site_author: JRVLTSQL Contributors
+site_name: JRVLTSQL ドキュメント
+site_description: JRA-VAN DataLab データを SQLite/PostgreSQL に取り込む Windows 向けツール
+site_author: JRVLTSQL コントリビューター
 site_url: https://miyamamoto.github.io/jrvltsql/
 
 repo_name: miyamamoto/jrvltsql
@@ -20,12 +20,12 @@ markdown_extensions:
       permalink: true
 
 nav:
-  - Home: index.md
-  - Architecture: architecture.md
+  - ホーム: index.md
+  - アーキテクチャ: architecture.md
   - CLI: CLI.md
-  - Supported data: data_support.md
+  - 対応データ種別一覧: data_support.md
   - PostgreSQL: postgresql.md
-  - Time-series odds: timeseries_odds.md
-  - Scripts: scripts.md
+  - 時系列オッズ: timeseries_odds.md
+  - スクリプト一覧: scripts.md
 
-copyright: Copyright &copy; 2024 JRVLTSQL Contributors
+copyright: Copyright &copy; 2024 JRVLTSQL コントリビューター

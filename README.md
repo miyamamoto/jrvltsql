@@ -4,7 +4,7 @@ JRA-VAN DataLab データを SQLite/PostgreSQL に取り込む Windows 専用パ
 
 JRA（中央競馬）専用です。
 
-Documentation: https://miyamamoto.github.io/jrvltsql/
+ドキュメント: https://miyamamoto.github.io/jrvltsql/
 
 ---
 
@@ -48,7 +48,7 @@ quickstart_postgres_timeseries.bat 20250426 20260412
 
 `quickstart_postgres_timeseries.bat` は、`RACE` データと公式1年保持の
 `TS_O1/TS_O2` 時系列オッズを PostgreSQL に投入します。完了時に
-Windows Task Scheduler へ `daily_sync.bat` を登録するか確認します。
+Windows タスクスケジューラへ `daily_sync.bat` を登録するか確認します。
 タスクから PostgreSQL に接続する場合は、現在の `POSTGRES_*` 接続情報を
 Windows ユーザー環境変数へ保存するかも確認されます。
 
@@ -119,7 +119,7 @@ jltsql realtime odds-timeseries --from <FROM> --to <TO> --db postgresql
 ### Windows タスク登録
 
 PostgreSQL 運用では、`quickstart_postgres_timeseries.bat` の最後に
-`daily_sync.bat` を Windows Task Scheduler に登録するか確認されます。
+`daily_sync.bat` を Windows タスクスケジューラに登録するか確認されます。
 手動で登録する場合は以下を実行します。
 
 ```powershell
@@ -143,12 +143,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File install_tasks.ps1 -DbType po
 
 ## ドキュメント
 
-- [Architecture](docs/architecture.md)
+- [アーキテクチャ](docs/architecture.md)
 - [CLI](docs/CLI.md)
-- [Supported data](docs/data_support.md)
+- [対応データ種別一覧](docs/data_support.md)
 - [PostgreSQL](docs/postgresql.md)
-- [Time-series odds](docs/timeseries_odds.md)
-- [Scripts](docs/scripts.md)
+- [時系列オッズ](docs/timeseries_odds.md)
+- [スクリプト一覧](docs/scripts.md)
 
 ---
 
