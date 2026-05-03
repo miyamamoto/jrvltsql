@@ -1,46 +1,54 @@
-# jrvltsql v1.3.0 リリースノート
+# jrvltsql v1.4.0 Release Notes
 
-## 主要な変更
+## Highlights
 
-### 🗄️ Dual-write mode
-- SQLite を primary にしつつ PostgreSQL へ同時書き込み
-- DDL / migration も mirror 側へ反映
-- PostgreSQL 併用時の移行パスを標準化
+### PostgreSQL time-series odds workflow
 
-### 🔄 PostgreSQL migration 整備
-- schema migration の PostgreSQL 対応を追加
-- migration テストを拡充
-- batch / realtime の書き込み経路を調整
+- Added `quickstart_postgres_timeseries.bat` for PostgreSQL race-data setup plus
+  official `TS_O1/TS_O2` time-series odds ingestion.
+- Added `fetch_timeseries_postgres.bat` for adding time-series odds to an
+  existing PostgreSQL installation.
+- Added `daily_sync.bat` for scheduled recent race-card/result synchronization.
 
-### 🧪 品質改善
-- DDL mirror の反映漏れを修正
-- realtime / verify 周辺の false positive を解消
-- dual-write / migration まわりのテストを追加
+### Expanded odds storage
 
-## 対象ユーザー
+- Expanded JRA-VAN time-series odds records into one row per ticket combination.
+- Added direct storage of expanded `TS_O1` to `TS_O6` rows.
+- Added multi-row PostgreSQL inserts for expanded time-series odds rows.
 
-- Windows 上で JV-Link から JRA データを取り込みたい運用者
-- SQLite から PostgreSQL mirror / 移行へ進めたい運用者
-- race day の realtime 監視を安定化したい利用者
+### Data correctness
 
-## システム要件
-- Windows 10/11
-- Python 3.12（32-bit）
-- JV-Link（中央競馬）
+- Fixed JRA-VAN time-series odds key generation.
+- Normalized blank and unavailable odds placeholders before PostgreSQL writes.
+- Updated tests so O1 to O6 expanded parser outputs are treated as `list[dict]`.
 
-## インストール / アップデート
+### Documentation cleanup
+
+- Added current architecture, PostgreSQL, time-series odds, and scripts docs.
+- Removed stale script README files.
+- Replaced downstream-system-specific naming with collector-generic wording.
+
+## Requirements
+
+- Windows 10/11 for real JV-Link collection.
+- Python 3.12.
+- JRA-VAN DataLab and JV-Link.
+- PostgreSQL is optional but required for shared time-series odds collection.
+
+## Upgrade
+
 ```powershell
 irm https://raw.githubusercontent.com/miyamamoto/jrvltsql/master/install.ps1 | iex
 ```
 
-## 主な差分
+For PostgreSQL time-series odds setup:
 
-- `src/database/dual_handler.py`
-- `src/database/migration.py`
-- `src/services/realtime_monitor.py`
-- `src/cli/main.py`
+```bat
+quickstart_postgres_timeseries.bat 20250426 20260412
+```
 
-## 補足
+For time-series-only backfill:
 
-- 本リリースは **JRA 専用** です
-- NAR 取り込みは `jrvltsql-nar` 側で分離管理します
+```bat
+fetch_timeseries_postgres.bat 20250426 20260412
+```
