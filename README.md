@@ -13,14 +13,15 @@ JRA（中央競馬）専用です。
 | 目的 | まず実行 | 到達点 |
 |------|----------|--------|
 | SQLite で試す | `quickstart.bat` | JRA の主要データがローカル DB に入ります。 |
-| SQLite に公式時系列オッズも入れる | `quickstart.bat --include-timeseries` | SQLite の `TS_O1` / `TS_O2` に公式1年保持の単複枠・馬連時系列オッズが入ります。 |
+| SQLite に公式時系列オッズも入れる | `quickstart.bat` で時系列オッズ取得を選択、または `quickstart.bat --yes --include-timeseries` | SQLite の `TS_O1` / `TS_O2` に公式1年保持の単複枠・馬連時系列オッズが入ります。 |
 | PostgreSQL 運用を始める | `quickstart_postgres_timeseries.bat 20250426 20260412` | `RACE` 系データと公式 `TS_O1` / `TS_O2` が入り、日次同期タスク登録まで進めます。 |
 | 公式時系列オッズだけ足す | `fetch_timeseries_postgres.bat 20250426 20260412` | 既存 PostgreSQL に `TS_O1` / `TS_O2` だけ追加します。 |
 | 三連複・三連単の締切前オッズを残す | `jltsql realtime odds-sokuho-timeseries --from 20260418 --to 20260419 --db postgresql` | 開催週の全賭式オッズが `TS_O1`〜`TS_O6` に入ります。 |
-| 日次同期を自動化する | `install_tasks.ps1` | `daily_sync.bat` が Windows タスクとして登録されます。 |
+| 日次同期を自動化する | `quickstart.bat` / `quickstart_postgres_timeseries.bat` の最後で登録、または `install_tasks.ps1` | `daily_sync.bat` が Windows タスクとして登録されます。SQLite / PostgreSQL のどちらにも対応します。 |
 
-`daily_sync.bat` は通常データ更新用です。公式時系列オッズや全賭式速報オッズを
-継続蓄積したい場合は、上のオッズ取得コマンドを別途実行してください。
+`daily_sync.bat` は通常データ更新用です。`--db sqlite` / `--db postgresql`
+の両方に対応します。公式時系列オッズや全賭式速報オッズを継続蓄積したい場合は、
+上のオッズ取得コマンドを別途実行してください。
 
 ## どこまで対応しているか
 
@@ -64,12 +65,13 @@ quickstart.bat
 4. JRA-VAN からのデータ取得・DB 格納
 5. S3 キャッシュのアップロード（オプション）
 6. DB 検証 (`raceday_verify --phase pre`)
+7. SQLite 日次同期タスク登録の実行確認（オプション）
 
 対話形式では、公式1年保持の時系列オッズを取得するか確認されます。
 非対話で SQLite に `TS_O1/TS_O2` を入れる場合は以下です。
 
 ```bat
-quickstart.bat --include-timeseries
+quickstart.bat --yes --include-timeseries
 ```
 
 PostgreSQL + 時系列オッズ:
@@ -157,11 +159,13 @@ jltsql realtime odds-timeseries --from <FROM> --to <TO> --db sqlite --db-path da
 
 ### Windows タスク登録
 
-PostgreSQL 運用では、`quickstart_postgres_timeseries.bat` の最後に
-`daily_sync.bat` を Windows タスクスケジューラに登録するか確認されます。
+`daily_sync.bat` は SQLite / PostgreSQL の両方に対応しています。
+`quickstart.bat` の最後では SQLite 用、`quickstart_postgres_timeseries.bat`
+の最後では PostgreSQL 用として Windows タスクスケジューラに登録するか確認されます。
 手動で登録する場合は以下を実行します。
 
 ```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File install_tasks.ps1 -DbType sqlite -Time 06:30
 powershell -NoProfile -ExecutionPolicy Bypass -File install_tasks.ps1 -DbType postgresql -Time 06:30
 ```
 

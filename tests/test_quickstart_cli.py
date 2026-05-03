@@ -210,4 +210,7 @@ class TestQuickstartBatchRoles:
 
         assert ":prompt_postgres_timeseries" not in text
         assert 'call "%~dp0quickstart_postgres_timeseries.bat"' not in text
-        assert "quickstart.bat --include-timeseries" in text
+        assert "quickstart.bat --yes --include-timeseries" in text
+        assert "-DbType sqlite" in text
+        assert "SKIP_SCHEDULER_FOR_YES" in text
+        assert 'if not "%~1"==""' in text

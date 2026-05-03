@@ -23,7 +23,7 @@ NAR / 地方競馬はこのリポジトリの対象外です。
 | `src/database/` | SQLite / PostgreSQL ハンドラ、スキーマ、テーブル対応を管理します。 |
 | `src/realtime/` | JVRTOpen 速報・時系列データの保存処理を担当します。 |
 | `scripts/quickstart.py` | 対話・非対話の初期セットアップと更新処理をまとめます。 |
-| `quickstart.bat` | Windows 向けの通常 quickstart です。既定は SQLite で、`--include-timeseries` により SQLite に公式時系列オッズも保存できます。 |
+| `quickstart.bat` | Windows 向けの通常 quickstart です。既定は SQLite で、対話形式または `--yes --include-timeseries` により SQLite に公式時系列オッズも保存できます。最後に SQLite 用の日次同期タスク登録を確認します。 |
 | `quickstart_postgres_timeseries.bat` | PostgreSQL へ RACE と公式時系列オッズを投入し、最後にタスク登録を確認します。 |
 | `daily_sync.bat` | Windows タスクスケジューラから実行する日次同期です。 |
 | `install_tasks.ps1` | `daily_sync.bat` の Windows タスク登録・更新を行います。 |
@@ -58,8 +58,9 @@ JRA-VAN の公式長期保持時系列オッズは以下です。
 ## スケジューリング
 
 通常データの同期は、Windows タスクスケジューラで `daily_sync.bat` を
-日次実行します。`quickstart_postgres_timeseries.bat` は、PostgreSQL
-時系列オッズ投入完了後にこのタスク登録を確認します。
+日次実行します。`daily_sync.bat` は `--db sqlite` / `--db postgresql` の
+両方に対応します。`quickstart.bat` は SQLite 用、`quickstart_postgres_timeseries.bat`
+は PostgreSQL 用としてこのタスク登録を確認します。
 
 PostgreSQL 接続をタスクから行う場合、`POSTGRES_*` 環境変数は Windows
 ユーザー環境変数など永続的に参照できる場所へ設定してください。

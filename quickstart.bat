@@ -14,6 +14,14 @@ echo.
 
 REM Store exit code for later
 set SCRIPT_EXIT_CODE=0
+set SKIP_SCHEDULER_FOR_YES=0
+
+if not "%~1"=="" (
+    for %%A in (%*) do (
+        if /I "%%~A"=="--yes" set "SKIP_SCHEDULER_FOR_YES=1"
+        if /I "%%~A"=="-y" set "SKIP_SCHEDULER_FOR_YES=1"
+    )
+)
 
 REM Prefer repo-local interpreters first so Windows collectors can run
 REM without relying on global PATH state.
@@ -88,10 +96,26 @@ echo   To view data:
 echo     - Use DB Browser for SQLite
 echo     - Python: sqlite3.connect('data/keiba.db')
 echo.
+call :prompt_sqlite_daily_sync
+if !errorlevel! neq 0 (
+    set "SCRIPT_EXIT_CODE=!errorlevel!"
+    echo.
+    echo ============================================================
+    echo   Daily Sync Task Registration Failed
+    echo ============================================================
+    echo.
+    echo   Exit Code: !SCRIPT_EXIT_CODE!
+    echo.
+    echo   Press Enter to close...
+    set /p dummy=
+    endlocal & exit /b !SCRIPT_EXIT_CODE!
+)
+
+echo.
 echo   CLI commands:
 echo     jltsql status   - Check database status
 echo     jltsql fetch    - Fetch additional data
-echo     quickstart.bat --include-timeseries - Fill SQLite TS_O1/TS_O2 odds
+echo     quickstart.bat --yes --include-timeseries - Fill SQLite TS_O1/TS_O2 odds
 echo     quickstart_postgres_timeseries.bat  - PostgreSQL setup + TS_O1/TS_O2
 echo     jltsql --help   - Other commands
 echo.
@@ -102,4 +126,42 @@ echo.
 echo   Press Enter to close...
 set /p dummy=
 endlocal
+exit /b 0
+
+:prompt_sqlite_daily_sync
+if /I "!JLTSQL_SKIP_SCHEDULER_PROMPT!"=="1" exit /b 0
+if "!SKIP_SCHEDULER_FOR_YES!"=="1" exit /b 0
+
+if not exist "%~dp0install_tasks.ps1" (
+    echo [INFO] install_tasks.ps1 not found. Daily sync task registration skipped.
+    exit /b 0
+)
+
+echo.
+echo ============================================================
+echo   Optional SQLite Daily Sync Task Registration
+echo ============================================================
+echo.
+echo   This registers daily_sync.bat as a Windows scheduled task.
+echo   Database: SQLite ^(data\keiba.db^)
+echo   Default task: JRVLTSQL_DailySync, daily at 06:30.
+echo.
+set /p REGISTER_TASK="  Register or update the scheduled task now? [y/N]: "
+if /I not "!REGISTER_TASK!"=="y" (
+    echo [INFO] Scheduled task registration skipped.
+    exit /b 0
+)
+
+set "TASK_TIME=06:30"
+set /p TASK_TIME_INPUT="  Daily run time HH:mm [06:30]: "
+if not "!TASK_TIME_INPUT!"=="" set "TASK_TIME=!TASK_TIME_INPUT!"
+
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0install_tasks.ps1" -Time "!TASK_TIME!" -DbType sqlite
+set "TASK_EXIT_CODE=!errorlevel!"
+if not "!TASK_EXIT_CODE!"=="0" (
+    echo [ERROR] Scheduled task registration failed. Exit code: !TASK_EXIT_CODE!
+    exit /b !TASK_EXIT_CODE!
+)
+
+echo [OK] Scheduled task registration completed.
 exit /b 0

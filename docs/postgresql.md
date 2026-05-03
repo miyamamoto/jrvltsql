@@ -49,10 +49,12 @@ daily_sync.bat --db postgresql --days-back 7 --days-forward 3
 ```
 
 このコマンドは、直近のレース番組、結果、関連する通常データを更新します。
+SQLite で同じ処理をする場合は `daily_sync.bat --db sqlite` を使います。
 
 手動で Windows タスクを登録・更新する場合:
 
 ```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File install_tasks.ps1 -DbType sqlite -Time 06:30
 powershell -NoProfile -ExecutionPolicy Bypass -File install_tasks.ps1 -DbType postgresql -Time 06:30
 ```
 
