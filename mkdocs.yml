@@ -21,6 +21,10 @@ markdown_extensions:
 
 nav:
   - Home: index.md
+  - Architecture: architecture.md
   - CLI: CLI.md
+  - PostgreSQL: postgresql.md
+  - Time-series odds: timeseries_odds.md
+  - Scripts: scripts.md
 
 copyright: Copyright &copy; 2024 JRVLTSQL Contributors

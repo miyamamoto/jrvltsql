@@ -4,6 +4,8 @@ JRA-VAN DataLab データを SQLite/PostgreSQL に取り込む Windows 専用パ
 
 JRA（中央競馬）専用です。
 
+Documentation: https://miyamamoto.github.io/jrvltsql/
+
 ---
 
 ## 必要要件
