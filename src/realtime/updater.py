@@ -3,6 +3,7 @@
 This module handles real-time data updates to the database.
 """
 
+from datetime import datetime, timezone
 from typing import Dict, Optional
 
 from src.database.base import BaseDatabase
@@ -219,7 +220,10 @@ class RealtimeUpdater:
         """Insert already parsed records in batches grouped by target table."""
         grouped: dict[str, list[Dict]] = {}
         errors = 0
+        batch_collected_at = self._current_collected_at() if timeseries else None
         for record in records:
+            if timeseries and batch_collected_at:
+                record.setdefault("CollectedAt", batch_collected_at)
             record_type = record.get("RecordSpec")
             table_name = self._resolve_timeseries_table(record) if timeseries else None
             if table_name is None:
@@ -395,7 +399,14 @@ class RealtimeUpdater:
         from src.importer.importer import convert_record_types
 
         clean_data = {k: v for k, v in data.items() if not k.startswith("_")}
+        if table_name.startswith("TS_"):
+            clean_data.setdefault("CollectedAt", self._current_collected_at())
         return convert_record_types(clean_data, table_name)
+
+    @staticmethod
+    def _current_collected_at() -> str:
+        """Return collector-side capture timestamp in UTC ISO-8601."""
+        return datetime.now(timezone.utc).isoformat()
 
     def _handle_new_record(self, table_name: str, data: Dict) -> Dict:
         """Handle new record insertion.
@@ -511,26 +522,27 @@ class RealtimeUpdater:
             "TS_SOKUHO_O1": [
                 "Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji",
                 "RaceNum", "Umaban", "Kumi", "HassoTime", "SourceSpec",
+                "CollectedAt",
             ],
             "TS_SOKUHO_O2": [
                 "Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji",
-                "RaceNum", "Kumi", "HassoTime", "SourceSpec",
+                "RaceNum", "Kumi", "HassoTime", "SourceSpec", "CollectedAt",
             ],
             "TS_SOKUHO_O3": [
                 "Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji",
-                "RaceNum", "Kumi", "HassoTime", "SourceSpec",
+                "RaceNum", "Kumi", "HassoTime", "SourceSpec", "CollectedAt",
             ],
             "TS_SOKUHO_O4": [
                 "Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji",
-                "RaceNum", "Kumi", "HassoTime", "SourceSpec",
+                "RaceNum", "Kumi", "HassoTime", "SourceSpec", "CollectedAt",
             ],
             "TS_SOKUHO_O5": [
                 "Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji",
-                "RaceNum", "Kumi", "HassoTime", "SourceSpec",
+                "RaceNum", "Kumi", "HassoTime", "SourceSpec", "CollectedAt",
             ],
             "TS_SOKUHO_O6": [
                 "Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji",
-                "RaceNum", "Kumi", "HassoTime", "SourceSpec",
+                "RaceNum", "Kumi", "HassoTime", "SourceSpec", "CollectedAt",
             ],
 
             # Weather/Track condition tables

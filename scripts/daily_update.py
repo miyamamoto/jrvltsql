@@ -18,6 +18,8 @@ from src.utils.config import load_config
 UPDATE_SPECS = [
     ("TOKU", 2),
     ("RACE", 2),
+    # Master deltas keep UM/KS/CH/BR/BN current after the initial DIFN setup.
+    ("DIFN", 1),
     ("TCVN", 2),
     ("RCVN", 2),
 ]

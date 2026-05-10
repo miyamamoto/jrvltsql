@@ -63,7 +63,7 @@ Windows タスクスケジューラへ登録するか確認されます。
 | 確定オッズ | `NL_O1`〜`NL_O6` | `RACE` 取得 | レース後の確定オッズです。投資判断時点のオッズではありません。 |
 | 公式時系列オッズ | `TS_O1`, `TS_O2` | `0B41`, `0B42` | 単複枠・馬連のみ。JRA-VAN 側の保持は約1年です。 |
 | 開催週の速報オッズ | `TS_SOKUHO_O1`〜`TS_SOKUHO_O6` | `0B30` または `0B31`〜`0B36` | 全賭式対応。ただし JRA-VAN 側の保持は約1週間です。 |
-| 日次同期 | `NL_*` | `daily_sync.bat --db sqlite` / `--db postgresql` | 時系列オッズは取得しません。 |
+| 日次同期 | `NL_*`, `TS_O1`, `TS_O2`, `TS_SOKUHO_O*` | `daily_sync.bat --db sqlite` / `--db postgresql` | 既定では直近通常データ、公式時系列、開催週速報を更新します。不要なら `--no-timeseries` / `--no-realtime` を指定します。 |
 
 ## PostgreSQL を使う場合
 
@@ -103,7 +103,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File install_tasks.ps1 -DbType sq
 powershell -NoProfile -ExecutionPolicy Bypass -File install_tasks.ps1 -DbType postgresql -Time 06:30
 ```
 
-`daily_sync.bat` は通常データ更新用です。公式時系列オッズや全賭式速報オッズを継続蓄積する場合は、別途オッズ取得コマンドを実行してください。
+`daily_sync.bat` は運用向けに PostgreSQL 既定です。通常データに加え、
+公式 `TS_O1` / `TS_O2` と開催週の速報系データも取得します。
+通常データだけに絞る場合は `--no-timeseries --no-realtime` を指定してください。
 
 ## 詳細ドキュメント
 

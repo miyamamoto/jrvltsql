@@ -1644,9 +1644,10 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
             {"name": "HassoTime", "type": "TEXT", "description": "発走時刻", "example": "1540", "nullable": False},
             {"name": "Umaban", "type": "INTEGER", "description": "馬番", "example": "1", "nullable": False},
             {"name": "TanOdds", "type": "REAL", "description": "単勝オッズ", "example": "3.5", "nullable": True},
-            {"name": "TanNinki", "type": "INTEGER", "description": "単勝人気順", "example": "1", "nullable": True}
+            {"name": "TanNinki", "type": "INTEGER", "description": "単勝人気順", "example": "1", "nullable": True},
+            {"name": "CollectedAt", "type": "TEXT", "description": "collector保存時刻（UTC ISO-8601）", "example": "2026-05-10T12:34:56.789012+00:00", "nullable": True}
         ],
-        "primary_key": ["Year", "MonthDay", "JyoCD", "RaceNum", "Umaban", "HassoTime"],
+        "primary_key": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "Umaban", "Kumi", "HassoTime"],
         "indexes": ["Year", "MonthDay", "HassoTime"]
     },
     "TS_O2": {
@@ -1663,9 +1664,10 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
             {"name": "HassoTime", "type": "TEXT", "description": "発走時刻", "example": "1540", "nullable": False},
             {"name": "Kumi", "type": "TEXT", "description": "組み合わせ", "example": "0102", "nullable": False},
             {"name": "Odds", "type": "REAL", "description": "馬連オッズ", "example": "12.5", "nullable": True},
-            {"name": "Ninki", "type": "INTEGER", "description": "人気順", "example": "3", "nullable": True}
+            {"name": "Ninki", "type": "INTEGER", "description": "人気順", "example": "3", "nullable": True},
+            {"name": "CollectedAt", "type": "TEXT", "description": "collector保存時刻（UTC ISO-8601）", "example": "2026-05-10T12:34:56.789012+00:00", "nullable": True}
         ],
-        "primary_key": ["Year", "MonthDay", "JyoCD", "RaceNum", "Kumi", "HassoTime"],
+        "primary_key": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "Kumi", "HassoTime"],
         "indexes": ["Year", "MonthDay", "HassoTime"]
     },
     "TS_O3": {
@@ -1682,9 +1684,10 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
             {"name": "HassoTime", "type": "TEXT", "description": "発走時刻", "example": "1540", "nullable": False},
             {"name": "Kumi", "type": "TEXT", "description": "組み合わせ", "example": "0102", "nullable": False},
             {"name": "OddsLow", "type": "REAL", "description": "ワイドオッズ下限", "example": "2.5", "nullable": True},
-            {"name": "OddsHigh", "type": "REAL", "description": "ワイドオッズ上限", "example": "4.5", "nullable": True}
+            {"name": "OddsHigh", "type": "REAL", "description": "ワイドオッズ上限", "example": "4.5", "nullable": True},
+            {"name": "CollectedAt", "type": "TEXT", "description": "collector保存時刻（UTC ISO-8601）", "example": "2026-05-10T12:34:56.789012+00:00", "nullable": True}
         ],
-        "primary_key": ["Year", "MonthDay", "JyoCD", "RaceNum", "Kumi", "HassoTime"],
+        "primary_key": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "Kumi", "HassoTime"],
         "indexes": ["Year", "MonthDay", "HassoTime"]
     },
     "TS_O4": {
@@ -1701,9 +1704,10 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
             {"name": "HassoTime", "type": "TEXT", "description": "発走時刻", "example": "1540", "nullable": False},
             {"name": "Kumi", "type": "TEXT", "description": "組み合わせ", "example": "0102", "nullable": False},
             {"name": "Odds", "type": "REAL", "description": "馬単オッズ", "example": "25.0", "nullable": True},
-            {"name": "Ninki", "type": "INTEGER", "description": "人気順", "example": "5", "nullable": True}
+            {"name": "Ninki", "type": "INTEGER", "description": "人気順", "example": "5", "nullable": True},
+            {"name": "CollectedAt", "type": "TEXT", "description": "collector保存時刻（UTC ISO-8601）", "example": "2026-05-10T12:34:56.789012+00:00", "nullable": True}
         ],
-        "primary_key": ["Year", "MonthDay", "JyoCD", "RaceNum", "Kumi", "HassoTime"],
+        "primary_key": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "Kumi", "HassoTime"],
         "indexes": ["Year", "MonthDay", "HassoTime"]
     },
     "TS_O5": {
@@ -1720,9 +1724,10 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
             {"name": "HassoTime", "type": "TEXT", "description": "発走時刻", "example": "1540", "nullable": False},
             {"name": "Kumi", "type": "TEXT", "description": "組み合わせ", "example": "010203", "nullable": False},
             {"name": "Odds", "type": "REAL", "description": "三連複オッズ", "example": "45.0", "nullable": True},
-            {"name": "Ninki", "type": "INTEGER", "description": "人気順", "example": "8", "nullable": True}
+            {"name": "Ninki", "type": "INTEGER", "description": "人気順", "example": "8", "nullable": True},
+            {"name": "CollectedAt", "type": "TEXT", "description": "collector保存時刻（UTC ISO-8601）", "example": "2026-05-10T12:34:56.789012+00:00", "nullable": True}
         ],
-        "primary_key": ["Year", "MonthDay", "JyoCD", "RaceNum", "Kumi", "HassoTime"],
+        "primary_key": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "Kumi", "HassoTime"],
         "indexes": ["Year", "MonthDay", "HassoTime"]
     },
     "TS_O6": {
@@ -1739,9 +1744,10 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
             {"name": "HassoTime", "type": "TEXT", "description": "発走時刻", "example": "1540", "nullable": False},
             {"name": "Kumi", "type": "TEXT", "description": "組み合わせ", "example": "010203", "nullable": False},
             {"name": "Odds", "type": "REAL", "description": "三連単オッズ", "example": "150.0", "nullable": True},
-            {"name": "Ninki", "type": "INTEGER", "description": "人気順", "example": "15", "nullable": True}
+            {"name": "Ninki", "type": "INTEGER", "description": "人気順", "example": "15", "nullable": True},
+            {"name": "CollectedAt", "type": "TEXT", "description": "collector保存時刻（UTC ISO-8601）", "example": "2026-05-10T12:34:56.789012+00:00", "nullable": True}
         ],
-        "primary_key": ["Year", "MonthDay", "JyoCD", "RaceNum", "Kumi", "HassoTime"],
+        "primary_key": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "Kumi", "HassoTime"],
         "indexes": ["Year", "MonthDay", "HassoTime"]
     }
 }
@@ -1772,7 +1778,7 @@ for _source_table, _target_table in (
             "nullable": False,
         },
     )
-    _metadata["primary_key"] = [*_metadata["primary_key"], "SourceSpec"]
+    _metadata["primary_key"] = [*_metadata["primary_key"], "SourceSpec", "CollectedAt"]
     TABLE_METADATA[_target_table] = _metadata
 
 

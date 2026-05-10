@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""
-PostgreSQL本番データベースの空テーブルを埋める
+"""Backfill empty PostgreSQL tables from JV-Link.
 
-残り44個の空テーブルに対して、適切なデータスペックでデータを取得・格納
+Compatibility/diagnostic helper only. Normal production setup should use
+quickstart/daily_sync so PostgreSQL, masters, odds, and time-series tables are
+created through the same code path.
 """
 import sys
 import time
@@ -16,7 +17,7 @@ sys.path.insert(0, str(project_root))
 from src.database.postgresql_handler import PostgreSQLDatabase
 from src.fetcher.historical import HistoricalFetcher
 from src.importer.importer import DataImporter
-from src.parser.factory import ParserFactory
+from src.utils.config import load_config
 import structlog
 
 logger = structlog.get_logger()
@@ -25,14 +26,20 @@ class EmptyTableFiller:
     """空テーブルを埋めるためのクラス"""
 
     def __init__(self):
-        self.db_config = {
-            "host": "localhost",
-            "port": 5432,
-            "database": "keiba",
-            "user": "postgres",
-            "password": "postgres",
-        }
-        self.service_key = "5UJC-VRFM-448X-F3V4-4"
+        config_path = project_root / "config" / "config.yaml"
+        config = load_config(str(config_path)) if config_path.exists() else None
+        if config:
+            self.db_config = config.get("databases.postgresql", {})
+            self.service_key = config.get("jvlink.service_key")
+        else:
+            self.db_config = {
+                "host": "localhost",
+                "port": 5432,
+                "database": "keiba",
+                "user": "postgres",
+                "password": "",
+            }
+            self.service_key = None
 
     def get_empty_tables(self, db):
         """空テーブルのリストを取得"""
@@ -46,9 +53,14 @@ class EmptyTableFiller:
 
         empty_tables = []
         for row in result:
-            table_name = row[0]
+            table_name = row.get("table_name") if isinstance(row, dict) else row[0]
             count_result = db.fetch_one(f"SELECT COUNT(*) FROM {table_name}")
-            if count_result and count_result[0] == 0:
+            count = (
+                next(iter(count_result.values()))
+                if isinstance(count_result, dict)
+                else count_result[0]
+            ) if count_result else 0
+            if count == 0:
                 empty_tables.append(table_name.upper())
 
         return empty_tables
@@ -81,7 +93,7 @@ class EmptyTableFiller:
                 option=option
             ):
                 records.append(record)
-                if len(records) >= max_records:
+                if max_records and len(records) >= max_records:
                     print(f"  ! 最大レコード数 ({max_records}) に達しました")
                     break
 
@@ -128,7 +140,7 @@ class EmptyTableFiller:
             print(f"         ... 他 {len(empty_tables) - 20} テーブル")
 
         # データスペック別に取得
-        # 蓄積系データ (option=1)
+        # 蓄積系データ
         # - DIFN: マスタデータ (新)  → UM, CH, KS, BN, BR等
         # - BLDN: 血統情報 (新)     → HN, SK等
         # - YSCH: 開催スケジュール   → YS
@@ -140,12 +152,12 @@ class EmptyTableFiller:
         # - COMM: 各種解説
         # - MING: レース当日発表
 
-        print("\n[2/4] 蓄積系データ取得 (option=1)...")
+        print("\n[2/4] 蓄積系データ取得...")
 
         all_table_stats = defaultdict(int)
 
         # DIFNデータスペック
-        stats = self.fetch_and_import(db, "DIFN", "20230101", option=1, max_records=15000)
+        stats = self.fetch_and_import(db, "DIFN", "19860101", option=4, max_records=0)
         for table, count in stats.items():
             all_table_stats[table] += count
 
@@ -197,9 +209,13 @@ class EmptyTableFiller:
         total_records = 0
 
         for row in result:
-            table_name = row[0]
+            table_name = row.get("table_name") if isinstance(row, dict) else row[0]
             count_result = db.fetch_one(f"SELECT COUNT(*) FROM {table_name}")
-            count = count_result[0] if count_result else 0
+            count = (
+                next(iter(count_result.values()))
+                if isinstance(count_result, dict)
+                else count_result[0]
+            ) if count_result else 0
             total_records += count
 
             if table_name.upper() in empty_tables and count > 0:

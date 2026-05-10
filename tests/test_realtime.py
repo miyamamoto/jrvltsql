@@ -447,7 +447,9 @@ class TestRealtimeUpdater(unittest.TestCase):
             for call in self.mock_db.insert_many.call_args_list
         }
         self.assertNotIn("SourceSpec", inserted_by_table["TS_O1"][0])
+        self.assertIn("CollectedAt", inserted_by_table["TS_O1"][0])
         self.assertEqual(inserted_by_table["TS_SOKUHO_O1"][0]["SourceSpec"], "0B30")
+        self.assertIn("CollectedAt", inserted_by_table["TS_SOKUHO_O1"][0])
 
     @patch('src.realtime.updater.ParserFactory')
     def test_process_record_new(self, mock_factory_class):
@@ -708,6 +710,13 @@ class TestRealtimeUpdater(unittest.TestCase):
         self.assertEqual(
             self.updater._get_primary_keys("RT_WE"),
             ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "HenkoID"],
+        )
+        self.assertEqual(
+            self.updater._get_primary_keys("TS_SOKUHO_O2"),
+            [
+                "Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji",
+                "RaceNum", "Kumi", "HassoTime", "SourceSpec", "CollectedAt",
+            ],
         )
         self.assertEqual(self.updater._get_primary_keys("RT_DM"), [])
 

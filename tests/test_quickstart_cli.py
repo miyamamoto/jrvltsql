@@ -247,7 +247,7 @@ class TestQuickstartBatchRoles:
         assert '-DbType "%DB_TYPE%"' in text
         assert "PersistPostgresEnvironment" in text
 
-    def test_daily_sync_is_normal_data_only(self):
+    def test_daily_sync_includes_master_and_timeseries_paths(self):
         batch = Path(__file__).resolve().parents[1] / "daily_sync.bat"
         text = batch.read_text(encoding="utf-8")
 
@@ -255,7 +255,10 @@ class TestQuickstartBatchRoles:
         assert "--db-type postgresql" in text
         assert "--db-type sqlite" in text
         assert "scripts/quickstart.py --mode update --yes" in text
-        assert "--include-timeseries" not in text
+        assert "--include-timeseries" in text
+        assert "--include-realtime" in text
+        assert "--no-timeseries" in text
+        assert "--no-realtime" in text
 
     def test_install_tasks_registers_daily_sync_with_db_type(self):
         script = Path(__file__).resolve().parents[1] / "install_tasks.ps1"

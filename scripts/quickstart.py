@@ -1780,14 +1780,14 @@ class QuickstartRunner:
     # DIFN: UM, KS, CH, BR, BN, RC + 地方・海外レース(RA, SE)
     SIMPLE_SPECS = [
         ("RACE", "レース情報", 1),
-        ("DIFN", "蓄積系ソフト用蓄積情報", 1),
+        ("DIFN", "蓄積系ソフト用蓄積情報", 4),
     ]
 
     # 標準モード: 簡易 + 付加情報 (option=1)
     STANDARD_SPECS = [
         ("TOKU", "特別登録馬", 1),
         ("RACE", "レース情報", 1),
-        ("DIFN", "蓄積系ソフト用蓄積情報", 1),
+        ("DIFN", "蓄積系ソフト用蓄積情報", 4),
         ("BLDN", "蓄積系ソフト用血統情報", 1),
         ("MING", "蓄積系ソフト用マイニング情報", 1),
         ("SLOP", "坂路調教情報", 1),
@@ -1804,7 +1804,7 @@ class QuickstartRunner:
     FULL_SPECS = [
         ("TOKU", "特別登録馬", 1),
         ("RACE", "レース情報", 1),  # オッズ(O1-O6)もRACEに含まれる
-        ("DIFN", "蓄積系ソフト用蓄積情報", 1),
+        ("DIFN", "蓄積系ソフト用蓄積情報", 4),
         ("BLDN", "蓄積系ソフト用血統情報", 1),
         ("MING", "蓄積系ソフト用マイニング情報", 1),
         ("SLOP", "坂路調教情報", 1),
@@ -1820,6 +1820,7 @@ class QuickstartRunner:
     UPDATE_SPECS = [
         ("TOKU", "特別登録馬", 2),
         ("RACE", "レース情報", 2),
+        ("DIFN", "蓄積系ソフト用蓄積情報", 1),
         ("TCVN", "調教師変更情報", 2),
         ("RCVN", "騎手変更情報", 2),
     ]
@@ -2314,7 +2315,7 @@ class QuickstartRunner:
                                     ):
                                         raw_buff = record.get("_raw", "")
                                         if raw_buff:
-                                            updater.process_record(raw_buff, timeseries=True)
+                                            updater.process_record(raw_buff, timeseries=True, source_spec=spec)
                                             spec_records += 1
                                             cumulative_records += 1
 
@@ -2862,8 +2863,8 @@ class QuickstartRunner:
             'error_message': None,
         }
 
-        # 時系列データかどうか判定（0B20, 0B30-0B36）
-        is_time_series = spec.startswith("0B2") or spec.startswith("0B3")
+        # 時系列データかどうか判定（0B20, 0B30-0B36, 0B41-0B42）
+        is_time_series = spec.startswith("0B2") or spec.startswith("0B3") or spec in {"0B41", "0B42"}
 
         try:
             from src.fetcher.realtime import RealtimeFetcher
@@ -2900,7 +2901,11 @@ class QuickstartRunner:
                                 raw_buff = record.get("_raw")
                                 if not raw_buff:
                                     continue
-                                result = updater.process_record(raw_buff, timeseries=is_time_series)
+                                result = updater.process_record(
+                                    raw_buff,
+                                    timeseries=is_time_series,
+                                    source_spec=spec if is_time_series else None,
+                                )
                                 if result is None:
                                     continue
                                 # process_record は dict または list[dict] を返す
