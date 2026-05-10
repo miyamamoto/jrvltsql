@@ -663,13 +663,17 @@ def run_unit_tests(issues):
            "--ignore=tests/unit/test_jvlink_bridge.py",
            "--ignore=tests/integration/",
            "--ignore=tests/e2e/",
-           "--basetemp=C:/tmp/pytest-jrvl",
+           "--basetemp=.pytest-tmp",
            "--no-header"]
     r = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
-    lines = (r.stdout + r.stderr).strip().splitlines()
+    output = r.stdout + r.stderr
+    lines = output.strip().splitlines()
     for line in lines[-10:]:
         print(f"  {line}")
     if r.returncode != 0:
+        if "No module named pytest" in output:
+            print("  [SKIP] pytest not installed -- pip install pytest to enable unit tests")
+            return True
         issues.append(f"Unit tests failed (exit {r.returncode})")
         return False
     return True

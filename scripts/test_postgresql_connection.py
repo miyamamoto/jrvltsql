@@ -22,23 +22,22 @@ def test_driver_availability():
     print("=" * 80)
 
     try:
-        import pg8000.native
-        print("✅ pg8000: インストール済み (推奨)")
-        return "pg8000"
-    except ImportError:
-        print("❌ pg8000: 未インストール")
-
-    try:
         import psycopg
-        print("✅ psycopg: インストール済み")
+        print("✅ psycopg: インストール済み (推奨)")
         return "psycopg"
     except ImportError:
         print("❌ psycopg: 未インストール")
 
+    try:
+        import pg8000.native
+        print("✅ pg8000: インストール済み (fallback)")
+        return "pg8000"
+    except ImportError:
+        print("❌ pg8000: 未インストール")
+
     print("\nエラー: PostgreSQLドライバーがインストールされていません")
     print("以下のコマンドでインストールしてください:")
-    print("  pip install pg8000  # 推奨 (純Python)")
-    print("  pip install psycopg # C拡張版")
+    print('  pip install "psycopg[binary]"')
     return None
 
 

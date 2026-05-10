@@ -20,22 +20,23 @@ def setup_test_database():
     print(f"  Target DB: {test_db}")
 
     try:
-        import pg8000.native
-        print(f"\n  [INFO] pg8000ドライバーを使用")
+        import psycopg
+        print(f"\n  [INFO] psycopgドライバーを使用")
     except ImportError:
-        print(f"\n  [ERROR] pg8000がインストールされていません")
-        print(f"  pip install pg8000")
+        print(f"\n  [ERROR] psycopgがインストールされていません")
+        print('  pip install "psycopg[binary]"')
         return False
 
     # まずpostgresデータベースに接続
     print(f"\npostgresデータベースに接続中...")
     try:
-        conn = pg8000.native.Connection(
+        conn = psycopg.connect(
             user=user,
             password=password,
             host=host,
             port=port,
-            database="postgres",  # デフォルトDBに接続
+            dbname="postgres",  # デフォルトDBに接続
+            autocommit=True,
             timeout=10,
         )
         print(f"  [OK] 接続成功")
@@ -49,14 +50,15 @@ def setup_test_database():
     # テスト用データベースが存在するか確認
     print(f"\n'{test_db}'データベースの存在確認...")
     try:
-        rows = conn.run("SELECT datname FROM pg_database WHERE datname = :db", db=test_db)
-        if rows:
-            print(f"  [INFO] データベースは既に存在します")
-        else:
-            # データベースを作成
-            print(f"  データベースを作成中...")
-            conn.run(f"CREATE DATABASE {test_db}")
-            print(f"  [OK] データベース '{test_db}' を作成しました")
+        with conn.cursor() as cur:
+            cur.execute("SELECT datname FROM pg_database WHERE datname = %s", (test_db,))
+            if cur.fetchone():
+                print(f"  [INFO] データベースは既に存在します")
+            else:
+                # データベースを作成
+                print(f"  データベースを作成中...")
+                cur.execute(f"CREATE DATABASE {test_db}")
+                print(f"  [OK] データベース '{test_db}' を作成しました")
     except Exception as e:
         print(f"  [ERROR] データベース作成失敗: {e}")
         conn.close()

@@ -6,18 +6,18 @@ This module provides PostgreSQL database operations for JLTSQL.
 from typing import Any, Dict, List, Optional
 
 try:
-    import pg8000.native
-    DRIVER = "pg8000"
+    import psycopg
+    from psycopg.rows import dict_row
+    DRIVER = "psycopg"
 except ImportError:
     try:
-        import psycopg
-        from psycopg.rows import dict_row
-        DRIVER = "psycopg"
+        import pg8000.native
+        DRIVER = "pg8000"
     except ImportError:
         raise ImportError(
             "No PostgreSQL driver available. "
-            "Install pg8000 (pure Python, works on Win32): pip install pg8000 "
-            "Or install psycopg (requires libpq): pip install psycopg"
+            "Install psycopg binary: pip install 'psycopg[binary]' "
+            "or the fallback driver: pip install pg8000"
         )
 
 from src.database.base import BaseDatabase, DatabaseError

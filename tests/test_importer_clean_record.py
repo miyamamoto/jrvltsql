@@ -49,3 +49,40 @@ class TestCleanRecord:
         }
         cleaned = self.importer._clean_record(record)
         assert len(cleaned) == 4
+
+
+def test_convert_record_types_drops_schema_external_fields():
+    """Shared converter should not pass parser metadata to database INSERT."""
+    from src.importer.importer import convert_record_types
+
+    converted = convert_record_types(
+        {
+            "RecordSpec": "RA",
+            "DataKubun": "1",
+            "Year": "2026",
+            "RecordDelimiter": "\r\n",
+            "UnexpectedParserField": "x",
+        },
+        "RT_RA",
+    )
+
+    assert converted["RecordSpec"] == "RA"
+    assert converted["Year"] == 2026
+    assert "RecordDelimiter" not in converted
+    assert "UnexpectedParserField" not in converted
+
+
+def test_convert_record_types_maps_masked_numeric_to_null():
+    """JV-Data masked numeric values should become NULL for typed columns."""
+    from src.importer.importer import convert_record_types
+
+    converted = convert_record_types(
+        {
+            "RecordSpec": "RA",
+            "DataKubun": "1",
+            "Year": "****",
+        },
+        "RT_RA",
+    )
+
+    assert converted["Year"] is None

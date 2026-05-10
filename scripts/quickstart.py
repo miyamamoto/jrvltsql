@@ -444,16 +444,16 @@ def _check_postgresql_database(host: str, port: int, database: str, user: str, p
         ステータス: "exists" (既存), "created" (新規作成), "error" (エラー)
     """
     try:
-        # PostgreSQLドライバのインポート
+        # PostgreSQLドライバのインポート。標準は psycopg[binary]。
         try:
-            import pg8000.native
-            driver = "pg8000"
+            import psycopg
+            driver = "psycopg"
         except ImportError:
             try:
-                import psycopg
-                driver = "psycopg"
+                import pg8000.native
+                driver = "pg8000"
             except ImportError:
-                return "error", "PostgreSQLドライバがインストールされていません。\npip install pg8000 または pip install psycopg を実行してください。"
+                return "error", "PostgreSQLドライバがインストールされていません。\npip install \"psycopg[binary]\" を実行してください。"
 
         # まずpostgresデータベースに接続してターゲットDBの存在確認
         if driver == "pg8000":
@@ -520,11 +520,11 @@ def _drop_postgresql_database(host: str, port: int, database: str, user: str, pa
     """
     try:
         try:
-            import pg8000.native
-            driver = "pg8000"
-        except ImportError:
             import psycopg
             driver = "psycopg"
+        except ImportError:
+            import pg8000.native
+            driver = "pg8000"
 
         if driver == "pg8000":
             conn = pg8000.native.Connection(
@@ -589,16 +589,16 @@ def _test_postgresql_connection(host: str, port: int, database: str, user: str, 
         (成功/失敗, メッセージ)
     """
     try:
-        # PostgreSQLドライバのインポート
+        # PostgreSQLドライバのインポート。標準は psycopg[binary]。
         try:
-            import pg8000.native
-            driver = "pg8000"
+            import psycopg
+            driver = "psycopg"
         except ImportError:
             try:
-                import psycopg
-                driver = "psycopg"
+                import pg8000.native
+                driver = "pg8000"
             except ImportError:
-                return False, "PostgreSQLドライバがインストールされていません。\npip install pg8000 または pip install psycopg を実行してください。"
+                return False, "PostgreSQLドライバがインストールされていません。\npip install \"psycopg[binary]\" を実行してください。"
 
         # 接続テスト
         if driver == "pg8000":
@@ -763,7 +763,7 @@ def _interactive_setup_rich() -> dict:
                     "[cyan]2. サービスの起動確認:[/cyan]\n"
                     "   services.msc → postgresql-x64-XX を開始\n\n"
                     "[cyan]3. Pythonドライバのインストール:[/cyan]\n"
-                    "   pip install pg8000",
+                    "   pip install \"psycopg[binary]\"",
                     border_style="yellow",
                 ))
                 console.print()
@@ -1349,7 +1349,7 @@ def _interactive_setup_simple() -> dict:
                 print("PostgreSQLのインストール・設定方法:")
                 print("  1. https://www.postgresql.org/download/")
                 print("  2. サービス起動: services.msc -> postgresql-x64-XX")
-                print("  3. Pythonドライバ: pip install pg8000")
+                print("  3. Pythonドライバ: pip install \"psycopg[binary]\"")
                 print()
                 retry = input("再試行しますか？ (y/n) [y]: ").strip().lower() or "y"
                 if retry != "y":
@@ -2076,7 +2076,6 @@ class QuickstartRunner:
                 # NL_RAテーブルから開催情報を取得（Kaiji/Nichiji含む）
                 # Year + MonthDay で日付を構成
                 # PostgreSQLでは printf の代わりに lpad を使用
-                # pg8000では :name 形式のプレースホルダーを使用
                 if db.get_db_type() == 'postgresql':
                     query = f"""
                         SELECT DISTINCT
@@ -2086,8 +2085,8 @@ class QuickstartRunner:
                             nichiji,
                             racenum
                         FROM {table_name}
-                        WHERE (year || lpad(monthday::text, 4, '0')) >= :from_date
-                          AND (year || lpad(monthday::text, 4, '0')) <= :to_date
+                        WHERE (year || lpad(monthday::text, 4, '0')) >= ?
+                          AND (year || lpad(monthday::text, 4, '0')) <= ?
                           AND lpad(jyocd::text, 2, '0') IN ('01','02','03','04','05','06','07','08','09','10')
                         ORDER BY race_date, jyocd, racenum
                     """
@@ -2105,11 +2104,7 @@ class QuickstartRunner:
                           AND printf('%02d', CAST(JyoCD AS INTEGER)) IN ('01','02','03','04','05','06','07','08','09','10')
                         ORDER BY race_date, JyoCD, RaceNum
                     """
-                # PostgreSQLでは辞書形式、SQLiteではタプル形式でパラメータを渡す
-                if db.get_db_type() == 'postgresql':
-                    results = db.fetch_all(query, {'from_date': from_date, 'to_date': to_date})
-                else:
-                    results = db.fetch_all(query, (from_date, to_date))
+                results = db.fetch_all(query, (from_date, to_date))
                 # fetch_all returns a list of dictionaries with lowercase keys for PostgreSQL
                 # For consistency, we convert dict rows to tuple rows
                 if db.get_db_type() == 'postgresql':
@@ -2872,7 +2867,7 @@ class QuickstartRunner:
 
         try:
             from src.fetcher.realtime import RealtimeFetcher
-            from src.importer.importer import DataImporter
+            from src.realtime.updater import RealtimeUpdater
 
             # データベース接続
             db = self._create_database()
@@ -2887,7 +2882,10 @@ class QuickstartRunner:
 
             with db:
                 fetcher = RealtimeFetcher(sid="JLTSQL")
-                importer = DataImporter(db, batch_size=1000)
+                # RealtimeUpdater は record_type を RT_*（速報系）/ TS_O*（時系列）に
+                # 正しくルーティングする。DataImporter を使うと NL_* に書き込まれ
+                # 速報系テーブルが空になる。
+                updater = RealtimeUpdater(db)
 
                 for date_str in race_dates:
                     # 時系列データはレース単位のキーが必要
@@ -2897,10 +2895,21 @@ class QuickstartRunner:
                         keys = [date_str]  # 速報系は日付単位
 
                     for key in keys:
-                        records = []
                         try:
                             for record in fetcher.fetch(data_spec=spec, key=key, continuous=False):
-                                records.append(record)
+                                raw_buff = record.get("_raw")
+                                if not raw_buff:
+                                    continue
+                                result = updater.process_record(raw_buff, timeseries=is_time_series)
+                                if result is None:
+                                    continue
+                                # process_record は dict または list[dict] を返す
+                                if isinstance(result, list):
+                                    total_records += sum(
+                                        1 for r in result if r and r.get("success")
+                                    )
+                                elif result.get("success"):
+                                    total_records += 1
                         except Exception as e:
                             error_str = str(e)
                             # 契約外チェック
@@ -2910,11 +2919,6 @@ class QuickstartRunner:
                             if '-1' in error_str or 'no data' in error_str.lower():
                                 continue
                             raise
-
-                        if records:
-                            # インポート
-                            import_stats = importer.import_records(iter(records), auto_commit=True)
-                            total_records += import_stats.get('records_imported', len(records))
 
                 details['records_saved'] = total_records
 
@@ -3154,10 +3158,12 @@ class QuickstartRunner:
         # option=3/4（セットアップモード）は一部のスペックのみ対応
         # RACE, DIFF, BLOD等の主要スペックはoption=2対応
         # COMM, PARA等の補助スペックはoption=1のみ対応
+        # DIFN（マスタデータ: UM, KS, CH）はoption=4が必要（差分では不十分）
         OPTION_4_SUPPORTED_SPECS = {
             "RACE", "DIFF", "BLOD", "SNAP", "SLOP", "WOOD",
             "YSCH", "HOSE", "HOYU", "CHOK", "KISI", "BRDR",
             "TOKU", "MING", "O1", "O2", "O3", "O4", "O5", "O6",
+            "DIFN",  # Master data (horses, jockeys, trainers)
         }
 
         # option=1（差分データ）はJV-Link側の「最終取得時刻」以降のデータのみ返す

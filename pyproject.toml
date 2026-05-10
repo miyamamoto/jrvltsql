@@ -34,7 +34,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-postgres = ["pg8000"]
+postgres = ["psycopg[binary]"]
 s3 = ["boto3>=1.26", "cryptography>=41.0"]
 dev = [
     "pytest>=7.4",
@@ -109,7 +109,7 @@ addopts = [
     "--cov=src",
     "--cov-report=term-missing",
     "--cov-report=html",
-    "--basetemp=C:/tmp/pytest-jrvl",
+    "--basetemp=.pytest-tmp",
 ]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",

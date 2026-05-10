@@ -60,6 +60,84 @@ def _should_not_divide(field_name: str) -> bool:
     return False
 
 
+def convert_record_types(record: dict, table_name: str) -> dict:
+    """Convert record field types based on table schema.
+
+    Module-level helper used by DataImporter and RealtimeUpdater so that all
+    write paths (NL_*, RT_*, TS_O*) apply identical numeric/text coercion.
+    Handles JV-Data sentinel values like "***", "----", "0103*****" by
+    mapping them to None for INTEGER/BIGINT/REAL columns. Fields not present
+    in the target schema are dropped so parser metadata never reaches INSERT.
+    """
+    column_types = get_table_column_types(table_name)
+    if not column_types:
+        return record
+
+    converted = {}
+
+    for field_name, value in record.items():
+        if field_name not in column_types:
+            continue
+
+        col_type = column_types[field_name]
+
+        if value is None or (isinstance(value, str) and not value.strip()):
+            converted[field_name] = None
+            continue
+
+        try:
+            if col_type in ("INTEGER", "BIGINT"):
+                str_value = str(value).strip()
+                if str_value:
+                    if (str_value.startswith('***') or
+                        '****' in str_value or
+                        all(c in '-*' for c in str_value) or
+                        '--' in str_value or
+                        '*' in str_value):
+                        converted[field_name] = None
+                    else:
+                        numeric_part = ''.join(c for c in str_value if c.isdigit() or c == '-')
+                        if numeric_part and numeric_part != '-':
+                            converted[field_name] = int(numeric_part)
+                        else:
+                            converted[field_name] = None
+                else:
+                    converted[field_name] = None
+
+            elif col_type == "REAL":
+                str_value = str(value).strip()
+                if str_value:
+                    if (str_value.startswith('***') or
+                        '****' in str_value or
+                        all(c in '-*' for c in str_value) or
+                        '--' in str_value or
+                        '*' in str_value):
+                        converted[field_name] = None
+                    else:
+                        numeric_part = ''.join(c for c in str_value if c.isdigit() or c in '.-')
+                        if numeric_part and numeric_part not in ('-', '.', '-.'):
+                            float_value = float(numeric_part)
+                            if _should_divide_by_10(field_name):
+                                converted[field_name] = float_value / 10.0
+                            else:
+                                converted[field_name] = float_value
+                        else:
+                            converted[field_name] = None
+                else:
+                    converted[field_name] = None
+
+            else:
+                if isinstance(value, str):
+                    converted[field_name] = value.strip() if value.strip() else None
+                else:
+                    converted[field_name] = str(value) if value is not None else None
+
+        except (ValueError, TypeError):
+            converted[field_name] = None
+
+    return converted
+
+
 class ImporterError(Exception):
     """Data importer error."""
 
@@ -226,102 +304,10 @@ class DataImporter:
     def _convert_record(self, record: dict, table_name: str) -> dict:
         """Convert record field types based on table schema.
 
-        Converts string values from parsers to appropriate types (INTEGER, REAL)
-        based on the schema definition. Also handles special JV-Data formatting
-        where some REAL values are stored as 10x their actual value.
-
-        Args:
-            record: Cleaned record dictionary (without metadata)
-            table_name: Target table name for type mapping
-
-        Returns:
-            Record with converted field types
+        Delegates to the module-level convert_record_types() so that
+        DataImporter and RealtimeUpdater share identical coercion rules.
         """
-        # Get column types for this table
-        column_types = get_table_column_types(table_name)
-        if not column_types:
-            # No schema found, return as-is
-            return record
-
-        converted = {}
-
-        for field_name, value in record.items():
-            col_type = column_types.get(field_name, "TEXT")
-
-            # Handle empty/whitespace values
-            if value is None or (isinstance(value, str) and not value.strip()):
-                converted[field_name] = None
-                continue
-
-            # Convert based on type
-            try:
-                if col_type in ("INTEGER", "BIGINT"):
-                    # Convert to integer (or bigint)
-                    str_value = str(value).strip()
-                    if str_value:
-                        # Check for invalid/masked values in JV-Data:
-                        # - "***" prefix: masked data (e.g., "***05011005")
-                        # - "****" anywhere: masked data
-                        # - "--", "----", "------": no data available
-                        # - Contains only '-' or '*': invalid
-                        # - Contains non-numeric chars (except leading '-' for negative)
-                        if (str_value.startswith('***') or
-                            '****' in str_value or
-                            all(c in '-*' for c in str_value) or
-                            '--' in str_value):
-                            converted[field_name] = None
-                        else:
-                            # Try to extract numeric value
-                            # Handle cases like "0103-------" by taking only valid digits
-                            numeric_part = ''.join(c for c in str_value if c.isdigit() or c == '-')
-                            if numeric_part and numeric_part != '-':
-                                converted[field_name] = int(numeric_part)
-                            else:
-                                converted[field_name] = None
-                    else:
-                        converted[field_name] = None
-
-                elif col_type == "REAL":
-                    str_value = str(value).strip()
-                    if str_value:
-                        # Check for invalid/masked values in JV-Data:
-                        # - "***" prefix: masked data
-                        # - "****" anywhere: masked data
-                        # - "--", "----", "------": no data available
-                        # - Contains only '-' or '*': invalid
-                        if (str_value.startswith('***') or
-                            '****' in str_value or
-                            all(c in '-*' for c in str_value) or
-                            '--' in str_value):
-                            converted[field_name] = None
-                        else:
-                            # Try to extract numeric value
-                            numeric_part = ''.join(c for c in str_value if c.isdigit() or c in '.-')
-                            if numeric_part and numeric_part not in ('-', '.', '-.'):
-                                float_value = float(numeric_part)
-                                # Check if this field needs to be divided by 10
-                                if _should_divide_by_10(field_name):
-                                    converted[field_name] = float_value / 10.0
-                                else:
-                                    converted[field_name] = float_value
-                            else:
-                                converted[field_name] = None
-                    else:
-                        converted[field_name] = None
-
-                else:
-                    # TEXT type - keep as string, convert None to empty string if needed
-                    if isinstance(value, str):
-                        converted[field_name] = value.strip() if value.strip() else None
-                    else:
-                        converted[field_name] = str(value) if value is not None else None
-
-            except (ValueError, TypeError):
-                # Conversion failed, set to None
-                # Note: 詳細なログ出力は省略（Unicode文字でコンソール出力エラーになる場合があるため）
-                converted[field_name] = None
-
-        return converted
+        return convert_record_types(record, table_name)
 
     def import_records(
         self,
@@ -457,8 +443,8 @@ class DataImporter:
                 error=str(e),
             )
 
-            # PostgreSQL (pg8000.native) uses autocommit mode and doesn't support rollback
-            # Only attempt rollback for databases that support it (e.g., SQLite)
+            # PostgreSQLDatabase performs driver-specific rollback when
+            # insert_many() fails. Avoid a second rollback here.
             try:
                 db_type = self.database.get_db_type()
             except AttributeError:
@@ -470,7 +456,7 @@ class DataImporter:
                     self.database.rollback()
                 except Exception as rollback_error:
                     logger.debug(
-                        "Rollback failed (expected for PostgreSQL autocommit mode)",
+                        "Rollback failed during batch fallback",
                         table=table_name,
                         error=str(rollback_error),
                     )
