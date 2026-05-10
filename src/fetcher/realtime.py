@@ -346,7 +346,7 @@ class RealtimeFetcher(BaseFetcher):
         公式仕様:
         - 0B30〜0B36 は速報オッズで、提供単位はレース毎、保存期間は1週間
         - 0B41/0B42 は時系列オッズで、単複枠/馬連のみ、保存期間は1年間
-        - ワイド以降の長期時系列は、開催週に0B30をTS_O3〜TS_O6へ蓄積する
+        - ワイド以降の長期時系列は、開催週に0B30をTS_SOKUHO_O3〜TS_SOKUHO_O6へ蓄積する
 
         Args:
             data_spec: Time series data spec code
@@ -691,10 +691,10 @@ class RealtimeFetcher(BaseFetcher):
         公式仕様:
         - 0B30〜0B36 は速報オッズで、提供単位はレース毎、保存期間は1週間
         - 0B41/0B42 は時系列オッズで、単複枠/馬連のみ、保存期間は1年間
-        - ワイド以降の長期時系列は、開催週に0B30をTS_O3〜TS_O6へ蓄積する
+        - ワイド以降の長期時系列は、開催週に0B30をTS_SOKUHO_O3〜TS_SOKUHO_O6へ蓄積する
 
         時系列オッズの蓄積について:
-        - TS_O1-O6テーブル（HassoTimeをPKに含む）を使用して蓄積可能
+        - TS_SOKUHO_O1-O6テーブル（HassoTimeをPKに含む）を使用して蓄積可能
         - RealtimeUpdater.process_record(buff, timeseries=True) で保存
         - 蓄積系オッズ(O1-O6)は最終確定オッズのみ、時系列オッズは推移を記録
 

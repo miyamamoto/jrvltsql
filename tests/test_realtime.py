@@ -410,6 +410,45 @@ class TestRealtimeUpdater(unittest.TestCase):
                 f"Mapping mismatch for {record_type}",
             )
 
+    def test_timeseries_table_routing_separates_official_and_sokuho(self):
+        """Official 0B41/0B42 and速報 0B30-0B36 use different tables."""
+        self.assertEqual(
+            self.updater._resolve_timeseries_table({"RecordSpec": "O1", "SourceSpec": "0B41"}),
+            "TS_O1",
+        )
+        self.assertEqual(
+            self.updater._resolve_timeseries_table({"RecordSpec": "O2", "SourceSpec": "0B42"}),
+            "TS_O2",
+        )
+        self.assertEqual(
+            self.updater._resolve_timeseries_table({"RecordSpec": "O1", "SourceSpec": "0B30"}),
+            "TS_SOKUHO_O1",
+        )
+        self.assertEqual(
+            self.updater._resolve_timeseries_table({"RecordSpec": "O6", "SourceSpec": "0B36"}),
+            "TS_SOKUHO_O6",
+        )
+
+    def test_process_parsed_records_batch_keeps_source_spec_for_sokuho_only(self):
+        """SourceSpec is persisted for速報 tables and stripped from official TS tables."""
+        records = [
+            {"RecordSpec": "O1", "SourceSpec": "0B41", "Year": 2026, "MonthDay": 503},
+            {"RecordSpec": "O1", "SourceSpec": "0B30", "Year": 2026, "MonthDay": 503},
+        ]
+
+        result = self.updater.process_parsed_records_batch(records, timeseries=True)
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["inserted"], 2)
+        self.assertEqual(result["tables"], ["TS_O1", "TS_SOKUHO_O1"])
+
+        inserted_by_table = {
+            call.args[0]: call.args[1]
+            for call in self.mock_db.insert_many.call_args_list
+        }
+        self.assertNotIn("SourceSpec", inserted_by_table["TS_O1"][0])
+        self.assertEqual(inserted_by_table["TS_SOKUHO_O1"][0]["SourceSpec"], "0B30")
+
     @patch('src.realtime.updater.ParserFactory')
     def test_process_record_new(self, mock_factory_class):
         """Test processing new record (headDataKubun=1)."""

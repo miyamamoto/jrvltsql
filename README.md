@@ -50,7 +50,7 @@ Windows タスクスケジューラへ登録するか確認されます。
 | PostgreSQL で範囲指定して公式時系列オッズも入れる | `quickstart_timeseries.bat --db postgresql --from 20250426 --to 20260412` | 指定範囲の通常データ + `TS_O1` / `TS_O2` を取得し、日次同期タスク登録を確認します。 |
 | SQLite で非対話実行する | `quickstart.bat --yes --include-timeseries` | 通常データは `19860101`〜今日、公式時系列オッズは今日から過去12か月を取得します。タスク登録確認は出しません。 |
 | 既存 PostgreSQL に公式時系列だけ足す | `fetch_timeseries_postgres.bat 20250426 20260412` | `TS_O1` / `TS_O2` だけを追加します。 |
-| 三連複・三連単を含む締切前オッズを残す | `jltsql realtime odds-sokuho-timeseries --from 20260418 --to 20260419 --db postgresql` | 開催週の全賭式速報オッズを `TS_O1`〜`TS_O6` に保存します。 |
+| 三連複・三連単を含む締切前オッズを残す | `jltsql realtime odds-sokuho-timeseries --from 20260418 --to 20260419 --db postgresql` | 開催週の全賭式速報オッズを `TS_SOKUHO_O1`〜`TS_SOKUHO_O6` に保存します。 |
 | 日次同期を手動登録する | `powershell -NoProfile -ExecutionPolicy Bypass -File install_tasks.ps1 -DbType sqlite -Time 06:30` | `daily_sync.bat` を Windows タスクとして登録します。 |
 
 詳細な判断フローは [はじめに](docs/getting_started.md) を参照してください。
@@ -62,7 +62,7 @@ Windows タスクスケジューラへ登録するか確認されます。
 | 通常データ | `NL_*` | `quickstart.bat`, `daily_sync.bat` | 出馬表、結果、払戻、確定オッズなどです。 |
 | 確定オッズ | `NL_O1`〜`NL_O6` | `RACE` 取得 | レース後の確定オッズです。投資判断時点のオッズではありません。 |
 | 公式時系列オッズ | `TS_O1`, `TS_O2` | `0B41`, `0B42` | 単複枠・馬連のみ。JRA-VAN 側の保持は約1年です。 |
-| 開催週の速報オッズ | `TS_O1`〜`TS_O6` | `0B30` または `0B31`〜`0B36` | 全賭式対応。ただし JRA-VAN 側の保持は約1週間です。 |
+| 開催週の速報オッズ | `TS_SOKUHO_O1`〜`TS_SOKUHO_O6` | `0B30` または `0B31`〜`0B36` | 全賭式対応。ただし JRA-VAN 側の保持は約1週間です。 |
 | 日次同期 | `NL_*` | `daily_sync.bat --db sqlite` / `--db postgresql` | 時系列オッズは取得しません。 |
 
 ## PostgreSQL を使う場合

@@ -224,8 +224,8 @@ class RealtimeMonitor:
         Speed-report specs (0B12, 0B15, etc.) use a date key (YYYYMMDD).
         Time-series specs (0B20, 0B30-0B36) require a per-race key
         (YYYYMMDDJJRR). For those specs we iterate every race in NL_RA for
-        today and poll each one, storing results in TS_O* tables with
-        timeseries=True so multiple odds snapshots are preserved.
+        today and poll each one, storing速報 odds results in TS_SOKUHO_O*
+        tables with timeseries=True so multiple odds snapshots are preserved.
         """
         fetcher = RealtimeFetcher(sid=self.sid)
         jvlink = fetcher.jvlink
@@ -298,7 +298,11 @@ class RealtimeMonitor:
                     continue
                 if ret_code > 0 and buff:
                     try:
-                        result = updater.process_record(buff, timeseries=timeseries)
+                        result = updater.process_record(
+                            buff,
+                            timeseries=timeseries,
+                            source_spec=data_spec if timeseries else None,
+                        )
                         with self._lock:
                             if result:
                                 self.status.records_imported += 1

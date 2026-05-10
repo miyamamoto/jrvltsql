@@ -147,16 +147,17 @@ jltsql realtime odds-sokuho-timeseries --from 20260418 --to 20260419 --db sqlite
 
 | 賭式 | 保存先 |
 | --- | --- |
-| 単勝・複勝・枠連 | `TS_O1` |
-| 馬連 | `TS_O2` |
-| ワイド | `TS_O3` |
-| 馬単 | `TS_O4` |
-| 三連複 | `TS_O5` |
-| 三連単 | `TS_O6` |
+| 単勝・複勝・枠連 | `TS_SOKUHO_O1` |
+| 馬連 | `TS_SOKUHO_O2` |
+| ワイド | `TS_SOKUHO_O3` |
+| 馬単 | `TS_SOKUHO_O4` |
+| 三連複 | `TS_SOKUHO_O5` |
+| 三連単 | `TS_SOKUHO_O6` |
 
 注意:
 
 - `0B30` 系の速報オッズは JRA-VAN 側の保持が約1週間です。
+- 公式長期時系列 `TS_O1` / `TS_O2` とは分けて保存します。
 - 1か月後にまとめて取りに行く運用はできません。
 - 長期評価したい場合は、開催週から継続蓄積してください。
 - `jltsql realtime odds-timeseries` / `odds-sokuho-timeseries` は、既存 DB のレース情報を使って取得キーを作ります。先に通常データを入れてください。
