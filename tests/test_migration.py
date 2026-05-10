@@ -33,24 +33,30 @@ class MockPostgreSQLDatabase(BaseDatabase):
     def rollback(self): pass
 
     def table_exists(self, table_name: str) -> bool:
-        return table_name in self._tables
+        # Real PostgreSQL stores unquoted identifiers in lowercase.
+        return table_name.lower() in self._tables
 
     def execute(self, sql: str, parameters=None):
         self._executed.append(sql.strip())
         upper = sql.strip().upper()
         if upper.startswith("DROP TABLE"):
             # Extract table name: DROP TABLE "NL_H1" or DROP TABLE NL_H1
+            # IF EXISTS is supported and silently no-ops on missing tables.
             import re
-            m = re.search(r'DROP\s+TABLE\s+"?(\w+)"?', sql, re.IGNORECASE)
+            m = re.search(r'DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?"?(\w+)"?', sql, re.IGNORECASE)
             if m:
-                self._tables.pop(m.group(1), None)
+                # Real PG: unquoted name is lowercased; quoted name preserves case.
+                # The migration code now uses unquoted lowercase for PG, so just
+                # normalize to lowercase to match real behavior.
+                self._tables.pop(m.group(1).lower(), None)
         elif upper.startswith("CREATE TABLE"):
             from src.database.migration import _extract_columns_from_sql
             import re
             m = re.search(r'CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?"?(\w+)"?', sql, re.IGNORECASE)
             if m:
                 cols = _extract_columns_from_sql(sql)
-                self._tables[m.group(1)] = list(cols or [])
+                # Real PG lowercases unquoted identifiers when storing.
+                self._tables[m.group(1).lower()] = list(cols or [])
 
     def executemany(self, sql: str, parameters): pass
 
@@ -59,10 +65,12 @@ class MockPostgreSQLDatabase(BaseDatabase):
         return rows[0] if rows else None
 
     def fetch_all(self, sql: str, parameters=None) -> List[Dict[str, Any]]:
-        # Respond to information_schema.columns query used in migration
+        # Respond to information_schema.columns query used in migration.
+        # Real PG stores names lowercased and migration.py passes .lower(),
+        # so compare on lowercase here.
         if "information_schema.columns" in sql.lower():
             table_name = parameters[0] if parameters else None
-            cols = self._tables.get(table_name, [])
+            cols = self._tables.get((table_name or "").lower(), [])
             return [{"name": c} for c in cols]
         return []
 
@@ -218,9 +226,9 @@ def test_pg_migrate_drops_and_recreates_on_mismatch(pg_db):
     result = migrate_table_if_needed(pg_db, "NL_H1", NEW_SCHEMA)
     assert result is True
 
-    # Table should now have new columns
-    assert "BetType" in pg_db._tables["NL_H1"]
-    assert "TanUma" not in pg_db._tables["NL_H1"]
+    # Table should now have new columns (real PG stores names lowercased)
+    assert "BetType" in pg_db._tables["nl_h1"]
+    assert "TanUma" not in pg_db._tables["nl_h1"]
 
 
 def test_pg_migrate_no_op_when_schema_matches(pg_db):
@@ -244,5 +252,6 @@ def test_pg_migrate_all_tables(pg_db):
 
     count = migrate_all_tables(pg_db, {"NL_H1": NEW_SCHEMA, "NL_H6": NEW_H6})
     assert count == 2
-    assert "BetType" in pg_db._tables["NL_H1"]
-    assert "SanrentanKumi" in pg_db._tables["NL_H6"]
+    # Real PG stores unquoted identifiers lowercased.
+    assert "BetType" in pg_db._tables["nl_h1"]
+    assert "SanrentanKumi" in pg_db._tables["nl_h6"]

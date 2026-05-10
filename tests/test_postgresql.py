@@ -167,8 +167,7 @@ def test_connection():
     except ImportError as e:
         print(f"  [ERROR] ドライバーがインストールされていません: {e}")
         print(f"\n  インストール方法:")
-        print(f"    pip install pg8000      # 純粋Python (Win32対応)")
-        print(f"    pip install psycopg     # 高速 (libpq必要)")
+        print('    pip install "psycopg[binary]"')
         pytest.skip("PostgreSQL driver not available")
 
     # 接続テスト

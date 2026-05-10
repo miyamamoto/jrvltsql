@@ -632,41 +632,41 @@ class RealtimeFetcher(BaseFetcher):
     ) -> list:
         """Fetch NL_RA race keys from PostgreSQL for time-series odds retrieval."""
         try:
-            import pg8000.dbapi as pgdb
+            import psycopg
 
-            conn = pgdb.connect(
+            conn = psycopg.connect(
                 host=pg_config.get("host", "localhost"),
                 port=int(pg_config.get("port", 5432)),
-                database=pg_config.get("database", "keiba"),
+                dbname=pg_config.get("database", "keiba"),
                 user=pg_config.get("user", "postgres"),
                 password=pg_config.get("password", ""),
             )
             try:
-                cur = conn.cursor()
-                cur.execute(query, params)
-                return cur.fetchall()
+                with conn.cursor() as cur:
+                    cur.execute(query, params)
+                    return cur.fetchall()
             finally:
                 conn.close()
         except ImportError:
             try:
-                import psycopg
+                import pg8000.dbapi as pgdb
 
-                conn = psycopg.connect(
+                conn = pgdb.connect(
                     host=pg_config.get("host", "localhost"),
                     port=int(pg_config.get("port", 5432)),
-                    dbname=pg_config.get("database", "keiba"),
+                    database=pg_config.get("database", "keiba"),
                     user=pg_config.get("user", "postgres"),
                     password=pg_config.get("password", ""),
                 )
                 try:
-                    with conn.cursor() as cur:
-                        cur.execute(query, params)
-                        return cur.fetchall()
+                    cur = conn.cursor()
+                    cur.execute(query, params)
+                    return cur.fetchall()
                 finally:
                     conn.close()
             except ImportError as exc:
                 raise FetcherError(
-                    "PostgreSQL driver not installed. Install pg8000 or psycopg."
+                    "PostgreSQL driver not installed. Install psycopg[binary]."
                 ) from exc
 
     def fetch_time_series_batch(
