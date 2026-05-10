@@ -171,7 +171,11 @@ class BatchProcessor:
 
     @staticmethod
     def _should_split_setup_range(from_date: str, to_date: str, option: int) -> bool:
-        if option not in (3, 4):
+        # option=4 (分割セットアップ) は JVOpen を1回だけ呼び出して全期間を一括取得する。
+        # 年単位に分割すると各チャンクで JV-Link が fromtime 以降の全データを返すため
+        # O(n^2) の処理量になる（20年なら210年分を処理）。
+        # option=3 (ダイアログ付きセットアップ) のみ分割を維持する。
+        if option != 3:
             return False
         start = datetime.strptime(from_date, "%Y%m%d")
         end = datetime.strptime(to_date, "%Y%m%d")

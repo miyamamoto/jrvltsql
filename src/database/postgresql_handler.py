@@ -251,8 +251,6 @@ class PostgreSQLDatabase(BaseDatabase):
 
         except Exception as e:
             logger.error(f"SQL execution failed: {sql[:100]}", error=str(e))
-            if self._connection:
-                self.rollback()
             raise DatabaseError(f"SQL execution failed: {e}")
 
     def executemany(self, sql: str, parameters_list: List[tuple]) -> int:
@@ -292,8 +290,6 @@ class PostgreSQLDatabase(BaseDatabase):
 
         except Exception as e:
             logger.error(f"SQL executemany failed: {sql[:100]}", error=str(e))
-            if self._connection:
-                self.rollback()
             raise DatabaseError(f"SQL executemany failed: {e}")
 
     def fetch_one(self, sql: str, parameters: Optional[tuple] = None) -> Optional[Dict[str, Any]]:
@@ -339,8 +335,6 @@ class PostgreSQLDatabase(BaseDatabase):
 
         except Exception as e:
             logger.error(f"SQL query failed: {sql[:100]}", error=str(e))
-            if self._connection:
-                self.rollback()
             raise DatabaseError(f"SQL query failed: {e}")
 
     def fetch_all(self, sql: str, parameters: Optional[tuple] = None) -> List[Dict[str, Any]]:
@@ -386,8 +380,6 @@ class PostgreSQLDatabase(BaseDatabase):
 
         except Exception as e:
             logger.error(f"SQL query failed: {sql[:100]}", error=str(e))
-            if self._connection:
-                self.rollback()
             raise DatabaseError(f"SQL query failed: {e}")
 
     def create_table(self, table_name: str, schema: str) -> None:
@@ -529,6 +521,11 @@ class PostgreSQLDatabase(BaseDatabase):
 
         except Exception as e:
             raise DatabaseError(f"Failed to commit transaction: {e}")
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit. pg8000 is autocommit — no rollback needed on error."""
+        self.disconnect()
+        return False
 
     def rollback(self) -> None:
         """Rollback the current transaction.
