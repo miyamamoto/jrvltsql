@@ -1604,19 +1604,28 @@ def timeseries(ctx, spec, from_date, to_date, db, db_path):
             database = SQLiteDatabase(db_config)
 
         with database:
-            # Ensure TS_O* tables exist
+            # Ensure official/sokuho time-series tables exist.
             from src.database.schema import SCHEMAS
             schema_registry = SCHEMAS
             for spec_code in specs_list:
                 # Map spec to table name
                 table_map = {
-                    "0B30": "TS_O1,TS_O2,TS_O3,TS_O4,TS_O5,TS_O6",
-                    "0B31": "TS_O1",
-                    "0B32": "TS_O2",
-                    "0B33": "TS_O3",
-                    "0B34": "TS_O4",
-                    "0B35": "TS_O5",
-                    "0B36": "TS_O6",
+                    "0B30": ",".join(
+                        [
+                            "TS_SOKUHO_O1",
+                            "TS_SOKUHO_O2",
+                            "TS_SOKUHO_O3",
+                            "TS_SOKUHO_O4",
+                            "TS_SOKUHO_O5",
+                            "TS_SOKUHO_O6",
+                        ]
+                    ),
+                    "0B31": "TS_SOKUHO_O1",
+                    "0B32": "TS_SOKUHO_O2",
+                    "0B33": "TS_SOKUHO_O3",
+                    "0B34": "TS_SOKUHO_O4",
+                    "0B35": "TS_SOKUHO_O5",
+                    "0B36": "TS_SOKUHO_O6",
                     "0B41": "TS_O1",
                     "0B42": "TS_O2",
                 }
@@ -1700,6 +1709,7 @@ def timeseries(ctx, spec, from_date, to_date, db, db_path):
                         # dictionaries. Save parsed rows directly to avoid
                         # re-processing the same raw record repeatedly.
                         clean_record = {k: v for k, v in record.items() if not k.startswith("_")}
+                        clean_record["SourceSpec"] = spec_code
                         records_batch.append(clean_record)
                         record_count += 1
                         total_records += 1
@@ -1818,9 +1828,10 @@ def odds_timeseries(ctx, from_date, to_date, db, db_path):
 def odds_sokuho_timeseries(ctx, from_date, to_date, db, db_path):
     """Fetch current-week速報 all-bets odds snapshots via 0B30.
 
-    0B30 returns O1-O6 and fills TS_O1-TS_O6, but JRA-VAN officially retains
-    it for about one week. Use this command for current race-week collection
-    and future accumulation of wide/exacta/trio/trifecta decision odds.
+    0B30 returns O1-O6 and fills TS_SOKUHO_O1-TS_SOKUHO_O6, but JRA-VAN
+    officially retains it for about one week. Use this command for current
+    race-week collection and future accumulation of wide/exacta/trio/trifecta
+    decision odds.
     """
     ctx.invoke(
         timeseries,

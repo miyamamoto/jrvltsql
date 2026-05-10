@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Export TS_O1/TS_O2 rows from the configured PostgreSQL database to CSV."""
+"""Export odds time-series rows from the configured PostgreSQL database to CSV."""
 
 from __future__ import annotations
 
@@ -15,7 +15,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from src.utils.config import load_config
 
 
-TABLES = ("TS_O1", "TS_O2")
+TABLES = (
+    "TS_O1",
+    "TS_O2",
+    "TS_SOKUHO_O1",
+    "TS_SOKUHO_O2",
+    "TS_SOKUHO_O3",
+    "TS_SOKUHO_O4",
+    "TS_SOKUHO_O5",
+    "TS_SOKUHO_O6",
+)
 
 
 def _normalise_date(value: str) -> str:

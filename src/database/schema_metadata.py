@@ -4,6 +4,7 @@ This module provides detailed descriptions of tables and columns
 for LLM-based applications to understand the database schema.
 """
 
+from copy import deepcopy
 from typing import Dict, List, TypedDict
 
 
@@ -1744,6 +1745,35 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
         "indexes": ["Year", "MonthDay", "HassoTime"]
     }
 }
+
+
+for _source_table, _target_table in (
+    ("TS_O1", "TS_SOKUHO_O1"),
+    ("TS_O2", "TS_SOKUHO_O2"),
+    ("TS_O3", "TS_SOKUHO_O3"),
+    ("TS_O4", "TS_SOKUHO_O4"),
+    ("TS_O5", "TS_SOKUHO_O5"),
+    ("TS_O6", "TS_SOKUHO_O6"),
+):
+    _metadata = deepcopy(TABLE_METADATA[_source_table])
+    _metadata["table_name"] = _target_table
+    _metadata["description"] = _metadata["description"].replace("（時系列）", "（速報時系列）")
+    _metadata["purpose"] = (
+        _metadata["purpose"].replace("時間推移を記録する", "開催週速報オッズの時間推移を記録する")
+        + "。SourceSpecをキーに含め、0B30と0B31-0B36の上書きを避ける"
+    )
+    _metadata["columns"].insert(
+        1,
+        {
+            "name": "SourceSpec",
+            "type": "TEXT",
+            "description": "取得元データ仕様コード",
+            "example": "0B30",
+            "nullable": False,
+        },
+    )
+    _metadata["primary_key"] = [*_metadata["primary_key"], "SourceSpec"]
+    TABLE_METADATA[_target_table] = _metadata
 
 
 def get_table_description(table_name: str) -> str:

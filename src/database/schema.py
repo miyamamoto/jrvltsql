@@ -2276,6 +2276,42 @@ SCHEMAS = {
 }
 
 
+def _build_sokuho_timeseries_schema(source_table: str, target_table: str) -> str:
+    """Build a速報 time-series schema from the official TS_O* schema.
+
+    The official 0B41/0B42 odds and current-week 0B30-0B36速報 odds share
+    O1-O6 record layouts, but they are different data sources with different
+    retention windows. Keep them in separate physical tables and include
+    SourceSpec in the速報 primary key so 0B30 and 0B31-0B36 imports cannot
+    overwrite each other.
+    """
+    schema_sql = SCHEMAS[source_table].replace(
+        f"CREATE TABLE IF NOT EXISTS {source_table}",
+        f"CREATE TABLE IF NOT EXISTS {target_table}",
+        1,
+    )
+    schema_sql = schema_sql.replace(
+        "RecordSpec TEXT,\n",
+        "RecordSpec TEXT,\n            SourceSpec TEXT,\n",
+        1,
+    )
+    return schema_sql.replace("HassoTime)", "HassoTime, SourceSpec)")
+
+
+for _source_table, _target_table in (
+    ("TS_O1", "TS_SOKUHO_O1"),
+    ("TS_O2", "TS_SOKUHO_O2"),
+    ("TS_O3", "TS_SOKUHO_O3"),
+    ("TS_O4", "TS_SOKUHO_O4"),
+    ("TS_O5", "TS_SOKUHO_O5"),
+    ("TS_O6", "TS_SOKUHO_O6"),
+):
+    SCHEMAS[_target_table] = _build_sokuho_timeseries_schema(
+        _source_table,
+        _target_table,
+    )
+
+
 class SchemaManager:
     """Schema management for JLTSQL database.
 

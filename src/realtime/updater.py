@@ -88,7 +88,18 @@ class RealtimeUpdater:
         "RC": "RT_RC",  # 騎手変更情報 (Row D, E両方)
     }
 
-    # 時系列オッズ専用テーブルマッピング (TS_O1-O6)
+    SOKUHO_TIMESERIES_SPECS = {
+        "0B30",
+        "0B31",
+        "0B32",
+        "0B33",
+        "0B34",
+        "0B35",
+        "0B36",
+    }
+
+    # 公式1年保持の時系列オッズ専用テーブルマッピング (TS_O1/TS_O2)。
+    # O3-O6は既存DBとの互換用に残すが、新規の速報保存には使わない。
     # HassoTimeをPRIMARY KEYに含めて複数時点のデータを保持
     TIMESERIES_RECORD_TYPE_TABLE = {
         "O1": "TS_O1",  # 単複枠オッズ時系列
@@ -97,6 +108,17 @@ class RealtimeUpdater:
         "O4": "TS_O4",  # 馬単オッズ時系列
         "O5": "TS_O5",  # 三連複オッズ時系列
         "O6": "TS_O6",  # 三連単オッズ時系列
+    }
+
+    # 開催週速報オッズ専用テーブルマッピング (TS_SOKUHO_O1-O6)
+    # 0B30-0B36は公式長期時系列と保持期間も意味も異なるため分離する。
+    SOKUHO_TIMESERIES_RECORD_TYPE_TABLE = {
+        "O1": "TS_SOKUHO_O1",
+        "O2": "TS_SOKUHO_O2",
+        "O3": "TS_SOKUHO_O3",
+        "O4": "TS_SOKUHO_O4",
+        "O5": "TS_SOKUHO_O5",
+        "O6": "TS_SOKUHO_O6",
     }
 
     # Note: The following record types are NOT provided in real-time:
@@ -119,14 +141,20 @@ class RealtimeUpdater:
 
         logger.info("RealtimeUpdater initialized")
 
-    def process_record(self, buff: bytes, timeseries: bool = False) -> Optional[Dict]:
+    def process_record(
+        self,
+        buff: bytes,
+        timeseries: bool = False,
+        source_spec: Optional[str] = None,
+    ) -> Optional[Dict]:
         """Process real-time data record.
 
         Args:
             buff: Raw JV-Data record buffer (bytes)
-            timeseries: If True, save odds data to TS_O* tables (time series)
-                       instead of RT_O* tables. This preserves odds history
-                       with HassoTime as part of the primary key.
+            timeseries: If True, save odds data to official TS_O* or
+                       sokuho TS_SOKUHO_O* tables instead of RT_O* tables.
+                       This preserves odds history with HassoTime as part of
+                       the primary key.
 
         Returns:
             Dictionary with processing result, or None if failed
@@ -150,13 +178,22 @@ class RealtimeUpdater:
                 if spec:
                     self.cache_manager.write_rt_record(spec, today, buff)
 
-            return self.process_parsed_record(parsed_data, timeseries=timeseries)
+            return self.process_parsed_record(
+                parsed_data,
+                timeseries=timeseries,
+                source_spec=source_spec,
+            )
 
         except Exception as e:
             logger.error(f"Error processing record: {e}", exc_info=True)
             raise
 
-    def process_parsed_record(self, parsed_data, timeseries: bool = False) -> Optional[Dict]:
+    def process_parsed_record(
+        self,
+        parsed_data,
+        timeseries: bool = False,
+        source_spec: Optional[str] = None,
+    ) -> Optional[Dict]:
         """Process already parsed JV-Data.
 
         Batch time-series fetchers may expand one raw JV-Link record into many
@@ -167,35 +204,32 @@ class RealtimeUpdater:
         if isinstance(parsed_data, list):
             results = []
             for item in parsed_data:
+                if timeseries and source_spec:
+                    item.setdefault("SourceSpec", source_spec)
                 result = self._process_single_record(item, timeseries=timeseries)
                 if result:
                     results.append(result)
             return results if results else None
 
+        if timeseries and source_spec:
+            parsed_data.setdefault("SourceSpec", source_spec)
         return self._process_single_record(parsed_data, timeseries=timeseries)
 
     def process_parsed_records_batch(self, records: list[Dict], timeseries: bool = False) -> Dict:
         """Insert already parsed records in batches grouped by target table."""
-        from src.database.schema_types import get_table_column_types
-
         grouped: dict[str, list[Dict]] = {}
         errors = 0
         for record in records:
             record_type = record.get("RecordSpec")
-            table_name = (
-                self.TIMESERIES_RECORD_TYPE_TABLE.get(record_type)
-                if timeseries and record_type in self.TIMESERIES_RECORD_TYPE_TABLE
-                else self.RECORD_TYPE_TABLE.get(record_type)
-            )
+            table_name = self._resolve_timeseries_table(record) if timeseries else None
+            if table_name is None:
+                table_name = self.RECORD_TYPE_TABLE.get(record_type)
             if not table_name:
                 logger.warning(f"Unknown record type: {record_type}")
                 errors += 1
                 continue
 
-            clean_data = {k: v for k, v in record.items() if not k.startswith("_")}
-            schema_columns = get_table_column_types(table_name)
-            if schema_columns:
-                clean_data = {column: clean_data.get(column) for column in schema_columns}
+            clean_data = self._prepare_data_for_db(table_name, record)
             grouped.setdefault(table_name, []).append(clean_data)
 
         inserted = 0
@@ -212,6 +246,29 @@ class RealtimeUpdater:
             "tables": sorted(grouped),
         }
 
+    def _resolve_timeseries_table(self, record: Dict) -> Optional[str]:
+        """Resolve official vs速報 odds time-series table from source spec."""
+        record_type = record.get("RecordSpec")
+        if record_type not in self.TIMESERIES_RECORD_TYPE_TABLE:
+            return None
+
+        source_spec = str(
+            record.get("SourceSpec") or record.get("_SourceSpec") or ""
+        ).upper()
+        if source_spec in self.SOKUHO_TIMESERIES_SPECS:
+            return self.SOKUHO_TIMESERIES_RECORD_TYPE_TABLE.get(record_type)
+
+        # O3-O6 are only available as current-week速報 odds in JRA-VAN RT specs.
+        # If older callers omitted SourceSpec, keep these out of official TS_O*.
+        if not source_spec and record_type in {"O3", "O4", "O5", "O6"}:
+            return self.SOKUHO_TIMESERIES_RECORD_TYPE_TABLE.get(record_type)
+
+        return self.TIMESERIES_RECORD_TYPE_TABLE.get(record_type)
+
+    def _clean_data_for_table(self, table_name: str, data: Dict) -> Dict:
+        """Drop parser metadata and coerce values for the target schema."""
+        return self._prepare_data_for_db(table_name, data)
+
     def _insert_rows_resilient(
         self,
         table_name: str,
@@ -220,10 +277,10 @@ class RealtimeUpdater:
     ) -> tuple[int, int]:
         """Insert rows, splitting batches on timeout/driver failures.
 
-        PostgreSQL can time out on very large TS_O* upserts. Dropping a whole
-        5,000-row odds batch silently corrupts later strategy evaluation, so
-        recursively split failed batches and only count irreducible single-row
-        failures as errors.
+        PostgreSQL can time out on very large odds time-series upserts.
+        Dropping a whole 5,000-row odds batch silently corrupts later strategy
+        evaluation, so recursively split failed batches and only count
+        irreducible single-row failures as errors.
         """
         if not rows:
             return 0, 0
@@ -288,11 +345,10 @@ class RealtimeUpdater:
                 logger.warning("Missing RecordSpec in parsed data")
                 return None
 
-            # Get table name
-            # For timeseries mode, use TS_O* tables for odds data
-            if timeseries and record_type in self.TIMESERIES_RECORD_TYPE_TABLE:
-                table_name = self.TIMESERIES_RECORD_TYPE_TABLE.get(record_type)
-            else:
+            # Get table name. In time-series mode, route official 0B41/0B42
+            # and current-week 0B30-0B36速報 odds to separate physical tables.
+            table_name = self._resolve_timeseries_table(parsed_data) if timeseries else None
+            if table_name is None:
                 table_name = self.RECORD_TYPE_TABLE.get(record_type)
 
             if not table_name:
@@ -452,6 +508,30 @@ class RealtimeUpdater:
             "TS_O4": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "Kumi", "HassoTime"],
             "TS_O5": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "Kumi", "HassoTime"],
             "TS_O6": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "Kumi", "HassoTime"],
+            "TS_SOKUHO_O1": [
+                "Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji",
+                "RaceNum", "Umaban", "Kumi", "HassoTime", "SourceSpec",
+            ],
+            "TS_SOKUHO_O2": [
+                "Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji",
+                "RaceNum", "Kumi", "HassoTime", "SourceSpec",
+            ],
+            "TS_SOKUHO_O3": [
+                "Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji",
+                "RaceNum", "Kumi", "HassoTime", "SourceSpec",
+            ],
+            "TS_SOKUHO_O4": [
+                "Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji",
+                "RaceNum", "Kumi", "HassoTime", "SourceSpec",
+            ],
+            "TS_SOKUHO_O5": [
+                "Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji",
+                "RaceNum", "Kumi", "HassoTime", "SourceSpec",
+            ],
+            "TS_SOKUHO_O6": [
+                "Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji",
+                "RaceNum", "Kumi", "HassoTime", "SourceSpec",
+            ],
 
             # Weather/Track condition tables
             "RT_WE": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "HenkoID"],

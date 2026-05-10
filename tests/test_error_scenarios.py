@@ -301,6 +301,25 @@ class TestResourceConstraints(unittest.TestCase):
 class TestFetcherErrors(unittest.TestCase):
     """Test fetcher error handling."""
 
+    @patch('src.fetcher.historical.time.sleep', return_value=None)
+    @patch('src.fetcher.base.JVLinkWrapper')
+    @patch('src.jvlink.bridge.find_bridge_executable', return_value=None)
+    def test_wait_for_download_completes_when_downloaded_file_count_reaches_download_count(
+        self,
+        mock_find_bridge,
+        mock_jvlink_class,
+        mock_sleep,
+    ):
+        """JVStatus returns downloaded file count, not a percentage."""
+        mock_jvlink = MagicMock()
+        mock_jvlink.jv_status.return_value = 6
+        mock_jvlink_class.return_value = mock_jvlink
+
+        fetcher = HistoricalFetcher(sid="TEST", show_progress=False)
+        fetcher._wait_for_download(download_count=6, timeout=1, interval=0.01)
+
+        mock_jvlink.jv_status.assert_called_once()
+
     @patch('src.fetcher.base.JVLinkWrapper')
     def test_jvlink_init_failure(self, mock_jvlink_class):
         """Test handling of JV-Link initialization failure."""

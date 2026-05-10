@@ -123,7 +123,8 @@ TABLE_TO_RECORD_TYPE: Dict[str, str] = {
     v: k for k, v in RECORD_TYPE_TO_TABLE.items()
 }
 
-# 時系列オッズ専用マッピング (TS_O1-O6)
+# 公式1年保持の時系列オッズ専用マッピング (0B41/0B42 -> TS_O1/TS_O2)
+# O3-O6は既存DBとの互換用に残すが、新規の速報保存には使わない。
 # 時系列データ取得時にHassoTimeを含むPRIMARY KEYでデータを保存
 # これにより複数時点のオッズ推移を記録可能
 TIMESERIES_RECORD_TYPE_TO_TABLE: Dict[str, str] = {
@@ -133,6 +134,16 @@ TIMESERIES_RECORD_TYPE_TO_TABLE: Dict[str, str] = {
     "O4": "TS_O4",  # 馬単オッズ時系列
     "O5": "TS_O5",  # 三連複オッズ時系列
     "O6": "TS_O6",  # 三連単オッズ時系列
+}
+
+# 開催週速報オッズ専用マッピング (0B30-0B36 -> TS_SOKUHO_O1-O6)
+SOKUHO_TIMESERIES_RECORD_TYPE_TO_TABLE: Dict[str, str] = {
+    "O1": "TS_SOKUHO_O1",  # 単複枠オッズ速報スナップショット
+    "O2": "TS_SOKUHO_O2",  # 馬連オッズ速報スナップショット
+    "O3": "TS_SOKUHO_O3",  # ワイドオッズ速報スナップショット
+    "O4": "TS_SOKUHO_O4",  # 馬単オッズ速報スナップショット
+    "O5": "TS_SOKUHO_O5",  # 三連複オッズ速報スナップショット
+    "O6": "TS_SOKUHO_O6",  # 三連単オッズ速報スナップショット
 }
 
 # Helper functions for table name resolution

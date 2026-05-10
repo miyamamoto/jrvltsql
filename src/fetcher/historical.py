@@ -172,9 +172,9 @@ class HistoricalFetcher(BaseFetcher):
                 if self.progress_display:
                     download_task_id = self.progress_display.add_download_task(
                         f"{data_spec} ダウンロード",
-                        total=100,
+                        total=download_count,
                     )
-                self._wait_for_download(download_task_id)
+                self._wait_for_download(download_task_id, download_count=download_count)
 
             # Reset statistics and set total files
             self.reset_statistics()
@@ -319,7 +319,12 @@ class HistoricalFetcher(BaseFetcher):
             self.cache_manager = None
 
     def _wait_for_download(
-        self, download_task_id: Optional[int] = None, timeout: int = 600, interval: float = 0.08
+        self,
+        download_task_id: Optional[int] = None,
+        *,
+        download_count: int,
+        timeout: int = 600,
+        interval: float = 0.08,
     ):
         """Wait for JV-Link download to complete.
 
@@ -336,14 +341,11 @@ class HistoricalFetcher(BaseFetcher):
         last_status = None
         retry_count = 0
         max_retries = 2  # Maximum retries for temporary errors
-        last_progress_time = start_time  # Track when progress last changed (stall detection)
+        if download_count <= 0:
+            return
+
+        last_progress_time = start_time  # Track when downloaded-file count last changed.
         stall_timeout = 300.0  # 5 minutes before stall abort
-        # Count how many consecutive 0-status polls we get BEFORE download_started.
-        # If download finishes before our first poll, status is immediately 0 and
-        # download_started never becomes True → we'd loop forever.  After
-        # IMMEDIATE_ZERO_THRESHOLD consecutive 0s we treat it as "already done".
-        zero_before_start_count = 0
-        IMMEDIATE_ZERO_THRESHOLD = 5  # ~0.4 seconds at 80ms interval
 
         # Retryable error codes (temporary errors that may resolve)
         # -201: Database error (might be busy)
@@ -352,7 +354,6 @@ class HistoricalFetcher(BaseFetcher):
         # -502: Download failed
         # -503: Similar download error
         retryable_errors = {-201, -202, -203, -502, -503}
-        download_started = False  # JVStatus > 0 を確認してから 0 を「完了」と判定
 
         while True:
             # Check if timeout exceeded
@@ -362,69 +363,22 @@ class HistoricalFetcher(BaseFetcher):
 
             try:
                 # Get download status
-                # JVStatus returns:
-                # > 0: Download in progress (percentage * 100)
-                # 0: Download complete
-                # < 0: Error
+                # JVStatus returns the number of downloaded files, not a
+                # percentage.  Download is complete when the count reaches the
+                # JVOpen download_count value.
                 status = self.jvlink.jv_status()
 
-                if status != last_status:
-                    last_progress_time = time.time()  # Reset stall timer on any change
-                    if status > 0:
-                        download_started = True
-                        percentage = status / 100
-                        logger.info(
-                            "Download in progress",
-                            progress_percent=percentage,
-                            elapsed_seconds=int(elapsed),
-                        )
-                        # Update progress display
-                        if self.progress_display and download_task_id is not None:
-                            self.progress_display.update_download(
-                                download_task_id,
-                                completed=status,
-                                status=f"{percentage:.1f}% - {int(elapsed)}秒経過",
-                            )
-                        # Reset retry count on progress
-                        retry_count = 0
-                    elif status == 0 and not download_started:
-                        zero_before_start_count += 1
-                        if zero_before_start_count >= IMMEDIATE_ZERO_THRESHOLD:
-                            # Download already completed before we started polling.
-                            logger.info(
-                                "Download appears already complete (status 0 before download_started)",
-                                elapsed=f"{elapsed:.1f}s",
-                            )
-                            if self.progress_display and download_task_id is not None:
-                                self.progress_display.update_download(
-                                    download_task_id,
-                                    completed=100,
-                                    status="完了",
-                                )
-                            return
-                        logger.debug("Waiting for download to start", elapsed=f"{elapsed:.1f}s")
-                    last_status = status
-                else:
-                    # Stall detection: kmy-keiba restarts if download progress
-                    # doesn't change for 60 seconds
-                    if download_started and status > 0:
-                        stall_elapsed = time.time() - last_progress_time
-                        if stall_elapsed >= stall_timeout:
-                            logger.warning(
-                                "Download stalled (no progress for 60s), treating as timeout",
-                                last_status=status,
-                                stall_seconds=stall_elapsed,
-                            )
-                            raise FetcherError(
-                                f"Download stalled at {status}% for {stall_elapsed:.0f}s"
-                            )
-
-                if status == 0 and download_started:
-                    logger.info("Download completed", elapsed_seconds=int(elapsed))
+                if status >= download_count:
+                    logger.info(
+                        "Download completed",
+                        elapsed_seconds=int(elapsed),
+                        downloaded_files=status,
+                        download_count=download_count,
+                    )
                     if self.progress_display and download_task_id is not None:
                         self.progress_display.update_download(
                             download_task_id,
-                            completed=100,
+                            completed=download_count,
                             status="完了",
                         )
                     # Wait for file system write completion
@@ -432,7 +386,44 @@ class HistoricalFetcher(BaseFetcher):
                     logger.info("Waiting for file write completion...", wait_seconds=wait_time)
                     time.sleep(wait_time)
                     logger.info("File write wait completed")
-                    return  # Download complete
+                    return
+
+                if status != last_status:
+                    last_progress_time = time.time()  # Reset stall timer on any change
+                    if status >= 0:
+                        progress_percent = min(100.0, (status / download_count) * 100.0)
+                        logger.info(
+                            "Download in progress",
+                            downloaded_files=status,
+                            download_count=download_count,
+                            progress_percent=progress_percent,
+                            elapsed_seconds=int(elapsed),
+                        )
+                        # Update progress display
+                        if self.progress_display and download_task_id is not None:
+                            self.progress_display.update_download(
+                                download_task_id,
+                                completed=status,
+                                status=f"{status}/{download_count} - {int(elapsed)}秒経過",
+                            )
+                        # Reset retry count on progress
+                        retry_count = 0
+                    last_status = status
+                else:
+                    # Stall detection: abort if downloaded-file count does not
+                    # change for a long time before all files are downloaded.
+                    if status >= 0:
+                        stall_elapsed = time.time() - last_progress_time
+                        if stall_elapsed >= stall_timeout:
+                            logger.warning(
+                                "Download stalled (downloaded file count did not change), treating as timeout",
+                                last_status=status,
+                                download_count=download_count,
+                                stall_seconds=stall_elapsed,
+                            )
+                            raise FetcherError(
+                                f"Download stalled at {status}/{download_count} files for {stall_elapsed:.0f}s"
+                            )
 
                 if status < 0:
                     if status in retryable_errors:
