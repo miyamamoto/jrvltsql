@@ -1,21 +1,70 @@
 """Schema migration utilities.
 
-Detects schema mismatches in existing tables and recreates them when needed.
-This handles cases where table schemas have changed (e.g., NL_H1/NL_H6 went
-from flat schema to full struct schema in PR #34) and existing databases have
-the old column layout.
+Detects schema mismatches in existing tables and applies safe migrations.
 
-Strategy: DROP and recreate. Data loss is acceptable because quickstart
-re-fetches everything from scratch.
+The production PostgreSQL database is used by near-real-time collectors, so
+``quickstart`` must never wipe tables implicitly.  The default migration policy
+is therefore additive only: missing columns are added with ``ALTER TABLE`` and
+extra/renamed columns are preserved with a warning.  Destructive DROP+recreate
+is available only when ``JLTSQL_ALLOW_DESTRUCTIVE_MIGRATIONS=1`` is set.
 """
 
+import os
 import re
-from typing import Dict, Optional, Set
+from typing import Dict, List, Optional, Set
 
 from src.database.base import BaseDatabase
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+def _schema_body(create_sql: str) -> Optional[str]:
+    """Return the body inside the CREATE TABLE parentheses."""
+    match = re.search(r'\((.+)\)', create_sql, re.DOTALL)
+    if not match:
+        return None
+    return match.group(1)
+
+
+def _split_schema_items(body: str) -> List[str]:
+    """Split a CREATE TABLE body by top-level commas."""
+    items: List[str] = []
+    current: List[str] = []
+    depth = 0
+    for char in body:
+        if char == "(":
+            depth += 1
+        elif char == ")" and depth:
+            depth -= 1
+        if char == "," and depth == 0:
+            item = "".join(current).strip()
+            if item:
+                items.append(item)
+            current = []
+        else:
+            current.append(char)
+    tail = "".join(current).strip()
+    if tail:
+        items.append(tail)
+    return items
+
+
+def _extract_column_definitions(create_sql: str) -> Optional[Dict[str, str]]:
+    """Extract column-name -> column-definition from CREATE TABLE SQL."""
+    body = _schema_body(create_sql)
+    if body is None:
+        return None
+
+    definitions: Dict[str, str] = {}
+    for item in _split_schema_items(body):
+        upper = item.upper()
+        if upper.startswith(("PRIMARY KEY", "UNIQUE", "FOREIGN KEY", "CONSTRAINT", "CHECK")):
+            continue
+        token = item.split()[0].strip('`"[]')
+        if token:
+            definitions[token] = item
+    return definitions
 
 
 def _extract_columns_from_sql(create_sql: str) -> Optional[Set[str]]:
@@ -27,59 +76,30 @@ def _extract_columns_from_sql(create_sql: str) -> Optional[Set[str]]:
     Returns:
         Set of column names, or None if parsing fails
     """
-    # Find content between first ( and last )
-    match = re.search(r'\((.+)\)', create_sql, re.DOTALL)
-    if not match:
+    definitions = _extract_column_definitions(create_sql)
+    if definitions is None:
         return None
-
-    body = match.group(1)
-
-    # Remove PRIMARY KEY(...) and similar constraints with nested parens
-    # before splitting by comma
-    body = re.sub(r'PRIMARY\s+KEY\s*\([^)]*\)', '', body, flags=re.IGNORECASE)
-    body = re.sub(r'UNIQUE\s*\([^)]*\)', '', body, flags=re.IGNORECASE)
-    body = re.sub(r'FOREIGN\s+KEY\s*\([^)]*\)\s*REFERENCES\s*[^,)]*', '', body, flags=re.IGNORECASE)
-
-    columns = set()
-    for line in body.split(','):
-        line = line.strip()
-        if not line:
-            continue
-        # Skip remaining constraint keywords
-        if line.upper().startswith(('CONSTRAINT', 'CHECK')):
-            continue
-        # First token is the column name (possibly quoted)
-        token = line.split()[0].strip('`"[]')
-        if token:
-            columns.add(token)
-    return columns
+    return set(definitions)
 
 
-def migrate_table_if_needed(db: BaseDatabase, table_name: str, schema_sql: str) -> bool:
-    """Check if an existing table's columns match the expected schema.
+def _destructive_migrations_enabled() -> bool:
+    return os.getenv("JLTSQL_ALLOW_DESTRUCTIVE_MIGRATIONS", "").lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
 
-    If the table exists but has different columns, DROP and recreate it.
 
-    Args:
-        db: Database instance (must be connected)
-        table_name: Table name to check
-        schema_sql: The CREATE TABLE SQL for the expected schema
-
-    Returns:
-        True if migration (DROP+recreate) was performed, False otherwise
-    """
-    if not db.table_exists(table_name):
-        return False
-
-    expected_columns = _extract_columns_from_sql(schema_sql)
-    if expected_columns is None:
-        logger.warning(f"Could not parse schema SQL for {table_name}, skipping migration check")
-        return False
-
-    # Get existing columns — PRAGMA for SQLite, information_schema for PostgreSQL
+def _table_identifier(db: BaseDatabase, table_name: str) -> str:
     if db.get_db_type() == "postgresql":
-        # PostgreSQL stores unquoted identifiers in lowercase; information_schema
-        # also stores them lowercased, so we must lowercase the lookup key.
+        return table_name.lower()
+    return f'"{table_name}"'
+
+
+def _get_existing_columns(db: BaseDatabase, table_name: str) -> Set[str]:
+    """Get existing column names for a table."""
+    if db.get_db_type() == "postgresql":
         existing_info = db.fetch_all(
             "SELECT column_name AS name FROM information_schema.columns "
             "WHERE table_name = ? AND table_schema = 'public'",
@@ -87,29 +107,100 @@ def migrate_table_if_needed(db: BaseDatabase, table_name: str, schema_sql: str) 
         )
     else:
         existing_info = db.fetch_all(f'PRAGMA table_info("{table_name}")')
-    existing_columns = {row['name'] for row in existing_info}
+    return {row['name'] for row in existing_info}
+
+
+def _add_missing_columns(
+    db: BaseDatabase,
+    table_name: str,
+    expected_definitions: Dict[str, str],
+    missing_columns: List[str],
+) -> int:
+    """Add missing columns without touching existing data."""
+    table_identifier = _table_identifier(db, table_name)
+    added = 0
+    for column_name in missing_columns:
+        definition = expected_definitions[column_name]
+        logger.warning(
+            f"Adding missing column to {table_name}: {definition}"
+        )
+        db.execute(f"ALTER TABLE {table_identifier} ADD COLUMN {definition}")
+        added += 1
+    if added:
+        db.commit()
+    return added
+
+
+def migrate_table_if_needed(db: BaseDatabase, table_name: str, schema_sql: str) -> bool:
+    """Check if an existing table's columns match the expected schema.
+
+    By default, only additive migrations are applied.  Existing rows are
+    preserved.  Destructive DROP+recreate is opt-in via
+    ``JLTSQL_ALLOW_DESTRUCTIVE_MIGRATIONS=1``.
+
+    Args:
+        db: Database instance (must be connected)
+        table_name: Table name to check
+        schema_sql: The CREATE TABLE SQL for the expected schema
+
+    Returns:
+        True if a schema change was applied, False otherwise
+    """
+    if not db.table_exists(table_name):
+        return False
+
+    expected_definitions = _extract_column_definitions(schema_sql)
+    if expected_definitions is None:
+        logger.warning(f"Could not parse schema SQL for {table_name}, skipping migration check")
+        return False
+    expected_columns = set(expected_definitions)
+
+    existing_columns = _get_existing_columns(db, table_name)
 
     # PostgreSQL lowercases all unquoted identifiers, so compare case-insensitively.
     # Without this, every PG run sees a "mismatch" between schema.py's CamelCase
     # column names and information_schema's lowercased names, triggering a DROP+
     # recreate on every call to create_all_tables() — which silently wipes data.
-    if {c.lower() for c in existing_columns} == {c.lower() for c in expected_columns}:
+    existing_lower = {c.lower() for c in existing_columns}
+    expected_lower = {c.lower() for c in expected_columns}
+    if existing_lower == expected_lower:
         return False
 
-    # Schema mismatch detected
+    missing_columns = [
+        column for column in expected_columns
+        if column.lower() not in existing_lower
+    ]
+    extra_columns = sorted(
+        column for column in existing_columns
+        if column.lower() not in expected_lower
+    )
+
+    if missing_columns:
+        added = _add_missing_columns(db, table_name, expected_definitions, missing_columns)
+        if extra_columns:
+            logger.warning(
+                f"Schema for {table_name} has extra columns preserved: {extra_columns}"
+            )
+        return added > 0
+
+    if not extra_columns:
+        return False
+
+    if not _destructive_migrations_enabled():
+        logger.warning(
+            f"Schema mismatch for {table_name}: extra columns preserved and "
+            f"destructive migration skipped. extra={extra_columns}. "
+            "Set JLTSQL_ALLOW_DESTRUCTIVE_MIGRATIONS=1 to allow DROP+recreate."
+        )
+        return False
+
     logger.warning(
         f"Schema mismatch for {table_name}: "
         f"existing={sorted(existing_columns)}, "
         f"expected={sorted(expected_columns)}. "
         f"Dropping and recreating table."
     )
-    # PostgreSQL stores unquoted identifiers in lowercase. Quoting the uppercase
-    # name (e.g. "NL_BN") makes the DROP case-sensitive and fail with
-    # "relation does not exist". Use unquoted/lowercase for PostgreSQL.
-    if db.get_db_type() == "postgresql":
-        db.execute(f'DROP TABLE IF EXISTS {table_name.lower()}')
-    else:
-        db.execute(f'DROP TABLE IF EXISTS "{table_name}"')
+    db.execute(f"DROP TABLE IF EXISTS {_table_identifier(db, table_name)}")
     db.execute(schema_sql)
     db.commit()
     return True

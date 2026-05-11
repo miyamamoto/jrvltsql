@@ -90,7 +90,7 @@ Benefits with PRIMARY KEY constraints:
 - Optimized query performance on primary key columns
 """
 
-from typing import Dict, List
+from typing import Any, Dict, List
 
 from src.database.base import BaseDatabase
 from src.utils.logger import get_logger
@@ -2091,6 +2091,7 @@ SCHEMAS = {
             TanVote BIGINT,
             FukuVote BIGINT,
             WakurenVote BIGINT,
+            CollectedAt TEXT,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban, Kumi, HassoTime)
         )
     """,
@@ -2113,6 +2114,7 @@ SCHEMAS = {
             Odds REAL,
             Ninki INTEGER,
             Vote BIGINT,
+            CollectedAt TEXT,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi, HassoTime)
         )
     """,
@@ -2136,6 +2138,7 @@ SCHEMAS = {
             OddsHigh REAL,
             Ninki INTEGER,
             Vote BIGINT,
+            CollectedAt TEXT,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi, HassoTime)
         )
     """,
@@ -2158,6 +2161,7 @@ SCHEMAS = {
             Odds REAL,
             Ninki INTEGER,
             Vote BIGINT,
+            CollectedAt TEXT,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi, HassoTime)
         )
     """,
@@ -2180,6 +2184,7 @@ SCHEMAS = {
             Odds REAL,
             Ninki INTEGER,
             Vote BIGINT,
+            CollectedAt TEXT,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi, HassoTime)
         )
     """,
@@ -2202,6 +2207,7 @@ SCHEMAS = {
             Odds REAL,
             Ninki INTEGER,
             Vote BIGINT,
+            CollectedAt TEXT,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi, HassoTime)
         )
     """,
@@ -2295,7 +2301,10 @@ def _build_sokuho_timeseries_schema(source_table: str, target_table: str) -> str
         "RecordSpec TEXT,\n            SourceSpec TEXT,\n",
         1,
     )
-    return schema_sql.replace("HassoTime)", "HassoTime, SourceSpec)")
+    return schema_sql.replace(
+        "HassoTime)",
+        "HassoTime, SourceSpec, CollectedAt)",
+    )
 
 
 for _source_table, _target_table in (
@@ -2500,7 +2509,7 @@ class SchemaManager:
             Dictionary with table and column metadata
         """
         db_type = self.db.get_db_type()
-        result = {"table": None, "columns": {}}
+        result: Dict[str, Any] = {"table": None, "columns": {}}
 
         try:
             if db_type == "sqlite":

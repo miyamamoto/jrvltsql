@@ -10,6 +10,8 @@ set "DB_TYPE=postgresql"
 set "DAYS_BACK=7"
 set "DAYS_FORWARD=3"
 set "ENSURE_TABLES=0"
+set "INCLUDE_TIMESERIES=1"
+set "INCLUDE_REALTIME=1"
 
 :parse_args
 if "%~1"=="" goto :parsed
@@ -33,6 +35,16 @@ if /I "%~1"=="--days-forward" (
 )
 if /I "%~1"=="--ensure-tables" (
     set "ENSURE_TABLES=1"
+    shift
+    goto :parse_args
+)
+if /I "%~1"=="--no-timeseries" (
+    set "INCLUDE_TIMESERIES=0"
+    shift
+    goto :parse_args
+)
+if /I "%~1"=="--no-realtime" (
+    set "INCLUDE_REALTIME=0"
     shift
     goto :parse_args
 )
@@ -72,41 +84,45 @@ if /I "%DB_TYPE%"=="postgresql" (
     set "DB_ARGS=--db-type sqlite"
 )
 
+set "EXTRA_ARGS="
+if "%INCLUDE_TIMESERIES%"=="1" set "EXTRA_ARGS=!EXTRA_ARGS! --include-timeseries --timeseries-from-date %FROM_DATE% --timeseries-to-date %TO_DATE%"
+if "%INCLUDE_REALTIME%"=="1" set "EXTRA_ARGS=!EXTRA_ARGS! --include-realtime"
+
 if defined PYTHON (
-    "%PYTHON%" scripts/quickstart.py --mode update --yes %DB_ARGS% --from-date "%FROM_DATE%" --to-date "%TO_DATE%"
+    "%PYTHON%" scripts/quickstart.py --mode update --yes %DB_ARGS% --from-date "%FROM_DATE%" --to-date "%TO_DATE%" !EXTRA_ARGS!
     set "SCRIPT_EXIT_CODE=!errorlevel!"
     goto :check_result
 )
 
 if exist "%~dp0venv32\Scripts\python.exe" (
-    "%~dp0venv32\Scripts\python.exe" scripts/quickstart.py --mode update --yes %DB_ARGS% --from-date "%FROM_DATE%" --to-date "%TO_DATE%"
+    "%~dp0venv32\Scripts\python.exe" scripts/quickstart.py --mode update --yes %DB_ARGS% --from-date "%FROM_DATE%" --to-date "%TO_DATE%" !EXTRA_ARGS!
     set "SCRIPT_EXIT_CODE=!errorlevel!"
     goto :check_result
 )
 
 if exist "%~dp0.venv\Scripts\python.exe" (
-    "%~dp0.venv\Scripts\python.exe" scripts/quickstart.py --mode update --yes %DB_ARGS% --from-date "%FROM_DATE%" --to-date "%TO_DATE%"
+    "%~dp0.venv\Scripts\python.exe" scripts/quickstart.py --mode update --yes %DB_ARGS% --from-date "%FROM_DATE%" --to-date "%TO_DATE%" !EXTRA_ARGS!
     set "SCRIPT_EXIT_CODE=!errorlevel!"
     goto :check_result
 )
 
 py -3.12-32 --version >nul 2>&1
 if !errorlevel!==0 (
-    py -3.12-32 scripts/quickstart.py --mode update --yes %DB_ARGS% --from-date "%FROM_DATE%" --to-date "%TO_DATE%"
+    py -3.12-32 scripts/quickstart.py --mode update --yes %DB_ARGS% --from-date "%FROM_DATE%" --to-date "%TO_DATE%" !EXTRA_ARGS!
     set "SCRIPT_EXIT_CODE=!errorlevel!"
     goto :check_result
 )
 
 py --version >nul 2>&1
 if !errorlevel!==0 (
-    py scripts/quickstart.py --mode update --yes %DB_ARGS% --from-date "%FROM_DATE%" --to-date "%TO_DATE%"
+    py scripts/quickstart.py --mode update --yes %DB_ARGS% --from-date "%FROM_DATE%" --to-date "%TO_DATE%" !EXTRA_ARGS!
     set "SCRIPT_EXIT_CODE=!errorlevel!"
     goto :check_result
 )
 
 python --version >nul 2>&1
 if !errorlevel!==0 (
-    python scripts/quickstart.py --mode update --yes %DB_ARGS% --from-date "%FROM_DATE%" --to-date "%TO_DATE%"
+    python scripts/quickstart.py --mode update --yes %DB_ARGS% --from-date "%FROM_DATE%" --to-date "%TO_DATE%" !EXTRA_ARGS!
     set "SCRIPT_EXIT_CODE=!errorlevel!"
     goto :check_result
 )

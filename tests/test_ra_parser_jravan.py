@@ -75,6 +75,43 @@ class TestRAParserJRAVAN(unittest.TestCase):
         self.assertEqual(result["Nichiji"], "08")
         self.assertEqual(result["RaceNum"], "11")
 
+    def test_extended_layout_reads_post_time_from_late_offsets(self):
+        """Recent RA payloads can carry post time after extended prize arrays."""
+
+        sample_data = bytearray(b" " * 1270)
+        sample_data[0:2] = b"RA"
+        sample_data[2:3] = b"7"
+        sample_data[3:11] = b"20260508"
+        sample_data[11:15] = b"2026"
+        sample_data[15:19] = b"0508"
+        sample_data[19:21] = b"05"
+        sample_data[21:23] = b"02"
+        sample_data[23:25] = b"03"
+        sample_data[25:27] = b"12"
+        # Old 856-byte offset contains prize/previous-prize digits in the
+        # extended layout and must not be used as the post time.
+        sample_data[745:749] = b"0000"
+        sample_data[873:877] = b"1540"
+        sample_data[877:881] = b"1535"
+        sample_data[881:883] = b"18"
+        sample_data[883:885] = b"16"
+        sample_data[885:887] = b"16"
+        sample_data[887:888] = b"2"
+        sample_data[888:889] = b"1"
+        sample_data[889:890] = b"1"
+
+        result = self.parser.parse(bytes(sample_data))
+
+        self.assertEqual(result["RecordSpec"], "RA")
+        self.assertEqual(result["HassoTime"], "1540")
+        self.assertEqual(result["HassoTimeBefore"], "1535")
+        self.assertEqual(result["TorokuTosu"], "18")
+        self.assertEqual(result["SyussoTosu"], "16")
+        self.assertEqual(result["NyusenTosu"], "16")
+        self.assertEqual(result["Syukaisu"], "2")
+        self.assertEqual(result["RecordUpKubun"], "1")
+        self.assertEqual(result["TenkoCD"], "1")
+
     def test_empty_values_convert_to_empty_string(self):
         """Test that empty/whitespace values convert to empty string.
 

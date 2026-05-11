@@ -18,9 +18,22 @@ from src.utils.config import load_config
 UPDATE_SPECS = [
     ("TOKU", 2),
     ("RACE", 2),
+    # Master deltas keep UM/KS/CH/BR/BN current after the initial DIFN setup.
+    ("DIFN", 1),
     ("TCVN", 2),
     ("RCVN", 2),
 ]
+
+
+def _effective_option(spec: str, configured_option: int, from_date: str) -> int:
+    """Apply quickstart's setup fallback for specs that need full refresh."""
+
+    if spec != "DIFN" or configured_option != 1:
+        return configured_option
+    from_date_dt = datetime.strptime(from_date, "%Y%m%d")
+    now = datetime.now()
+    months_ago = (now.year * 12 + now.month) - (from_date_dt.year * 12 + from_date_dt.month)
+    return 4 if months_ago > 11 else configured_option
 
 
 def main() -> int:
@@ -39,14 +52,15 @@ def main() -> int:
     from_date = (datetime.now() - timedelta(days=max(args.days_back, 1))).strftime("%Y%m%d")
 
     with database:
+        processor = BatchProcessor(
+            database=database,
+            sid=config.get("jvlink.sid", "JLTSQL"),
+            batch_size=1000,
+            service_key=config.get("jvlink.service_key"),
+            show_progress=False,
+        )
         for spec, option in UPDATE_SPECS:
-            processor = BatchProcessor(
-                database=database,
-                sid=config.get("jvlink.sid", "JLTSQL"),
-                batch_size=1000,
-                service_key=config.get("jvlink.service_key"),
-                show_progress=False,
-            )
+            option = _effective_option(spec, option, from_date)
             print(f"[daily-sync] {spec} {from_date}..{to_date} option={option}")
             stats = processor.process_date_range(
                 data_spec=spec,

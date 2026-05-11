@@ -36,6 +36,16 @@ class RAParser:
         except Exception:
             return ""
 
+    @staticmethod
+    def _looks_like_hhmm(value: str) -> bool:
+        """Return True when a field looks like a non-zero HHMM time."""
+
+        if len(value) != 4 or not value.isdigit() or value == "0000":
+            return False
+        hour = int(value[:2])
+        minute = int(value[2:])
+        return 0 <= hour <= 23 and 0 <= minute <= 59
+
     def parse(self, data: bytes) -> Optional[Dict[str, str]]:
         """
         RAレコードをパースしてフィールド辞書を返す
@@ -240,8 +250,29 @@ class RAParser:
             # 61. 　　各通過順位 (位置:784, 長さ:70)
             result["TsukaJyuni"] = self.decode_field(data[783:853])
 
+            # 近年のJRA-VAN RAレコードは、856 byte互換レイアウトより後半の
+            # 賞金配列が長い形式で届く場合がある。この場合、従来位置で発走
+            # 時刻を読むと HassoTime=0000 などに崩れ、締切基準のオッズ抽出が
+            # 破綻する。既存DBスキーマは維持しつつ、利用中の既存列だけ正しい
+            # 後方オフセットで上書きする。
+            extended_layout_applied = False
+            if len(data) >= 889:
+                extended_hasso_time = self.decode_field(data[873:877])
+                if self._looks_like_hhmm(extended_hasso_time):
+                    extended_layout_applied = True
+                    result["HassoTime"] = extended_hasso_time
+                    result["HassoTimeBefore"] = self.decode_field(data[877:881])
+                    result["TorokuTosu"] = self.decode_field(data[881:883])
+                    result["SyussoTosu"] = self.decode_field(data[883:885])
+                    result["NyusenTosu"] = self.decode_field(data[885:887])
+                    result["Syukaisu"] = self.decode_field(data[887:888])
+                    result["RecordUpKubun"] = self.decode_field(data[888:889])
+                    if len(data) >= 890:
+                        result["TenkoCD"] = self.decode_field(data[889:890])
+
             # 62. レコード更新区分 (位置:854, 長さ:1)
-            result["RecordUpKubun"] = self.decode_field(data[853:854])
+            if not extended_layout_applied:
+                result["RecordUpKubun"] = self.decode_field(data[853:854])
 
             # 63. レコード区切 (位置:855, 長さ:2)
             result["Crlf"] = self.decode_field(data[854:856])

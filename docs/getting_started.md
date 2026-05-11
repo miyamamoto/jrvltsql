@@ -164,8 +164,9 @@ jltsql realtime odds-sokuho-timeseries --from 20260418 --to 20260419 --db sqlite
 
 ## 日次同期
 
-通常データの更新だけを毎日行う場合は `daily_sync.bat` を使います。
-直接実行時の既定は PostgreSQL です。SQLite では必ず `--db sqlite` を指定してください。
+運用では `daily_sync.bat` を使います。直接実行時の既定は PostgreSQL です。
+SQLite では必ず `--db sqlite` を指定してください。既定では直近通常データに加え、
+公式 `TS_O1` / `TS_O2` と開催週の速報系データも更新します。
 
 ```bat
 daily_sync.bat --db sqlite --days-back 7 --days-forward 3
@@ -179,7 +180,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File install_tasks.ps1 -DbType sq
 powershell -NoProfile -ExecutionPolicy Bypass -File install_tasks.ps1 -DbType postgresql -Time 06:30
 ```
 
-`daily_sync.bat` が更新するのは通常データです。時系列オッズは取得しません。
+通常データだけを更新したい検証では `--no-timeseries --no-realtime` を付けます。
 
 ## よくある混同
 
@@ -189,7 +190,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File install_tasks.ps1 -DbType po
 | SQLite と PostgreSQL で時系列 quickstart のコマンド形は違うのか | 推奨導線は同じです。`quickstart_timeseries.bat --db sqlite|postgresql --from <FROM> --to <TO>` を使います。 |
 | `quickstart_postgres_timeseries.bat` は SQLite にも使うのか | 使いません。PostgreSQL 専用 batch です。 |
 | `daily_sync.bat` は SQLite / PostgreSQL の両方で使えるのか | 使えます。`--db sqlite` または `--db postgresql` を指定します。 |
-| `daily_sync.bat` で時系列オッズも入るのか | 入りません。通常データ更新だけです。 |
+| `daily_sync.bat` で時系列オッズも入るのか | 既定では入ります。通常データだけにする場合は `--no-timeseries --no-realtime` を指定します。 |
 | 確定オッズ `NL_O*` は投資判断時点のオッズか | 違います。レース後の確定オッズです。 |
 | 三連複・三連単の過去時系列を1年分まとめて取れるか | 取れません。開催週の継続蓄積が必要です。 |
 

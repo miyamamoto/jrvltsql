@@ -95,7 +95,7 @@ class O1Parser:
                     continue
                 rows_by_umaban.setdefault(
                     umaban,
-                    {**base, "Umaban": umaban, "FukuUmaban": umaban, "Kumi": ""},
+                    {**base, "Umaban": umaban, "FukuUmaban": umaban, "Kumi": "00"},
                 )
                 rows_by_umaban[umaban].update(
                     {"TanOdds": odds, "TanNinki": ninki, "TanVote": tan_vote}
@@ -114,7 +114,7 @@ class O1Parser:
                     continue
                 rows_by_umaban.setdefault(
                     umaban,
-                    {**base, "Umaban": umaban, "FukuUmaban": umaban, "Kumi": ""},
+                    {**base, "Umaban": umaban, "FukuUmaban": umaban, "Kumi": "00"},
                 )
                 rows_by_umaban[umaban].update(
                     {
