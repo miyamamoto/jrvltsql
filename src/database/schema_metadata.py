@@ -1753,6 +1753,43 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
 }
 
 
+def _ensure_column_metadata(table_name: str, column: ColumnMetadata) -> None:
+    """Add missing metadata for columns referenced by generated table keys."""
+
+    columns = TABLE_METADATA[table_name]["columns"]
+    if not any(existing["name"] == column["name"] for existing in columns):
+        columns.append(column)
+
+
+_KAIJI_COLUMN: ColumnMetadata = {
+    "name": "Kaiji",
+    "type": "INTEGER",
+    "description": "開催回次",
+    "example": "3",
+    "nullable": False,
+}
+_NICHIJI_COLUMN: ColumnMetadata = {
+    "name": "Nichiji",
+    "type": "INTEGER",
+    "description": "開催日次",
+    "example": "8",
+    "nullable": False,
+}
+_KUMI_COLUMN: ColumnMetadata = {
+    "name": "Kumi",
+    "type": "TEXT",
+    "description": "組み合わせ。単勝・複勝行では主キー安定化のため00を使用",
+    "example": "0102",
+    "nullable": False,
+}
+
+
+for _table_name in ("TS_O1", "TS_O2", "TS_O3", "TS_O4", "TS_O5", "TS_O6"):
+    _ensure_column_metadata(_table_name, _KAIJI_COLUMN)
+    _ensure_column_metadata(_table_name, _NICHIJI_COLUMN)
+_ensure_column_metadata("TS_O1", _KUMI_COLUMN)
+
+
 for _source_table, _target_table in (
     ("TS_O1", "TS_SOKUHO_O1"),
     ("TS_O2", "TS_SOKUHO_O2"),

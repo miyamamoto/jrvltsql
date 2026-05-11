@@ -90,7 +90,7 @@ Benefits with PRIMARY KEY constraints:
 - Optimized query performance on primary key columns
 """
 
-from typing import Dict, List
+from typing import Any, Dict, List
 
 from src.database.base import BaseDatabase
 from src.utils.logger import get_logger
@@ -2509,7 +2509,7 @@ class SchemaManager:
             Dictionary with table and column metadata
         """
         db_type = self.db.get_db_type()
-        result = {"table": None, "columns": {}}
+        result: Dict[str, Any] = {"table": None, "columns": {}}
 
         try:
             if db_type == "sqlite":

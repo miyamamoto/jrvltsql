@@ -451,6 +451,27 @@ class TestRealtimeUpdater(unittest.TestCase):
         self.assertEqual(inserted_by_table["TS_SOKUHO_O1"][0]["SourceSpec"], "0B30")
         self.assertIn("CollectedAt", inserted_by_table["TS_SOKUHO_O1"][0])
 
+    def test_ts_o1_primary_key_fields_are_not_blank(self):
+        """O1 horse rows keep a non-null Kumi sentinel for PostgreSQL keys."""
+        data = self.updater._prepare_data_for_db(
+            "TS_O1",
+            {
+                "RecordSpec": "O1",
+                "Year": "2026",
+                "MonthDay": "0503",
+                "JyoCD": "05",
+                "Kaiji": "1",
+                "Nichiji": "2",
+                "RaceNum": "1",
+                "HassoTime": "1540",
+                "Umaban": "01",
+                "Kumi": "",
+            },
+        )
+
+        self.assertEqual(data["Umaban"], 1)
+        self.assertEqual(data["Kumi"], "00")
+
     @patch('src.realtime.updater.ParserFactory')
     def test_process_record_new(self, mock_factory_class):
         """Test processing new record (headDataKubun=1)."""

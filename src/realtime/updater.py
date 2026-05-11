@@ -4,7 +4,7 @@ This module handles real-time data updates to the database.
 """
 
 from datetime import datetime, timezone
-from typing import Dict, Optional
+from typing import Dict, List, Optional, Union
 
 from src.database.base import BaseDatabase
 from src.jvlink.constants import (
@@ -147,7 +147,7 @@ class RealtimeUpdater:
         buff: bytes,
         timeseries: bool = False,
         source_spec: Optional[str] = None,
-    ) -> Optional[Dict]:
+    ) -> Optional[Union[Dict, List[Dict]]]:
         """Process real-time data record.
 
         Args:
@@ -158,7 +158,7 @@ class RealtimeUpdater:
                        the primary key.
 
         Returns:
-            Dictionary with processing result, or None if failed
+            Dictionary or list of dictionaries with processing result, or None if failed
 
         Raises:
             Exception: If processing fails
@@ -194,13 +194,13 @@ class RealtimeUpdater:
         parsed_data,
         timeseries: bool = False,
         source_spec: Optional[str] = None,
-    ) -> Optional[Dict]:
+    ) -> Optional[Union[Dict, List[Dict]]]:
         """Process already parsed JV-Data.
 
         Batch time-series fetchers may expand one raw JV-Link record into many
         odds rows. Re-processing the raw buffer would duplicate work and insert
         the same expanded record repeatedly, so callers can save the parsed rows
-        directly through this method.
+        directly through this method. Returns a list when parsed_data is a list.
         """
         if isinstance(parsed_data, list):
             results = []
@@ -401,6 +401,11 @@ class RealtimeUpdater:
         clean_data = {k: v for k, v in data.items() if not k.startswith("_")}
         if table_name.startswith("TS_"):
             clean_data.setdefault("CollectedAt", self._current_collected_at())
+        if table_name in {"TS_O1", "TS_SOKUHO_O1"}:
+            if clean_data.get("Umaban") and not clean_data.get("Kumi"):
+                clean_data["Kumi"] = "00"
+            if clean_data.get("Kumi") and not clean_data.get("Umaban"):
+                clean_data["Umaban"] = "0"
         return convert_record_types(clean_data, table_name)
 
     @staticmethod

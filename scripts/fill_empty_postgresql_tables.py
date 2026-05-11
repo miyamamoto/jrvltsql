@@ -22,6 +22,16 @@ import structlog
 
 logger = structlog.get_logger()
 
+
+def _scalar(row, key=None):
+    """Return the first scalar value from dict or tuple DB rows."""
+    if not row:
+        return None
+    if isinstance(row, dict):
+        return row[key] if key else next(iter(row.values()))
+    return row[0]
+
+
 class EmptyTableFiller:
     """空テーブルを埋めるためのクラス"""
 
@@ -53,13 +63,8 @@ class EmptyTableFiller:
 
         empty_tables = []
         for row in result:
-            table_name = row.get("table_name") if isinstance(row, dict) else row[0]
-            count_result = db.fetch_one(f"SELECT COUNT(*) FROM {table_name}")
-            count = (
-                next(iter(count_result.values()))
-                if isinstance(count_result, dict)
-                else count_result[0]
-            ) if count_result else 0
+            table_name = _scalar(row, "table_name")
+            count = _scalar(db.fetch_one(f"SELECT COUNT(*) FROM {table_name}")) or 0
             if count == 0:
                 empty_tables.append(table_name.upper())
 
@@ -124,12 +129,18 @@ class EmptyTableFiller:
 
     def fill_tables(self):
         """空テーブルを埋める"""
+        db = PostgreSQLDatabase(self.db_config)
+        db.connect()
+        try:
+            self._fill_tables_connected(db)
+        finally:
+            db.disconnect()
+
+    def _fill_tables_connected(self, db):
+        """Fill empty tables using an already connected database."""
         print("=" * 80)
         print("PostgreSQL 空テーブル埋めプロセス")
         print("=" * 80)
-
-        db = PostgreSQLDatabase(self.db_config)
-        db.connect()
 
         # 現在の空テーブルを確認
         print("\n[1/4] 空テーブル確認中...")
@@ -209,13 +220,8 @@ class EmptyTableFiller:
         total_records = 0
 
         for row in result:
-            table_name = row.get("table_name") if isinstance(row, dict) else row[0]
-            count_result = db.fetch_one(f"SELECT COUNT(*) FROM {table_name}")
-            count = (
-                next(iter(count_result.values()))
-                if isinstance(count_result, dict)
-                else count_result[0]
-            ) if count_result else 0
+            table_name = _scalar(row, "table_name")
+            count = _scalar(db.fetch_one(f"SELECT COUNT(*) FROM {table_name}")) or 0
             total_records += count
 
             if table_name.upper() in empty_tables and count > 0:
@@ -247,8 +253,6 @@ class EmptyTableFiller:
         print("\n今回追加されたレコード数:")
         for table, count in sorted(all_table_stats.items()):
             print(f"  {table}: {count:,}")
-
-        db.disconnect()
 
         print("\n" + "=" * 80)
         print("完了")
