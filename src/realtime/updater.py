@@ -3,7 +3,8 @@
 This module handles real-time data updates to the database.
 """
 
-from typing import Dict, Optional
+from datetime import datetime, timezone
+from typing import Dict, List, Optional, Union
 
 from src.database.base import BaseDatabase
 from src.jvlink.constants import (
@@ -146,7 +147,7 @@ class RealtimeUpdater:
         buff: bytes,
         timeseries: bool = False,
         source_spec: Optional[str] = None,
-    ) -> Optional[Dict]:
+    ) -> Optional[Union[Dict, List[Dict]]]:
         """Process real-time data record.
 
         Args:
@@ -157,7 +158,7 @@ class RealtimeUpdater:
                        the primary key.
 
         Returns:
-            Dictionary with processing result, or None if failed
+            Dictionary or list of dictionaries with processing result, or None if failed
 
         Raises:
             Exception: If processing fails
@@ -193,13 +194,13 @@ class RealtimeUpdater:
         parsed_data,
         timeseries: bool = False,
         source_spec: Optional[str] = None,
-    ) -> Optional[Dict]:
+    ) -> Optional[Union[Dict, List[Dict]]]:
         """Process already parsed JV-Data.
 
         Batch time-series fetchers may expand one raw JV-Link record into many
         odds rows. Re-processing the raw buffer would duplicate work and insert
         the same expanded record repeatedly, so callers can save the parsed rows
-        directly through this method.
+        directly through this method. Returns a list when parsed_data is a list.
         """
         if isinstance(parsed_data, list):
             results = []
@@ -219,7 +220,10 @@ class RealtimeUpdater:
         """Insert already parsed records in batches grouped by target table."""
         grouped: dict[str, list[Dict]] = {}
         errors = 0
+        batch_collected_at = self._current_collected_at() if timeseries else None
         for record in records:
+            if timeseries and batch_collected_at:
+                record.setdefault("CollectedAt", batch_collected_at)
             record_type = record.get("RecordSpec")
             table_name = self._resolve_timeseries_table(record) if timeseries else None
             if table_name is None:
@@ -395,7 +399,19 @@ class RealtimeUpdater:
         from src.importer.importer import convert_record_types
 
         clean_data = {k: v for k, v in data.items() if not k.startswith("_")}
+        if table_name.startswith("TS_"):
+            clean_data.setdefault("CollectedAt", self._current_collected_at())
+        if table_name in {"TS_O1", "TS_SOKUHO_O1"}:
+            if clean_data.get("Umaban") and not clean_data.get("Kumi"):
+                clean_data["Kumi"] = "00"
+            if clean_data.get("Kumi") and not clean_data.get("Umaban"):
+                clean_data["Umaban"] = "0"
         return convert_record_types(clean_data, table_name)
+
+    @staticmethod
+    def _current_collected_at() -> str:
+        """Return collector-side capture timestamp in UTC ISO-8601."""
+        return datetime.now(timezone.utc).isoformat()
 
     def _handle_new_record(self, table_name: str, data: Dict) -> Dict:
         """Handle new record insertion.
@@ -511,26 +527,27 @@ class RealtimeUpdater:
             "TS_SOKUHO_O1": [
                 "Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji",
                 "RaceNum", "Umaban", "Kumi", "HassoTime", "SourceSpec",
+                "CollectedAt",
             ],
             "TS_SOKUHO_O2": [
                 "Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji",
-                "RaceNum", "Kumi", "HassoTime", "SourceSpec",
+                "RaceNum", "Kumi", "HassoTime", "SourceSpec", "CollectedAt",
             ],
             "TS_SOKUHO_O3": [
                 "Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji",
-                "RaceNum", "Kumi", "HassoTime", "SourceSpec",
+                "RaceNum", "Kumi", "HassoTime", "SourceSpec", "CollectedAt",
             ],
             "TS_SOKUHO_O4": [
                 "Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji",
-                "RaceNum", "Kumi", "HassoTime", "SourceSpec",
+                "RaceNum", "Kumi", "HassoTime", "SourceSpec", "CollectedAt",
             ],
             "TS_SOKUHO_O5": [
                 "Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji",
-                "RaceNum", "Kumi", "HassoTime", "SourceSpec",
+                "RaceNum", "Kumi", "HassoTime", "SourceSpec", "CollectedAt",
             ],
             "TS_SOKUHO_O6": [
                 "Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji",
-                "RaceNum", "Kumi", "HassoTime", "SourceSpec",
+                "RaceNum", "Kumi", "HassoTime", "SourceSpec", "CollectedAt",
             ],
 
             # Weather/Track condition tables

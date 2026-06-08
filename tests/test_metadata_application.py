@@ -26,6 +26,15 @@ from src.database.schema import SchemaManager
 from src.database.schema_metadata import TABLE_METADATA
 
 
+def test_metadata_primary_key_columns_are_described():
+    """Every metadata primary-key column should have a column definition."""
+
+    for table_name, metadata in TABLE_METADATA.items():
+        defined_columns = {column["name"] for column in metadata["columns"]}
+        missing = set(metadata.get("primary_key", [])) - defined_columns
+        assert not missing, f"{table_name} primary_key references missing columns: {sorted(missing)}"
+
+
 class TestSQLiteMetadata(unittest.TestCase):
     """Test metadata application and retrieval for SQLite."""
 

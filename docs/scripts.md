@@ -9,7 +9,7 @@
 | `quickstart_timeseries.bat` | SQLite / PostgreSQL で範囲指定して公式時系列オッズも入れるとき | `--db sqlite` / `--db postgresql` を同じ形で指定し、指定範囲の通常データと公式 `TS_O1` / `TS_O2` を投入します。最後に指定 DB 用の日次タスク登録を確認します。 | 三連複・三連単など `TS_SOKUHO_O3`〜`TS_SOKUHO_O6` の開催週速報蓄積は行いません。 |
 | `quickstart_postgres_timeseries.bat` | PostgreSQL 専用バッチを直接使うとき | 指定範囲の通常データと公式 `TS_O1` / `TS_O2` 時系列オッズを投入します。最後に日次タスク登録を確認します。 | SQLite には使いません。新規手順では `quickstart_timeseries.bat --db postgresql` を推奨します。 |
 | `fetch_timeseries_postgres.bat` | 既存 PostgreSQL に公式時系列だけ追加するとき | `0B41` / `0B42` から `TS_O1` / `TS_O2` を追加します。 | `RACE` 系データは追加しません。 |
-| `daily_sync.bat` | 日次で通常データを更新するとき | 直近の通常データを更新します。`--db sqlite` / `--db postgresql` に対応します。既定は PostgreSQL、過去7日・未来3日です。 | 公式時系列オッズや全賭式速報オッズの蓄積は行いません。SQLite では `--db sqlite` を指定してください。 |
+| `daily_sync.bat` | 日次で通常データと直近オッズを更新するとき | 直近の通常データ、公式 `TS_O1` / `TS_O2`、開催週の速報系データを更新します。`--db sqlite` / `--db postgresql` に対応し、既定は PostgreSQL、過去7日・未来3日です。 | 通常データだけにする場合は `--no-timeseries --no-realtime` を指定します。SQLite では `--db sqlite` を指定してください。 |
 | `install_tasks.ps1` | 日次同期を Windows タスク化するとき | `daily_sync.bat` の Windows タスク登録・更新を行います。`-DbType sqlite` / `-DbType postgresql` に対応します。 | オッズ取得処理そのものは実行しません。 |
 | `scripts/quickstart.py` | バッチの内部処理 | セットアップ・更新処理の本体です。 | 通常は直接実行する必要はありません。 |
 | `scripts/raceday_verify.py` | 開催日の健全性確認 | レース前後の DB 状態を検証します。 | データ取得の代替ではありません。 |

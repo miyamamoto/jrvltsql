@@ -49,6 +49,17 @@ class MockPostgreSQLDatabase(BaseDatabase):
                 # The migration code now uses unquoted lowercase for PG, so just
                 # normalize to lowercase to match real behavior.
                 self._tables.pop(m.group(1).lower(), None)
+        elif upper.startswith("ALTER TABLE"):
+            import re
+            m = re.search(
+                r'ALTER\s+TABLE\s+"?(\w+)"?\s+ADD\s+COLUMN\s+"?(\w+)"?',
+                sql,
+                re.IGNORECASE,
+            )
+            if m:
+                table = m.group(1).lower()
+                column = m.group(2)
+                self._tables.setdefault(table, []).append(column)
         elif upper.startswith("CREATE TABLE"):
             from src.database.migration import _extract_columns_from_sql
             import re
@@ -125,8 +136,8 @@ NEW_SCHEMA = """CREATE TABLE IF NOT EXISTS NL_H1 (
 )"""
 
 
-def test_migrate_drops_and_recreates_on_mismatch(db):
-    """Old schema table should be dropped and recreated with new schema."""
+def test_migrate_adds_missing_columns_without_dropping(db):
+    """Missing columns should be added without dropping existing rows."""
     # Create table with old schema
     db.execute(OLD_SCHEMA)
     db.commit()
@@ -145,16 +156,37 @@ def test_migrate_drops_and_recreates_on_mismatch(db):
     result = migrate_table_if_needed(db, "NL_H1", NEW_SCHEMA)
     assert result is True
 
-    # Verify new columns
+    # Verify new columns were added and old columns were preserved.
+    info = db.fetch_all("PRAGMA table_info(NL_H1)")
+    new_cols = {r['name'] for r in info}
+    assert "BetType" in new_cols
+    assert "Kumi" in new_cols
+    assert "TanUma" in new_cols
+
+    # Old data should be preserved.
+    rows = db.fetch_all("SELECT * FROM NL_H1")
+    assert len(rows) == 1
+
+
+def test_migrate_drops_and_recreates_on_mismatch_when_explicitly_allowed(db, monkeypatch):
+    """DROP+recreate is opt-in because production DBs must not be wiped."""
+    monkeypatch.setenv("JLTSQL_ALLOW_DESTRUCTIVE_MIGRATIONS", "1")
+    db.execute(OLD_SCHEMA)
+    db.commit()
+    db.execute("INSERT INTO NL_H1 (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, TanUma) VALUES (2025, 101, '01', 1, 1, 1, 'test')")
+    db.commit()
+
+    # First add missing columns, then a second call sees only extra columns and
+    # may run destructive migration because the explicit flag is set.
+    assert migrate_table_if_needed(db, "NL_H1", NEW_SCHEMA) is True
+    assert migrate_table_if_needed(db, "NL_H1", NEW_SCHEMA) is True
+
     info = db.fetch_all("PRAGMA table_info(NL_H1)")
     new_cols = {r['name'] for r in info}
     assert "BetType" in new_cols
     assert "Kumi" in new_cols
     assert "TanUma" not in new_cols
-
-    # Old data should be gone
-    rows = db.fetch_all("SELECT * FROM NL_H1")
-    assert len(rows) == 0
+    assert db.fetch_all("SELECT * FROM NL_H1") == []
 
 
 def test_migrate_no_op_when_schema_matches(db):
@@ -219,14 +251,26 @@ def pg_db():
     return MockPostgreSQLDatabase()
 
 
-def test_pg_migrate_drops_and_recreates_on_mismatch(pg_db):
-    """PostgreSQL path: mismatch triggers DROP + CREATE via information_schema."""
+def test_pg_migrate_adds_missing_columns_without_dropping(pg_db):
+    """PostgreSQL path: mismatch adds columns and preserves existing schema."""
     pg_db.execute(OLD_SCHEMA)  # seeds _tables["NL_H1"] with old columns
 
     result = migrate_table_if_needed(pg_db, "NL_H1", NEW_SCHEMA)
     assert result is True
 
-    # Table should now have new columns (real PG stores names lowercased)
+    # Table should now have both old and new columns.
+    assert "BetType" in pg_db._tables["nl_h1"]
+    assert "TanUma" in pg_db._tables["nl_h1"]
+
+
+def test_pg_migrate_drops_and_recreates_on_mismatch_when_explicitly_allowed(pg_db, monkeypatch):
+    """PostgreSQL destructive migration requires explicit opt-in."""
+    monkeypatch.setenv("JLTSQL_ALLOW_DESTRUCTIVE_MIGRATIONS", "1")
+    pg_db.execute(OLD_SCHEMA)
+
+    assert migrate_table_if_needed(pg_db, "NL_H1", NEW_SCHEMA) is True
+    assert migrate_table_if_needed(pg_db, "NL_H1", NEW_SCHEMA) is True
+
     assert "BetType" in pg_db._tables["nl_h1"]
     assert "TanUma" not in pg_db._tables["nl_h1"]
 

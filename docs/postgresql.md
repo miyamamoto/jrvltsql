@@ -11,7 +11,7 @@ jrvltsql は SQLite だけでなく PostgreSQL へ直接保存できます。複
 | `quickstart_timeseries.bat --db postgresql --from <FROM> --to <TO>` | 指定範囲の通常データ、公式1年保持の `TS_O1` / `TS_O2` | `TS_SOKUHO_O3`〜`TS_SOKUHO_O6` の開催週速報蓄積 |
 | `quickstart_postgres_timeseries.bat <FROM> <TO>` | 同上。PostgreSQL 専用 batch | SQLite 保存 |
 | `fetch_timeseries_postgres.bat <FROM> <TO>` | 公式1年保持の `TS_O1` / `TS_O2` | `RACE` 系データ、`TS_SOKUHO_O3`〜`TS_SOKUHO_O6` |
-| `daily_sync.bat --db postgresql` | 直近の通常データ | 時系列オッズ |
+| `daily_sync.bat --db postgresql` | 直近の通常データ、公式 `TS_O1` / `TS_O2`、開催週の速報系データ | 通常データだけにする場合は `--no-timeseries --no-realtime` |
 | `jltsql realtime odds-sokuho-timeseries --db postgresql` | 開催週の `TS_SOKUHO_O1`〜`TS_SOKUHO_O6` | JRA-VAN 側の保持期間を過ぎた速報オッズ |
 
 ## 必要な環境変数

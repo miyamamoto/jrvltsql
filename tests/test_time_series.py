@@ -271,6 +271,7 @@ def test_odds_parsers_expand_combination_arrays():
     rows_o1 = O1Parser().parse(raw_o1)
     assert len(rows_o1) == 4
     assert rows_o1[0]["Umaban"] == "01"
+    assert rows_o1[0]["Kumi"] == "00"
     assert rows_o1[0]["TanOdds"] == "0123"
     assert rows_o1[0]["FukuOddsHigh"] == "0020"
     assert rows_o1[-1]["Kumi"] == "13"

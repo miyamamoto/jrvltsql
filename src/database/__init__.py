@@ -8,10 +8,10 @@ values:
 - ``postgresql``  → :class:`PostgreSQLDatabase`
 - ``dual``        → :class:`DualDatabase` wrapping SQLite (primary) + PostgreSQL (secondary)
 
-The ``dual`` mode lets ingestion keep writing to SQLite (historical
-behavior) while also mirroring every write into PostgreSQL, which is the
-recommended migration path when standing up a remote analytics PG alongside
-an existing SQLite installation.
+Production collectors should use ``postgresql`` so records are written
+directly to PostgreSQL at collection time. ``dual`` remains a compatibility
+mode for local migration checks where SQLite must stay primary; it is not the
+recommended operational path for race-day ingestion.
 """
 
 from typing import Any, Optional
