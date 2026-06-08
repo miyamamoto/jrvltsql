@@ -254,7 +254,14 @@ class TestQuickstartBatchRoles:
         assert 'set "DB_TYPE=postgresql"' in text
         assert "--db-type postgresql" in text
         assert "--db-type sqlite" in text
-        assert "scripts/quickstart.py --mode update --yes" in text
+        assert "SYNC_SCRIPT=scripts/quickstart.py" in text
+        assert "SYNC_SCRIPT=scripts/daily_update.py" in text
+        assert "--days-forward %DAYS_FORWARD%" in text
+        assert "JRA_DAILY_UPDATE_SPECS=RACE,DIFN" in text
+        assert "--specs !JRA_DAILY_UPDATE_SPECS!" in text
+        assert "--force-incremental" in text
+        assert "--ignore-jvopen-error-codes -303" in text
+        assert "avoid quickstart's rich progress UI" in text
         assert "--include-timeseries" in text
         assert "--include-realtime" in text
         assert "--no-timeseries" in text

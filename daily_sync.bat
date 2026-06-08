@@ -88,41 +88,52 @@ set "EXTRA_ARGS="
 if "%INCLUDE_TIMESERIES%"=="1" set "EXTRA_ARGS=!EXTRA_ARGS! --include-timeseries --timeseries-from-date %FROM_DATE% --timeseries-to-date %TO_DATE%"
 if "%INCLUDE_REALTIME%"=="1" set "EXTRA_ARGS=!EXTRA_ARGS! --include-realtime"
 
+set "SYNC_SCRIPT=scripts/quickstart.py"
+set "SYNC_ARGS=--mode update --yes %DB_ARGS% --from-date %FROM_DATE% --to-date %TO_DATE% !EXTRA_ARGS!"
+if "%INCLUDE_TIMESERIES%"=="0" if "%INCLUDE_REALTIME%"=="0" (
+    rem Task Scheduler production path: avoid quickstart's rich progress UI and
+    rem use the non-interactive daily updater for normal JVOpen data only.
+    if not defined JRA_DAILY_UPDATE_SPECS set "JRA_DAILY_UPDATE_SPECS=RACE,DIFN"
+    set "SYNC_SCRIPT=scripts/daily_update.py"
+    set "SYNC_ARGS=--days-back %DAYS_BACK% --days-forward %DAYS_FORWARD% --db %DB_TYPE% --specs !JRA_DAILY_UPDATE_SPECS! --force-incremental --ignore-jvopen-error-codes -303"
+    if "%ENSURE_TABLES%"=="1" set "SYNC_ARGS=!SYNC_ARGS! --ensure-tables"
+)
+
 if defined PYTHON (
-    "%PYTHON%" scripts/quickstart.py --mode update --yes %DB_ARGS% --from-date "%FROM_DATE%" --to-date "%TO_DATE%" !EXTRA_ARGS!
+    "%PYTHON%" %SYNC_SCRIPT% !SYNC_ARGS!
     set "SCRIPT_EXIT_CODE=!errorlevel!"
     goto :check_result
 )
 
 if exist "%~dp0venv32\Scripts\python.exe" (
-    "%~dp0venv32\Scripts\python.exe" scripts/quickstart.py --mode update --yes %DB_ARGS% --from-date "%FROM_DATE%" --to-date "%TO_DATE%" !EXTRA_ARGS!
+    "%~dp0venv32\Scripts\python.exe" %SYNC_SCRIPT% !SYNC_ARGS!
     set "SCRIPT_EXIT_CODE=!errorlevel!"
     goto :check_result
 )
 
 if exist "%~dp0.venv\Scripts\python.exe" (
-    "%~dp0.venv\Scripts\python.exe" scripts/quickstart.py --mode update --yes %DB_ARGS% --from-date "%FROM_DATE%" --to-date "%TO_DATE%" !EXTRA_ARGS!
+    "%~dp0.venv\Scripts\python.exe" %SYNC_SCRIPT% !SYNC_ARGS!
     set "SCRIPT_EXIT_CODE=!errorlevel!"
     goto :check_result
 )
 
 py -3.12-32 --version >nul 2>&1
 if !errorlevel!==0 (
-    py -3.12-32 scripts/quickstart.py --mode update --yes %DB_ARGS% --from-date "%FROM_DATE%" --to-date "%TO_DATE%" !EXTRA_ARGS!
+    py -3.12-32 %SYNC_SCRIPT% !SYNC_ARGS!
     set "SCRIPT_EXIT_CODE=!errorlevel!"
     goto :check_result
 )
 
 py --version >nul 2>&1
 if !errorlevel!==0 (
-    py scripts/quickstart.py --mode update --yes %DB_ARGS% --from-date "%FROM_DATE%" --to-date "%TO_DATE%" !EXTRA_ARGS!
+    py %SYNC_SCRIPT% !SYNC_ARGS!
     set "SCRIPT_EXIT_CODE=!errorlevel!"
     goto :check_result
 )
 
 python --version >nul 2>&1
 if !errorlevel!==0 (
-    python scripts/quickstart.py --mode update --yes %DB_ARGS% --from-date "%FROM_DATE%" --to-date "%TO_DATE%" !EXTRA_ARGS!
+    python %SYNC_SCRIPT% !SYNC_ARGS!
     set "SCRIPT_EXIT_CODE=!errorlevel!"
     goto :check_result
 )
