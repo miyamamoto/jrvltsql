@@ -253,3 +253,4 @@ jv_data_formats.json
 quickstart_debug.bat
 setup_dll_surrogate.bat
 uv.lock
+.pytest-tmp/
