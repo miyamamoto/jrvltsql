@@ -4,7 +4,7 @@
 HRレコードパーサー: ４．払戻
 
 JV-Data仕様書 Ver.4.9.0.1に基づく払戻レコードのパース
-払戻データは配列構造になっているため、最初の1件目を抽出する
+払戻データは配列構造のため全要素を抽出する (複勝5件・ワイド7件など)
 """
 
 from typing import Dict, Optional
@@ -145,40 +145,42 @@ class HRParser:
             # ここから配列データ
             # pos = 102 at this point (JV-Data仕様書: 単勝払戻は位置103から、0始まりで102)
 
-            # 単勝払戻 (3件配列: 馬番2 + 払戻9 + 人気2 = 13バイト × 3 = 39バイト)
-            # 最初の1件目のみ抽出
-            result["TanUmaban"] = self.decode_field(data[pos:pos+2])
-            result["TanPay"] = self.decode_field(data[pos+2:pos+11])
-            result["TanNinki"] = self.decode_field(data[pos+11:pos+13])
-            pos += 39  # 3件分スキップ
+            # 払戻配列はすべての要素を抽出する。
+            # 1件目は後方互換のため接尾辞なし (TanUmaban)、2件目以降は
+            # 番号付き (TanUmaban2, TanUmaban3, ...)。
+            # 複勝は最大5頭、ワイドは最大7組が同時に払い戻されるため、
+            # 1件目のみの抽出では的中の大半を取りこぼす (2026-06-11 修正、
+            # jrvltsql-nar#6 と同型)。
 
-            # 複勝払戻 (5件配列: 馬番2 + 払戻9 + 人気2 = 13バイト × 5 = 65バイト)
-            # 最初の1件目のみ抽出
-            result["FukuUmaban"] = self.decode_field(data[pos:pos+2])
-            result["FukuPay"] = self.decode_field(data[pos+2:pos+11])
-            result["FukuNinki"] = self.decode_field(data[pos+11:pos+13])
-            pos += 65  # 5件分スキップ
+            def _entry_suffix(index: int) -> str:
+                return "" if index == 1 else str(index)
 
-            # 枠連払戻 (3件配列: 組合せ2 + 払戻9 + 人気2 = 13バイト × 3 = 39バイト)
-            # 最初の1件目のみ抽出
-            result["WakuKumi"] = self.decode_field(data[pos:pos+2])
-            result["WakuPay"] = self.decode_field(data[pos+2:pos+11])
-            result["WakuNinki"] = self.decode_field(data[pos+11:pos+13])
-            pos += 39  # 3件分スキップ
+            def _extract_array(prefix_a, prefix_b, prefix_c, count, len_a, len_b, len_c, start):
+                p = start
+                for i in range(1, count + 1):
+                    sfx = _entry_suffix(i)
+                    result[f"{prefix_a}{sfx}"] = self.decode_field(data[p:p + len_a])
+                    result[f"{prefix_b}{sfx}"] = self.decode_field(data[p + len_a:p + len_a + len_b])
+                    result[f"{prefix_c}{sfx}"] = self.decode_field(
+                        data[p + len_a + len_b:p + len_a + len_b + len_c]
+                    )
+                    p += len_a + len_b + len_c
+                return p
 
-            # 馬連払戻 (3件配列: 組合せ4 + 払戻9 + 人気3 = 16バイト × 3 = 48バイト)
-            # 最初の1件目のみ抽出
-            result["UmarenKumi"] = self.decode_field(data[pos:pos+4])
-            result["UmarenPay"] = self.decode_field(data[pos+4:pos+13])
-            result["UmarenNinki"] = self.decode_field(data[pos+13:pos+16])
-            pos += 48  # 3件分スキップ
+            # 単勝払戻 (3件配列: 馬番2 + 払戻9 + 人気2 = 13バイト × 3)
+            pos = _extract_array("TanUmaban", "TanPay", "TanNinki", 3, 2, 9, 2, pos)
 
-            # ワイド払戻 (7件配列: 組合せ4 + 払戻9 + 人気3 = 16バイト × 7 = 112バイト)
-            # 最初の1件目のみ抽出
-            result["WideKumi"] = self.decode_field(data[pos:pos+4])
-            result["WidePay"] = self.decode_field(data[pos+4:pos+13])
-            result["WideNinki"] = self.decode_field(data[pos+13:pos+16])
-            pos += 112  # 7件分スキップ
+            # 複勝払戻 (5件配列: 馬番2 + 払戻9 + 人気2 = 13バイト × 5)
+            pos = _extract_array("FukuUmaban", "FukuPay", "FukuNinki", 5, 2, 9, 2, pos)
+
+            # 枠連払戻 (3件配列: 組合せ2 + 払戻9 + 人気2 = 13バイト × 3)
+            pos = _extract_array("WakuKumi", "WakuPay", "WakuNinki", 3, 2, 9, 2, pos)
+
+            # 馬連払戻 (3件配列: 組合せ4 + 払戻9 + 人気3 = 16バイト × 3)
+            pos = _extract_array("UmarenKumi", "UmarenPay", "UmarenNinki", 3, 4, 9, 3, pos)
+
+            # ワイド払戻 (7件配列: 組合せ4 + 払戻9 + 人気3 = 16バイト × 7)
+            pos = _extract_array("WideKumi", "WidePay", "WideNinki", 7, 4, 9, 3, pos)
 
             # 予備 (3件配列: 16バイト × 3 = 48バイト)
             result["Yobi1"] = self.decode_field(data[pos:pos+4])
@@ -186,26 +188,14 @@ class HRParser:
             result["Yobi3"] = self.decode_field(data[pos+13:pos+16])
             pos += 48  # 3件分スキップ
 
-            # 馬単払戻 (6件配列: 組合せ4 + 払戻9 + 人気3 = 16バイト × 6 = 96バイト)
-            # 最初の1件目のみ抽出
-            result["UmatanKumi"] = self.decode_field(data[pos:pos+4])
-            result["UmatanPay"] = self.decode_field(data[pos+4:pos+13])
-            result["UmatanNinki"] = self.decode_field(data[pos+13:pos+16])
-            pos += 96  # 6件分スキップ
+            # 馬単払戻 (6件配列: 組合せ4 + 払戻9 + 人気3 = 16バイト × 6)
+            pos = _extract_array("UmatanKumi", "UmatanPay", "UmatanNinki", 6, 4, 9, 3, pos)
 
-            # 三連複払戻 (3件配列: 組合せ6 + 払戻9 + 人気3 = 18バイト × 3 = 54バイト)
-            # 最初の1件目のみ抽出
-            result["SanrenfukuKumi"] = self.decode_field(data[pos:pos+6])
-            result["SanrenfukuPay"] = self.decode_field(data[pos+6:pos+15])
-            result["SanrenfukuNinki"] = self.decode_field(data[pos+15:pos+18])
-            pos += 54  # 3件分スキップ
+            # 三連複払戻 (3件配列: 組合せ6 + 払戻9 + 人気3 = 18バイト × 3)
+            pos = _extract_array("SanrenfukuKumi", "SanrenfukuPay", "SanrenfukuNinki", 3, 6, 9, 3, pos)
 
-            # 三連単払戻 (6件配列: 組合せ6 + 払戻9 + 人気4 = 19バイト × 6 = 114バイト)
-            # 最初の1件目のみ抽出
-            result["SanrentanKumi"] = self.decode_field(data[pos:pos+6])
-            result["SanrentanPay"] = self.decode_field(data[pos+6:pos+15])
-            result["SanrentanNinki"] = self.decode_field(data[pos+15:pos+19])
-            pos += 114  # 6件分スキップ
+            # 三連単払戻 (6件配列: 組合せ6 + 払戻9 + 人気4 = 19バイト × 6)
+            pos = _extract_array("SanrentanKumi", "SanrentanPay", "SanrentanNinki", 6, 6, 9, 4, pos)
 
             # レコード区切 (2バイト)
             if pos < len(data):
