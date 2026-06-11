@@ -112,6 +112,107 @@ class TestRAParserJRAVAN(unittest.TestCase):
         self.assertEqual(result["RecordUpKubun"], "1")
         self.assertEqual(result["TenkoCD"], "1")
 
+    @staticmethod
+    def _build_extended_record(corner_sets=(), legacy_corner_bytes=None):
+        """Build a full-layout (1272 byte) RA record for corner tests.
+
+        Args:
+            corner_sets: Iterable of (corner, syukaisu, jyuni) byte tuples
+                         written to the JV-Data full-layout positions (981+).
+            legacy_corner_bytes: Optional bytes written at the 856-byte
+                         compat corner position (781-853) to simulate the
+                         prize-array digits that occupy it in full layout.
+        """
+        data = bytearray(b" " * 1272)
+        data[0:2] = b"RA"
+        data[2:3] = b"1"
+        data[3:11] = b"20260607"
+        data[11:15] = b"2026"
+        data[15:19] = b"0607"
+        data[19:21] = b"05"
+        data[21:23] = b"03"
+        data[23:25] = b"01"
+        data[25:27] = b"11"
+        # Extended-layout post time triggers the full-layout branch.
+        data[873:877] = b"1545"
+        if legacy_corner_bytes:
+            data[781:781 + len(legacy_corner_bytes)] = legacy_corner_bytes
+        for idx, (corner, syukaisu, jyuni) in enumerate(corner_sets):
+            base = 981 + idx * 72
+            data[base:base + 1] = corner
+            data[base + 1:base + 2] = syukaisu
+            data[base + 2:base + 2 + len(jyuni)] = jyuni
+        return bytes(data)
+
+    def test_legacy_record_keeps_single_corner_set_and_blank_expansion(self):
+        """856-byte compat records expose one corner set; sets 2-4 stay empty."""
+        sample_data = bytearray(b" " * 856)
+        sample_data[0:2] = b"RA"
+        sample_data[2:3] = b"1"
+        sample_data[781:782] = b"4"
+        sample_data[782:783] = b"1"
+        sample_data[783:791] = b"03,05,07"
+
+        result = self.parser.parse(bytes(sample_data))
+
+        self.assertEqual(result["Corner"], "4")
+        self.assertEqual(result["Syukaisu"], "1")
+        self.assertEqual(result["TsukaJyuni"], "03,05,07")
+        for idx in (2, 3, 4):
+            self.assertEqual(result[f"Corner{idx}"], "")
+            self.assertEqual(result[f"Syukaisu{idx}"], "")
+            self.assertEqual(result[f"TsukaJyuni{idx}"], "")
+
+    def test_extended_layout_expands_four_corner_sets(self):
+        """Full-layout records expand all four corner sets by position."""
+        sample_data = self._build_extended_record(
+            corner_sets=[
+                (b"1", b"1", b"02,04,06"),
+                (b"2", b"1", b"04,02,06"),
+                (b"3", b"1", b"06,02,04"),
+                (b"4", b"2", b"01,02,03"),
+            ],
+        )
+
+        result = self.parser.parse(sample_data)
+
+        # First set keeps the backward-compatible column names.
+        self.assertEqual(result["Corner"], "1")
+        self.assertEqual(result["Syukaisu"], "1")
+        self.assertEqual(result["TsukaJyuni"], "02,04,06")
+        self.assertEqual(result["Corner2"], "2")
+        self.assertEqual(result["Syukaisu2"], "1")
+        self.assertEqual(result["TsukaJyuni2"], "04,02,06")
+        self.assertEqual(result["Corner3"], "3")
+        self.assertEqual(result["Syukaisu3"], "1")
+        self.assertEqual(result["TsukaJyuni3"], "06,02,04")
+        self.assertEqual(result["Corner4"], "4")
+        self.assertEqual(result["Syukaisu4"], "2")
+        self.assertEqual(result["TsukaJyuni4"], "01,02,03")
+
+    def test_extended_layout_blank_corners_clear_legacy_garbage(self):
+        """Blank full-layout corners must not leak compat-position digits."""
+        sample_data = bytearray(
+            self._build_extended_record(
+                corner_sets=[],
+                # In full layout 781-853 holds prize-array digits, which the
+                # compat read would misinterpret as corner data.
+                legacy_corner_bytes=b"0001234500067890",
+            )
+        )
+        sample_data[887:888] = b"2"  # extended-layout Syukaisu position
+
+        result = self.parser.parse(bytes(sample_data))
+
+        self.assertEqual(result["Corner"], "")
+        self.assertEqual(result["TsukaJyuni"], "")
+        # Syukaisu comes from the extended scalar position and is preserved.
+        self.assertEqual(result["Syukaisu"], "2")
+        for idx in (2, 3, 4):
+            self.assertEqual(result[f"Corner{idx}"], "")
+            self.assertEqual(result[f"Syukaisu{idx}"], "")
+            self.assertEqual(result[f"TsukaJyuni{idx}"], "")
+
     def test_empty_values_convert_to_empty_string(self):
         """Test that empty/whitespace values convert to empty string.
 

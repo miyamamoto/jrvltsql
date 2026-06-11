@@ -88,7 +88,7 @@ class TestIntegration:
 
             # Sample column count verification for key tables
             test_tables = {
-                "NL_RA": 62,   # Race details table
+                "NL_RA": 71,   # Race details table (incl. corner sets 2-4)
                 "NL_SE": 70,   # Horse race results table
                 "NL_UM": 61,   # Horse master table
                 "NL_KS": 68,   # Jockey master table

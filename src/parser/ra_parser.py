@@ -24,6 +24,13 @@ class RAParser:
     RECORD_TYPE = "RA"
     RECORD_LENGTH = 856
 
+    # JV-Data仕様 (Ver.4.9.0.1) フルレイアウトの<コーナー通過順位>位置。
+    # 856byte互換レイアウトは1セットのみだが、フルレイアウトでは
+    # (コーナー1 + 周回数1 + 各通過順位70 = 72byte) × 4セットが並ぶ。
+    EXTENDED_CORNER_OFFSET = 981
+    CORNER_SET_SIZE = 72
+    CORNER_SET_COUNT = 4
+
     def __init__(self):
         self.logger = get_logger(__name__)
 
@@ -250,6 +257,14 @@ class RAParser:
             # 61. 　　各通過順位 (位置:784, 長さ:70)
             result["TsukaJyuni"] = self.decode_field(data[783:853])
 
+            # 856byte互換レイアウトはコーナー通過順位を1セットしか持たない。
+            # 2-4セット目はフルレイアウト時のみ取得できるため空で初期化する
+            # (importer側でNULLに変換される)。
+            for corner_index in range(2, self.CORNER_SET_COUNT + 1):
+                result[f"Corner{corner_index}"] = ""
+                result[f"Syukaisu{corner_index}"] = ""
+                result[f"TsukaJyuni{corner_index}"] = ""
+
             # 近年のJRA-VAN RAレコードは、856 byte互換レイアウトより後半の
             # 賞金配列が長い形式で届く場合がある。この場合、従来位置で発走
             # 時刻を読むと HassoTime=0000 などに崩れ、締切基準のオッズ抽出が
@@ -269,6 +284,40 @@ class RAParser:
                     result["RecordUpKubun"] = self.decode_field(data[888:889])
                     if len(data) >= 890:
                         result["TenkoCD"] = self.decode_field(data[889:890])
+
+                    # フルレイアウトの<コーナー通過順位>4セットを展開する。
+                    # 856byte互換位置 (781-853) はフルレイアウトでは賞金配列の
+                    # 途中になるため、こちらの正しい位置で上書きする。
+                    # 1セット目は後方互換のため既存列名を維持し、2セット目
+                    # 以降は Corner2/Syukaisu2/TsukaJyuni2 ... に格納する。
+                    for corner_index in range(1, self.CORNER_SET_COUNT + 1):
+                        offset = (
+                            self.EXTENDED_CORNER_OFFSET
+                            + (corner_index - 1) * self.CORNER_SET_SIZE
+                        )
+                        if len(data) < offset + self.CORNER_SET_SIZE:
+                            break
+                        corner = self.decode_field(data[offset : offset + 1])
+                        syukaisu = self.decode_field(data[offset + 1 : offset + 2])
+                        tsuka_jyuni = self.decode_field(
+                            data[offset + 2 : offset + self.CORNER_SET_SIZE]
+                        )
+                        if corner_index == 1:
+                            if corner or syukaisu or tsuka_jyuni:
+                                result["Corner"] = corner
+                                result["Syukaisu"] = syukaisu
+                                result["TsukaJyuni"] = tsuka_jyuni
+                            else:
+                                # 速報段階などコーナー情報が未確定 (全空白) の
+                                # 場合、互換位置 (781-853) の値は賞金配列の断片
+                                # なのでクリアする。Syukaisu は上の拡張位置で
+                                # 設定済みのため保持する。
+                                result["Corner"] = ""
+                                result["TsukaJyuni"] = ""
+                        else:
+                            result[f"Corner{corner_index}"] = corner
+                            result[f"Syukaisu{corner_index}"] = syukaisu
+                            result[f"TsukaJyuni{corner_index}"] = tsuka_jyuni
 
             # 62. レコード更新区分 (位置:854, 長さ:1)
             if not extended_layout_applied:
