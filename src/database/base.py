@@ -235,8 +235,16 @@ class BaseDatabase(ABC):
         if not data_list:
             raise DatabaseError("No data provided for insert")
 
-        # Use first row to determine columns
-        columns = list(data_list[0].keys())
+        # Use the union of all row keys.  Expanded JV-Data records such as O1
+        # intentionally produce heterogeneous rows (horse odds vs bracket odds).
+        # Using only the first row would silently drop columns that appear later.
+        columns: List[str] = []
+        seen_columns = set()
+        for row in data_list:
+            for column in row.keys():
+                if column not in seen_columns:
+                    columns.append(column)
+                    seen_columns.add(column)
         placeholders = ", ".join(["?" for _ in columns])
         # Quote column names using database-specific method
         quoted_columns = [self._quote_identifier(col) for col in columns]

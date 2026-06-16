@@ -17,12 +17,12 @@ class O6Parser:
     O6レコードパーサー
 
     １２．オッズ6（3連単）
-    レコード長: 70 bytes
+    レコード長: 83285 bytes
     VBテーブル名: ODDS_SANRENTAN
     """
 
     RECORD_TYPE = "O6"
-    RECORD_LENGTH = 70
+    RECORD_LENGTH = 83285
 
     def __init__(self):
         self.logger = get_logger(__name__)
@@ -82,7 +82,7 @@ class O6Parser:
                     continue
                 rows.append({**base, "Kumi": kumi, "Odds": odds, "Ninki": ninki, "Vote": vote})
 
-            return rows
+            return rows if rows else [base]
 
         except Exception as e:
             self.logger.error(f"O6レコードパース中にエラー: {e}")

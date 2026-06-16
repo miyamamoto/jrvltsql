@@ -82,6 +82,33 @@ def _extract_columns_from_sql(create_sql: str) -> Optional[Set[str]]:
     return set(definitions)
 
 
+def _extract_primary_key_columns(create_sql: str) -> Optional[List[str]]:
+    """Extract PRIMARY KEY columns from CREATE TABLE SQL."""
+    body = _schema_body(create_sql)
+    if body is None:
+        return None
+
+    inline_pk: List[str] = []
+    for item in _split_schema_items(body):
+        match = re.match(
+            r'(?:CONSTRAINT\s+\S+\s+)?PRIMARY\s+KEY\s*\(([^)]*)\)',
+            item,
+            re.IGNORECASE,
+        )
+        if match:
+            return [column.strip().strip('`"[]') for column in match.group(1).split(",")]
+
+        upper = item.upper()
+        if upper.startswith(("UNIQUE", "FOREIGN KEY", "CONSTRAINT", "CHECK")):
+            continue
+        if re.search(r'\bPRIMARY\s+KEY\b', item, re.IGNORECASE):
+            token = item.split()[0].strip('`"[]')
+            if token:
+                inline_pk.append(token)
+
+    return inline_pk
+
+
 def _destructive_migrations_enabled() -> bool:
     return os.getenv("JLTSQL_ALLOW_DESTRUCTIVE_MIGRATIONS", "").lower() in {
         "1",
@@ -108,6 +135,28 @@ def _get_existing_columns(db: BaseDatabase, table_name: str) -> Set[str]:
     else:
         existing_info = db.fetch_all(f'PRAGMA table_info("{table_name}")')
     return {row['name'] for row in existing_info}
+
+
+def _get_existing_primary_key_columns(db: BaseDatabase, table_name: str) -> List[str]:
+    """Get existing primary key columns in key order."""
+    if db.get_db_type() == "postgresql":
+        rows = db.fetch_all(
+            """
+            SELECT a.attname AS name
+            FROM pg_index i
+            JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+            WHERE i.indrelid = ?::regclass
+            AND i.indisprimary
+            ORDER BY array_position(i.indkey, a.attnum)
+            """,
+            (table_name.lower(),),
+        )
+        return [row["name"] for row in rows]
+
+    rows = db.fetch_all(f'PRAGMA table_info("{table_name}")')
+    pk_rows = [row for row in rows if row.get("pk", 0)]
+    pk_rows.sort(key=lambda row: row.get("pk", 0))
+    return [row["name"] for row in pk_rows]
 
 
 def _add_missing_columns(
@@ -154,8 +203,32 @@ def migrate_table_if_needed(db: BaseDatabase, table_name: str, schema_sql: str) 
         logger.warning(f"Could not parse schema SQL for {table_name}, skipping migration check")
         return False
     expected_columns = set(expected_definitions)
+    expected_pk = _extract_primary_key_columns(schema_sql) or []
 
     existing_columns = _get_existing_columns(db, table_name)
+    existing_pk = _get_existing_primary_key_columns(db, table_name)
+
+    existing_pk_lower = [column.lower() for column in existing_pk]
+    expected_pk_lower = [column.lower() for column in expected_pk]
+    if existing_pk_lower != expected_pk_lower:
+        if not _destructive_migrations_enabled():
+            logger.warning(
+                f"Primary key mismatch for {table_name}: "
+                f"existing={existing_pk}, expected={expected_pk}. "
+                "Destructive migration skipped. "
+                "Set JLTSQL_ALLOW_DESTRUCTIVE_MIGRATIONS=1 to allow DROP+recreate."
+            )
+            return False
+
+        logger.warning(
+            f"Primary key mismatch for {table_name}: "
+            f"existing={existing_pk}, expected={expected_pk}. "
+            "Dropping and recreating table."
+        )
+        db.execute(f"DROP TABLE IF EXISTS {_table_identifier(db, table_name)}")
+        db.execute(schema_sql)
+        db.commit()
+        return True
 
     # PostgreSQL lowercases all unquoted identifiers, so compare case-insensitively.
     # Without this, every PG run sees a "mismatch" between schema.py's CamelCase

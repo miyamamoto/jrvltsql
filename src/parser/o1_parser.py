@@ -17,12 +17,12 @@ class O1Parser:
     O1レコードパーサー
 
     ７．オッズ1（単複枠）
-    レコード長: 107 bytes
+    レコード長: 962 bytes
     VBテーブル名: ODDS_TANPUKU
     """
 
     RECORD_TYPE = "O1"
-    RECORD_LENGTH = 107
+    RECORD_LENGTH = 962
 
     def __init__(self):
         self.logger = get_logger(__name__)
@@ -149,7 +149,7 @@ class O1Parser:
                     }
                 )
 
-            return rows
+            return rows if rows else [base]
 
         except Exception as e:
             self.logger.error(f"O1レコードパース中にエラー: {e}")

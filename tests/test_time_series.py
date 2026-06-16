@@ -261,13 +261,26 @@ def test_odds_parsers_expand_combination_arrays():
     """O1-O6 parsers should expand embedded odds arrays into row lists."""
     from src.parser.o1_parser import O1Parser
     from src.parser.o2_parser import O2Parser
+    from src.parser.o3_parser import O3Parser
+    from src.parser.o4_parser import O4Parser
+    from src.parser.o5_parser import O5Parser
     from src.parser.o6_parser import O6Parser
+    from src.database.schema import SCHEMAS
 
+    assert O1Parser.RECORD_LENGTH == 962
+    assert O2Parser.RECORD_LENGTH == 2042
+    assert O3Parser.RECORD_LENGTH == 2654
+    assert O4Parser.RECORD_LENGTH == 4031
+    assert O5Parser.RECORD_LENGTH == 12293
+    assert O6Parser.RECORD_LENGTH == 83285
+    assert "PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban, Kumi)" in SCHEMAS["NL_O1"]
+    assert "PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban, Kumi)" in SCHEMAS["RT_O1"]
     header_o1 = b"O1" + b"4" + b"20260419" + b"2026" + b"0419" + b"06" + b"03" + b"08" + b"11" + b"04191549" + b"18" + b"18" + b"777" + b"3"
     tan = b"01012301" + b"02045602" + b"0" * (26 * 8)
     fuku = b"010010002001" + b"020030004002" + b"0" * (26 * 12)
     wakuren = b"120123401" + b"130567802" + b"0" * (34 * 9)
     raw_o1 = header_o1 + tan + fuku + wakuren + b"000000001230000000045600000000789\r\n"
+    assert len(raw_o1) == O1Parser.RECORD_LENGTH
     rows_o1 = O1Parser().parse(raw_o1)
     assert len(rows_o1) == 4
     assert rows_o1[0]["Umaban"] == "01"
@@ -283,6 +296,51 @@ def test_odds_parsers_expand_combination_arrays():
     assert [(r["Kumi"], r["Odds"], r["Ninki"], r["Vote"]) for r in rows_o2] == [
         ("0102", "000123", "010", "00000000999"),
         ("0103", "000456", "020", "00000000999"),
+    ]
+
+    header_o3 = b"O3" + header_combo[2:]
+    raw_o3 = (
+        header_o3
+        + b"01020012300456010"
+        + b"01030023400567020"
+        + b"0" * (151 * 17)
+        + b"00000000777\r\n"
+    )
+    assert len(raw_o3) == O3Parser.RECORD_LENGTH
+    rows_o3 = O3Parser().parse(raw_o3)
+    assert [(r["Kumi"], r["OddsLow"], r["OddsHigh"], r["Ninki"], r["Vote"]) for r in rows_o3] == [
+        ("0102", "00123", "00456", "010", "00000000777"),
+        ("0103", "00234", "00567", "020", "00000000777"),
+    ]
+
+    header_o4 = b"O4" + header_combo[2:]
+    raw_o4 = (
+        header_o4
+        + b"0102000123010"
+        + b"0201000456020"
+        + b"0" * (304 * 13)
+        + b"00000000666\r\n"
+    )
+    assert len(raw_o4) == O4Parser.RECORD_LENGTH
+    rows_o4 = O4Parser().parse(raw_o4)
+    assert [(r["Kumi"], r["Odds"], r["Ninki"], r["Vote"]) for r in rows_o4] == [
+        ("0102", "000123", "010", "00000000666"),
+        ("0201", "000456", "020", "00000000666"),
+    ]
+
+    header_o5 = b"O5" + header_combo[2:]
+    raw_o5 = (
+        header_o5
+        + b"010203000123010"
+        + b"010204000456020"
+        + b"0" * (814 * 15)
+        + b"00000000555\r\n"
+    )
+    assert len(raw_o5) == O5Parser.RECORD_LENGTH
+    rows_o5 = O5Parser().parse(raw_o5)
+    assert [(r["Kumi"], r["Odds"], r["Ninki"], r["Vote"]) for r in rows_o5] == [
+        ("010203", "000123", "010", "00000000555"),
+        ("010204", "000456", "020", "00000000555"),
     ]
 
     header_o6 = b"O6" + header_combo[2:]

@@ -35,6 +35,32 @@ def test_metadata_primary_key_columns_are_described():
         assert not missing, f"{table_name} primary_key references missing columns: {sorted(missing)}"
 
 
+def test_av_metadata_matches_scratch_exclusion_schema():
+    """AV metadata should describe the official race/horse scratch schema."""
+
+    for table_name in ("NL_AV", "RT_AV"):
+        metadata = TABLE_METADATA[table_name]
+        column_names = {column["name"] for column in metadata["columns"]}
+        assert "出走取消・競走除外" in metadata["description"]
+        assert metadata["primary_key"] == [
+            "開催年", "開催月日", "競馬場コード", "開催回",
+            "開催日目", "レース番号", "馬番",
+        ]
+        assert {"開催年", "開催月日", "競馬場コード", "レース番号", "馬番", "事由区分"} <= column_names
+        assert "セール主催者名" not in column_names
+        assert "取引価格" not in column_names
+
+
+def test_hs_metadata_matches_market_price_schema():
+    """HS metadata should describe the official market-price schema."""
+
+    metadata = TABLE_METADATA["NL_HS"]
+    column_names = {column["name"] for column in metadata["columns"]}
+    assert "競走馬市場取引価格" in metadata["description"]
+    assert metadata["primary_key"] == ["血統登録番号", "主催者・市場コード", "市場開始日"]
+    assert {"血統登録番号", "主催者・市場コード", "市場開始日", "取引価格"} <= column_names
+
+
 class TestSQLiteMetadata(unittest.TestCase):
     """Test metadata application and retrieval for SQLite."""
 

@@ -231,8 +231,8 @@ class RealtimeFetcher(BaseFetcher):
         Args:
             data_spec: Time series data spec code
                       - 0B20: 票数情報
-                      - 0B30: 単勝オッズ
-                      - 0B31: 複勝・枠連オッズ
+                      - 0B30: 速報オッズ全賭式
+                      - 0B31: 速報オッズ単複枠
                       - 0B32: 馬連オッズ
                       - 0B33: ワイドオッズ
                       - 0B34: 馬単オッズ

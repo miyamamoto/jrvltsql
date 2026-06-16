@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional, Union
 
 from src.database.base import BaseDatabase
+from src.database.schema_types import get_table_primary_key_columns
 from src.jvlink.constants import (
     DATA_KUBUN_NEW,
     DATA_KUBUN_UPDATE,
@@ -55,8 +56,8 @@ class RealtimeUpdater:
         # 0B13: データマイニング予想
         "DM": "RT_DM",  # データマイニング（タイム型）
 
-        # 0B14: 出走取消・競走除外
-        "AV": "RT_AV",  # 場外発売情報
+        # 0B14: 速報開催情報一括
+        "AV": "RT_AV",  # 出走取消・競走除外
 
         # 0B15: 払戻情報
         "HR": "RT_HR",  # 払戻
@@ -73,12 +74,12 @@ class RealtimeUpdater:
         "H6": "RT_H6",  # 票数（３連単）
 
         # 0B30-0B36: 速報オッズ、0B41/0B42: 公式1年保持の時系列オッズ
-        "O1": "RT_O1",  # オッズ（単勝・複勝）
-        "O2": "RT_O2",  # オッズ（枠連）
-        "O3": "RT_O3",  # オッズ（馬連）
-        "O4": "RT_O4",  # オッズ（ワイド）
-        "O5": "RT_O5",  # オッズ（馬単）
-        "O6": "RT_O6",  # オッズ（３連複・３連単）
+        "O1": "RT_O1",  # オッズ（単勝・複勝・枠連）
+        "O2": "RT_O2",  # オッズ（馬連）
+        "O3": "RT_O3",  # オッズ（ワイド）
+        "O4": "RT_O4",  # オッズ（馬単）
+        "O5": "RT_O5",  # オッズ（３連複）
+        "O6": "RT_O6",  # オッズ（３連単）
 
         # === その他 (成績データ) ===
         "JC": "RT_JC",  # 騎手成績
@@ -234,6 +235,12 @@ class RealtimeUpdater:
                 continue
 
             clean_data = self._prepare_data_for_db(table_name, record)
+            if not self._has_complete_primary_key(table_name, clean_data):
+                logger.warning(
+                    f"Skipping record with incomplete primary key for {table_name}"
+                )
+                errors += 1
+                continue
             grouped.setdefault(table_name, []).append(clean_data)
 
         inserted = 0
@@ -409,6 +416,13 @@ class RealtimeUpdater:
         return convert_record_types(clean_data, table_name)
 
     @staticmethod
+    def _has_complete_primary_key(table_name: str, data: Dict) -> bool:
+        primary_keys = get_table_primary_key_columns(table_name)
+        if not primary_keys:
+            return True
+        return all(data.get(key) not in (None, "") for key in primary_keys)
+
+    @staticmethod
     def _current_collected_at() -> str:
         """Return collector-side capture timestamp in UTC ISO-8601."""
         return datetime.now(timezone.utc).isoformat()
@@ -425,6 +439,14 @@ class RealtimeUpdater:
         """
         try:
             clean_data = self._prepare_data_for_db(table_name, data)
+            if not self._has_complete_primary_key(table_name, clean_data):
+                return {
+                    "operation": "insert",
+                    "table": table_name,
+                    "record_type": data.get("RecordSpec"),
+                    "success": False,
+                    "error": "Incomplete primary key",
+                }
 
             # INSERT OR REPLACE handles duplicates (UPSERT semantics)
             self.database.insert(table_name, clean_data)
@@ -459,6 +481,14 @@ class RealtimeUpdater:
         """
         try:
             clean_data = self._prepare_data_for_db(table_name, data)
+            if not self._has_complete_primary_key(table_name, clean_data):
+                return {
+                    "operation": "update",
+                    "table": table_name,
+                    "record_type": data.get("RecordSpec"),
+                    "success": False,
+                    "error": "Incomplete primary key",
+                }
 
             # INSERT OR REPLACE handles the update (replaces existing row on PK match)
             self.database.insert(table_name, clean_data)
@@ -503,7 +533,7 @@ class RealtimeUpdater:
             "RT_HR": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum"],
 
             # Odds data - race identifier + Umaban or Kumi
-            "RT_O1": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "Umaban"],
+            "RT_O1": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "Umaban", "Kumi"],
             "RT_O2": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "Kumi"],
             "RT_O3": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "Kumi"],
             "RT_O4": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "Kumi"],
@@ -511,8 +541,8 @@ class RealtimeUpdater:
             "RT_O6": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "Kumi"],
 
             # Vote data
-            "RT_H1": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum"],
-            "RT_H6": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "Kumi"],
+            "RT_H1": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "BetType", "Kumi"],
+            "RT_H6": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "SanrentanKumi"],
 
             # Change data - 騎手変更情報
             "RT_RC": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "Umaban"],
@@ -554,17 +584,47 @@ class RealtimeUpdater:
             "RT_WE": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "HenkoID"],
             "RT_WH": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "HappyoTime", "HenkoID"],
 
-            # Tables without explicit PRIMARY KEY in schema
-            # These tables don't have PRIMARY KEY constraints defined
-            "RT_DM": [],  # Data mining (time type) - no primary key
-            "RT_TM": [],  # Data mining (match type) - no primary key
-            "RT_AV": [],  # Sale info - no primary key
-            "RT_JC": [],  # Jockey results - no primary key
-            "RT_TC": [],  # Trainer results - no primary key
-            "RT_CC": [],  # Horse results - no primary key
+            # Other realtime tables
+            "RT_DM": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "Umaban"],
+            "RT_TM": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "Umaban"],
+            "RT_AV": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "Umaban"],
+            "RT_JC": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "Umaban"],
+            "RT_TC": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum"],
+            "RT_CC": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum"],
         }
 
         return PRIMARY_KEY_MAP.get(lookup_name, [])
+
+    @staticmethod
+    def _expanded_record_delete_keys(table_name: str, data: Dict) -> list:
+        """Return record-level delete keys for expanded array tables."""
+        data_kubun = data.get("headDataKubun") or data.get("DataKubun")
+        if data_kubun not in {DATA_KUBUN_DELETE, DATA_KUBUN_ERASE}:
+            return []
+
+        base_keys = ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum"]
+        expanded_tables = {
+            "RT_H1", "RT_H6",
+            "RT_O1", "RT_O2", "RT_O3", "RT_O4", "RT_O5", "RT_O6",
+        }
+        ts_tables = {
+            "TS_O1", "TS_O2", "TS_O3", "TS_O4", "TS_O5", "TS_O6",
+            "TS_SOKUHO_O1", "TS_SOKUHO_O2", "TS_SOKUHO_O3",
+            "TS_SOKUHO_O4", "TS_SOKUHO_O5", "TS_SOKUHO_O6",
+        }
+
+        if table_name in expanded_tables:
+            keys = base_keys
+        elif table_name in ts_tables:
+            keys = [*base_keys, "HassoTime"]
+            if table_name.startswith("TS_SOKUHO_") and data.get("SourceSpec"):
+                keys.append("SourceSpec")
+        else:
+            return []
+
+        if all(data.get(key) not in (None, "") for key in keys):
+            return keys
+        return []
 
     def _handle_delete_record(self, table_name: str, data: Dict) -> Dict:
         """Handle record deletion.
@@ -581,6 +641,7 @@ class RealtimeUpdater:
             For tables without primary keys, deletion is not supported.
         """
         try:
+            clean_data = self._prepare_data_for_db(table_name, data)
             # Get primary key columns for this table
             primary_keys = self._get_primary_keys(table_name)
 
@@ -596,28 +657,44 @@ class RealtimeUpdater:
                     "error": "No primary key defined for table",
                 }
 
-            # Build WHERE clause from primary key fields
-            where_conditions = []
-            where_values = []
+            record_level_keys = self._expanded_record_delete_keys(table_name, clean_data)
+            if record_level_keys:
+                where_conditions = [f"{key} = ?" for key in record_level_keys]
+                where_values = [clean_data[key] for key in record_level_keys]
+                sql = f"DELETE FROM {table_name} WHERE {' AND '.join(where_conditions)}"
+                self.database.execute(sql, tuple(where_values))
+                return {
+                    "operation": "delete",
+                    "table": table_name,
+                    "record_type": data.get("RecordSpec"),
+                    "success": True,
+                }
 
-            for key in primary_keys:
-                if key in data:
-                    where_conditions.append(f"{key} = ?")
-                    where_values.append(data[key])
-                else:
-                    logger.warning(
-                        f"Primary key column {key} not found in data for {table_name}"
-                    )
-
-            # Check if we have all required primary key values
-            if not where_conditions:
+            missing_keys = [
+                key for key in primary_keys
+                if key not in clean_data
+                or clean_data.get(key) is None
+                or clean_data.get(key) == ""
+            ]
+            if missing_keys:
+                logger.warning(
+                    f"Missing primary key columns for {table_name}: {missing_keys}"
+                )
                 return {
                     "operation": "delete",
                     "table": table_name,
                     "record_type": data.get("RecordSpec"),
                     "success": False,
-                    "error": "Missing primary key values in data",
+                    "error": f"Missing primary key values: {', '.join(missing_keys)}",
                 }
+
+            # Build WHERE clause from primary key fields
+            where_conditions = []
+            where_values = []
+
+            for key in primary_keys:
+                where_conditions.append(f"{key} = ?")
+                where_values.append(clean_data[key])
 
             # Execute DELETE statement
             sql = f"DELETE FROM {table_name} WHERE {' AND '.join(where_conditions)}"

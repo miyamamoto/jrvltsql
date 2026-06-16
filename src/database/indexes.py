@@ -39,10 +39,9 @@ INDEXES = {
     ],
 
     "NL_AV": [
-        # 市場取引価格 (Market Transaction Price)
-        # 実際のスキーマ: KettoNum, SaleHostName, SaleName, Price
-        "CREATE INDEX IF NOT EXISTS idx_nl_av_horse ON NL_AV(KettoNum)",
-        "CREATE INDEX IF NOT EXISTS idx_nl_av_sale ON NL_AV(SaleName)",
+        # 出走取消・競走除外 (Scratched/Excluded Horse)
+        "CREATE INDEX IF NOT EXISTS idx_nl_av_race ON NL_AV(Year, MonthDay, JyoCD, RaceNum)",
+        "CREATE INDEX IF NOT EXISTS idx_nl_av_horse ON NL_AV(Umaban)",
     ],
 
     "NL_BN": [
@@ -90,8 +89,14 @@ INDEXES = {
         "CREATE INDEX IF NOT EXISTS idx_nl_dm_race ON NL_DM(RaceNum)",
     ],
 
+    "NL_HC": [
+        # 坂路調教 (Hill Training)
+        "CREATE INDEX IF NOT EXISTS idx_nl_hc_horse ON NL_HC(KettoNum)",
+        "CREATE INDEX IF NOT EXISTS idx_nl_hc_date ON NL_HC(ChokyoDate)",
+    ],
+
     "NL_HS": [
-        # 馬成績 (Horse Results)
+        # 競走馬市場取引価格 (Sale)
         "CREATE INDEX IF NOT EXISTS idx_nl_hs_date ON NL_HS(MakeDate)",
     ],
 
@@ -223,10 +228,9 @@ INDEXES = {
     ],
 
     "RT_AV": [
-        # リアルタイム: 場外発売 (Market Transaction Price)
-        # 実際のスキーマ: KettoNum, SaleHostName, SaleName, Price のみ
-        "CREATE INDEX IF NOT EXISTS idx_rt_av_horse ON RT_AV(KettoNum)",
-        "CREATE INDEX IF NOT EXISTS idx_rt_av_sale ON RT_AV(SaleName)",
+        # リアルタイム: 出走取消・競走除外
+        "CREATE INDEX IF NOT EXISTS idx_rt_av_race ON RT_AV(Year, MonthDay, JyoCD, RaceNum)",
+        "CREATE INDEX IF NOT EXISTS idx_rt_av_horse ON RT_AV(Umaban)",
     ],
 
     "RT_CC": [

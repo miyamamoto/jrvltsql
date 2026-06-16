@@ -17,12 +17,12 @@ class O2Parser:
     O2レコードパーサー
 
     ８．オッズ2（馬連）
-    レコード長: 66 bytes
+    レコード長: 2042 bytes
     VBテーブル名: ODDS_UMAREN
     """
 
     RECORD_TYPE = "O2"
-    RECORD_LENGTH = 66
+    RECORD_LENGTH = 2042
 
     def __init__(self):
         self.logger = get_logger(__name__)
@@ -82,7 +82,7 @@ class O2Parser:
                     continue
                 rows.append({**base, "Kumi": kumi, "Odds": odds, "Ninki": ninki, "Vote": vote})
 
-            return rows
+            return rows if rows else [base]
 
         except Exception as e:
             self.logger.error(f"O2レコードパース中にエラー: {e}")

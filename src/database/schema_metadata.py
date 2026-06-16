@@ -702,7 +702,7 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
             {"name": "単勝票数合計", "type": "TEXT", "description": "単勝投票総数", "example": "1234567", "nullable": True},
             {"name": "複勝票数合計", "type": "TEXT", "description": "複勝投票総数", "example": "987654", "nullable": True}
         ],
-        "primary_key": ["開催年月日", "競馬場コード", "レース番号", "発表月日時分"],
+        "primary_key": ["開催年月日", "競馬場コード", "レース番号", "馬番", "組番"],
         "indexes": ["開催年月日", "発表月日時分"]
     },
 
@@ -720,7 +720,7 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
             {"name": "馬連オッズ", "type": "TEXT", "description": "馬連オッズ（全組合せ）", "example": "45.6", "nullable": True},
             {"name": "馬連票数合計", "type": "TEXT", "description": "馬連投票総数", "example": "2345678", "nullable": True}
         ],
-        "primary_key": ["開催年月日", "競馬場コード", "レース番号", "発表月日時分"],
+        "primary_key": ["開催年月日", "競馬場コード", "レース番号", "組番"],
         "indexes": ["開催年月日"]
     },
 
@@ -738,7 +738,7 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
             {"name": "ワイドオッズ", "type": "TEXT", "description": "ワイドオッズ（下限-上限形式）", "example": "2.5-3.2", "nullable": True},
             {"name": "ワイド票数合計", "type": "TEXT", "description": "ワイド投票総数", "example": "1876543", "nullable": True}
         ],
-        "primary_key": ["開催年月日", "競馬場コード", "レース番号", "発表月日時分"],
+        "primary_key": ["開催年月日", "競馬場コード", "レース番号", "組番"],
         "indexes": ["開催年月日"]
     },
 
@@ -756,7 +756,7 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
             {"name": "馬単オッズ", "type": "TEXT", "description": "馬単オッズ（全組合せ・順番指定）", "example": "123.4", "nullable": True},
             {"name": "馬単票数合計", "type": "TEXT", "description": "馬単投票総数", "example": "3456789", "nullable": True}
         ],
-        "primary_key": ["開催年月日", "競馬場コード", "レース番号", "発表月日時分"],
+        "primary_key": ["開催年月日", "競馬場コード", "レース番号", "組番"],
         "indexes": ["開催年月日"]
     },
 
@@ -774,7 +774,7 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
             {"name": "3連複オッズ", "type": "TEXT", "description": "3連複オッズ（全組合せ）", "example": "456.7", "nullable": True},
             {"name": "3連複票数合計", "type": "TEXT", "description": "3連複投票総数", "example": "4567890", "nullable": True}
         ],
-        "primary_key": ["開催年月日", "競馬場コード", "レース番号", "発表月日時分"],
+        "primary_key": ["開催年月日", "競馬場コード", "レース番号", "組番"],
         "indexes": ["開催年月日"]
     },
 
@@ -792,7 +792,7 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
             {"name": "3連単オッズ", "type": "TEXT", "description": "3連単オッズ（全組合せ・順番指定）", "example": "12345.6", "nullable": True},
             {"name": "3連単票数合計", "type": "TEXT", "description": "3連単投票総数", "example": "5678901", "nullable": True}
         ],
-        "primary_key": ["開催年月日", "競馬場コード", "レース番号", "発表月日時分"],
+        "primary_key": ["開催年月日", "競馬場コード", "レース番号", "組番"],
         "indexes": ["開催年月日"]
     },
 
@@ -893,20 +893,26 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
     "NL_AV": {
         "table_name": "NL_AV",
         "record_type": "AV",
-        "description": "競走除外馬情報",
-        "purpose": "レースから除外された馬とその理由を格納",
+        "description": "出走取消・競走除外情報",
+        "purpose": "出走取消または競走除外となった馬と発表時刻・事由を格納",
         "columns": [
             {"name": "レコード種別ID", "type": "TEXT", "description": "レコード種別識別子（'AV'）", "example": "AV", "nullable": False},
-            {"name": "開催年月日", "type": "TEXT", "description": "レース開催日", "example": "20240601", "nullable": False},
+            {"name": "データ区分", "type": "TEXT", "description": "データ区分（1=出走取消、2=競走除外）", "example": "1", "nullable": False},
+            {"name": "データ作成年月日", "type": "TEXT", "description": "データ作成日", "example": "20240601", "nullable": False},
+            {"name": "開催年", "type": "INTEGER", "description": "開催年", "example": "2024", "nullable": False},
+            {"name": "開催月日", "type": "INTEGER", "description": "開催月日", "example": "0601", "nullable": False},
             {"name": "競馬場コード", "type": "TEXT", "description": "競馬場コード", "example": "05", "nullable": False},
-            {"name": "レース番号", "type": "TEXT", "description": "レース番号", "example": "11", "nullable": False},
-            {"name": "馬番", "type": "TEXT", "description": "除外馬の馬番", "example": "03", "nullable": False},
-            {"name": "馬名", "type": "TEXT", "description": "除外馬の馬名", "example": "○○○○", "nullable": True},
-            {"name": "事由区分", "type": "TEXT", "description": "除外理由（1=疾病、2=事故、3=その他）", "example": "1", "nullable": True},
-            {"name": "発表月日時分", "type": "TEXT", "description": "除外発表日時", "example": "06010900", "nullable": True}
+            {"name": "開催回", "type": "INTEGER", "description": "開催回", "example": "3", "nullable": False},
+            {"name": "開催日目", "type": "INTEGER", "description": "開催日目", "example": "8", "nullable": False},
+            {"name": "レース番号", "type": "INTEGER", "description": "レース番号", "example": "11", "nullable": False},
+            {"name": "発表月日時分", "type": "TEXT", "description": "発表月日時分", "example": "06010930", "nullable": True},
+            {"name": "馬番", "type": "INTEGER", "description": "該当馬番", "example": "3", "nullable": False},
+            {"name": "馬名", "type": "TEXT", "description": "該当馬名", "example": "テストホース", "nullable": True},
+            {"name": "事由区分", "type": "TEXT", "description": "事由区分（001=疾病、002=事故、003=その他）", "example": "001", "nullable": True},
+            {"name": "レコード区切り", "type": "TEXT", "description": "レコード区切り文字", "example": "\\r\\n", "nullable": True}
         ],
-        "primary_key": ["開催年月日", "競馬場コード", "レース番号", "馬番"],
-        "indexes": ["開催年月日"]
+        "primary_key": ["開催年", "開催月日", "競馬場コード", "開催回", "開催日目", "レース番号", "馬番"],
+        "indexes": ["開催年", "開催月日", "競馬場コード", "レース番号"]
     },
 
     "NL_CC": {
@@ -1042,38 +1048,42 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
     "NL_H1": {
         "table_name": "NL_H1",
         "record_type": "H1",
-        "description": "単勝・複勝払戻情報",
-        "purpose": "単勝・複勝の払戻金額と返還情報を格納",
+        "description": "票数1（全賭式）情報",
+        "purpose": "単勝・複勝・枠連・馬連・ワイド・馬単・3連複の票数と人気順を組番ごとに格納",
         "columns": [
             {"name": "レコード種別ID", "type": "TEXT", "description": "レコード種別識別子（'H1'）", "example": "H1", "nullable": False},
             {"name": "開催年月日", "type": "TEXT", "description": "レース開催日", "example": "20240601", "nullable": False},
             {"name": "競馬場コード", "type": "TEXT", "description": "競馬場コード", "example": "05", "nullable": False},
             {"name": "レース番号", "type": "TEXT", "description": "レース番号", "example": "11", "nullable": False},
-            {"name": "単勝払戻金", "type": "TEXT", "description": "単勝100円あたり払戻金", "example": "350", "nullable": True},
-            {"name": "複勝払戻金", "type": "TEXT", "description": "複勝100円あたり払戻金（最大3頭分）", "example": "120,150,180", "nullable": True},
+            {"name": "賭式", "type": "TEXT", "description": "展開後の賭式", "example": "Tansyo", "nullable": False},
+            {"name": "組番", "type": "TEXT", "description": "賭式ごとの馬番・組番", "example": "0102", "nullable": False},
+            {"name": "票数", "type": "BIGINT", "description": "該当組番の投票数", "example": "12345", "nullable": True},
+            {"name": "人気", "type": "INTEGER", "description": "該当組番の人気順", "example": "1", "nullable": True},
             {"name": "単勝票数合計", "type": "TEXT", "description": "単勝総投票数", "example": "1234567", "nullable": True},
             {"name": "複勝票数合計", "type": "TEXT", "description": "複勝総投票数", "example": "987654", "nullable": True},
             {"name": "返還馬番情報", "type": "TEXT", "description": "返還対象馬番リスト", "example": "03,07", "nullable": True}
         ],
-        "primary_key": ["開催年月日", "競馬場コード", "レース番号"],
+        "primary_key": ["開催年月日", "競馬場コード", "レース番号", "賭式", "組番"],
         "indexes": ["開催年月日"]
     },
 
     "NL_H6": {
         "table_name": "NL_H6",
         "record_type": "H6",
-        "description": "3連単払戻情報",
-        "purpose": "3連単の払戻金額と投票数情報を格納",
+        "description": "票数6（三連単）情報",
+        "purpose": "三連単の票数と人気順を組番ごとに格納",
         "columns": [
             {"name": "レコード種別ID", "type": "TEXT", "description": "レコード種別識別子（'H6'）", "example": "H6", "nullable": False},
             {"name": "開催年月日", "type": "TEXT", "description": "レース開催日", "example": "20240601", "nullable": False},
             {"name": "競馬場コード", "type": "TEXT", "description": "競馬場コード", "example": "05", "nullable": False},
             {"name": "レース番号", "type": "TEXT", "description": "レース番号", "example": "11", "nullable": False},
-            {"name": "3連単払戻金", "type": "TEXT", "description": "3連単100円あたり払戻金", "example": "123450", "nullable": True},
-            {"name": "3連単票数合計", "type": "TEXT", "description": "3連単総投票数", "example": "5678901", "nullable": True},
-            {"name": "3連単的中票数", "type": "TEXT", "description": "3連単的中票数", "example": "123", "nullable": True}
+            {"name": "三連単組番", "type": "TEXT", "description": "三連単の組番", "example": "010203", "nullable": False},
+            {"name": "三連単票数", "type": "BIGINT", "description": "該当組番の投票数", "example": "12345", "nullable": True},
+            {"name": "三連単人気", "type": "INTEGER", "description": "該当組番の人気順", "example": "1", "nullable": True},
+            {"name": "三連単票数合計", "type": "BIGINT", "description": "三連単総投票数", "example": "5678901", "nullable": True},
+            {"name": "三連単返還票数合計", "type": "BIGINT", "description": "三連単返還票数合計", "example": "0", "nullable": True}
         ],
-        "primary_key": ["開催年月日", "競馬場コード", "レース番号"],
+        "primary_key": ["開催年月日", "競馬場コード", "レース番号", "三連単組番"],
         "indexes": ["開催年月日"]
     },
 
@@ -1120,15 +1130,22 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
         "table_name": "NL_HC",
         "record_type": "HC",
         "description": "調教タイム情報",
-        "purpose": "調教時の走破タイムとラップタイムを格納",
+        "purpose": "坂路調教時の走破タイムとラップタイムを格納",
         "columns": [
             {"name": "レコード種別ID", "type": "TEXT", "description": "レコード種別識別子（'HC'）", "example": "HC", "nullable": False},
-            {"name": "トレセン区分", "type": "TEXT", "description": "トレーニングセンター（1=美浦、2=栗東）", "example": "1", "nullable": False},
+            {"name": "データ区分", "type": "TEXT", "description": "データ区分", "example": "1", "nullable": False},
+            {"name": "データ作成年月日", "type": "TEXT", "description": "データ作成日", "example": "20240525", "nullable": False},
+            {"name": "トレセン区分", "type": "TEXT", "description": "トレーニングセンター（0=美浦、1=栗東）", "example": "1", "nullable": False},
             {"name": "調教年月日", "type": "TEXT", "description": "調教実施日", "example": "20240525", "nullable": False},
             {"name": "調教時刻", "type": "TEXT", "description": "調教実施時刻", "example": "0630", "nullable": False},
             {"name": "血統登録番号", "type": "TEXT", "description": "馬の血統登録番号", "example": "2020123456", "nullable": False},
-            {"name": "4F走破タイム", "type": "TEXT", "description": "4ハロン走破タイム（秒）", "example": "52.3", "nullable": True},
-            {"name": "3F走破タイム", "type": "TEXT", "description": "3ハロン走破タイム（秒）", "example": "38.5", "nullable": True}
+            {"name": "4F走破タイム", "type": "REAL", "description": "4ハロン走破タイム（秒）", "example": "52.3", "nullable": True},
+            {"name": "800M-600Mラップ", "type": "REAL", "description": "800M～600Mのラップタイム（秒）", "example": "13.8", "nullable": True},
+            {"name": "3F走破タイム", "type": "REAL", "description": "3ハロン走破タイム（秒）", "example": "38.5", "nullable": True},
+            {"name": "600M-400Mラップ", "type": "REAL", "description": "600M～400Mのラップタイム（秒）", "example": "13.0", "nullable": True},
+            {"name": "2F走破タイム", "type": "REAL", "description": "2ハロン走破タイム（秒）", "example": "25.5", "nullable": True},
+            {"name": "400M-200Mラップ", "type": "REAL", "description": "400M～200Mのラップタイム（秒）", "example": "12.8", "nullable": True},
+            {"name": "200M-0Mラップ", "type": "REAL", "description": "200M～0Mのラップタイム（秒）", "example": "12.7", "nullable": True}
         ],
         "primary_key": ["トレセン区分", "調教年月日", "調教時刻", "血統登録番号"],
         "indexes": ["血統登録番号", "調教年月日"]
@@ -1137,18 +1154,26 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
     "NL_HS": {
         "table_name": "NL_HS",
         "record_type": "HS",
-        "description": "馬成績サマリ情報",
-        "purpose": "競走馬の累計成績サマリ（着順別回数、賞金）を格納",
+        "description": "競走馬市場取引価格情報",
+        "purpose": "競走馬の市場取引価格、セール主催者、市場名、開催期間を格納",
         "columns": [
             {"name": "レコード種別ID", "type": "TEXT", "description": "レコード種別識別子（'HS'）", "example": "HS", "nullable": False},
+            {"name": "データ区分", "type": "TEXT", "description": "データ区分", "example": "1", "nullable": False},
+            {"name": "データ作成年月日", "type": "TEXT", "description": "データ作成日", "example": "20240601", "nullable": False},
             {"name": "血統登録番号", "type": "TEXT", "description": "馬の血統登録番号", "example": "2020123456", "nullable": False},
-            {"name": "平地本賞金", "type": "TEXT", "description": "平地競走での獲得本賞金（千円）", "example": "123456", "nullable": True},
-            {"name": "障害本賞金", "type": "TEXT", "description": "障害競走での獲得本賞金（千円）", "example": "12345", "nullable": True},
-            {"name": "総合着回数", "type": "TEXT", "description": "1着-2着-3着-着外の回数", "example": "5-3-2-10", "nullable": True},
-            {"name": "脚質傾向", "type": "TEXT", "description": "主な脚質（1=逃げ、2=先行、3=差し、4=追込）", "example": "2", "nullable": True}
+            {"name": "父馬繁殖登録番号", "type": "TEXT", "description": "父馬の繁殖登録番号", "example": "1234567890", "nullable": True},
+            {"name": "母馬繁殖登録番号", "type": "TEXT", "description": "母馬の繁殖登録番号", "example": "0987654321", "nullable": True},
+            {"name": "生年", "type": "TEXT", "description": "生年", "example": "2021", "nullable": True},
+            {"name": "主催者・市場コード", "type": "TEXT", "description": "主催者・市場コード", "example": "000001", "nullable": False},
+            {"name": "セール主催者名", "type": "TEXT", "description": "セール主催者名", "example": "JRAブリーズアップセール", "nullable": True},
+            {"name": "セール名", "type": "TEXT", "description": "市場の名称", "example": "2024 JRAブリーズアップセール", "nullable": True},
+            {"name": "市場開始日", "type": "TEXT", "description": "市場の開催期間開始日", "example": "20240423", "nullable": False},
+            {"name": "市場終了日", "type": "TEXT", "description": "市場の開催期間終了日", "example": "20240423", "nullable": True},
+            {"name": "馬齢", "type": "INTEGER", "description": "取引時の競走馬の年齢", "example": "2", "nullable": True},
+            {"name": "取引価格", "type": "BIGINT", "description": "取引価格", "example": "12000000", "nullable": True}
         ],
-        "primary_key": ["血統登録番号"],
-        "indexes": ["血統登録番号"]
+        "primary_key": ["血統登録番号", "主催者・市場コード", "市場開始日"],
+        "indexes": ["血統登録番号", "主催者・市場コード", "市場開始日"]
     },
 
     "NL_HY": {
@@ -1278,18 +1303,26 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
     "RT_AV": {
         "table_name": "RT_AV",
         "record_type": "AV",
-        "description": "競走除外馬情報（速報）",
-        "purpose": "リアルタイムでの競走除外馬情報を格納（NL_AVと同構造）",
+        "description": "出走取消・競走除外情報（速報）",
+        "purpose": "リアルタイムでの出走取消・競走除外情報を格納（NL_AVと同構造）",
         "columns": [
             {"name": "レコード種別ID", "type": "TEXT", "description": "レコード種別識別子（'AV'）", "example": "AV", "nullable": False},
-            {"name": "開催年月日", "type": "TEXT", "description": "レース開催日", "example": "20240601", "nullable": False},
+            {"name": "データ区分", "type": "TEXT", "description": "データ区分（1=出走取消、2=競走除外）", "example": "1", "nullable": False},
+            {"name": "データ作成年月日", "type": "TEXT", "description": "データ作成日", "example": "20240601", "nullable": False},
+            {"name": "開催年", "type": "INTEGER", "description": "開催年", "example": "2024", "nullable": False},
+            {"name": "開催月日", "type": "INTEGER", "description": "開催月日", "example": "0601", "nullable": False},
             {"name": "競馬場コード", "type": "TEXT", "description": "競馬場コード", "example": "05", "nullable": False},
-            {"name": "レース番号", "type": "TEXT", "description": "レース番号", "example": "11", "nullable": False},
-            {"name": "馬番", "type": "TEXT", "description": "除外馬の馬番", "example": "03", "nullable": False},
-            {"name": "馬名", "type": "TEXT", "description": "除外馬の馬名", "example": "○○○○", "nullable": True}
+            {"name": "開催回", "type": "INTEGER", "description": "開催回", "example": "3", "nullable": False},
+            {"name": "開催日目", "type": "INTEGER", "description": "開催日目", "example": "8", "nullable": False},
+            {"name": "レース番号", "type": "INTEGER", "description": "レース番号", "example": "11", "nullable": False},
+            {"name": "発表月日時分", "type": "TEXT", "description": "発表月日時分", "example": "06010930", "nullable": True},
+            {"name": "馬番", "type": "INTEGER", "description": "該当馬番", "example": "3", "nullable": False},
+            {"name": "馬名", "type": "TEXT", "description": "該当馬名", "example": "テストホース", "nullable": True},
+            {"name": "事由区分", "type": "TEXT", "description": "事由区分（001=疾病、002=事故、003=その他）", "example": "001", "nullable": True},
+            {"name": "レコード区切り", "type": "TEXT", "description": "レコード区切り文字", "example": "\\r\\n", "nullable": True}
         ],
-        "primary_key": ["開催年月日", "競馬場コード", "レース番号", "馬番"],
-        "indexes": ["開催年月日"]
+        "primary_key": ["開催年", "開催月日", "競馬場コード", "開催回", "開催日目", "レース番号", "馬番"],
+        "indexes": ["開催年", "開催月日", "競馬場コード", "レース番号"]
     },
 
     "RT_CC": {
@@ -1329,33 +1362,37 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
     "RT_H1": {
         "table_name": "RT_H1",
         "record_type": "H1",
-        "description": "単勝・複勝払戻情報（速報）",
-        "purpose": "リアルタイムでの単勝・複勝払戻情報を格納（NL_H1と同構造）",
+        "description": "票数1（全賭式）情報（速報）",
+        "purpose": "リアルタイムでの票数1情報を格納（NL_H1と同構造）",
         "columns": [
             {"name": "レコード種別ID", "type": "TEXT", "description": "レコード種別識別子（'H1'）", "example": "H1", "nullable": False},
             {"name": "開催年月日", "type": "TEXT", "description": "レース開催日", "example": "20240601", "nullable": False},
             {"name": "競馬場コード", "type": "TEXT", "description": "競馬場コード", "example": "05", "nullable": False},
             {"name": "レース番号", "type": "TEXT", "description": "レース番号", "example": "11", "nullable": False},
-            {"name": "単勝払戻金", "type": "TEXT", "description": "単勝100円あたり払戻金", "example": "350", "nullable": True},
-            {"name": "複勝払戻金", "type": "TEXT", "description": "複勝100円あたり払戻金", "example": "120,150,180", "nullable": True}
+            {"name": "賭式", "type": "TEXT", "description": "展開後の賭式", "example": "Tansyo", "nullable": False},
+            {"name": "組番", "type": "TEXT", "description": "賭式ごとの馬番・組番", "example": "0102", "nullable": False},
+            {"name": "票数", "type": "BIGINT", "description": "該当組番の投票数", "example": "12345", "nullable": True},
+            {"name": "人気", "type": "INTEGER", "description": "該当組番の人気順", "example": "1", "nullable": True}
         ],
-        "primary_key": ["開催年月日", "競馬場コード", "レース番号"],
+        "primary_key": ["開催年月日", "競馬場コード", "レース番号", "賭式", "組番"],
         "indexes": ["開催年月日"]
     },
 
     "RT_H6": {
         "table_name": "RT_H6",
         "record_type": "H6",
-        "description": "3連単払戻情報（速報）",
-        "purpose": "リアルタイムでの3連単払戻情報を格納（NL_H6と同構造）",
+        "description": "票数6（三連単）情報（速報）",
+        "purpose": "リアルタイムでの三連単票数情報を格納（NL_H6と同構造）",
         "columns": [
             {"name": "レコード種別ID", "type": "TEXT", "description": "レコード種別識別子（'H6'）", "example": "H6", "nullable": False},
             {"name": "開催年月日", "type": "TEXT", "description": "レース開催日", "example": "20240601", "nullable": False},
             {"name": "競馬場コード", "type": "TEXT", "description": "競馬場コード", "example": "05", "nullable": False},
             {"name": "レース番号", "type": "TEXT", "description": "レース番号", "example": "11", "nullable": False},
-            {"name": "3連単払戻金", "type": "TEXT", "description": "3連単100円あたり払戻金", "example": "123450", "nullable": True}
+            {"name": "三連単組番", "type": "TEXT", "description": "三連単の組番", "example": "010203", "nullable": False},
+            {"name": "三連単票数", "type": "BIGINT", "description": "該当組番の投票数", "example": "12345", "nullable": True},
+            {"name": "三連単人気", "type": "INTEGER", "description": "該当組番の人気順", "example": "1", "nullable": True}
         ],
-        "primary_key": ["開催年月日", "競馬場コード", "レース番号"],
+        "primary_key": ["開催年月日", "競馬場コード", "レース番号", "三連単組番"],
         "indexes": ["開催年月日"]
     },
 
@@ -1413,7 +1450,7 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
             {"name": "単勝オッズ", "type": "TEXT", "description": "単勝オッズ", "example": "3.5", "nullable": True},
             {"name": "複勝オッズ", "type": "TEXT", "description": "複勝オッズ", "example": "1.2-1.5", "nullable": True}
         ],
-        "primary_key": ["開催年月日", "競馬場コード", "レース番号", "発表月日時分"],
+        "primary_key": ["開催年月日", "競馬場コード", "レース番号", "馬番", "組番"],
         "indexes": ["開催年月日", "発表月日時分"]
     },
 
@@ -1430,7 +1467,7 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
             {"name": "発表月日時分", "type": "TEXT", "description": "オッズ発表時刻", "example": "06011430", "nullable": False},
             {"name": "馬連オッズ", "type": "TEXT", "description": "馬連オッズ", "example": "45.6", "nullable": True}
         ],
-        "primary_key": ["開催年月日", "競馬場コード", "レース番号", "発表月日時分"],
+        "primary_key": ["開催年月日", "競馬場コード", "レース番号", "組番"],
         "indexes": ["開催年月日"]
     },
 
@@ -1447,7 +1484,7 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
             {"name": "発表月日時分", "type": "TEXT", "description": "オッズ発表時刻", "example": "06011430", "nullable": False},
             {"name": "ワイドオッズ", "type": "TEXT", "description": "ワイドオッズ", "example": "2.5-3.2", "nullable": True}
         ],
-        "primary_key": ["開催年月日", "競馬場コード", "レース番号", "発表月日時分"],
+        "primary_key": ["開催年月日", "競馬場コード", "レース番号", "組番"],
         "indexes": ["開催年月日"]
     },
 
@@ -1464,7 +1501,7 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
             {"name": "発表月日時分", "type": "TEXT", "description": "オッズ発表時刻", "example": "06011430", "nullable": False},
             {"name": "馬単オッズ", "type": "TEXT", "description": "馬単オッズ", "example": "123.4", "nullable": True}
         ],
-        "primary_key": ["開催年月日", "競馬場コード", "レース番号", "発表月日時分"],
+        "primary_key": ["開催年月日", "競馬場コード", "レース番号", "組番"],
         "indexes": ["開催年月日"]
     },
 
@@ -1481,7 +1518,7 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
             {"name": "発表月日時分", "type": "TEXT", "description": "オッズ発表時刻", "example": "06011430", "nullable": False},
             {"name": "3連複オッズ", "type": "TEXT", "description": "3連複オッズ", "example": "456.7", "nullable": True}
         ],
-        "primary_key": ["開催年月日", "競馬場コード", "レース番号", "発表月日時分"],
+        "primary_key": ["開催年月日", "競馬場コード", "レース番号", "組番"],
         "indexes": ["開催年月日"]
     },
 
@@ -1498,7 +1535,7 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
             {"name": "発表月日時分", "type": "TEXT", "description": "オッズ発表時刻", "example": "06011430", "nullable": False},
             {"name": "3連単オッズ", "type": "TEXT", "description": "3連単オッズ", "example": "12345.6", "nullable": True}
         ],
-        "primary_key": ["開催年月日", "競馬場コード", "レース番号", "発表月日時分"],
+        "primary_key": ["開催年月日", "競馬場コード", "レース番号", "組番"],
         "indexes": ["開催年月日"]
     },
 
@@ -1782,6 +1819,41 @@ _KUMI_COLUMN: ColumnMetadata = {
     "example": "0102",
     "nullable": False,
 }
+_UMABAN_JA_COLUMN: ColumnMetadata = {
+    "name": "馬番",
+    "type": "INTEGER",
+    "description": "馬番。枠連行では0を使用",
+    "example": "1",
+    "nullable": False,
+}
+_KUMI_JA_COLUMN: ColumnMetadata = {
+    "name": "組番",
+    "type": "TEXT",
+    "description": "組み合わせ。単勝・複勝行では00を使用",
+    "example": "0102",
+    "nullable": False,
+}
+
+
+for _table_name in ("NL_O1", "RT_O1"):
+    TABLE_METADATA[_table_name]["primary_key"] = ["開催年月日", "競馬場コード", "レース番号", "馬番", "組番"]
+    _ensure_column_metadata(_table_name, _UMABAN_JA_COLUMN)
+    _ensure_column_metadata(_table_name, _KUMI_JA_COLUMN)
+
+for _table_name in (
+    "NL_O2",
+    "NL_O3",
+    "NL_O4",
+    "NL_O5",
+    "NL_O6",
+    "RT_O2",
+    "RT_O3",
+    "RT_O4",
+    "RT_O5",
+    "RT_O6",
+):
+    TABLE_METADATA[_table_name]["primary_key"] = ["開催年月日", "競馬場コード", "レース番号", "組番"]
+    _ensure_column_metadata(_table_name, _KUMI_JA_COLUMN)
 
 
 for _table_name in ("TS_O1", "TS_O2", "TS_O3", "TS_O4", "TS_O5", "TS_O6"):
