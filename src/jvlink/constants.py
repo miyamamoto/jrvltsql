@@ -42,7 +42,7 @@ JV_READ_ERROR = -2  # エラー
 # Data Specification Codes
 # Note: "N" suffix variants (DIFN, BLDN, HOSN) are aliases
 DATA_SPEC_RACE = "RACE"  # レースデータ (RA, SE, HR, WF, JG)
-DATA_SPEC_DIFF = "DIFF"  # マスタデータ (UM, KS, CH, BR, BN, HN, SK, RC, HC)
+DATA_SPEC_DIFF = "DIFF"  # マスタデータ (UM, KS, CH, BR, BN, HN, SK, RC)
 DATA_SPEC_DIFN = "DIFN"  # マスタデータ (DIFF の別名)
 DATA_SPEC_YSCH = "YSCH"  # 開催スケジュール
 DATA_SPEC_TOKU = "TOKU"  # 特別登録馬
@@ -367,7 +367,7 @@ RECORD_TYPE_BN = "BN"  # 馬主マスタ
 RECORD_TYPE_HN = "HN"  # 繁殖馬マスタ
 RECORD_TYPE_SK = "SK"  # 産駒マスタ
 RECORD_TYPE_RC = "RC"  # レコードマスタ
-RECORD_TYPE_HC = "HC"  # 配当マスタ
+RECORD_TYPE_HC = "HC"  # 坂路調教
 
 # Odds Record Types
 RECORD_TYPE_O1 = "O1"  # 単勝・複勝・枠連オッズ
@@ -380,7 +380,7 @@ RECORD_TYPE_O6 = "O6"  # 3連単オッズ
 # Other Record Types
 RECORD_TYPE_YSCH = "YS"  # 開催スケジュール
 RECORD_TYPE_TK = "TK"  # 特別登録馬
-RECORD_TYPE_HS = "HS"  # 坂路調教
+RECORD_TYPE_HS = "HS"  # 競走馬市場取引価格
 RECORD_TYPE_HY = "HY"  # 馬名の意味
 
 # Data Kubun (データ区分)

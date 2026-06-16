@@ -644,7 +644,11 @@ class PostgreSQLDatabase(BaseDatabase):
         if not rows or not pk_columns:
             return rows
 
-        column_by_lower = {column.lower(): column for column in rows[0].keys()}
+        column_by_lower = {
+            column.lower(): column
+            for row in rows
+            for column in row.keys()
+        }
         resolved_pk_columns = [column_by_lower.get(column.lower()) for column in pk_columns]
         if any(column is None for column in resolved_pk_columns):
             return rows
@@ -730,8 +734,15 @@ class PostgreSQLDatabase(BaseDatabase):
 
         data_list = [self._normalize_insert_data(table_name, row) for row in data_list]
 
-        # Use first row to determine columns
-        columns = list(data_list[0].keys())
+        # Use the union of all row keys. Expanded records can be heterogeneous
+        # (for example O1 horse rows vs bracket-quinella rows).
+        columns: List[str] = []
+        seen_columns = set()
+        for row in data_list:
+            for column in row.keys():
+                if column not in seen_columns:
+                    columns.append(column)
+                    seen_columns.add(column)
         placeholders = ", ".join(["?" for _ in columns])
         row_placeholders = f"({placeholders})"
         # Quote column names (lowercase for PostgreSQL)

@@ -5,15 +5,17 @@ defined in schema.py, enabling type-safe data processing.
 """
 
 import re
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from src.database.schema import SCHEMAS
 
 # キャッシュ（テーブル名 → カラム型マッピング）
 _table_column_types_cache: Dict[str, Dict[str, str]] = {}
+_table_primary_keys_cache: Dict[str, List[str]] = {}
 
 # コンパイル済み正規表現パターン
 _column_pattern = re.compile(r'^\s*(\w+)\s+(INTEGER|BIGINT|REAL|TEXT)\s*[,)]?\s*$', re.MULTILINE)
+_primary_key_pattern = re.compile(r'PRIMARY\s+KEY\s*\(([^)]*)\)', re.IGNORECASE)
 
 
 def get_table_column_types(table_name: str) -> Dict[str, str]:
@@ -95,6 +97,29 @@ def get_column_type(table_name: str, column_name: str) -> Optional[str]:
     """
     column_types = get_table_column_types(table_name)
     return column_types.get(column_name)
+
+
+def get_table_primary_key_columns(table_name: str) -> List[str]:
+    """Get primary-key columns for a specific table from SCHEMAS."""
+    if table_name in _table_primary_keys_cache:
+        return _table_primary_keys_cache[table_name]
+
+    create_statement = SCHEMAS.get(table_name)
+    if not create_statement:
+        return []
+
+    match = _primary_key_pattern.search(create_statement)
+    if not match:
+        _table_primary_keys_cache[table_name] = []
+        return []
+
+    columns = [
+        column.strip().strip('`"[]')
+        for column in match.group(1).split(",")
+        if column.strip()
+    ]
+    _table_primary_keys_cache[table_name] = columns
+    return columns
 
 
 def is_numeric_column(table_name: str, column_name: str) -> bool:

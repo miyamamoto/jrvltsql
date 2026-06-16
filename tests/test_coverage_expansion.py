@@ -43,14 +43,16 @@ def make_h6_record_full(
     kaiji="01", nichiji="01", race_num="01",
     toroku_tosu="12", syusso_tosu="10",
     entries=None,
+    total_hyo="00000000000",
+    henkan_hyo="00000000000",
 ) -> bytes:
-    """Create full H6 record (102900 bytes).
+    """Create full H6 record (102890 bytes).
 
     Args:
         entries: list of (kumi_str, hyo_str, ninki_str) tuples.
                  Unspecified slots are filled with '000000' (ASCII zeros).
     """
-    data = bytearray(102900)
+    data = bytearray(H6Parser.RECORD_LENGTH)
     data[0:2] = _pad("H6", 2)
     data[2:3] = _pad(data_kubun, 1)
     data[3:11] = _pad(make_date, 8)
@@ -81,9 +83,9 @@ def make_h6_record_full(
             data[offset + 17:offset + 21] = _pad(ninki, 4)
 
     # Totals
-    data[102866:102877] = _num(0, 11)
-    data[102877:102888] = _num(0, 11)
-    data[102898:102900] = b"\r\n"
+    data[102866:102877] = _pad(total_hyo, 11)
+    data[102877:102888] = _pad(henkan_hyo, 11)
+    data[102888:102890] = b"\r\n"
     return bytes(data)
 
 
@@ -348,6 +350,18 @@ class TestH6FullStructExpansion:
         assert "SanrentanHyoTotal" in rows[0]
         assert "SanrentanHenkanHyoTotal" in rows[0]
 
+    def test_total_fields_read_from_full_struct_offsets(self):
+        """HyoTotal fields are read from the official offsets after 4896 entries."""
+        entries = [("010203", "00000010000", "0001")]
+        data = make_h6_record_full(
+            entries=entries,
+            total_hyo="00012345678",
+            henkan_hyo="00000000999",
+        )
+        rows = H6Parser().parse(data)
+        assert rows[0]["SanrentanHyoTotal"] == "00012345678"
+        assert rows[0]["SanrentanHenkanHyoTotal"] == "00000000999"
+
     def test_header_propagated(self):
         """Header fields propagated to all rows."""
         entries = [("010203", "00000010000", "0001")]
@@ -412,7 +426,7 @@ class TestH6EdgeCases:
         assert result is None or isinstance(result, dict)
 
     def test_between_flat_and_full(self):
-        """Data between 78 and 102900 bytes is parsed as flat."""
+        """Data between 78 and 102890 bytes is parsed as flat."""
         data = b"H6" + b" " * 200
         result = H6Parser().parse(data)
         assert result is None or isinstance(result, dict)

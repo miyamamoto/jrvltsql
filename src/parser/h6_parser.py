@@ -3,7 +3,7 @@
 """
 H6レコードパーサー: ６．票数6（3連単）
 
-フルストラクト (JV_H6_HYOSU_SANRENTAN) = 102,900バイトをパースし、
+フルストラクト (JV_H6_HYOSU_SANRENTAN) = 102,890バイトをパースし、
 各組番ごとに展開した行リストを返す。
 
 構造 (kmy-keiba structures.cs 準拠):
@@ -15,7 +15,7 @@ H6レコードパーサー: ６．票数6（3連単）
   HyoSanrentan[4896]×21 = 102,816  (pos 50)
   HyoTotal[2]×11 = 22              (pos 102866)
   crlf(2)                           (pos 102888)
-  Total = 102,900
+  Total = 102,890
 
 HYO_INFO4: kumi(6) + hyo(11) + ninki(4) = 21
 """
@@ -29,7 +29,7 @@ class H6Parser:
     H6レコードパーサー（フルストラクト対応）
 
     ６．票数6（3連単）
-    レコード長: 102,900 bytes (JV_H6_HYOSU_SANRENTAN)
+    レコード長: 102,890 bytes (JV_H6_HYOSU_SANRENTAN)
     旧レコード長: 78 bytes (フラット1組合せ分) — 後方互換のためフォールバック対応
 
     parse() は List[Dict] を返す（フルストラクト時、1組合せ = 1行）。
@@ -37,7 +37,7 @@ class H6Parser:
     """
 
     RECORD_TYPE = "H6"
-    RECORD_LENGTH = 102900
+    RECORD_LENGTH = 102890
     RECORD_LENGTH_FLAT = 78
 
     def __init__(self):
@@ -72,7 +72,7 @@ class H6Parser:
         """
         H6レコードをパースする。
 
-        102,900バイトのフルストラクトの場合: List[Dict] を返す。
+        102,890バイトのフルストラクトの場合: List[Dict] を返す。
         78バイトのフラットレコードの場合: 単一 Dict を返す（後方互換）。
         """
         try:
@@ -90,7 +90,7 @@ class H6Parser:
             return None
 
     def _parse_full(self, data: bytes) -> List[Dict[str, str]]:
-        """Parse full 102,900-byte struct into multiple rows."""
+        """Parse full 102,890-byte struct into multiple rows."""
         header = self._parse_header(data)
 
         # Parse HyoTotal[2] × 11 bytes at position 102866

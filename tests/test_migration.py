@@ -11,6 +11,7 @@ from src.database.base import BaseDatabase
 from src.database.sqlite_handler import SQLiteDatabase
 from src.database.migration import (
     _extract_columns_from_sql,
+    _extract_primary_key_columns,
     migrate_table_if_needed,
     migrate_all_tables,
 )
@@ -22,6 +23,7 @@ class MockPostgreSQLDatabase(BaseDatabase):
     def __init__(self):
         super().__init__({})
         self._tables: Dict[str, List[str]] = {}  # table_name -> [col_name, ...]
+        self._primary_keys: Dict[str, List[str]] = {}
         self._executed: List[str] = []
 
     def get_db_type(self) -> str:
@@ -48,7 +50,9 @@ class MockPostgreSQLDatabase(BaseDatabase):
                 # Real PG: unquoted name is lowercased; quoted name preserves case.
                 # The migration code now uses unquoted lowercase for PG, so just
                 # normalize to lowercase to match real behavior.
-                self._tables.pop(m.group(1).lower(), None)
+                table = m.group(1).lower()
+                self._tables.pop(table, None)
+                self._primary_keys.pop(table, None)
         elif upper.startswith("ALTER TABLE"):
             import re
             m = re.search(
@@ -66,8 +70,11 @@ class MockPostgreSQLDatabase(BaseDatabase):
             m = re.search(r'CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?"?(\w+)"?', sql, re.IGNORECASE)
             if m:
                 cols = _extract_columns_from_sql(sql)
+                pk = _extract_primary_key_columns(sql)
                 # Real PG lowercases unquoted identifiers when storing.
-                self._tables[m.group(1).lower()] = list(cols or [])
+                table = m.group(1).lower()
+                self._tables[table] = list(cols or [])
+                self._primary_keys[table] = list(pk or [])
 
     def executemany(self, sql: str, parameters): pass
 
@@ -83,6 +90,10 @@ class MockPostgreSQLDatabase(BaseDatabase):
             table_name = parameters[0] if parameters else None
             cols = self._tables.get((table_name or "").lower(), [])
             return [{"name": c} for c in cols]
+        if "pg_index" in sql.lower():
+            table_name = parameters[0] if parameters else None
+            pk = self._primary_keys.get((table_name or "").lower(), [])
+            return [{"name": c} for c in pk]
         return []
 
     def create_table(self, table_name: str, schema: str): pass
@@ -118,6 +129,31 @@ def test_extract_columns_no_pk():
     assert cols == {"X", "Y"}
 
 
+def test_extract_primary_key_columns():
+    sql = """CREATE TABLE IF NOT EXISTS T (
+        A INTEGER, B TEXT, C REAL,
+        PRIMARY KEY (A, B)
+    )"""
+    assert _extract_primary_key_columns(sql) == ["A", "B"]
+
+
+def test_extract_primary_key_columns_inline_definition():
+    sql = """CREATE TABLE IF NOT EXISTS T (
+        Id INTEGER PRIMARY KEY,
+        Name TEXT
+    )"""
+    assert _extract_primary_key_columns(sql) == ["Id"]
+
+
+def test_extract_primary_key_columns_named_constraint():
+    sql = """CREATE TABLE IF NOT EXISTS T (
+        A INTEGER,
+        B TEXT,
+        CONSTRAINT pk_t PRIMARY KEY (A, B)
+    )"""
+    assert _extract_primary_key_columns(sql) == ["A", "B"]
+
+
 # --- migrate_table_if_needed tests ---
 
 OLD_SCHEMA = """CREATE TABLE IF NOT EXISTS NL_H1 (
@@ -135,21 +171,39 @@ NEW_SCHEMA = """CREATE TABLE IF NOT EXISTS NL_H1 (
     PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, BetType, Kumi)
 )"""
 
+ADDITIVE_OLD_SCHEMA = """CREATE TABLE IF NOT EXISTS NL_H1 (
+    Year INTEGER, MonthDay INTEGER, JyoCD TEXT,
+    Kaiji INTEGER, Nichiji INTEGER, RaceNum INTEGER,
+    HenkanUma TEXT, BetType TEXT, Kumi TEXT,
+    PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, BetType, Kumi)
+)"""
+
+INLINE_OLD_SCHEMA = """CREATE TABLE IF NOT EXISTS INLINE_PK (
+    Id INTEGER PRIMARY KEY,
+    Name TEXT
+)"""
+
+INLINE_NEW_SCHEMA = """CREATE TABLE IF NOT EXISTS INLINE_PK (
+    Id INTEGER PRIMARY KEY,
+    Name TEXT,
+    Score REAL
+)"""
+
 
 def test_migrate_adds_missing_columns_without_dropping(db):
     """Missing columns should be added without dropping existing rows."""
     # Create table with old schema
-    db.execute(OLD_SCHEMA)
+    db.execute(ADDITIVE_OLD_SCHEMA)
     db.commit()
 
     # Verify old columns exist
     info = db.fetch_all("PRAGMA table_info(NL_H1)")
     old_cols = {r['name'] for r in info}
-    assert "TanUma" in old_cols
-    assert "BetType" not in old_cols
+    assert "BetType" in old_cols
+    assert "Hyo" not in old_cols
 
     # Insert a row into old table
-    db.execute("INSERT INTO NL_H1 (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, TanUma) VALUES (2025, 101, '01', 1, 1, 1, 'test')")
+    db.execute("INSERT INTO NL_H1 (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, BetType, Kumi) VALUES (2025, 101, '01', 1, 1, 1, 'T', '01')")
     db.commit()
 
     # Run migration
@@ -161,7 +215,7 @@ def test_migrate_adds_missing_columns_without_dropping(db):
     new_cols = {r['name'] for r in info}
     assert "BetType" in new_cols
     assert "Kumi" in new_cols
-    assert "TanUma" in new_cols
+    assert "Hyo" in new_cols
 
     # Old data should be preserved.
     rows = db.fetch_all("SELECT * FROM NL_H1")
@@ -176,9 +230,6 @@ def test_migrate_drops_and_recreates_on_mismatch_when_explicitly_allowed(db, mon
     db.execute("INSERT INTO NL_H1 (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, TanUma) VALUES (2025, 101, '01', 1, 1, 1, 'test')")
     db.commit()
 
-    # First add missing columns, then a second call sees only extra columns and
-    # may run destructive migration because the explicit flag is set.
-    assert migrate_table_if_needed(db, "NL_H1", NEW_SCHEMA) is True
     assert migrate_table_if_needed(db, "NL_H1", NEW_SCHEMA) is True
 
     info = db.fetch_all("PRAGMA table_info(NL_H1)")
@@ -187,6 +238,34 @@ def test_migrate_drops_and_recreates_on_mismatch_when_explicitly_allowed(db, mon
     assert "Kumi" in new_cols
     assert "TanUma" not in new_cols
     assert db.fetch_all("SELECT * FROM NL_H1") == []
+
+
+def test_primary_key_mismatch_requires_destructive_opt_in(db):
+    """Primary-key changes are not safe additive migrations."""
+    db.execute(OLD_SCHEMA)
+    db.commit()
+
+    result = migrate_table_if_needed(db, "NL_H1", NEW_SCHEMA)
+    assert result is False
+
+    info = db.fetch_all("PRAGMA table_info(NL_H1)")
+    cols = {r['name'] for r in info}
+    assert "BetType" not in cols
+
+
+def test_inline_primary_key_does_not_create_false_mismatch(db):
+    """Inline PRIMARY KEY definitions should allow additive migrations."""
+    db.execute(INLINE_OLD_SCHEMA)
+    db.execute("INSERT INTO INLINE_PK (Id, Name) VALUES (1, 'keiba')")
+    db.commit()
+
+    result = migrate_table_if_needed(db, "INLINE_PK", INLINE_NEW_SCHEMA)
+    assert result is True
+
+    cols = {r['name'] for r in db.fetch_all("PRAGMA table_info(INLINE_PK)")}
+    assert "Score" in cols
+    rows = db.fetch_all("SELECT Id, Name FROM INLINE_PK")
+    assert rows == [{"Id": 1, "Name": "keiba"}]
 
 
 def test_migrate_no_op_when_schema_matches(db):
@@ -226,11 +305,18 @@ NEW_H6 = """CREATE TABLE IF NOT EXISTS NL_H6 (
     PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, SanrentanKumi)
 )"""
 
+ADDITIVE_OLD_H6 = """CREATE TABLE IF NOT EXISTS NL_H6 (
+    Year INTEGER, MonthDay INTEGER, JyoCD TEXT,
+    Kaiji INTEGER, Nichiji INTEGER, RaceNum INTEGER,
+    SanrentanKumi TEXT,
+    PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, SanrentanKumi)
+)"""
+
 
 def test_migrate_all_tables_multiple(db):
     """Test that migrate_all_tables handles multiple tables."""
-    db.execute(OLD_SCHEMA)
-    db.execute(OLD_H6)
+    db.execute(ADDITIVE_OLD_SCHEMA)
+    db.execute(ADDITIVE_OLD_H6)
     db.commit()
 
     schemas = {"NL_H1": NEW_SCHEMA, "NL_H6": NEW_H6}
@@ -253,14 +339,14 @@ def pg_db():
 
 def test_pg_migrate_adds_missing_columns_without_dropping(pg_db):
     """PostgreSQL path: mismatch adds columns and preserves existing schema."""
-    pg_db.execute(OLD_SCHEMA)  # seeds _tables["NL_H1"] with old columns
+    pg_db.execute(ADDITIVE_OLD_SCHEMA)
 
     result = migrate_table_if_needed(pg_db, "NL_H1", NEW_SCHEMA)
     assert result is True
 
     # Table should now have both old and new columns.
     assert "BetType" in pg_db._tables["nl_h1"]
-    assert "TanUma" in pg_db._tables["nl_h1"]
+    assert "Hyo" in pg_db._tables["nl_h1"]
 
 
 def test_pg_migrate_drops_and_recreates_on_mismatch_when_explicitly_allowed(pg_db, monkeypatch):
@@ -269,10 +355,18 @@ def test_pg_migrate_drops_and_recreates_on_mismatch_when_explicitly_allowed(pg_d
     pg_db.execute(OLD_SCHEMA)
 
     assert migrate_table_if_needed(pg_db, "NL_H1", NEW_SCHEMA) is True
-    assert migrate_table_if_needed(pg_db, "NL_H1", NEW_SCHEMA) is True
 
     assert "BetType" in pg_db._tables["nl_h1"]
     assert "TanUma" not in pg_db._tables["nl_h1"]
+
+
+def test_pg_primary_key_mismatch_requires_destructive_opt_in(pg_db):
+    """PostgreSQL path: primary-key changes require destructive opt-in."""
+    pg_db.execute(OLD_SCHEMA)
+
+    result = migrate_table_if_needed(pg_db, "NL_H1", NEW_SCHEMA)
+    assert result is False
+    assert "BetType" not in pg_db._tables["nl_h1"]
 
 
 def test_pg_migrate_no_op_when_schema_matches(pg_db):
@@ -291,8 +385,8 @@ def test_pg_migrate_no_op_when_table_missing(pg_db):
 
 def test_pg_migrate_all_tables(pg_db):
     """PostgreSQL path: migrate_all_tables handles multiple tables."""
-    pg_db.execute(OLD_SCHEMA)
-    pg_db.execute(OLD_H6)
+    pg_db.execute(ADDITIVE_OLD_SCHEMA)
+    pg_db.execute(ADDITIVE_OLD_H6)
 
     count = migrate_all_tables(pg_db, {"NL_H1": NEW_SCHEMA, "NL_H6": NEW_H6})
     assert count == 2

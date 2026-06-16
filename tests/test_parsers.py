@@ -16,7 +16,7 @@ import pytest
 from src.parser.factory import ParserFactory, ALL_RECORD_TYPES
 
 
-ODDS_RECORD_TYPES = {"O1", "O2", "O3", "O4", "O5", "O6"}
+EXPANDED_RECORD_TYPES = {"H1", "H6", "O1", "O2", "O3", "O4", "O5", "O6"}
 
 
 def _first_record_or_none(result):
@@ -78,11 +78,11 @@ class TestIndividualParsers:
 
         # レコード長の定義（公式仕様書より）
         record_lengths = {
-            'AV': 260, 'BN': 263, 'BR': 475, 'BT': 415, 'CC': 71,
+            'AV': 78, 'BN': 263, 'BR': 475, 'BT': 415, 'CC': 71,
             'CH': 96, 'CK': 232, 'CS': 208, 'DM': 233,
-            'H1': 782, 'H6': 782, 'HC': 3248, 'HN': 3248, 'HR': 3664, 'HS': 3664, 'HY': 1336,
+            'H1': 28955, 'H6': 102890, 'HC': 60, 'HN': 251, 'HR': 719, 'HS': 200, 'HY': 123,
             'JC': 252, 'JG': 251, 'KS': 282,
-            'O1': 148, 'O2': 148, 'O3': 148, 'O4': 148, 'O5': 148, 'O6': 148,
+            'O1': 962, 'O2': 2042, 'O3': 2654, 'O4': 4031, 'O5': 12293, 'O6': 83285,
             'RA': 856, 'RC': 1926, 'SE': 463, 'SK': 263, 'TC': 71, 'TK': 240, 'TM': 216,
             'UM': 969, 'WC': 72, 'WE': 195, 'WF': 3416, 'WH': 1356, 'YS': 424,
         }
@@ -144,7 +144,7 @@ class TestIndividualParsers:
 
         result = parser.parse(data)
         assert result is not None, f"{record_type}パーサーがサンプルデータのパースに失敗"
-        if record_type in ODDS_RECORD_TYPES:
+        if record_type in EXPANDED_RECORD_TYPES:
             assert isinstance(result, list), f"{record_type}パーサーの戻り値がリストでない"
             assert all(isinstance(row, dict) for row in result), f"{record_type}パーサーのリスト要素が辞書でない"
         else:
@@ -160,7 +160,7 @@ class TestIndividualParsers:
         assert result is not None
         record = _first_record_or_none(result)
         if record is None:
-            assert record_type in ODDS_RECORD_TYPES
+            assert record_type in EXPANDED_RECORD_TYPES
             return
 
         # 共通フィールドの確認（すべてのパーサーにRecordSpecがあるはず）
@@ -179,7 +179,7 @@ class TestIndividualParsers:
         assert result is not None
         record = _first_record_or_none(result)
         if record is None:
-            assert record_type in ODDS_RECORD_TYPES
+            assert record_type in EXPANDED_RECORD_TYPES
             return
         assert record['RecordSpec'] == record_type, \
             f"{record_type}パーサーのRecordSpecの値が正しくない: {record.get('RecordSpec')}"

@@ -17,12 +17,12 @@ class O5Parser:
     O5レコードパーサー
 
     １１．オッズ5（3連複）
-    レコード長: 68 bytes
+    レコード長: 12293 bytes
     VBテーブル名: ODDS_SANREN
     """
 
     RECORD_TYPE = "O5"
-    RECORD_LENGTH = 68
+    RECORD_LENGTH = 12293
 
     def __init__(self):
         self.logger = get_logger(__name__)
@@ -82,7 +82,7 @@ class O5Parser:
                     continue
                 rows.append({**base, "Kumi": kumi, "Odds": odds, "Ninki": ninki, "Vote": vote})
 
-            return rows
+            return rows if rows else [base]
 
         except Exception as e:
             self.logger.error(f"O5レコードパース中にエラー: {e}")

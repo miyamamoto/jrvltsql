@@ -40,7 +40,7 @@ Master Tables:
     NL_CS: PRIMARY KEY (JyoCD, Kyori, TrackCD)  -- Course
 
 Odds Tables:
-    NL_O1, RT_O1: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
+    NL_O1, RT_O1: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban, Kumi)
     NL_O2, RT_O2: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi)
     NL_O3, RT_O3: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi)
     NL_O4, RT_O4: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Kumi)
@@ -54,7 +54,7 @@ Payout Tables:
 
 Additional Data Tables:
     NL_CK: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, KettoNum)
-    NL_HC: PRIMARY KEY (ChokyosiCode, Num, SetYear)
+    NL_HC: PRIMARY KEY (TresenKubun, ChokyoDate, ChokyoTime, KettoNum)
     NL_TM, RT_TM: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
     NL_WF: PRIMARY KEY (Year, MonthDay)
 
@@ -73,8 +73,9 @@ Pace/Data Mining Tables:
     NL_DM, RT_DM: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
 
 Sale/Auction Tables:
-    NL_AV, RT_AV: PRIMARY KEY (KettoNum, SaleHostName, SaleName)
     NL_HS: PRIMARY KEY (KettoNum, SaleCode, FromDate)
+Scratch/Exclusion Tables:
+    NL_AV, RT_AV: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
 
 Workout/Training Tables:
     NL_WC: PRIMARY KEY (ChokyoDate, ChokyoTime, KettoNum, Course)
@@ -155,12 +156,19 @@ SCHEMAS = {
         CREATE TABLE IF NOT EXISTS NL_AV (
             RecordSpec TEXT,
             DataKubun TEXT,
-            KettoNum TEXT,
-            SaleHostName TEXT,
-            SaleName TEXT,
-            Price BIGINT,
+            MakeDate TEXT,
+            Year INTEGER,
+            MonthDay INTEGER,
+            JyoCD TEXT,
+            Kaiji INTEGER,
+            Nichiji INTEGER,
+            RaceNum INTEGER,
+            HappyoTime TEXT,
+            Umaban INTEGER,
+            Bamei TEXT,
+            JiyuKubun TEXT,
             RecordDelimiter TEXT,
-            PRIMARY KEY (KettoNum, SaleHostName, SaleName)
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
         )
     """,
 
@@ -464,15 +472,19 @@ SCHEMAS = {
             RecordSpec TEXT,
             DataKubun TEXT,
             MakeDate TEXT,
-            ChokyosiCode TEXT,
-            Num INTEGER,
-            SetYear INTEGER,
-            HonSyokinHeichi BIGINT,
-            HonSyokinSyogai BIGINT,
-            FukaSyokinHeichi BIGINT,
-            FukaSyokinSyogai BIGINT,
+            TresenKubun TEXT,
+            ChokyoDate TEXT,
+            ChokyoTime TEXT,
+            KettoNum TEXT,
+            HaronTime4 REAL,
+            LapTime4 REAL,
+            HaronTime3 REAL,
+            LapTime3 REAL,
+            HaronTime2 REAL,
+            LapTime2 REAL,
+            LapTime1 REAL,
             RecordDelimiter TEXT,
-            PRIMARY KEY (ChokyosiCode, Num, SetYear)
+            PRIMARY KEY (TresenKubun, ChokyoDate, ChokyoTime, KettoNum)
         )
     """,
     "NL_HN": """
@@ -882,7 +894,7 @@ SCHEMAS = {
             TanVote BIGINT,
             FukuVote BIGINT,
             WakurenVote BIGINT,
-            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban, Kumi)
         )
     """,
     "NL_O2": """
@@ -1502,12 +1514,19 @@ SCHEMAS = {
         CREATE TABLE IF NOT EXISTS RT_AV (
             RecordSpec TEXT,
             DataKubun TEXT,
-            KettoNum TEXT,
-            SaleHostName TEXT,
-            SaleName TEXT,
-            Price BIGINT,
+            MakeDate TEXT,
+            Year INTEGER,
+            MonthDay INTEGER,
+            JyoCD TEXT,
+            Kaiji INTEGER,
+            Nichiji INTEGER,
+            RaceNum INTEGER,
+            HappyoTime TEXT,
+            Umaban INTEGER,
+            Bamei TEXT,
+            JiyuKubun TEXT,
             RecordDelimiter TEXT,
-            PRIMARY KEY (KettoNum, SaleHostName, SaleName)
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
         )
     """,
     "RT_CC": """
@@ -1874,7 +1893,7 @@ SCHEMAS = {
             TanVote BIGINT,
             FukuVote BIGINT,
             WakurenVote BIGINT,
-            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban, Kumi)
         )
     """,
     "RT_O2": """

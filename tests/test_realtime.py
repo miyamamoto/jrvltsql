@@ -382,19 +382,19 @@ class TestRealtimeUpdater(unittest.TestCase):
             "RA": "RT_RA",  # Race detail
             "SE": "RT_SE",  # Horse race info
             "DM": "RT_DM",  # Data mining (time type)
-            "AV": "RT_AV",  # Sale info
+            "AV": "RT_AV",  # Scratched/excluded horse
             "HR": "RT_HR",  # Payout
             "WH": "RT_WH",  # Horse weight
             "TM": "RT_TM",  # Data mining (match type)
             # Time Series (0B2x-0B3x)
             "H1": "RT_H1",  # Vote count
             "H6": "RT_H6",  # Vote count (3rentan)
-            "O1": "RT_O1",  # Odds (tansho/fukusho)
-            "O2": "RT_O2",  # Odds (wakuren)
-            "O3": "RT_O3",  # Odds (umaren)
-            "O4": "RT_O4",  # Odds (wide)
-            "O5": "RT_O5",  # Odds (umatan)
-            "O6": "RT_O6",  # Odds (sanrenpuku/sanrentan)
+            "O1": "RT_O1",  # Odds (win/place/bracket quinella)
+            "O2": "RT_O2",  # Odds (quinella)
+            "O3": "RT_O3",  # Odds (wide)
+            "O4": "RT_O4",  # Odds (exacta)
+            "O5": "RT_O5",  # Odds (trio)
+            "O6": "RT_O6",  # Odds (trifecta)
             # Results
             "JC": "RT_JC",  # Jockey results
             "TC": "RT_TC",  # Trainer results
@@ -432,8 +432,32 @@ class TestRealtimeUpdater(unittest.TestCase):
     def test_process_parsed_records_batch_keeps_source_spec_for_sokuho_only(self):
         """SourceSpec is persisted for速報 tables and stripped from official TS tables."""
         records = [
-            {"RecordSpec": "O1", "SourceSpec": "0B41", "Year": 2026, "MonthDay": 503},
-            {"RecordSpec": "O1", "SourceSpec": "0B30", "Year": 2026, "MonthDay": 503},
+            {
+                "RecordSpec": "O1",
+                "SourceSpec": "0B41",
+                "Year": 2026,
+                "MonthDay": 503,
+                "JyoCD": "05",
+                "Kaiji": 1,
+                "Nichiji": 2,
+                "RaceNum": 11,
+                "HassoTime": "1540",
+                "Umaban": 1,
+                "Kumi": "00",
+            },
+            {
+                "RecordSpec": "O1",
+                "SourceSpec": "0B30",
+                "Year": 2026,
+                "MonthDay": 503,
+                "JyoCD": "05",
+                "Kaiji": 1,
+                "Nichiji": 2,
+                "RaceNum": 11,
+                "HassoTime": "1540",
+                "Umaban": 1,
+                "Kumi": "00",
+            },
         ]
 
         result = self.updater.process_parsed_records_batch(records, timeseries=True)
@@ -679,9 +703,9 @@ class TestRealtimeUpdater(unittest.TestCase):
         self.assertIsNone(result)
 
     @patch('src.realtime.updater.ParserFactory')
-    def test_process_record_delete_no_primary_key(self, mock_factory_class):
-        """Test deleting record from table without primary key."""
-        # Setup mock parser for DM (no primary key)
+    def test_process_record_delete_missing_primary_key_values(self, mock_factory_class):
+        """Test deleting record fails when primary key values are incomplete."""
+        # Setup mock parser for DM with an incomplete primary key.
         mock_parser = MagicMock()
         mock_parser.parse.return_value = {
             "RecordSpec": "DM",
@@ -705,7 +729,8 @@ class TestRealtimeUpdater(unittest.TestCase):
         self.assertEqual(result["operation"], "delete")
         self.assertEqual(result["table"], "RT_DM")
         self.assertFalse(result["success"])
-        self.assertIn("No primary key", result["error"])
+        self.assertIn("Missing primary key values", result["error"])
+        self.mock_db.execute.assert_not_called()
 
     def test_get_primary_keys(self):
         """Test _get_primary_keys returns correct primary keys."""
@@ -721,6 +746,18 @@ class TestRealtimeUpdater(unittest.TestCase):
         self.assertEqual(
             self.updater._get_primary_keys("RT_RC"),
             ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "Umaban"],
+        )
+        self.assertEqual(
+            self.updater._get_primary_keys("RT_O1"),
+            ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "Umaban", "Kumi"],
+        )
+        self.assertEqual(
+            self.updater._get_primary_keys("RT_H1"),
+            ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "BetType", "Kumi"],
+        )
+        self.assertEqual(
+            self.updater._get_primary_keys("RT_H6"),
+            ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "SanrentanKumi"],
         )
 
         # Test tables with primary keys (weather/track)
@@ -739,10 +776,30 @@ class TestRealtimeUpdater(unittest.TestCase):
                 "RaceNum", "Kumi", "HassoTime", "SourceSpec", "CollectedAt",
             ],
         )
-        self.assertEqual(self.updater._get_primary_keys("RT_DM"), [])
+        self.assertEqual(
+            self.updater._get_primary_keys("RT_DM"),
+            ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "Umaban"],
+        )
 
         # Test unknown table
         self.assertEqual(self.updater._get_primary_keys("UNKNOWN_TABLE"), [])
+
+    def test_realtime_primary_keys_match_schema(self):
+        """Realtime updater primary-key map should stay aligned with schema.py."""
+        import re
+
+        from src.database.schema import SCHEMAS
+
+        for table_name, ddl in SCHEMAS.items():
+            if not table_name.startswith(("RT_", "TS_")):
+                continue
+            match = re.search(r"PRIMARY KEY \(([^)]*)\)", ddl)
+            schema_pk = [column.strip() for column in match.group(1).split(",")] if match else []
+            self.assertEqual(
+                self.updater._get_primary_keys(table_name),
+                schema_pk,
+                f"Primary key mismatch for {table_name}",
+            )
 
     @patch('src.realtime.updater.ParserFactory')
     def test_handle_new_record_removes_metadata(self, mock_factory_class):
@@ -753,6 +810,11 @@ class TestRealtimeUpdater(unittest.TestCase):
             "RecordSpec": "RA",
             "headDataKubun": DATA_KUBUN_NEW,
             "Year": "2024",
+            "MonthDay": "0101",
+            "JyoCD": "05",
+            "Kaiji": "1",
+            "Nichiji": "1",
+            "RaceNum": "1",
             "_metadata": "should be removed",
             "_internal": "also removed",
         }
@@ -783,6 +845,11 @@ class TestRealtimeUpdater(unittest.TestCase):
             "RecordSpec": "RA",
             "DataKubun": DATA_KUBUN_NEW,  # Fallback to this
             "Year": "2024",
+            "MonthDay": "0101",
+            "JyoCD": "05",
+            "Kaiji": "1",
+            "Nichiji": "1",
+            "RaceNum": "1",
         }
         mock_factory_instance = MagicMock()
         mock_factory_instance.parse = mock_parser.parse
@@ -809,6 +876,11 @@ class TestRealtimeUpdater(unittest.TestCase):
             "RecordSpec": "RA",
             # No headDataKubun or DataKubun - defaults to "1" (NEW)
             "Year": "2024",
+            "MonthDay": "0101",
+            "JyoCD": "05",
+            "Kaiji": "1",
+            "Nichiji": "1",
+            "RaceNum": "1",
         }
         mock_factory_instance = MagicMock()
         mock_factory_instance.parse = mock_parser.parse

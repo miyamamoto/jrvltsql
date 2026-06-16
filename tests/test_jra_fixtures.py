@@ -58,12 +58,12 @@ PARSER_MAP = {
     "HY": (HYParser, 123),
     "JG": (JGParser, 80),
     "KS": (KSParser, 772),
-    "O1": (O1Parser, 107),
-    "O2": (O2Parser, 66),
-    "O3": (O3Parser, 70),
-    "O4": (O4Parser, 66),
-    "O5": (O5Parser, 68),
-    "O6": (O6Parser, 70),
+    "O1": (O1Parser, 107),    # Fixture files use legacy compact format (107 bytes)
+    "O2": (O2Parser, 66),     # Fixture files use legacy compact format (66 bytes)
+    "O3": (O3Parser, 70),     # Fixture files use legacy compact format (70 bytes)
+    "O4": (O4Parser, 66),     # Fixture files use legacy compact format (66 bytes)
+    "O5": (O5Parser, 68),     # Fixture files use legacy compact format (68 bytes)
+    "O6": (O6Parser, 70),     # Fixture files use legacy compact format (70 bytes)
     "RA": (RAParser, 856),
     "RC": (RCParser, 241),
     "SE": (SEParser, 463),
@@ -74,6 +74,7 @@ PARSER_MAP = {
     "WF": (WFParser, 169),
     "YS": (YSParser, 146),
 }
+EXPANDED_RECORD_TYPES = {"O1", "O2", "O3", "O4", "O5", "O6"}
 
 
 def load_fixture_records(record_type, record_length):
@@ -95,8 +96,8 @@ def load_fixture_records(record_type, record_length):
 class TestJRAFixtures:
     """実データフィクスチャを使ったJRAパーサーテスト"""
 
-    def test_parse_returns_dict(self, record_type):
-        """parse()が辞書を返すことを確認"""
+    def test_parse_returns_expected_shape(self, record_type):
+        """parse()が期待する戻り値形状を返すことを確認"""
         parser_cls, record_length = PARSER_MAP[record_type]
         parser = parser_cls()
         records = load_fixture_records(record_type, record_length)
@@ -104,9 +105,15 @@ class TestJRAFixtures:
 
         for i, rec in enumerate(records):
             result = parser.parse(rec)
-            assert isinstance(result, dict), (
-                f"{record_type} record {i}: parse() returned {type(result)}"
-            )
+            if record_type in EXPANDED_RECORD_TYPES:
+                assert isinstance(result, list), (
+                    f"{record_type} record {i}: parse() returned {type(result)}"
+                )
+                assert result, f"{record_type} record {i}: parse() returned an empty list"
+            else:
+                assert isinstance(result, dict), (
+                    f"{record_type} record {i}: parse() returned {type(result)}"
+                )
 
     def test_record_spec_matches(self, record_type):
         """RecordSpecフィールドがレコードタイプと一致することを確認"""
@@ -116,8 +123,9 @@ class TestJRAFixtures:
 
         for i, rec in enumerate(records):
             result = parser.parse(rec)
-            assert result["RecordSpec"] == record_type, (
-                f"{record_type} record {i}: RecordSpec={result['RecordSpec']}"
+            row = result[0] if isinstance(result, list) else result
+            assert row["RecordSpec"] == record_type, (
+                f"{record_type} record {i}: RecordSpec={row['RecordSpec']}"
             )
 
     def test_fields_not_all_empty(self, record_type):
@@ -128,7 +136,8 @@ class TestJRAFixtures:
 
         for i, rec in enumerate(records):
             result = parser.parse(rec)
-            non_empty = [k for k, v in result.items() if v and str(v).strip()]
+            row = result[0] if isinstance(result, list) else result
+            non_empty = [k for k, v in row.items() if v and str(v).strip()]
             assert len(non_empty) >= 3, (
                 f"{record_type} record {i}: only {len(non_empty)} non-empty fields"
             )
@@ -142,6 +151,69 @@ class TestJRAFixtures:
         for i, rec in enumerate(records):
             result = parser.parse(rec)
             assert result is not None, f"{record_type} record {i}: parse returned None"
+
+
+class TestHCParserRealData:
+    """HCパーサーの坂路調教レイアウト詳細テスト"""
+
+    def setup_method(self):
+        self.parser = HCParser()
+        self.records = load_fixture_records("HC", 60)
+
+    def test_uses_hanro_fields_not_trainer_stats(self):
+        result = self.parser.parse(self.records[-1])
+
+        assert "TresenKubun" in result
+        assert "ChokyoDate" in result
+        assert "ChokyoTime" in result
+        assert "KettoNum" in result
+        assert "HaronTime4" in result
+        assert "LapTime1" in result
+        assert "ChokyosiCode" not in result
+        assert "HonSyokinHeichi" not in result
+
+    def test_parses_official_hanro_positions(self):
+        result = self.parser.parse(self.records[-1])
+
+        assert result["RecordSpec"] == "HC"
+        assert result["DataKubun"] == "1"
+        assert result["MakeDate"] == "20240104"
+        assert result["TresenKubun"] == "0"
+        assert result["ChokyoDate"] == "20231201"
+        assert result["ChokyoTime"] == "0759"
+        assert result["KettoNum"] == "2021105492"
+        assert result["HaronTime4"] == "0695"
+        assert result["LapTime4"] == "177"
+        assert result["HaronTime3"] == "0518"
+        assert result["LapTime3"] == "187"
+        assert result["HaronTime2"] == "0331"
+        assert result["LapTime2"] == "167"
+        assert result["LapTime1"] == "164"
+
+    def test_nl_hc_schema_matches_hanro_fields(self):
+        from src.database.schema import SCHEMAS
+
+        schema = SCHEMAS["NL_HC"]
+        assert "TresenKubun TEXT" in schema
+        assert "HaronTime4 REAL" in schema
+        assert "LapTime1 REAL" in schema
+        assert "PRIMARY KEY (TresenKubun, ChokyoDate, ChokyoTime, KettoNum)" in schema
+        assert "ChokyosiCode" not in schema
+        assert "HonSyokinHeichi" not in schema
+
+    def test_hanro_times_are_converted_for_nl_hc_insert(self):
+        from src.importer.importer import convert_record_types
+
+        parsed = self.parser.parse(self.records[-1])
+        converted = convert_record_types(parsed, "NL_HC")
+
+        assert converted["HaronTime4"] == 69.5
+        assert converted["LapTime4"] == 17.7
+        assert converted["HaronTime3"] == 51.8
+        assert converted["LapTime3"] == 18.7
+        assert converted["HaronTime2"] == 33.1
+        assert converted["LapTime2"] == 16.7
+        assert converted["LapTime1"] == 16.4
 
 
 class TestRAParserRealData:

@@ -6,7 +6,10 @@ This module imports parsed JV-Data records into database.
 from typing import Any, Dict, Iterator, List, Optional
 
 from src.database.base import BaseDatabase, DatabaseError
-from src.database.schema_types import get_table_column_types
+from src.database.schema_types import (
+    get_table_column_types,
+    get_table_primary_key_columns,
+)
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -197,11 +200,11 @@ class DataImporter:
             "SE": "NL_SE",  # 馬毎レース情報
             "HR": "NL_HR",  # 払戻
             "JG": "NL_JG",  # 除外馬
-            "H1": "NL_H1",  # 単勝・複勝オッズ
-            "H6": "NL_H6",  # 単勝・複勝オッズ（6レースまとめ）
-            "O1": "NL_O1",  # 馬連オッズ
-            "O2": "NL_O2",  # ワイドオッズ
-            "O3": "NL_O3",  # 枠連オッズ
+            "H1": "NL_H1",  # 票数1（全賭式）
+            "H6": "NL_H6",  # 票数6（三連単）
+            "O1": "NL_O1",  # 単勝・複勝・枠連オッズ
+            "O2": "NL_O2",  # 馬連オッズ
+            "O3": "NL_O3",  # ワイドオッズ
             "O4": "NL_O4",  # 馬単オッズ
             "O5": "NL_O5",  # 三連複オッズ
             "O6": "NL_O6",  # 三連単オッズ
@@ -218,11 +221,11 @@ class DataImporter:
             "TC": "NL_TC",  # タイムコメント
             "CS": "NL_CS",  # コメントショート
             "CK": "NL_CK",  # 勝利騎手・調教師コメント
-            "WC": "NL_WC",  # 天候コメント
-            "AV": "NL_AV",  # 場外発売情報
+            "WC": "NL_WC",  # ウッドチップ調教
+            "AV": "NL_AV",  # 出走取消・競走除外
             "JC": "NL_JC",  # 重量変更情報
-            "HC": "NL_HC",  # 異常区分情報
-            "HS": "NL_HS",  # 配当金情報
+            "HC": "NL_HC",  # 坂路調教
+            "HS": "NL_HS",  # 競走馬市場取引価格
             "HY": "NL_HY",  # 馬名の意味由来
             "WE": "NL_WE",  # 気象情報
             "WF": "NL_WF",  # 風情報
@@ -235,14 +238,14 @@ class DataImporter:
             "RT_RA": "RT_RA",  # レース詳細（速報）
             "RT_SE": "RT_SE",  # 馬毎レース情報（速報）
             "RT_HR": "RT_HR",  # 払戻（速報）
-            "RT_O1": "RT_O1",  # 馬連オッズ（速報）
-            "RT_O2": "RT_O2",  # ワイドオッズ（速報）
-            "RT_O3": "RT_O3",  # 枠連オッズ（速報）
+            "RT_O1": "RT_O1",  # 単勝・複勝・枠連オッズ（速報）
+            "RT_O2": "RT_O2",  # 馬連オッズ（速報）
+            "RT_O3": "RT_O3",  # ワイドオッズ（速報）
             "RT_O4": "RT_O4",  # 馬単オッズ（速報）
             "RT_O5": "RT_O5",  # 三連複オッズ（速報）
             "RT_O6": "RT_O6",  # 三連単オッズ（速報）
-            "RT_H1": "RT_H1",  # 単勝・複勝オッズ（速報）
-            "RT_H6": "RT_H6",  # 単勝・複勝オッズ6R（速報）
+            "RT_H1": "RT_H1",  # 票数1（全賭式・速報）
+            "RT_H6": "RT_H6",  # 票数6（三連単・速報）
             "RT_WE": "RT_WE",  # 気象情報（速報）
             "RT_WH": "RT_WH",  # 馬場情報（速報）
             "RT_JC": "RT_JC",  # 重量変更情報（速報）
@@ -250,7 +253,7 @@ class DataImporter:
             "RT_TC": "RT_TC",  # タイムコメント（速報）
             "RT_TM": "RT_TM",  # タイムマスター（速報）
             "RT_DM": "RT_DM",  # データマスター（速報）
-            "RT_AV": "RT_AV",  # 場外発売情報（速報）
+            "RT_AV": "RT_AV",  # 出走取消・競走除外（速報）
             "RT_RC": "RT_RC",  # 騎手変更情報（速報）
         }
 
@@ -308,6 +311,14 @@ class DataImporter:
         DataImporter and RealtimeUpdater share identical coercion rules.
         """
         return convert_record_types(record, table_name)
+
+    @staticmethod
+    def _has_complete_primary_key(table_name: str, record: dict) -> bool:
+        """Return True when a converted row has all schema primary-key values."""
+        primary_keys = get_table_primary_key_columns(table_name)
+        if not primary_keys:
+            return True
+        return all(record.get(key) not in (None, "") for key in primary_keys)
 
     def import_records(
         self,
@@ -418,7 +429,22 @@ class DataImporter:
             # Clean records to remove metadata fields before insertion
             clean_batch = [self._clean_record(record) for record in batch]
             # Convert types based on schema definition
-            converted_batch = [self._convert_record(record, table_name) for record in clean_batch]
+            converted_batch = []
+            for record in clean_batch:
+                converted_record = self._convert_record(record, table_name)
+                if self._has_complete_primary_key(table_name, converted_record):
+                    converted_batch.append(converted_record)
+                else:
+                    self._records_failed += 1
+                    logger.warning(
+                        "Skipping record with incomplete primary key",
+                        table=table_name,
+                        primary_key=get_table_primary_key_columns(table_name),
+                    )
+
+            if not converted_batch:
+                return
+
             # Insert batch using INSERT OR REPLACE
             rows = self.database.insert_many(table_name, converted_batch, use_replace=True)
 
@@ -469,6 +495,14 @@ class DataImporter:
                 try:
                     clean_record = self._clean_record(record)
                     converted_record = self._convert_record(clean_record, table_name)
+                    if not self._has_complete_primary_key(table_name, converted_record):
+                        fail_count += 1
+                        logger.warning(
+                            "Skipping record with incomplete primary key",
+                            table=table_name,
+                            primary_key=get_table_primary_key_columns(table_name),
+                        )
+                        continue
                     self.database.insert(table_name, converted_record, use_replace=True)
                     success_count += 1
 
@@ -519,6 +553,14 @@ class DataImporter:
         try:
             clean_record = self._clean_record(record)
             converted_record = self._convert_record(clean_record, table_name)
+            if not self._has_complete_primary_key(table_name, converted_record):
+                self._records_failed += 1
+                logger.warning(
+                    "Skipping record with incomplete primary key",
+                    table=table_name,
+                    primary_key=get_table_primary_key_columns(table_name),
+                )
+                return False
             self.database.insert(table_name, converted_record, use_replace=True)
             self._records_imported += 1
 

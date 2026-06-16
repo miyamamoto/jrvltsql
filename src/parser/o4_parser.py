@@ -17,12 +17,12 @@ class O4Parser:
     O4レコードパーサー
 
     １０．オッズ4（馬単）
-    レコード長: 66 bytes
+    レコード長: 4031 bytes
     VBテーブル名: ODDS_UMATAN
     """
 
     RECORD_TYPE = "O4"
-    RECORD_LENGTH = 66
+    RECORD_LENGTH = 4031
 
     def __init__(self):
         self.logger = get_logger(__name__)
@@ -82,7 +82,7 @@ class O4Parser:
                     continue
                 rows.append({**base, "Kumi": kumi, "Odds": odds, "Ninki": ninki, "Vote": vote})
 
-            return rows
+            return rows if rows else [base]
 
         except Exception as e:
             self.logger.error(f"O4レコードパース中にエラー: {e}")

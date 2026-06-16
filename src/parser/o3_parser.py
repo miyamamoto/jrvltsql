@@ -17,12 +17,12 @@ class O3Parser:
     O3レコードパーサー
 
     ９．オッズ3（ワイド）
-    レコード長: 70 bytes
+    レコード長: 2654 bytes
     VBテーブル名: ODDS_WIDE
     """
 
     RECORD_TYPE = "O3"
-    RECORD_LENGTH = 70
+    RECORD_LENGTH = 2654
 
     def __init__(self):
         self.logger = get_logger(__name__)
@@ -83,7 +83,7 @@ class O3Parser:
                     continue
                 rows.append({**base, "Kumi": kumi, "OddsLow": low, "OddsHigh": high, "Ninki": ninki, "Vote": vote})
 
-            return rows
+            return rows if rows else [base]
 
         except Exception as e:
             self.logger.error(f"O3レコードパース中にエラー: {e}")
