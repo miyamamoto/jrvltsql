@@ -23,6 +23,10 @@ UPDATE_SPECS = [
     ("DIFN", 1),
     ("TCVN", 2),
     ("RCVN", 2),
+    # Training data is updated daily and must be collected incrementally.
+    # HC=坂路調教, WC=ウッドチップ調教. option=1 is the incremental fetch.
+    ("SLOP", 1),
+    ("WOOD", 1),
     # Speed-report specs fetched via JVRTOpen with a date key (option unused).
     # 0B12: 速報レース情報・払戻 (RA/SE/HR 成績確定後), 0B15: 速報レース情報
     # (RA/SE/HR 出走馬名表～)。RT_* テーブルは PRIMARY KEY + INSERT OR REPLACE
