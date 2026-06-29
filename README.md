@@ -1,7 +1,8 @@
 # JRVLTSQL
 
 JRVLTSQL は、JRA-VAN DataLab の JRA データを SQLite または PostgreSQL に保存する
-Windows 向けツールです。NAR / 地方競馬は対象外です。
+ツールです。Windows では JV-Link COM を直接使い、Linux では Docker/Wine 経由で
+JV-Link ブリッジを使えます。NAR / 地方競馬は対象外です。
 
 公開ドキュメント: https://miyamamoto.github.io/jrvltsql/
 
@@ -9,7 +10,7 @@ Windows 向けツールです。NAR / 地方競馬は対象外です。
 
 | 項目 | 要件 |
 | --- | --- |
-| OS | Windows 10 / 11 |
+| OS | Windows 10 / 11、または Docker が使える Linux |
 | Python | Python 3.10 以上。JV-Link COM を直接使う環境では 32-bit Python を推奨します。 |
 | 契約 | JRA-VAN DataLab + サービスキー |
 | PostgreSQL | PostgreSQL 運用時のみ必要 |
@@ -27,6 +28,29 @@ git clone https://github.com/miyamamoto/jrvltsql.git
 cd jrvltsql
 pip install -e .
 ```
+
+### Linux / Docker + Wine で動かす
+
+Docker image には Python 3.12、Wine 32-bit、Xvfb/noVNC、ネイティブ版
+`JVLinkBridge.exe` が入ります。JV-Link 本体とサービスキーは利用者側で用意します。
+
+```bash
+mkdir -p config data logs wineprefix jvlink-installers
+docker compose build jrvltsql
+docker compose up -d jrvltsql
+```
+
+GUI 操作が必要な場合はブラウザで `http://localhost:6080/vnc.html` を開きます。
+JV-Link インストーラを `jvlink-installers/` に置いたうえで、コンテナ内から実行します。
+
+```bash
+docker compose exec jrvltsql scripts/setup_wine_jvlink.sh /installers/<JV-Link-installer>.exe
+docker compose exec jrvltsql jltsql version
+```
+
+コンテナ内の JV-Link ブリッジは
+`/app/tools/jvlink-bridge/bin/native/JVLinkBridge.exe` を Wine で起動します。
+Wine prefix は `./wineprefix` に永続化されます。
 
 ## 最短手順
 

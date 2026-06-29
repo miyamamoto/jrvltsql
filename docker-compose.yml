@@ -1,28 +1,42 @@
-version: "3.8"
-
 services:
   jrvltsql:
     build: .
+    image: jrvltsql:wine
     environment:
-      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
-      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
-      - POSTGRES_DATABASE=${POSTGRES_DATABASE:-keiba}
-      - POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
-      - JLTSQL_HEADLESS=1
+      DISPLAY: ":1"
+      WINEPREFIX: /wineprefix
+      WINEARCH: win32
+      JVLINK_WINEPREFIX: /wineprefix
+      JVLINK_WINEARCH: win32
+      JVLINK_BRIDGE_EXE: /app/tools/jvlink-bridge/bin/native/JVLinkBridge.exe
+      JVLINK_SERVICE_KEY: ${JVLINK_SERVICE_KEY:-}
+      NOVNC_PUBLIC_PORT: 6080
+      VNC_PUBLIC_PORT: 15900
+      POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_DATABASE: ${POSTGRES_DATABASE:-keiba}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "6080:6080"  # noVNC browser UI
+      - "15900:5900" # raw VNC
     volumes:
+      - ./config:/app/config
       - ./data:/app/data
+      - ./logs:/app/logs
+      - ./wineprefix:/wineprefix
+      - ./jvlink-installers:/installers:ro
+    shm_size: "1gb"
     depends_on:
       - postgres
+    command: ["sleep", "infinity"]
 
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: keiba
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    ports:
-      - "5432:5432"
+      POSTGRES_DB: ${POSTGRES_DATABASE:-keiba}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     volumes:
       - pgdata:/var/lib/postgresql/data
 

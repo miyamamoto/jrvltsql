@@ -208,9 +208,17 @@ def status():
     console.print()
     console.print("[bold]JRA-VAN DataLab:[/bold]")
     try:
-        from src.jvlink import JVLinkWrapper
-        console.print("  状態: [green]利用可能[/green]")
-    except ImportError:
+        from src.jvlink import is_jvlink_available
+        from src.jvlink.bridge import find_bridge_executable
+
+        bridge_exe = find_bridge_executable()
+        if bridge_exe is not None:
+            console.print(f"  状態: [green]利用可能[/green] (JVLinkBridge: {bridge_exe})")
+        elif is_jvlink_available():
+            console.print("  状態: [green]利用可能[/green]")
+        else:
+            console.print("  状態: [red]利用不可[/red]")
+    except Exception:
         console.print("  状態: [red]利用不可[/red]")
     console.print("Status: [green]Ready[/green]")
 
@@ -229,9 +237,17 @@ def version(check):
     console.print()
     console.print("[bold]対応データソース:[/bold]")
     try:
-        from src.jvlink import JVLinkWrapper
-        console.print("  - JRA-VAN DataLab (JV-Link): [green]利用可能[/green]")
-    except ImportError:
+        from src.jvlink import is_jvlink_available
+        from src.jvlink.bridge import find_bridge_executable
+
+        bridge_exe = find_bridge_executable()
+        if bridge_exe is not None:
+            console.print(f"  - JRA-VAN DataLab (JV-Link): [green]利用可能[/green] (JVLinkBridge)")
+        elif is_jvlink_available():
+            console.print("  - JRA-VAN DataLab (JV-Link): [green]利用可能[/green]")
+        else:
+            console.print("  - JRA-VAN DataLab (JV-Link): [red]未インストール[/red]")
+    except Exception:
         console.print("  - JRA-VAN DataLab (JV-Link): [red]未インストール[/red]")
 
     if check:

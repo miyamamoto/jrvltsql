@@ -5,8 +5,11 @@
 
 ## 0. 準備
 
-JRVLTSQL は Windows + JRA-VAN DataLab / JV-Link を前提にした JRA 用ツールです。
+JRVLTSQL は JRA-VAN DataLab / JV-Link を使う JRA 用ツールです。
 地方競馬は対象外です。
+
+Windows では JV-Link COM を直接使えます。Linux では Docker/Wine で
+`JVLinkBridge.exe` を動かす構成を使います。
 
 Python は 3.10 以上で動作します。JV-Link COM を直接使う環境では 32-bit Python を推奨します。
 
@@ -22,6 +25,23 @@ irm https://raw.githubusercontent.com/miyamamoto/jrvltsql/master/install.ps1 | i
 git clone https://github.com/miyamamoto/jrvltsql.git
 cd jrvltsql
 pip install -e .
+```
+
+Linux / Docker で入れる場合:
+
+```bash
+mkdir -p config data logs wineprefix jvlink-installers
+docker compose build jrvltsql
+docker compose up -d jrvltsql
+```
+
+Wine 上の JV-Link インストールでマウス操作が必要な場合は、
+`http://localhost:6080/vnc.html` を開いて操作します。インストーラは
+`jvlink-installers/` に置き、コンテナ内から実行します。
+
+```bash
+docker compose exec jrvltsql scripts/setup_wine_jvlink.sh /installers/<JV-Link-installer>.exe
+docker compose exec jrvltsql jltsql version
 ```
 
 ## 1. まず決めること

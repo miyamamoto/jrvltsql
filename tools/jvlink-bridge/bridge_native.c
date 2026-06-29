@@ -7,6 +7,7 @@
 #include <windows.h>
 #include <ole2.h>
 #include <oleauto.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -19,6 +20,12 @@ static int g_is_open = 0;
 // Helper: Get DISPID for a method name
 static HRESULT GetDispId(IDispatch* disp, const wchar_t* name, DISPID* id) {
     return IDispatch_GetIDsOfNames(disp, &IID_NULL, (LPOLESTR*)&name, 1, LOCALE_USER_DEFAULT, id);
+}
+
+static HRESULT EnsureJVLink(void) {
+    if (g_jvlink) return S_OK;
+    return CoCreateInstance(&CLSID_JVLink, NULL, CLSCTX_INPROC_SERVER,
+                            &IID_IDispatch, (void**)&g_jvlink);
 }
 
 // Helper: Call a method with a single string argument, return int result
@@ -58,6 +65,42 @@ static int CallMethodStr(IDispatch* disp, const wchar_t* method, const char* arg
     return 0;
 }
 
+// Helper: Call a method with two string arguments, return int result
+static int CallMethodStrStr(IDispatch* disp, const wchar_t* method, const char* arg1, const char* arg2) {
+    DISPID id;
+    if (FAILED(GetDispId(disp, method, &id))) return -9999;
+
+    wchar_t wbuf1[512];
+    wchar_t wbuf2[512];
+    MultiByteToWideChar(CP_ACP, 0, arg1 ? arg1 : "", -1, wbuf1, 512);
+    MultiByteToWideChar(CP_ACP, 0, arg2 ? arg2 : "", -1, wbuf2, 512);
+
+    BSTR bArg1 = SysAllocString(wbuf1);
+    BSTR bArg2 = SysAllocString(wbuf2);
+
+    VARIANTARG args[2];
+    DISPPARAMS params = {args, NULL, 2, 0};
+
+    // Args are in reverse order for IDispatch
+    VariantInit(&args[1]); V_VT(&args[1]) = VT_BSTR; V_BSTR(&args[1]) = bArg1;
+    VariantInit(&args[0]); V_VT(&args[0]) = VT_BSTR; V_BSTR(&args[0]) = bArg2;
+
+    VARIANT result;
+    VariantInit(&result);
+    EXCEPINFO excep = {0};
+
+    HRESULT hr = IDispatch_Invoke(disp, id, &IID_NULL, LOCALE_USER_DEFAULT,
+                                   DISPATCH_METHOD, &params, &result, &excep, NULL);
+
+    SysFreeString(bArg1);
+    SysFreeString(bArg2);
+
+    if (FAILED(hr)) return -9998;
+    if (V_VT(&result) == VT_I4) return V_I4(&result);
+    if (V_VT(&result) == VT_I2) return V_I2(&result);
+    return 0;
+}
+
 // Call JVOpen: JVOpen(dataspec, fromtime, option, ref readcount, ref downloadcount, ref lastfiletimestamp)
 static int CallJVOpen(const char* dataspec, const char* fromtime, int option,
                        int* readcount, int* downloadcount, char* lastts, int lastts_size) {
@@ -65,13 +108,12 @@ static int CallJVOpen(const char* dataspec, const char* fromtime, int option,
     if (FAILED(GetDispId(g_jvlink, L"JVOpen", &id))) return -9999;
 
     // Convert strings to BSTR
-    int wlen;
     wchar_t wbuf[512];
     
-    wlen = MultiByteToWideChar(CP_ACP, 0, dataspec, -1, wbuf, 512);
+    MultiByteToWideChar(CP_ACP, 0, dataspec, -1, wbuf, 512);
     BSTR bDataspec = SysAllocString(wbuf);
     
-    wlen = MultiByteToWideChar(CP_ACP, 0, fromtime, -1, wbuf, 512);
+    MultiByteToWideChar(CP_ACP, 0, fromtime, -1, wbuf, 512);
     BSTR bFromtime = SysAllocString(wbuf);
 
     // JVOpen args: dataspec, fromtime, option, readcount, downloadcount, lastfiletimestamp
@@ -238,6 +280,9 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 }
 
 int main(int argc, char* argv[]) {
+    (void)argc;
+    (void)argv;
+
     // Initialize COM (STA for ActiveX)
     CoInitialize(NULL);
     OleInitialize(NULL);
@@ -276,9 +321,7 @@ int main(int argc, char* argv[]) {
 
         if (strcmp(cmd, "init") == 0) {
             char* key = json_get_string(line, "key");
-            // Create COM object
-            HRESULT hr = CoCreateInstance(&CLSID_JVLink, NULL, CLSCTX_INPROC_SERVER,
-                                          &IID_IDispatch, (void**)&g_jvlink);
+            HRESULT hr = EnsureJVLink();
             if (FAILED(hr) || !g_jvlink) {
                 json_response("{\"status\":\"error\",\"error\":\"CoCreateInstance failed\",\"hr\":\"0x%08X\"}", (unsigned)hr);
                 free(key); free(cmd); continue;
@@ -289,14 +332,22 @@ int main(int argc, char* argv[]) {
             free(key);
         }
         else if (strcmp(cmd, "setservicekey") == 0) {
-            if (!g_jvlink) { json_response("{\"status\":\"error\",\"error\":\"not init\"}"); free(cmd); continue; }
+            HRESULT hr = EnsureJVLink();
+            if (FAILED(hr) || !g_jvlink) {
+                json_response("{\"status\":\"error\",\"error\":\"CoCreateInstance failed\",\"hr\":\"0x%08X\"}", (unsigned)hr);
+                free(cmd); continue;
+            }
             char* skey = json_get_string(line, "servicekey");
             int code = CallMethodStr(g_jvlink, L"JVSetServiceKey", skey ? skey : "");
             json_response("{\"status\":\"%s\",\"code\":%d}", code == 0 ? "ok" : "error", code);
             free(skey);
         }
         else if (strcmp(cmd, "setsavepath") == 0) {
-            if (!g_jvlink) { json_response("{\"status\":\"error\",\"error\":\"not init\"}"); free(cmd); continue; }
+            HRESULT hr = EnsureJVLink();
+            if (FAILED(hr) || !g_jvlink) {
+                json_response("{\"status\":\"error\",\"error\":\"CoCreateInstance failed\",\"hr\":\"0x%08X\"}", (unsigned)hr);
+                free(cmd); continue;
+            }
             char* spath = json_get_string(line, "path");
             int code = CallMethodStr(g_jvlink, L"JVSetSavePath", spath ? spath : "C:\\JV-Data\\");
             json_response("{\"status\":\"%s\",\"code\":%d}", code == 0 ? "ok" : "error", code);
@@ -315,6 +366,16 @@ int main(int argc, char* argv[]) {
             json_response("{\"status\":\"%s\",\"code\":%d,\"readcount\":%d,\"downloadcount\":%d,\"lastfiletimestamp\":\"%s\"}",
                          code >= -2 ? "ok" : "error", code, readcount, downloadcount, lastts);
             free(dataspec); free(fromtime);
+        }
+        else if (strcmp(cmd, "rtopen") == 0) {
+            if (!g_jvlink) { json_response("{\"status\":\"error\",\"error\":\"not init\"}"); free(cmd); continue; }
+            char* dataspec = json_get_string(line, "dataspec");
+            char* key = json_get_string(line, "key");
+            int code = CallMethodStrStr(g_jvlink, L"JVRTOpen", dataspec ? dataspec : "", key ? key : "");
+            if (code >= 0) g_is_open = 1;
+            json_response("{\"status\":\"%s\",\"code\":%d,\"readcount\":%d}",
+                         code >= 0 ? "ok" : "error", code, code >= 0 ? code : 0);
+            free(dataspec); free(key);
         }
         else if (strcmp(cmd, "read") == 0) {
             if (!g_jvlink || !g_is_open) { json_response("{\"status\":\"error\",\"error\":\"not open\"}"); free(cmd); continue; }
@@ -348,6 +409,16 @@ int main(int argc, char* argv[]) {
             if (g_jvlink && g_is_open) CallJVClose();
             g_is_open = 0;
             json_response("{\"status\":\"ok\"}");
+        }
+        else if (strcmp(cmd, "filedelete") == 0) {
+            if (!g_jvlink) { json_response("{\"status\":\"error\",\"error\":\"not init\"}"); free(cmd); continue; }
+            char* filename = json_get_string(line, "filename");
+            int code = CallMethodStr(g_jvlink, L"JVFiledelete", filename ? filename : "");
+            if (code == -9999) {
+                code = CallMethodStr(g_jvlink, L"JVFileDelete", filename ? filename : "");
+            }
+            json_response("{\"status\":\"%s\",\"code\":%d}", code == 0 ? "ok" : "error", code);
+            free(filename);
         }
         else if (strcmp(cmd, "status") == 0) {
             if (!g_jvlink) { json_response("{\"status\":\"error\",\"error\":\"not init\"}"); free(cmd); continue; }

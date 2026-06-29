@@ -108,6 +108,7 @@ class RealtimeFetcher(BaseFetcher):
         try:
             # Initialize JV-Link
             logger.info("Initializing JV-Link", has_service_key=self._service_key is not None)
+            self._configure_service_key()
             ret = self.jvlink.jv_init()
             if ret != JV_RT_SUCCESS:
                 raise FetcherError(f"JV-Link initialization failed: {ret}")
@@ -495,6 +496,7 @@ class RealtimeFetcher(BaseFetcher):
         logger.info(f"Found {len(race_rows)} races in database")
 
         # Initialize JV-Link
+        self._configure_service_key()
         ret = self.jvlink.jv_init()
         if ret != JV_RT_SUCCESS:
             raise FetcherError(f"JV-Link initialization failed: {ret}")
@@ -795,6 +797,7 @@ class RealtimeFetcher(BaseFetcher):
         )
 
         # Initialize JV-Link once for the entire batch
+        self._configure_service_key()
         ret = self.jvlink.jv_init()
         if ret != JV_RT_SUCCESS:
             raise FetcherError(f"JV-Link initialization failed: {ret}")

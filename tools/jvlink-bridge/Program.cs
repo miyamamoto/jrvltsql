@@ -150,19 +150,29 @@ class BridgeForm : Form
         }
     }
 
+    private bool EnsureComObject()
+    {
+        if (_jvlink != null) return true;
+
+        try
+        {
+            var comType = Type.GetTypeFromProgID("JVDTLab.JVLink");
+            if (comType != null)
+                _jvlink = Activator.CreateInstance(comType);
+        }
+        catch
+        {
+            _jvlink = null;
+        }
+
+        return _jvlink != null;
+    }
+
     private void HandleInit(JsonNode node)
     {
         try
         {
-            if (_jvlink == null)
-            {
-                // Fallback: try creating via ProgID
-                var comType = Type.GetTypeFromProgID("JVDTLab.JVLink");
-                if (comType != null)
-                    _jvlink = Activator.CreateInstance(comType);
-            }
-
-            if (_jvlink == null)
+            if (!EnsureComObject())
             {
                 WriteResponse(new { status = "error", error = "JVLink COM object not available" });
                 return;
@@ -180,7 +190,7 @@ class BridgeForm : Form
 
     private void HandleSetServiceKey(JsonNode node)
     {
-        if (_jvlink == null) { WriteResponse(new { status = "error", error = "Not initialized" }); return; }
+        if (!EnsureComObject()) { WriteResponse(new { status = "error", error = "JVLink COM object not available" }); return; }
         var servicekey = node["servicekey"]?.GetValue<string>() ?? "";
         int code = _jvlink.JVSetServiceKey(servicekey);
         WriteResponse(new { status = code == 0 ? "ok" : "error", code });
@@ -188,7 +198,7 @@ class BridgeForm : Form
 
     private void HandleSetSavePath(JsonNode node)
     {
-        if (_jvlink == null) { WriteResponse(new { status = "error", error = "Not initialized" }); return; }
+        if (!EnsureComObject()) { WriteResponse(new { status = "error", error = "JVLink COM object not available" }); return; }
         var path = node["path"]?.GetValue<string>() ?? "C:\\JV-Data\\";
         int code = _jvlink.JVSetSavePath(path);
         WriteResponse(new { status = code == 0 ? "ok" : "error", code });
@@ -287,7 +297,15 @@ class BridgeForm : Form
     {
         if (_jvlink == null) { WriteResponse(new { status = "error", error = "Not initialized" }); return; }
         var filename = node["filename"]?.GetValue<string>() ?? "";
-        int code = _jvlink.JVFileDelete(filename);
+        int code;
+        try
+        {
+            code = _jvlink.JVFiledelete(filename);
+        }
+        catch
+        {
+            code = _jvlink.JVFileDelete(filename);
+        }
         WriteResponse(new { status = "ok", code });
     }
 

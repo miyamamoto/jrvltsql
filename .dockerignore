@@ -3,6 +3,11 @@ __pycache__
 *.pyc
 *.pyo
 data/
+logs/
+wineprefix/
+jvlink-installers/
+htmlcov/
+.pytest-tmp/
 *.db
 .env
 .venv

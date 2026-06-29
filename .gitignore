@@ -160,6 +160,10 @@ config/config.yaml
 .jvlink/
 jvlink_cache/
 
+# Docker / Wine runtime state
+wineprefix/
+jvlink-installers/
+
 # OS specific
 .DS_Store
 Thumbs.db

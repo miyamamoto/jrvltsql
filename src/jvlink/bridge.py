@@ -17,9 +17,10 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, TextIO, Tuple
 
 from src.jvlink.constants import (
     BUFFER_SIZE_JVREAD,
@@ -32,6 +33,8 @@ logger = get_logger(__name__)
 
 # Default bridge executable locations (searched in order)
 _BRIDGE_SEARCH_PATHS = [
+    # Native Win32 bridge (preferred for Wine; no .NET runtime dependency)
+    Path("tools/jvlink-bridge/bin/native/JVLinkBridge.exe"),
     # Relative to jrvltsql repo root (build output)
     Path("tools/jvlink-bridge/bin/x86/Release/net8.0-windows/JVLinkBridge.exe"),
     Path("tools/jvlink-bridge/bin/Release/net8.0-windows/JVLinkBridge.exe"),
@@ -48,14 +51,32 @@ _BRIDGE_SEARCH_PATHS = [
 _BRIDGE_SEARCH_PATHS_LINUX = [
     Path("/opt/jvlink-bridge/JVLinkBridge.exe"),
     Path.home() / "jvlink-bridge" / "JVLinkBridge.exe",
+    Path("tools/jvlink-bridge/bin/native/JVLinkBridge.exe"),
     Path("tools/jvlink-bridge/bin/x86/Release/net48/JVLinkBridge.exe"),
+    Path("tools/jvlink-bridge/bin/x86/Release/net8.0-windows/JVLinkBridge.exe"),
     Path("tools/jvlink-bridge/JVLinkBridge.exe"),
 ]
 
 
-def _is_wine_available() -> bool:
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+def _wine_executable() -> str:
+    return os.environ.get("JVLINK_WINE", "wine")
+
+
+def _is_wine_available(wine: Optional[str] = None) -> bool:
     """Check if Wine is installed and available."""
-    return shutil.which("wine") is not None
+    return shutil.which(wine or _wine_executable()) is not None
+
+
+def _looks_like_windows_path(path: str) -> bool:
+    return (
+        len(path) >= 3
+        and path[1] == ":"
+        and path[2] in ("\\", "/")
+    ) or path.startswith("\\\\")
 
 
 def find_bridge_executable() -> Optional[Path]:
@@ -69,20 +90,21 @@ def find_bridge_executable() -> Optional[Path]:
     # Environment variable override
     env_path = os.environ.get("JVLINK_BRIDGE_EXE")
     if env_path:
-        p = Path(env_path)
+        p = Path(env_path).expanduser()
         if p.exists():
             return p
 
     search_paths = _BRIDGE_SEARCH_PATHS_LINUX if sys.platform != "win32" else _BRIDGE_SEARCH_PATHS
 
     for p in search_paths:
+        p = p.expanduser()
         if p.is_absolute() and p.exists():
             return p
-        # Try relative to current working directory
         if not p.is_absolute():
-            abs_p = Path.cwd() / p
-            if abs_p.exists():
-                return abs_p
+            for base in (Path.cwd(), _repo_root()):
+                abs_p = base / p
+                if abs_p.exists():
+                    return abs_p
     return None
 
 
@@ -130,6 +152,8 @@ class JVLinkBridge:
         self._process: Optional[subprocess.Popen] = None
         self._is_open = False
         self._use_wine = sys.platform != "win32"
+        self._wine = _wine_executable()
+        self._stderr_file: Optional[TextIO] = None
 
         if bridge_path:
             self._bridge_path = Path(bridge_path)
@@ -142,18 +166,79 @@ class JVLinkBridge:
                 "tools/jvlink-bridge/ にビルド済みバイナリを配置してください。"
             )
 
-        if self._use_wine and not _is_wine_available():
-            raise JVLinkBridgeError(
-                "Linux環境ではWineが必要です。"
-                "apt install wine32 でインストールしてください。"
-            )
-
         logger.info(
             "JVLinkBridge initialized",
             bridge_path=str(self._bridge_path),
             sid=sid,
             use_wine=self._use_wine,
+            wine=self._wine if self._use_wine else None,
         )
+
+    def _build_command(self) -> list[str]:
+        if not self._use_wine:
+            return [str(self._bridge_path)]
+
+        if not _is_wine_available(self._wine):
+            raise JVLinkBridgeError(
+                "Linux環境ではWineが必要です。"
+                "wine32/wine をインストールし、必要なら JVLINK_WINE に実行ファイルを指定してください。"
+            )
+        return [self._wine, str(self._bridge_path)]
+
+    def _build_env(self) -> dict[str, str]:
+        env = os.environ.copy()
+        if self._use_wine:
+            env.setdefault("WINEDEBUG", "-all")
+        wineprefix = env.get("JVLINK_WINEPREFIX")
+        if wineprefix:
+            env["WINEPREFIX"] = wineprefix
+        winearch = env.get("JVLINK_WINEARCH")
+        if winearch:
+            env["WINEARCH"] = winearch
+        return env
+
+    def _open_stderr_file(self) -> TextIO:
+        if self._stderr_file is not None:
+            try:
+                self._stderr_file.close()
+            except Exception:
+                pass
+        self._stderr_file = tempfile.TemporaryFile(mode="w+t", encoding="utf-8", errors="replace")
+        return self._stderr_file
+
+    def _stderr_tail(self, limit: int = 4000) -> str:
+        if self._stderr_file is None:
+            return ""
+        try:
+            self._stderr_file.flush()
+            self._stderr_file.seek(0)
+            data = self._stderr_file.read()
+            return data[-limit:]
+        except Exception:
+            return ""
+
+    def _to_wine_path(self, path: str) -> str:
+        if not self._use_wine or _looks_like_windows_path(path):
+            return path
+
+        winepath = shutil.which("winepath")
+        if winepath:
+            try:
+                result = subprocess.run(
+                    [winepath, "-w", path],
+                    env=self._build_env(),
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    check=False,
+                )
+                converted = result.stdout.strip()
+                if result.returncode == 0 and converted:
+                    return converted
+            except Exception:
+                pass
+
+        return "Z:" + str(Path(path)).replace("/", "\\")
 
     def _start_process(self):
         if self._process is not None and self._process.poll() is None:
@@ -161,38 +246,38 @@ class JVLinkBridge:
 
         logger.info("Starting JVLinkBridge subprocess", path=str(self._bridge_path), wine=self._use_wine)
 
-        if self._use_wine:
-            cmd = ["wine", str(self._bridge_path)]
-        else:
-            cmd = [str(self._bridge_path)]
+        cmd = self._build_command()
+        stderr_file = self._open_stderr_file()
 
-        # Wine outputs verbose debug messages to stderr; suppress them to
-        # prevent the pipe buffer from filling up and deadlocking the process.
-        wine_env = None
-        stderr_target = subprocess.PIPE
-        if self._use_wine:
-            wine_env = {**os.environ, "WINEDEBUG": "-all"}
-            stderr_target = subprocess.DEVNULL
+        try:
+            self._process = subprocess.Popen(
+                cmd,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=stderr_file,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                bufsize=1,
+                env=self._build_env(),
+            )
 
-        self._process = subprocess.Popen(
-            cmd,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=stderr_target,
-            env=wine_env,
-            text=True,
-            encoding="utf-8",
-            bufsize=1,
-        )
-
-        response = self._read_response(timeout=10.0)
-        if response.get("status") != "ready":
-            raise JVLinkBridgeError(f"Bridge failed to start: {response.get('error', 'unknown')}")
-        logger.info("JVLinkBridge subprocess ready", version=response.get("version"))
+            response = self._read_response(timeout=10.0)
+            if response.get("status") != "ready":
+                raise JVLinkBridgeError(
+                    f"Bridge failed to start: {response.get('error', 'unknown')}. "
+                    f"stderr: {self._stderr_tail()}"
+                )
+            logger.info("JVLinkBridge subprocess ready", version=response.get("version"))
+        except Exception:
+            self.cleanup()
+            raise
 
     def _send_command(self, cmd: dict, timeout: Optional[float] = None) -> dict:
         if self._process is None or self._process.poll() is not None:
             raise JVLinkBridgeError("Bridge process is not running")
+        if self._process.stdin is None:
+            raise JVLinkBridgeError("Bridge stdin is not available")
 
         timeout = timeout or self._timeout
         cmd_json = json.dumps(cmd, ensure_ascii=False)
@@ -209,46 +294,63 @@ class JVLinkBridge:
         if self._process is None:
             raise JVLinkBridgeError("Bridge process is not running")
 
-        if sys.platform == "win32":
-            import threading
-            result = [None]
-            error = [None]
+        deadline = time.monotonic() + timeout
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise JVLinkBridgeError(
+                    f"Bridge response timeout ({timeout}s). stderr: {self._stderr_tail()}"
+                )
 
-            def _read():
-                try:
-                    result[0] = self._process.stdout.readline()
-                except Exception as e:
-                    error[0] = e
+            if sys.platform == "win32":
+                import threading
+                result = [None]
+                error = [None]
 
-            thread = threading.Thread(target=_read, daemon=True)
-            thread.start()
-            thread.join(timeout=timeout)
+                def _read():
+                    try:
+                        result[0] = self._process.stdout.readline()
+                    except Exception as e:
+                        error[0] = e
 
-            if thread.is_alive():
-                raise JVLinkBridgeError(f"Bridge response timeout ({timeout}s)")
-            if error[0]:
-                raise JVLinkBridgeError(f"Bridge read error: {error[0]}")
-            line = result[0]
-        else:
-            import select
-            ready, _, _ = select.select([self._process.stdout], [], [], timeout)
-            if not ready:
-                raise JVLinkBridgeError(f"Bridge response timeout ({timeout}s)")
-            line = self._process.stdout.readline()
+                thread = threading.Thread(target=_read, daemon=True)
+                thread.start()
+                thread.join(timeout=remaining)
 
-        if not line:
-            stderr_output = ""
-            if self._process.stderr:
-                try:
-                    stderr_output = self._process.stderr.read()
-                except Exception:
-                    pass
-            raise JVLinkBridgeError(f"Bridge terminated unexpectedly. stderr: {stderr_output}")
+                if thread.is_alive():
+                    raise JVLinkBridgeError(
+                        f"Bridge response timeout ({timeout}s). stderr: {self._stderr_tail()}"
+                    )
+                if error[0]:
+                    raise JVLinkBridgeError(f"Bridge read error: {error[0]}")
+                line = result[0]
+            else:
+                import select
+                ready, _, _ = select.select([self._process.stdout], [], [], remaining)
+                if not ready:
+                    raise JVLinkBridgeError(
+                        f"Bridge response timeout ({timeout}s). stderr: {self._stderr_tail()}"
+                    )
+                line = self._process.stdout.readline()
 
-        try:
-            return json.loads(line.strip())
-        except json.JSONDecodeError as e:
-            raise JVLinkBridgeError(f"Invalid JSON from bridge: {line.strip()!r}: {e}")
+            if not line:
+                raise JVLinkBridgeError(
+                    f"Bridge terminated unexpectedly. stderr: {self._stderr_tail()}"
+                )
+
+            raw = line.strip().lstrip("\ufeff")
+            if not raw:
+                continue
+
+            try:
+                return json.loads(raw)
+            except json.JSONDecodeError as e:
+                if not raw.startswith("{"):
+                    logger.warning("Ignoring non-JSON bridge output", line=raw[:200])
+                    continue
+                raise JVLinkBridgeError(
+                    f"Invalid JSON from bridge: {raw!r}: {e}. stderr: {self._stderr_tail()}"
+                )
 
     # =========================================================================
     # JV-Link API Methods
@@ -273,8 +375,11 @@ class JVLinkBridge:
         Args:
             service_key: JRA-VAN DataLab service key (without dashes).
         """
+        self._start_process()
         response = self._send_command({"cmd": "setservicekey", "servicekey": service_key})
         code = response.get("code", -1)
+        if response.get("status") == "error" and "code" not in response:
+            raise JVLinkBridgeError(response.get("error", "JVSetServiceKey failed"))
         if code != 0:
             logger.warning("JVSetServiceKey returned non-zero", code=code)
         return code
@@ -285,7 +390,10 @@ class JVLinkBridge:
         Args:
             path: Directory path for JV-Data files (Windows path format).
         """
-        response = self._send_command({"cmd": "setsavepath", "path": path})
+        self._start_process()
+        response = self._send_command({"cmd": "setsavepath", "path": self._to_wine_path(path)})
+        if response.get("status") == "error" and "code" not in response:
+            raise JVLinkBridgeError(response.get("error", "JVSetSavePath failed"))
         return response.get("code", -1)
 
     def jv_open(
@@ -425,6 +533,12 @@ class JVLinkBridge:
                     pass
         self._process = None
         self._is_open = False
+        if self._stderr_file is not None:
+            try:
+                self._stderr_file.close()
+            except Exception:
+                pass
+            self._stderr_file = None
 
     def __enter__(self):
         self.jv_init()

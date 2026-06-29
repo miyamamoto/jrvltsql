@@ -2,17 +2,20 @@
 
 Platform support:
 - Windows (32-bit Python): Direct COM via pywin32 (JVLinkWrapper)
-- Windows (64-bit Python): C# bridge subprocess (JVLinkBridge)
-- Linux: Wine + JVLinkBridge.exe (via bridge.py)
+- Windows (64-bit Python): JVLinkBridge subprocess
+- Linux/Docker: JVLinkBridge subprocess via Wine
 """
 
 import sys
 
 
 def is_jvlink_available() -> bool:
-    """Check if direct COM (pywin32) is available.
+    """Check if JV-Link COM operations are available on this platform."""
+    if sys.platform == "win32":
+        return True
+    try:
+        from src.jvlink.bridge import find_bridge_executable
 
-    This checks for native Windows COM support only.
-    For Wine-based bridge availability, use bridge.find_bridge_executable().
-    """
-    return sys.platform == "win32"
+        return find_bridge_executable() is not None
+    except Exception:
+        return False

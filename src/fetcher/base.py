@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from typing import Iterator, Optional
 
 from src.jvlink.constants import JV_READ_NO_MORE_DATA, JV_READ_SUCCESS
-from src.jvlink.wrapper import JVLinkWrapper  # noqa: F401 (used by test mocks)
+from src.jvlink.wrapper import JVLinkError, JVLinkWrapper
 from src.parser.factory import ParserFactory
 from src.utils.logger import get_logger
 from src.utils.progress import JVLinkProgressDisplay
@@ -54,7 +54,7 @@ class BaseFetcher(ABC):
                         JRA-VAN DataLab application or registry.
             show_progress: Show stylish progress display (default: True)
         """
-        # Prefer C# JVLinkBridge over Python win32com for JRA operations.
+        # Prefer JVLinkBridge over Python win32com for JRA operations.
         # On Linux, JVLinkBridge runs under Wine.
         # Eliminates 32-bit Python requirement and COM instability.
         from src.jvlink.bridge import find_bridge_executable
@@ -64,7 +64,15 @@ class BaseFetcher(ABC):
             logger.info("Using JVLinkBridge for JRA", bridge_path=str(bridge_exe))
             self.jvlink = JVLinkBridge(sid, bridge_path=bridge_exe)
         else:
-            self.jvlink = JVLinkWrapper(sid)
+            try:
+                logger.info("Using JVLinkWrapper for JRA")
+                self.jvlink = JVLinkWrapper(sid)
+            except JVLinkError as e:
+                raise FetcherError(
+                    "JV-Link is not available. "
+                    "Linux requires Wine + JVLinkBridge.exe + COM DLL registered. "
+                    "Run: scripts/setup_wine_jvlink.sh"
+                ) from e
 
         self.parser_factory = ParserFactory()
         self._records_fetched = 0
@@ -79,6 +87,18 @@ class BaseFetcher(ABC):
 
         logger.info(f"{self.__class__.__name__} initialized", sid=sid,
                    has_service_key=service_key is not None)
+
+    def _configure_service_key(self) -> None:
+        if not self._service_key:
+            return
+        service_key = str(self._service_key).strip()
+        if not service_key or (service_key.startswith("${") and service_key.endswith("}")):
+            return
+        if not hasattr(self.jvlink, "jv_set_service_key"):
+            return
+        ret = self.jvlink.jv_set_service_key(service_key)
+        if ret != 0:
+            raise FetcherError(f"JV-Link service key setup failed: {ret}")
 
     @abstractmethod
     def fetch(self, **kwargs) -> Iterator[dict]:
