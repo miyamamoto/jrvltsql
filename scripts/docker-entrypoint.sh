@@ -35,22 +35,16 @@ start_display() {
 }
 
 init_wine() {
-  if [ ! -f "$WINEPREFIX/system.reg" ]; then
-    echo "Initializing Wine prefix at $WINEPREFIX"
-    wineboot --init || true
-    wineserver -w || true
-  fi
-
-  if [ "${RUN_JVLINK_INSTALLER:-0}" = "1" ] && [ -n "${JVLINK_INSTALLER:-}" ]; then
-    echo "Running JV-Link installer: $JVLINK_INSTALLER"
-    wine "$JVLINK_INSTALLER"
-    wineserver -w || true
-  fi
-
-  if [ "${REGISTER_JVLINK_DLL:-0}" = "1" ] && [ -n "${JVLINK_DLL:-}" ]; then
-    echo "Registering JV-Link DLL: $JVLINK_DLL"
-    wine regsvr32 "$JVLINK_DLL"
-    wineserver -w || true
+  if [ "${AUTO_INSTALL_JVLINK:-1}" = "1" ]; then
+    scripts/setup_wine_jvlink.sh --auto || {
+      echo "JV-Link automatic setup failed. Open noVNC and rerun scripts/setup_wine_jvlink.sh manually." >&2
+    }
+  else
+    if [ ! -f "$WINEPREFIX/system.reg" ]; then
+      echo "Initializing Wine prefix at $WINEPREFIX"
+      wineboot --init || true
+      wineserver -w || true
+    fi
   fi
 }
 

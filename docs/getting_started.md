@@ -31,18 +31,24 @@ Linux / Docker で入れる場合:
 
 ```bash
 mkdir -p config data logs wineprefix jvlink-installers
+cp /path/to/<JV-Link-installer>.exe jvlink-installers/
+export JVLINK_SERVICE_KEY='XXXX-XXXX-XXXX-XXXX-X'
 docker compose build jrvltsql
 docker compose up -d jrvltsql
 ```
 
+コンテナ起動時に `jvlink-installers/` 内の JV-Link インストーラを自動検出して
+Wine 上で実行し、`JVDTLab.dll` の登録と `JVLINK_SERVICE_KEY` の設定を試みます。
 Wine 上の JV-Link インストールでマウス操作が必要な場合は、
-`http://localhost:6080/vnc.html` を開いて操作します。インストーラは
-`jvlink-installers/` に置き、コンテナ内から実行します。
+`http://localhost:6080/vnc.html` を開いて操作します。
 
 ```bash
-docker compose exec jrvltsql scripts/setup_wine_jvlink.sh /installers/<JV-Link-installer>.exe
 docker compose exec jrvltsql jltsql version
 ```
+
+インストーラ名を明示する場合は `JVLINK_INSTALLER=/installers/<file>.exe` を指定します。
+サイレントインストール引数がある場合は `JVLINK_INSTALLER_ARGS` を使えます。
+自動セットアップを止める場合は `AUTO_INSTALL_JVLINK=0` を指定します。
 
 ## 1. まず決めること
 
