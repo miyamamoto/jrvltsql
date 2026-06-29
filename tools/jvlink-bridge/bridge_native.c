@@ -311,9 +311,9 @@ int main(int argc, char* argv[]) {
             char lastts[64] = "";
             int code = CallJVOpen(dataspec ? dataspec : "", fromtime ? fromtime : "",
                                    option, &readcount, &downloadcount, lastts, sizeof(lastts));
-            if (code >= 0) g_is_open = 1;
+            if (code >= -2) g_is_open = 1;
             json_response("{\"status\":\"%s\",\"code\":%d,\"readcount\":%d,\"downloadcount\":%d,\"lastfiletimestamp\":\"%s\"}",
-                         code >= 0 ? "ok" : "error", code, readcount, downloadcount, lastts);
+                         code >= -2 ? "ok" : "error", code, readcount, downloadcount, lastts);
             free(dataspec); free(fromtime);
         }
         else if (strcmp(cmd, "read") == 0) {
