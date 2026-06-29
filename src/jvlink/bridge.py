@@ -166,11 +166,20 @@ class JVLinkBridge:
         else:
             cmd = [str(self._bridge_path)]
 
+        # Wine outputs verbose debug messages to stderr; suppress them to
+        # prevent the pipe buffer from filling up and deadlocking the process.
+        wine_env = None
+        stderr_target = subprocess.PIPE
+        if self._use_wine:
+            wine_env = {**os.environ, "WINEDEBUG": "-all"}
+            stderr_target = subprocess.DEVNULL
+
         self._process = subprocess.Popen(
             cmd,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stderr=stderr_target,
+            env=wine_env,
             text=True,
             encoding="utf-8",
             bufsize=1,

@@ -13,11 +13,13 @@ RUN apt-get update && \
 
 WORKDIR /app
 
-# Install Python dependencies
+# Install Python dependencies (cache layer)
 COPY pyproject.toml ./
-RUN pip install --no-cache-dir -e ".[postgres,s3]" 2>/dev/null || true
+RUN mkdir -p src && touch src/__init__.py && \
+    pip install --no-cache-dir ".[postgres,s3]" && \
+    rm -rf src
 
-# Copy source
+# Copy source and install package
 COPY . .
 RUN pip install --no-cache-dir -e ".[postgres,s3]"
 

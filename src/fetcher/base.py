@@ -10,6 +10,7 @@ from typing import Iterator, Optional
 
 from src.jvlink import is_jvlink_available
 from src.jvlink.constants import JV_READ_NO_MORE_DATA, JV_READ_SUCCESS
+from src.jvlink.wrapper import JVLinkWrapper  # noqa: F401 (used by test mocks)
 from src.parser.factory import ParserFactory
 from src.utils.logger import get_logger
 from src.utils.progress import JVLinkProgressDisplay
