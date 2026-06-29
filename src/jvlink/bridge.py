@@ -174,6 +174,11 @@ class JVLinkBridge:
             wine=self._wine if self._use_wine else None,
         )
 
+    @property
+    def uses_wine(self) -> bool:
+        """Whether this bridge runs the native COM host through Wine."""
+        return self._use_wine
+
     def _build_command(self) -> list[str]:
         if not self._use_wine:
             return [str(self._bridge_path)]

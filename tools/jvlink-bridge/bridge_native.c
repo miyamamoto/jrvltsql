@@ -252,13 +252,40 @@ static char* json_get_string(const char* json, const char* key) {
     while (*p == ' ' || *p == '\t') p++;
     if (*p != '"') return NULL;
     p++;
-    char* end = strchr(p, '"');
-    if (!end) return NULL;
-    int len = (int)(end - p);
-    char* val = (char*)malloc(len + 1);
-    memcpy(val, p, len);
-    val[len] = '\0';
-    return val;
+
+    char* val = (char*)malloc(strlen(p) + 1);
+    if (!val) return NULL;
+    int out = 0;
+    int escaped = 0;
+    while (*p) {
+        char c = *p++;
+        if (escaped) {
+            switch (c) {
+                case '"': val[out++] = '"'; break;
+                case '\\': val[out++] = '\\'; break;
+                case '/': val[out++] = '/'; break;
+                case 'b': val[out++] = '\b'; break;
+                case 'f': val[out++] = '\f'; break;
+                case 'n': val[out++] = '\n'; break;
+                case 'r': val[out++] = '\r'; break;
+                case 't': val[out++] = '\t'; break;
+                default: val[out++] = c; break;
+            }
+            escaped = 0;
+            continue;
+        }
+        if (c == '\\') {
+            escaped = 1;
+            continue;
+        }
+        if (c == '"') {
+            val[out] = '\0';
+            return val;
+        }
+        val[out++] = c;
+    }
+    free(val);
+    return NULL;
 }
 
 static int json_get_int(const char* json, const char* key, int defval) {

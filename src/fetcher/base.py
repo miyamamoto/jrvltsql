@@ -4,6 +4,7 @@ This module provides the base class for fetching JV-Data from JV-Link.
 """
 
 import gc
+import os
 import time
 from abc import ABC, abstractmethod
 from typing import Iterator, Optional
@@ -15,6 +16,8 @@ from src.utils.logger import get_logger
 from src.utils.progress import JVLinkProgressDisplay
 
 logger = get_logger(__name__)
+
+SERVICE_KEY_SETUP_ENABLED_VALUES = {"1", "true", "yes", "on"}
 
 
 class FetcherError(Exception):
@@ -50,6 +53,7 @@ class BaseFetcher(ABC):
             sid: Session ID for JV-Link API (default: "UNKNOWN")
             service_key: Optional JV-Link service key. If provided, it will be set
                         programmatically without requiring registry configuration.
+                        Under Wine, this requires JVLINK_SET_SERVICE_KEY=1.
                         If not provided, the service key must be configured in
                         JRA-VAN DataLab application or registry.
             show_progress: Show stylish progress display (default: True)
@@ -93,6 +97,16 @@ class BaseFetcher(ABC):
             return
         service_key = str(self._service_key).strip()
         if not service_key or (service_key.startswith("${") and service_key.endswith("}")):
+            return
+        service_key_setup_enabled = (
+            os.environ.get("JVLINK_SET_SERVICE_KEY", "").lower()
+            in SERVICE_KEY_SETUP_ENABLED_VALUES
+        )
+        if getattr(self.jvlink, "uses_wine", False) and not service_key_setup_enabled:
+            logger.warning(
+                "Skipping JV-Link service key setup under Wine. "
+                "Set JVLINK_SET_SERVICE_KEY=1 to explicitly register it."
+            )
             return
         if not hasattr(self.jvlink, "jv_set_service_key"):
             return

@@ -31,20 +31,22 @@ pip install -e .
 
 ### Linux / Docker + Wine で動かす
 
-Docker image には Python 3.12、Wine 32-bit、Xvfb/noVNC、ネイティブ版
+Docker image には Python 3.12、Wine、Xvfb/noVNC、ネイティブ版
 `JVLinkBridge.exe` が入ります。JV-Link 本体とサービスキーは利用者側で用意します。
 
 ```bash
 mkdir -p config data logs wineprefix jvlink-installers
 cp /path/to/<JV-Link-installer>.exe jvlink-installers/
-export JVLINK_SERVICE_KEY='XXXX-XXXX-XXXX-XXXX-X'
 docker compose build jrvltsql
 docker compose up -d jrvltsql
 ```
 
 コンテナ起動時に `jvlink-installers/` 内の JV-Link インストーラを自動検出して
-Wine 上で実行し、`JVDTLab.dll` の登録と `JVLINK_SERVICE_KEY` の設定を試みます。
+Wine 上で実行し、`JVDTLab.dll` の登録まで行います。
 GUI 操作が必要な場合はブラウザで `http://localhost:6080/vnc.html` を開きます。
+サービスキーは自動登録しません。既に別マシンで利用しているキーを Wine に
+登録すると、JV-Link 側の端末登録に影響する可能性があります。必要な場合だけ
+`JVLINK_SET_SERVICE_KEY=1` と `JVLINK_SERVICE_KEY` を明示して登録してください。
 
 ```bash
 docker compose exec jrvltsql jltsql version
@@ -56,6 +58,7 @@ docker compose exec jrvltsql jltsql version
 
 コンテナ内の JV-Link ブリッジは
 `/app/tools/jvlink-bridge/bin/native/JVLinkBridge.exe` を Wine で起動します。
+Wine prefix は公式JV-Linkインストーラを起動できる win64 構成です。
 Wine prefix は `./wineprefix` に永続化されます。
 
 ## 最短手順

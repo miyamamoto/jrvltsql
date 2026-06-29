@@ -11,9 +11,9 @@ ENV VIRTUAL_ENV=/opt/venv
 ENV PATH="/opt/venv/bin:${PATH}"
 ENV DISPLAY=:1
 ENV WINEPREFIX=/wineprefix
-ENV WINEARCH=win32
+ENV WINEARCH=win64
 ENV JVLINK_WINEPREFIX=/wineprefix
-ENV JVLINK_WINEARCH=win32
+ENV JVLINK_WINEARCH=win64
 ENV JVLINK_BRIDGE_EXE=/app/tools/jvlink-bridge/bin/native/JVLinkBridge.exe
 
 RUN dpkg --add-architecture i386 \
@@ -22,6 +22,8 @@ RUN dpkg --add-architecture i386 \
         ca-certificates \
         cabextract \
         curl \
+        7zip \
+        7zip-rar \
         fluxbox \
         fonts-ipafont-gothic \
         fonts-noto-cjk \
@@ -37,6 +39,7 @@ RUN dpkg --add-architecture i386 \
         python3-dev \
         python3-pip \
         python3-venv \
+        unshield \
         unzip \
         websockify \
         wine \

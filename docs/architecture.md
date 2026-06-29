@@ -11,7 +11,7 @@ PostgreSQL へ直接保存できます。
 - Windows 10 / 11、または Docker が使える Linux
 - JRA-VAN DataLab + JV-Link
 - JV-Link COM コンポーネントが 32-bit のため、直接 COM では 32-bit Python を推奨
-- Linux/Docker では Wine 32-bit prefix と `tools/jvlink-bridge/bin/native/JVLinkBridge.exe` を使用
+- Linux/Docker では公式インストーラを起動できる Wine win64 prefix と `tools/jvlink-bridge/bin/native/JVLinkBridge.exe` を使用
 
 NAR / 地方競馬はこのリポジトリの対象外です。
 

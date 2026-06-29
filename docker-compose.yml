@@ -5,11 +5,10 @@ services:
     environment:
       DISPLAY: ":1"
       WINEPREFIX: /wineprefix
-      WINEARCH: win32
+      WINEARCH: win64
       JVLINK_WINEPREFIX: /wineprefix
-      JVLINK_WINEARCH: win32
+      JVLINK_WINEARCH: win64
       JVLINK_BRIDGE_EXE: /app/tools/jvlink-bridge/bin/native/JVLinkBridge.exe
-      JVLINK_SERVICE_KEY: ${JVLINK_SERVICE_KEY:-}
       AUTO_INSTALL_JVLINK: ${AUTO_INSTALL_JVLINK:-1}
       JVLINK_INSTALLERS_DIR: /installers
       JVLINK_INSTALLER: ${JVLINK_INSTALLER:-}

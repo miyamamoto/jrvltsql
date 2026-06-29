@@ -3,7 +3,7 @@ set -euo pipefail
 
 export DISPLAY="${DISPLAY:-:1}"
 export WINEPREFIX="${WINEPREFIX:-/wineprefix}"
-export WINEARCH="${WINEARCH:-win32}"
+export WINEARCH="${WINEARCH:-win64}"
 export JVLINK_WINEPREFIX="${JVLINK_WINEPREFIX:-$WINEPREFIX}"
 export JVLINK_WINEARCH="${JVLINK_WINEARCH:-$WINEARCH}"
 export JVLINK_BRIDGE_EXE="${JVLINK_BRIDGE_EXE:-/app/tools/jvlink-bridge/bin/native/JVLinkBridge.exe}"
