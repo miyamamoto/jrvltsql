@@ -320,11 +320,16 @@ class JVLinkBridge:
         code = response.get("code", -1)
         read_count = response.get("readcount", 0)
 
-        if code < -2:
+        # JVRTOpen returns positive N (= readcount) on success.
+        # Normalize to match JVLinkWrapper contract: (JV_RT_SUCCESS, N).
+        if code >= 0:
+            read_count = code if read_count == 0 else read_count
+            self._is_open = True
+            return JV_READ_SUCCESS, read_count
+        elif code == -1:
+            return code, 0
+        else:
             raise JVLinkBridgeError("JVRTOpen failed", error_code=code)
-
-        self._is_open = True
-        return code, read_count
 
     def jv_read(self) -> Tuple[int, Optional[bytes], Optional[str]]:
         if not self._is_open:
