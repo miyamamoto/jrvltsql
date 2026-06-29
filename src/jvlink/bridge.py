@@ -5,10 +5,16 @@ This replaces the Python win32com-based JVLinkWrapper, eliminating:
 - 32-bit Python requirement
 - COM threading/marshaling issues
 - win32com dependency
+
+Platform support:
+- Windows (native): Runs JVLinkBridge.exe directly
+- Linux (Wine): Runs via 'wine JVLinkBridge.exe' with COM DLLs registered in Wine
 """
 
 import base64
 import json
+import os
+import shutil
 import subprocess
 import sys
 import time
@@ -16,9 +22,9 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 from src.jvlink.constants import (
+    BUFFER_SIZE_JVREAD,
     JV_READ_NO_MORE_DATA,
     JV_READ_SUCCESS,
-    BUFFER_SIZE_JVREAD,
 )
 from src.utils.logger import get_logger
 
@@ -29,6 +35,8 @@ _BRIDGE_SEARCH_PATHS = [
     # Relative to jrvltsql repo root (build output)
     Path("tools/jvlink-bridge/bin/x86/Release/net8.0-windows/JVLinkBridge.exe"),
     Path("tools/jvlink-bridge/bin/Release/net8.0-windows/JVLinkBridge.exe"),
+    Path("tools/jvlink-bridge/bin/x86/Release/net48/JVLinkBridge.exe"),
+    Path("tools/jvlink-bridge/bin/Release/net48/JVLinkBridge.exe"),
     # Relative to jrvltsql repo root (flat copy)
     Path("tools/jvlink-bridge/JVLinkBridge.exe"),
     # Generic Windows locations
@@ -36,14 +44,38 @@ _BRIDGE_SEARCH_PATHS = [
     Path(r"C:\Program Files (x86)\JVLinkBridge\JVLinkBridge.exe"),
 ]
 
+# Linux-specific paths (Wine environment)
+_BRIDGE_SEARCH_PATHS_LINUX = [
+    Path("/opt/jvlink-bridge/JVLinkBridge.exe"),
+    Path.home() / "jvlink-bridge" / "JVLinkBridge.exe",
+    Path("tools/jvlink-bridge/bin/x86/Release/net48/JVLinkBridge.exe"),
+    Path("tools/jvlink-bridge/JVLinkBridge.exe"),
+]
+
+
+def _is_wine_available() -> bool:
+    """Check if Wine is installed and available."""
+    return shutil.which("wine") is not None
+
 
 def find_bridge_executable() -> Optional[Path]:
     """Find the JVLinkBridge executable.
 
+    On Linux, also checks Linux-specific paths for Wine-based execution.
+
     Returns:
         Path to JVLinkBridge.exe, or None if not found.
     """
-    for p in _BRIDGE_SEARCH_PATHS:
+    # Environment variable override
+    env_path = os.environ.get("JVLINK_BRIDGE_EXE")
+    if env_path:
+        p = Path(env_path)
+        if p.exists():
+            return p
+
+    search_paths = _BRIDGE_SEARCH_PATHS_LINUX if sys.platform != "win32" else _BRIDGE_SEARCH_PATHS
+
+    for p in search_paths:
         if p.is_absolute() and p.exists():
             return p
         # Try relative to current working directory
@@ -97,6 +129,7 @@ class JVLinkBridge:
         self._timeout = timeout
         self._process: Optional[subprocess.Popen] = None
         self._is_open = False
+        self._use_wine = sys.platform != "win32"
 
         if bridge_path:
             self._bridge_path = Path(bridge_path)
@@ -109,16 +142,32 @@ class JVLinkBridge:
                 "tools/jvlink-bridge/ にビルド済みバイナリを配置してください。"
             )
 
-        logger.info("JVLinkBridge initialized", bridge_path=str(self._bridge_path), sid=sid)
+        if self._use_wine and not _is_wine_available():
+            raise JVLinkBridgeError(
+                "Linux環境ではWineが必要です。"
+                "apt install wine32 でインストールしてください。"
+            )
+
+        logger.info(
+            "JVLinkBridge initialized",
+            bridge_path=str(self._bridge_path),
+            sid=sid,
+            use_wine=self._use_wine,
+        )
 
     def _start_process(self):
         if self._process is not None and self._process.poll() is None:
             return
 
-        logger.info("Starting JVLinkBridge subprocess", path=str(self._bridge_path))
+        logger.info("Starting JVLinkBridge subprocess", path=str(self._bridge_path), wine=self._use_wine)
+
+        if self._use_wine:
+            cmd = ["wine", str(self._bridge_path)]
+        else:
+            cmd = [str(self._bridge_path)]
 
         self._process = subprocess.Popen(
-            [str(self._bridge_path)],
+            cmd,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -208,12 +257,25 @@ class JVLinkBridge:
         return 0
 
     def jv_set_service_key(self, service_key: str) -> int:
-        """Set service key. Note: Bridge doesn't directly support this yet.
+        """Set service key via COM bridge.
 
-        For JRA, the service key is typically set via registry by JRA-VAN DataLab installer.
+        Args:
+            service_key: JRA-VAN DataLab service key (without dashes).
         """
-        logger.warning("jv_set_service_key not implemented in bridge; use JRA-VAN DataLab to configure")
-        return 0
+        response = self._send_command({"cmd": "setservicekey", "servicekey": service_key})
+        code = response.get("code", -1)
+        if code != 0:
+            logger.warning("JVSetServiceKey returned non-zero", code=code)
+        return code
+
+    def jv_set_save_path(self, path: str) -> int:
+        """Set the data save path.
+
+        Args:
+            path: Directory path for JV-Data files (Windows path format).
+        """
+        response = self._send_command({"cmd": "setsavepath", "path": path})
+        return response.get("code", -1)
 
     def jv_open(
         self,

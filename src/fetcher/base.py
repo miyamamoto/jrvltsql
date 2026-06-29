@@ -8,8 +8,8 @@ import time
 from abc import ABC, abstractmethod
 from typing import Iterator, Optional
 
+from src.jvlink import is_jvlink_available
 from src.jvlink.constants import JV_READ_NO_MORE_DATA, JV_READ_SUCCESS
-from src.jvlink.wrapper import JVLinkWrapper
 from src.parser.factory import ParserFactory
 from src.utils.logger import get_logger
 from src.utils.progress import JVLinkProgressDisplay
@@ -55,15 +55,23 @@ class BaseFetcher(ABC):
             show_progress: Show stylish progress display (default: True)
         """
         # Prefer C# JVLinkBridge over Python win32com for JRA operations.
+        # On Linux, JVLinkBridge runs under Wine.
         # Eliminates 32-bit Python requirement and COM instability.
         from src.jvlink.bridge import find_bridge_executable
         bridge_exe = find_bridge_executable()
         if bridge_exe is not None:
             from src.jvlink.bridge import JVLinkBridge
-            logger.info("Using JVLinkBridge (C#) for JRA", bridge_path=str(bridge_exe))
+            logger.info("Using JVLinkBridge for JRA", bridge_path=str(bridge_exe))
             self.jvlink = JVLinkBridge(sid, bridge_path=bridge_exe)
-        else:
+        elif is_jvlink_available():
+            from src.jvlink.wrapper import JVLinkWrapper
             self.jvlink = JVLinkWrapper(sid)
+        else:
+            raise FetcherError(
+                "JV-Link is not available. "
+                "Linux requires Wine + JVLinkBridge.exe + COM DLL registered. "
+                "Run: scripts/setup_wine_jvlink.sh"
+            )
 
         self.parser_factory = ParserFactory()
         self._records_fetched = 0
