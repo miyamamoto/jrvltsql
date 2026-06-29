@@ -285,7 +285,7 @@ int main(int argc, char* argv[]) {
             }
             // Call JVInit
             int code = CallMethodStr(g_jvlink, L"JVInit", key ? key : "");
-            json_response("{\"status\":\"ok\",\"code\":%d}", code);
+            json_response("{\"status\":\"%s\",\"code\":%d}", code == 0 ? "ok" : "error", code);
             free(key);
         }
         else if (strcmp(cmd, "setservicekey") == 0) {

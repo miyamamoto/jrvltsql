@@ -259,8 +259,10 @@ class JVLinkBridge:
         response = self._send_command({"cmd": "init", "type": "jra", "key": self.sid})
 
         code = response.get("code", -1)
-        if response.get("status") == "error" and code != 0:
-            raise JVLinkBridgeError(response.get("error", "JVInit failed"), error_code=code)
+        if code != 0:
+            raise JVLinkBridgeError(
+                response.get("error", "JVInit failed"), error_code=code
+            )
 
         logger.info("JV-Link initialized via bridge", code=code)
         return code

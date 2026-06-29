@@ -65,7 +65,6 @@ class BaseFetcher(ABC):
             logger.info("Using JVLinkBridge for JRA", bridge_path=str(bridge_exe))
             self.jvlink = JVLinkBridge(sid, bridge_path=bridge_exe)
         elif is_jvlink_available():
-            from src.jvlink.wrapper import JVLinkWrapper
             self.jvlink = JVLinkWrapper(sid)
         else:
             raise FetcherError(
