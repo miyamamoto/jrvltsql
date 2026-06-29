@@ -170,7 +170,7 @@ class BridgeForm : Form
 
             var key = node["key"]?.GetValue<string>() ?? "UNKNOWN";
             int result = _jvlink.JVInit(key);
-            WriteResponse(new { status = "ok", code = result });
+            WriteResponse(new { status = result == 0 ? "ok" : "error", code = result });
         }
         catch (Exception ex)
         {
@@ -209,7 +209,7 @@ class BridgeForm : Form
         int code = _jvlink.JVOpen(dataspec, fromtime, option,
             ref readcount, ref downloadcount, ref lastfiletimestamp);
 
-        if (code < 0)
+        if (code < -2)
             WriteResponse(new { status = "error", code, error = "JVOpen failed", readcount, downloadcount, lastfiletimestamp });
         else
         {

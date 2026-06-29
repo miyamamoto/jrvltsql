@@ -258,12 +258,12 @@ class JVLinkBridge:
         self._start_process()
         response = self._send_command({"cmd": "init", "type": "jra", "key": self.sid})
 
-        if response.get("status") == "error":
-            code = response.get("code", -1)
+        code = response.get("code", -1)
+        if response.get("status") == "error" and code != 0:
             raise JVLinkBridgeError(response.get("error", "JVInit failed"), error_code=code)
 
-        logger.info("JV-Link initialized via bridge", hwnd=response.get("hwnd"))
-        return 0
+        logger.info("JV-Link initialized via bridge", code=code)
+        return code
 
     def jv_set_service_key(self, service_key: str) -> int:
         """Set service key via COM bridge.
