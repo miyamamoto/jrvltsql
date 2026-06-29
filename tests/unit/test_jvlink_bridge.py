@@ -18,7 +18,8 @@ def bridge(tmp_path):
     """Create bridge with mocked process."""
     exe = tmp_path / "JVLinkBridge.exe"
     exe.touch()
-    with patch("src.jvlink.bridge.find_bridge_executable", return_value=exe):
+    with patch("src.jvlink.bridge.find_bridge_executable", return_value=exe), \
+         patch("src.jvlink.bridge._is_wine_available", return_value=True):
         b = JVLinkBridge(sid="TEST", bridge_path=exe)
     mock_proc = MagicMock()
     mock_proc.poll.return_value = None
@@ -42,7 +43,8 @@ class TestJVLinkBridgeInit:
     def test_init_with_valid_path(self, tmp_path):
         exe = tmp_path / "JVLinkBridge.exe"
         exe.touch()
-        b = JVLinkBridge(bridge_path=exe)
+        with patch("src.jvlink.bridge._is_wine_available", return_value=True):
+            b = JVLinkBridge(bridge_path=exe)
         assert b._bridge_path == exe
 
 
