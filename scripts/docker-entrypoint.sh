@@ -2,6 +2,8 @@
 set -euo pipefail
 
 export DISPLAY="${DISPLAY:-:1}"
+export LANG="${LANG:-ja_JP.UTF-8}"
+export LC_ALL="${LC_ALL:-ja_JP.UTF-8}"
 export WINEPREFIX="${WINEPREFIX:-/wineprefix}"
 export WINEARCH="${WINEARCH:-win64}"
 export JVLINK_WINEPREFIX="${JVLINK_WINEPREFIX:-$WINEPREFIX}"
@@ -10,6 +12,8 @@ export JVLINK_BRIDGE_EXE="${JVLINK_BRIDGE_EXE:-/app/tools/jvlink-bridge/bin/nati
 export VNC_PORT="${VNC_PORT:-5900}"
 export VNC_PUBLIC_PORT="${VNC_PUBLIC_PORT:-$VNC_PORT}"
 export NOVNC_PUBLIC_PORT="${NOVNC_PUBLIC_PORT:-6080}"
+export AUTO_DISMISS_JVLINK_DIALOGS="${AUTO_DISMISS_JVLINK_DIALOGS:-1}"
+export JVLINK_DIALOG_WATCH_INTERVAL="${JVLINK_DIALOG_WATCH_INTERVAL:-1}"
 
 mkdir -p "$WINEPREFIX" /app/data /app/logs
 
@@ -34,6 +38,32 @@ start_display() {
   export NOVNC_PID=$!
 }
 
+start_jvlink_dialog_watcher() {
+  if [ "$AUTO_DISMISS_JVLINK_DIALOGS" != "1" ]; then
+    return
+  fi
+  if ! command -v xdotool >/dev/null 2>&1; then
+    echo "xdotool not found; JV-Link dialog auto-dismiss is disabled." >&2
+    return
+  fi
+
+  (
+    while true; do
+      for title in '払戻情報表示設定' 'JRA-VAN Data Lab\.'; do
+        for window_id in $(xdotool search --name "$title" 2>/dev/null || true); do
+          window_name="$(xdotool getwindowname "$window_id" 2>/dev/null || true)"
+          if [ -n "$window_name" ]; then
+            echo "Auto-dismissing JV-Link dialog: $window_name" >>/tmp/jvlink-dialog-watcher.log
+          fi
+          xdotool windowactivate --sync "$window_id" key Return >>/tmp/jvlink-dialog-watcher.log 2>&1 || true
+        done
+      done
+      sleep "$JVLINK_DIALOG_WATCH_INTERVAL"
+    done
+  ) &
+  export JVLINK_DIALOG_WATCHER_PID=$!
+}
+
 init_wine() {
   if [ "${AUTO_INSTALL_JVLINK:-1}" = "1" ]; then
     scripts/setup_wine_jvlink.sh --auto || {
@@ -49,7 +79,7 @@ init_wine() {
 }
 
 cleanup() {
-  for pid in "${NOVNC_PID:-}" "${X11VNC_PID:-}" "${FLUXBOX_PID:-}" "${XVFB_PID:-}"; do
+  for pid in "${JVLINK_DIALOG_WATCHER_PID:-}" "${NOVNC_PID:-}" "${X11VNC_PID:-}" "${FLUXBOX_PID:-}" "${XVFB_PID:-}"; do
     if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
       kill "$pid" 2>/dev/null || true
     fi
@@ -58,6 +88,7 @@ cleanup() {
 trap cleanup EXIT
 
 start_display
+start_jvlink_dialog_watcher
 init_wine
 
 cat <<EOF
@@ -68,6 +99,8 @@ Wine prefix:
   $WINEPREFIX
 JVLinkBridge:
   $JVLINK_BRIDGE_EXE
+JV-Link dialog auto-dismiss:
+  ${AUTO_DISMISS_JVLINK_DIALOGS}
 EOF
 
 exec "$@"

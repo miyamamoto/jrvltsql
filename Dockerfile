@@ -30,6 +30,7 @@ RUN dpkg --add-architecture i386 \
         gcc \
         gcc-mingw-w64-i686 \
         git \
+        gpg \
         language-pack-ja \
         libpq-dev \
         locales \
@@ -41,13 +42,17 @@ RUN dpkg --add-architecture i386 \
         python3-venv \
         unshield \
         unzip \
+        wget \
         websockify \
-        wine \
-        wine32:i386 \
-        wine64 \
         winbind \
+        xdotool \
         x11vnc \
         xvfb \
+    && mkdir -pm755 /etc/apt/keyrings \
+    && wget -qO- https://dl.winehq.org/wine-builds/winehq.key | gpg --dearmor -o /etc/apt/keyrings/winehq-archive.key - \
+    && wget -qNP /etc/apt/sources.list.d/ https://dl.winehq.org/wine-builds/ubuntu/dists/noble/winehq-noble.sources \
+    && apt-get update \
+    && apt-get install -y --install-recommends winehq-stable \
     && locale-gen ja_JP.UTF-8 \
     && rm -rf /var/lib/apt/lists/*
 
@@ -57,7 +62,7 @@ COPY . .
 
 RUN python3 -m venv /opt/venv \
     && pip install --upgrade pip setuptools wheel \
-    && pip install --no-cache-dir -e ".[postgres,s3]" \
+    && pip install --no-cache-dir ".[postgres,s3]" \
     && chmod +x scripts/docker-entrypoint.sh scripts/setup_wine_jvlink.sh scripts/build_jvlink_bridge_native.sh \
     && scripts/build_jvlink_bridge_native.sh \
     && mkdir -p /app/data /app/logs /wineprefix

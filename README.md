@@ -31,8 +31,12 @@ pip install -e .
 
 ### Linux / Docker + Wine で動かす
 
-Docker image には Python 3.12、Wine、Xvfb/noVNC、ネイティブ版
-`JVLinkBridge.exe` が入ります。JV-Link 本体とサービスキーは利用者側で用意します。
+Docker image には Python 3.12、WineHQ stable、Xvfb/noVNC、ネイティブ版
+`JVLinkBridge.exe`、および `jltsql` package が入ります。ホストのソースを
+bind mount しなくても、image 内の `/opt/venv` に通常インストールされた
+`jltsql` CLI で動作します。JV-Link 本体とサービスキーは利用者側で用意します。
+JV-Link が Wine 上で確認ダイアログを出した場合は、既知の確認画面だけ Enter で
+自動的に閉じます。手動操作したい場合は `AUTO_DISMISS_JVLINK_DIALOGS=0` を指定します。
 
 ```bash
 mkdir -p config data logs wineprefix jvlink-installers

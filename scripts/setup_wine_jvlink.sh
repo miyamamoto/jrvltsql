@@ -2,6 +2,8 @@
 set -euo pipefail
 
 export DISPLAY="${DISPLAY:-:1}"
+export LANG="${LANG:-ja_JP.UTF-8}"
+export LC_ALL="${LC_ALL:-ja_JP.UTF-8}"
 export WINEPREFIX="${WINEPREFIX:-/wineprefix}"
 export WINEARCH="${WINEARCH:-win64}"
 export JVLINK_WINEPREFIX="${JVLINK_WINEPREFIX:-$WINEPREFIX}"
@@ -44,6 +46,51 @@ wine_boot() {
   echo "Initializing Wine prefix: $WINEPREFIX"
   wineboot --init || true
   wineserver -w || true
+  repair_wine_prefix_dlls
+}
+
+copy_if_missing() {
+  local src="$1"
+  local dest="$2"
+
+  if [ -f "$dest" ] || [ ! -f "$src" ]; then
+    return 1
+  fi
+
+  mkdir -p "$(dirname "$dest")"
+  cp -f "$src" "$dest"
+  return 0
+}
+
+repair_wine_prefix_dlls() {
+  local copied=0
+  local src
+
+  for src in \
+    /opt/wine-stable/lib/wine/i386-windows/cryptbase.dll \
+    /usr/lib/wine/i386-windows/cryptbase.dll \
+    /usr/lib/i386-linux-gnu/wine/i386-windows/cryptbase.dll
+  do
+    if copy_if_missing "$src" "$WINEPREFIX/drive_c/windows/syswow64/cryptbase.dll"; then
+      copied=1
+      break
+    fi
+  done
+
+  for src in \
+    /opt/wine-stable/lib/wine/x86_64-windows/cryptbase.dll \
+    /usr/lib/wine/x86_64-windows/cryptbase.dll \
+    /usr/lib/x86_64-linux-gnu/wine/x86_64-windows/cryptbase.dll
+  do
+    if copy_if_missing "$src" "$WINEPREFIX/drive_c/windows/system32/cryptbase.dll"; then
+      copied=1
+      break
+    fi
+  done
+
+  if [ "$copied" = "1" ]; then
+    echo "Repaired missing Wine cryptbase.dll files in $WINEPREFIX"
+  fi
 }
 
 jvlink_registered() {

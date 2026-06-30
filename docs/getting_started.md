@@ -38,8 +38,12 @@ docker compose up -d jrvltsql
 
 コンテナ起動時に `jvlink-installers/` 内の JV-Link インストーラを自動検出して
 Wine 上で実行し、`JVDTLab.dll` の登録まで行います。
+Docker image には `jltsql` package を `/opt/venv` へ通常インストールしているため、
+ホストのソースディレクトリを bind mount しなくてもコンテナ単体で CLI が動作します。
 Wine 上の JV-Link インストールでマウス操作が必要な場合は、
 `http://localhost:6080/vnc.html` を開いて操作します。
+起動後の JV-Link 確認ダイアログは既知のものだけ自動で Enter を送ります。
+手動で確認したい場合は `AUTO_DISMISS_JVLINK_DIALOGS=0` を設定してください。
 サービスキーは自動登録しません。既に別マシンで利用しているキーを Wine に
 登録すると、JV-Link 側の端末登録に影響する可能性があります。必要な場合だけ
 `JVLINK_SET_SERVICE_KEY=1` と `JVLINK_SERVICE_KEY` を明示して登録してください。

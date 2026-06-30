@@ -55,8 +55,9 @@ Documentation = "https://github.com/miyamamoto/jrvltsql/docs"
 Repository = "https://github.com/miyamamoto/jrvltsql"
 Issues = "https://github.com/miyamamoto/jrvltsql/issues"
 
-[tool.setuptools]
-packages = ["src"]
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src", "src.*"]
 
 [tool.black]
 line-length = 100
