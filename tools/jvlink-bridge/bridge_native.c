@@ -159,15 +159,19 @@ static int CallJVRead(char* buff, int buff_size, char* filename, int fn_size) {
     DISPID id;
     if (FAILED(GetDispId(g_jvlink, L"JVRead", &id))) return -9999;
 
-    BSTR bBuff = SysAllocString(L"");
+    BSTR bBuff = SysAllocStringLen(NULL, (UINT)buff_size);
     long lSize = (long)buff_size;
     BSTR bFilename = SysAllocString(L"");
 
     VARIANTARG args[3];
     DISPPARAMS params = {args, NULL, 3, 0};
 
+    // Args are in reverse order for IDispatch.
+    // JVRead's size parameter is [in,out] in the type library. Passing it by
+    // value works with some automation layers, but can crash the native Wine
+    // bridge when JV-Link writes back to the argument.
     VariantInit(&args[2]); V_VT(&args[2]) = VT_BSTR | VT_BYREF; V_BSTRREF(&args[2]) = &bBuff;
-    VariantInit(&args[1]); V_VT(&args[1]) = VT_I4; V_I4(&args[1]) = lSize;
+    VariantInit(&args[1]); V_VT(&args[1]) = VT_I4 | VT_BYREF; V_I4REF(&args[1]) = &lSize;
     VariantInit(&args[0]); V_VT(&args[0]) = VT_BSTR | VT_BYREF; V_BSTRREF(&args[0]) = &bFilename;
 
     VARIANT result;
@@ -177,8 +181,25 @@ static int CallJVRead(char* buff, int buff_size, char* filename, int fn_size) {
     HRESULT hr = IDispatch_Invoke(g_jvlink, id, &IID_NULL, LOCALE_USER_DEFAULT,
                                    DISPATCH_METHOD, &params, &result, &excep, NULL);
 
+    int code = 0;
+    if (SUCCEEDED(hr)) {
+        if (V_VT(&result) == VT_I4) code = V_I4(&result);
+        else if (V_VT(&result) == VT_I2) code = V_I2(&result);
+    }
+
     if (bBuff) {
-        WideCharToMultiByte(932, 0, bBuff, -1, buff, buff_size, NULL, NULL);
+        if (code > 0) {
+            UINT bstr_len = SysStringLen(bBuff);
+            int copy_len = code;
+            if (copy_len > buff_size) copy_len = buff_size;
+            if ((UINT)copy_len > bstr_len) copy_len = (int)bstr_len;
+            for (int i = 0; i < copy_len; i++) {
+                buff[i] = (char)(bBuff[i] & 0x00ff);
+            }
+            buff[copy_len] = '\0';
+        } else {
+            buff[0] = '\0';
+        }
         SysFreeString(bBuff);
     }
     if (bFilename) {
@@ -187,8 +208,8 @@ static int CallJVRead(char* buff, int buff_size, char* filename, int fn_size) {
     }
 
     if (FAILED(hr)) return -9998;
-    if (V_VT(&result) == VT_I4) return V_I4(&result);
-    return 0;
+    VariantClear(&result);
+    return code;
 }
 
 // Call JVClose
@@ -325,7 +346,7 @@ int main(int argc, char* argv[]) {
                                0, 0, 1, 1, NULL, NULL, wc.hInstance, NULL);
 
     // Output ready message
-    json_response("{\"status\":\"ready\",\"version\":\"c-1.0\",\"pid\":%d}", GetCurrentProcessId());
+    json_response("{\"status\":\"ready\",\"version\":\"c-1.1\",\"pid\":%d}", GetCurrentProcessId());
 
     // Main command loop
     char line[65536];

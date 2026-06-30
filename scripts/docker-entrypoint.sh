@@ -48,7 +48,49 @@ start_jvlink_dialog_watcher() {
   fi
 
   (
+    click_window_fraction() {
+      local window_id="$1"
+      local x_permille="$2"
+      local y_permille="$3"
+      local geometry
+      geometry="$(xdotool getwindowgeometry --shell "$window_id" 2>/dev/null || true)"
+      if [ -z "$geometry" ]; then
+        return 1
+      fi
+
+      local X=0 Y=0 WIDTH=0 HEIGHT=0
+      eval "$geometry"
+      if [ "$WIDTH" -le 0 ] || [ "$HEIGHT" -le 0 ]; then
+        return 1
+      fi
+
+      local x=$((X + WIDTH * x_permille / 1000))
+      local y=$((Y + HEIGHT * y_permille / 1000))
+      xdotool mousemove "$x" "$y" click 1 >>/tmp/jvlink-dialog-watcher.log 2>&1
+    }
+
+    accept_usage_notice_dialog() {
+      local window_id="$1"
+      local window_name
+      window_name="$(xdotool getwindowname "$window_id" 2>/dev/null || true)"
+      echo "Accepting JV-Link usage notice dialog: ${window_name:-$window_id}" >>/tmp/jvlink-dialog-watcher.log
+
+      xdotool windowactivate --sync "$window_id" >>/tmp/jvlink-dialog-watcher.log 2>&1 || return 0
+      # Open the terms link first; JV-Link enables the checkbox only after this.
+      click_window_fraction "$window_id" 465 600 || return 0
+      sleep 2
+
+      xdotool windowactivate --sync "$window_id" >>/tmp/jvlink-dialog-watcher.log 2>&1 || return 0
+      click_window_fraction "$window_id" 405 700 || return 0
+      sleep 0.3
+      click_window_fraction "$window_id" 370 845 || return 0
+    }
+
     while true; do
+      for window_id in $(xdotool search --name 'ご注意事項' 2>/dev/null || true); do
+        accept_usage_notice_dialog "$window_id"
+      done
+
       for title in '払戻情報表示設定' 'JRA-VAN Data Lab\.'; do
         for window_id in $(xdotool search --name "$title" 2>/dev/null || true); do
           window_name="$(xdotool getwindowname "$window_id" 2>/dev/null || true)"
