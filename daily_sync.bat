@@ -9,7 +9,7 @@ cd /d "%~dp0"
 set "DB_TYPE=postgresql"
 set "DAYS_BACK=7"
 set "DAYS_FORWARD=3"
-set "ENSURE_TABLES=0"
+set "ENSURE_TABLES=1"
 set "INCLUDE_TIMESERIES=1"
 set "INCLUDE_REALTIME=1"
 
@@ -35,6 +35,11 @@ if /I "%~1"=="--days-forward" (
 )
 if /I "%~1"=="--ensure-tables" (
     set "ENSURE_TABLES=1"
+    shift
+    goto :parse_args
+)
+if /I "%~1"=="--no-ensure-tables" (
+    set "ENSURE_TABLES=0"
     shift
     goto :parse_args
 )
@@ -97,7 +102,7 @@ if "%INCLUDE_TIMESERIES%"=="0" if "%INCLUDE_REALTIME%"=="0" (
     if not defined JRA_DAILY_UPDATE_SPECS set "JRA_DAILY_UPDATE_SPECS=RACE,DIFN,SLOP,WOOD,0B12,0B15"
     set "SYNC_SCRIPT=scripts/daily_update.py"
     set "SYNC_ARGS=--days-back %DAYS_BACK% --days-forward %DAYS_FORWARD% --db %DB_TYPE% --specs !JRA_DAILY_UPDATE_SPECS! --force-incremental --ignore-jvopen-error-codes -303"
-    if "%ENSURE_TABLES%"=="1" set "SYNC_ARGS=!SYNC_ARGS! --ensure-tables"
+    if "%ENSURE_TABLES%"=="0" set "SYNC_ARGS=!SYNC_ARGS! --no-ensure-tables"
 )
 
 if defined PYTHON (

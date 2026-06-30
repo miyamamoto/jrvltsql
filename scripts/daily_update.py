@@ -207,7 +207,19 @@ def main() -> int:
     parser.add_argument("--days-back", type=int, default=7, help="Fetch window size in days")
     parser.add_argument("--days-forward", type=int, default=0, help="Fetch future card window size in days")
     parser.add_argument("--db", default=None, choices=["sqlite", "postgresql"], help="Override database type")
-    parser.add_argument("--ensure-tables", action="store_true", help="Create/migrate tables before sync")
+    parser.add_argument(
+        "--ensure-tables",
+        dest="ensure_tables",
+        action="store_true",
+        default=True,
+        help="Create/migrate tables before sync (default)",
+    )
+    parser.add_argument(
+        "--no-ensure-tables",
+        dest="ensure_tables",
+        action="store_false",
+        help="Skip table creation/migration before sync",
+    )
     parser.add_argument("--specs", default=None, help="Comma-separated subset of daily update specs")
     parser.add_argument("--force-incremental", action="store_true",
                         help="Use JVOpen option=1 instead of option=2 for selected update specs")

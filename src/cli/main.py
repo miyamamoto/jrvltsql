@@ -22,7 +22,11 @@ def _read_version():
     """Read version from pyproject.toml."""
     try:
         from importlib.metadata import version as _get_version
-        return _get_version("jrvltsql")
+        for dist_name in ("jltsql", "jrvltsql"):
+            try:
+                return _get_version(dist_name)
+            except Exception:
+                pass
     except Exception:
         pass
     try:
