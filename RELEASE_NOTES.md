@@ -1,54 +1,31 @@
-# jrvltsql v1.4.0 Release Notes
+# jrvltsql v1.6.1 Release Notes
 
-## Highlights
+## Summary
 
-### PostgreSQL time-series odds workflow
+- Fixed the non-interactive JRA daily sync path so training data is refreshed every day.
+- Added `SLOP` and `WOOD` to the default `JRA_DAILY_UPDATE_SPECS` used by `daily_sync.bat`.
+- Kept this public release scoped to the core Windows/JRA collector. Docker/Wine runtime work is not included.
 
-- Added `quickstart_postgres_timeseries.bat` for PostgreSQL race-data setup plus
-  official `TS_O1/TS_O2` time-series odds ingestion.
-- Added `fetch_timeseries_postgres.bat` for adding time-series odds to an
-  existing PostgreSQL installation.
-- Added `daily_sync.bat` for scheduled recent race-card/result synchronization.
+## Impact
 
-### Expanded odds storage
+Before this release, `SLOP` / `NL_HC` and `WOOD` / `NL_WC` were fetched during initial setup but were not included in the non-interactive daily incremental path. Scheduled daily updates could therefore leave training-derived fields stale after setup.
 
-- Expanded JRA-VAN time-series odds records into one row per ticket combination.
-- Added direct storage of expanded `TS_O1` to `TS_O6` rows.
-- Added multi-row PostgreSQL inserts for expanded time-series odds rows.
+After upgrading, the default scheduled daily sync fetches:
 
-### Data correctness
-
-- Fixed JRA-VAN time-series odds key generation.
-- Normalized blank and unavailable odds placeholders before PostgreSQL writes.
-- Updated tests so O1 to O6 expanded parser outputs are treated as `list[dict]`.
-
-### Documentation cleanup
-
-- Added current architecture, PostgreSQL, time-series odds, and scripts docs.
-- Removed stale script README files.
-- Replaced downstream-system-specific naming with collector-generic wording.
-
-## Requirements
-
-- Windows 10/11 for real JV-Link collection.
-- Python 3.12.
-- JRA-VAN DataLab and JV-Link.
-- PostgreSQL is optional but required for shared time-series odds collection.
-
-## Upgrade
-
-```powershell
-irm https://raw.githubusercontent.com/miyamamoto/jrvltsql/master/install.ps1 | iex
+```text
+RACE,DIFN,SLOP,WOOD,0B12,0B15
 ```
 
-For PostgreSQL time-series odds setup:
+Existing users who override `JRA_DAILY_UPDATE_SPECS` should add `SLOP,WOOD` to their environment if they want the same behavior.
 
-```bat
-quickstart_postgres_timeseries.bat 20250426 20260412
-```
+## Validation
 
-For time-series-only backfill:
+- GitHub Actions on PR #127: `lint` passed, `test` passed, `performance-test` skipped by workflow policy.
+- Local focused tests: `uv run pytest tests/test_daily_update.py tests/test_quickstart_cli.py -q` passed with 41 tests.
+- JRA readiness scan: target `jra`, 54 pass, 2 warnings for unrelated KPS working-tree/cache state.
 
-```bat
-fetch_timeseries_postgres.bat 20250426 20260412
-```
+## Migration Notes
+
+- No database schema migration is required.
+- No service key or JV-Link registration change is required.
+- Rollback: return to `v1.6.0` or remove `SLOP,WOOD` from `JRA_DAILY_UPDATE_SPECS`.
