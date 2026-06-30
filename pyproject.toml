@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jltsql"
-version = "1.4.1"
+version = "1.6.1"
 description = "JRA-VAN DataLab の競馬データをSQLite・PostgreSQLにインポートするツール"
 readme = "README.md"
 license = {text = "Apache-2.0"}
@@ -55,8 +55,8 @@ Documentation = "https://github.com/miyamamoto/jrvltsql/docs"
 Repository = "https://github.com/miyamamoto/jrvltsql"
 Issues = "https://github.com/miyamamoto/jrvltsql/issues"
 
-[tool.setuptools]
-packages = ["src"]
+[tool.setuptools.packages.find]
+include = ["src", "src.*"]
 
 [tool.black]
 line-length = 100

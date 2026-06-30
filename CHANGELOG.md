@@ -7,14 +7,46 @@
 
 ## [Unreleased]
 
+現時点で未リリースの変更はありません。
+
+## [1.6.1] - 2026-06-30
+
+### Fixed
+
+- 非対話の JRA daily sync 経路で、坂路調教 `SLOP` / `NL_HC` とウッドチップ調教 `WOOD` / `NL_WC` を通常差分として毎日取得するよう修正
+- `daily_sync.bat` の既定 `JRA_DAILY_UPDATE_SPECS` に `SLOP,WOOD` を追加し、Windows タスクスケジューラ実行でも調教データが初回セットアップ後に stale にならないよう修正
+
+### Notes
+
+- 公開リリースには Docker/Wine ランタイム変更を含めていません
+- スキーマ変更はありません
+
+## [1.6.0] - 2026-06-16
+
+### Fixed
+
+- JV-Data490 の HC / AV / H6 / O1〜O6 レイアウト不整合を修正
+- 展開済みオッズ・払戻行を保持できるよう保存キーと不完全な primary-key 行の扱いを修正
+- SQLite / PostgreSQL import、PostgreSQL batch insert grouping、migration metadata、realtime expanded-record storage を堅牢化
+
+### Notes
+
+- 既存 DB に旧 O1 / H6 / HC / AV 関連テーブル定義がある場合は、対象レコードの再 import 前に table recreation または migration を確認してください
+
+## [1.5.0] - 2026-06-11
+
 ### Added
 
+- HR 払戻配列の全エントリ抽出を追加
+- コーナー通過順位を最大4セットの配列として収集
+- `0B12` / `0B15` の daily sync 統合を追加
 - JVOpen/JVRTOpen の対応データ種別、レコード種別、保存先テーブル、運用コマンドをまとめた `docs/data_support.md` を追加
 - 初回ユーザー向けの実行順序をまとめた `docs/getting_started.md` を追加
 - SQLite / PostgreSQL 共通の範囲指定つき時系列 quickstart `quickstart_timeseries.bat` を追加
 
 ### Changed
 
+- a6 運用設定を upstream 化し、`.codex_backups/` を `.gitignore` に追加
 - 公開ドキュメントを日本語表記へ統一
 - README と MkDocs ホームを、初回導線・目的別コマンド・重要なデータ区分が一目で分かる構成へ整理
 - `quickstart.bat --yes --include-timeseries` の既定取得範囲をドキュメントに明記
@@ -142,7 +174,11 @@
 - quickstart.py 対話形式セットアップウィザード
 - CLI コマンド（fetch, status, monitor, init）
 
-[Unreleased]: https://github.com/miyamamoto/jrvltsql/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.1...HEAD
+[1.6.1]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.0...v1.6.1
+[1.6.0]: https://github.com/miyamamoto/jrvltsql/releases/tag/v1.6.0
+[1.5.0]: https://github.com/miyamamoto/jrvltsql/releases/tag/v1.5.0
+[1.4.1]: https://github.com/miyamamoto/jrvltsql/releases/tag/v1.4.1
 [1.4.0]: https://github.com/miyamamoto/jrvltsql/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/miyamamoto/jrvltsql/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/miyamamoto/jrvltsql/compare/v1.1.0...v1.2.0
