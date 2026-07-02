@@ -4,6 +4,7 @@ import os
 import re
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
+from urllib.parse import parse_qs, unquote, urlparse
 
 import yaml
 
@@ -101,8 +102,8 @@ def _expand_env_vars(config: Any) -> Any:
     elif isinstance(config, list):
         return [_expand_env_vars(item) for item in config]
     elif isinstance(config, str):
-        # Pattern: ${VAR} or ${VAR:default}
-        pattern = r"\$\{([^}:]+)(?::([^}]+))?\}"
+        # Pattern: ${VAR} or ${VAR:default}.  The default may be empty.
+        pattern = r"\$\{([^}:]+)(?::([^}]*))?\}"
 
         def replacer(match):
             var_name = match.group(1)
@@ -112,6 +113,99 @@ def _expand_env_vars(config: Any) -> Any:
         return re.sub(pattern, replacer, config)
     else:
         return config
+
+
+def _first_env(*names: str) -> str | None:
+    for name in names:
+        value = os.environ.get(name)
+        if value is not None and value.strip():
+            return value.strip()
+    return None
+
+
+def _coerce_port(value: str | int | None) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        raise ConfigError(f"Invalid PostgreSQL port: {value!r}") from exc
+
+
+def _postgres_config_from_url(value: str) -> Dict[str, Any]:
+    parsed = urlparse(value)
+    if parsed.scheme not in {"postgresql", "postgres"}:
+        raise ConfigError(
+            "PostgreSQL URL must use postgresql:// or postgres:// scheme"
+        )
+
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise ConfigError(f"Invalid PostgreSQL URL port: {value!r}") from exc
+
+    config: Dict[str, Any] = {}
+    if parsed.hostname:
+        config["host"] = parsed.hostname
+    if port is not None:
+        config["port"] = port
+    if parsed.path and parsed.path != "/":
+        config["database"] = unquote(parsed.path.lstrip("/"))
+    if parsed.username:
+        config["user"] = unquote(parsed.username)
+    if parsed.password:
+        config["password"] = unquote(parsed.password)
+
+    query = parse_qs(parsed.query)
+    for key in ("sslmode", "connect_timeout"):
+        values = query.get(key)
+        if values and values[0] != "":
+            config[key] = values[0]
+    return config
+
+
+def _apply_postgres_env_overrides(config: Dict[str, Any]) -> Dict[str, Any]:
+    """Apply PostgreSQL connection overrides from environment variables.
+
+    Operational collectors often run with a single explicit connection URL.
+    When a URL is set it must win over generic ``POSTGRES_USER`` etc.; KPS, for
+    example, exposes an ETL read-only user in ``POSTGRES_USER`` while
+    ``JRVLTSQL_POSTGRES_URL`` carries the ingestion writer credentials.
+    """
+
+    databases = config.get("databases")
+    if not isinstance(databases, dict):
+        return config
+    pg_config = databases.get("postgresql")
+    if not isinstance(pg_config, dict):
+        return config
+
+    url = _first_env("JRVLTSQL_POSTGRES_URL", "POSTGRES_URL", "DATABASE_URL")
+    if url:
+        pg_config.update(_postgres_config_from_url(url))
+        return config
+
+    overrides: Dict[str, Any] = {}
+    host = _first_env("POSTGRES_HOST", "PGHOST")
+    port = _first_env("POSTGRES_PORT", "PGPORT")
+    database = _first_env("POSTGRES_DB", "POSTGRES_DATABASE", "PGDATABASE", "KPS_POSTGRES_DB")
+    user = _first_env("POSTGRES_USER", "PGUSER")
+    password = _first_env("POSTGRES_PASSWORD", "PGPASSWORD")
+
+    if host:
+        overrides["host"] = host
+    coerced_port = _coerce_port(port)
+    if coerced_port is not None:
+        overrides["port"] = coerced_port
+    if database:
+        overrides["database"] = database
+    if user:
+        overrides["user"] = user
+    if password:
+        overrides["password"] = password
+
+    pg_config.update(overrides)
+    return config
 
 
 def _validate_config(config: Dict[str, Any]) -> None:
@@ -189,6 +283,7 @@ def load_config(config_path: Optional[Union[str, Path]] = None) -> Config:
 
     # Expand environment variables
     config_dict = _expand_env_vars(config_dict)
+    config_dict = _apply_postgres_env_overrides(config_dict)
 
     # Validate configuration
     _validate_config(config_dict)

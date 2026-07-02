@@ -16,15 +16,27 @@ jrvltsql は SQLite だけでなく PostgreSQL へ直接保存できます。複
 
 ## 必要な環境変数
 
+本番・開発環境を分ける運用では、接続先を1本の URL で明示する方式を推奨します。
+URL が設定されている場合は、個別の `POSTGRES_USER` などより優先されます。
+
+```bat
+set JRVLTSQL_POSTGRES_URL=postgresql://<user>:<password>@<host>:5432/<database>
+```
+
+代替として `POSTGRES_URL` / `DATABASE_URL` も使えます。
+
+URL を使わない場合は、以下の個別変数を設定します。
+
 ```bat
 set POSTGRES_HOST=<host>
 set POSTGRES_PORT=5432
-set POSTGRES_DATABASE=<database>
+set POSTGRES_DB=<database>
 set POSTGRES_USER=<user>
 set POSTGRES_PASSWORD=<password>
 ```
 
-一部の script では `POSTGRES_DATABASE` の別名として `POSTGRES_DB` も使えます。
+`PGHOST` / `PGPORT` / `PGDATABASE` / `PGUSER` / `PGPASSWORD` と
+`POSTGRES_DATABASE` も互換の別名として使えます。
 
 ## クイックスタート
 

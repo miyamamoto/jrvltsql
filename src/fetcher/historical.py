@@ -111,9 +111,9 @@ class HistoricalFetcher(BaseFetcher):
                 # スペックヘッダーを表示（日付範囲付き）
                 self.progress_display.print_spec_header(data_spec, from_date, to_date)
 
-            # Note: Service key must be pre-configured in Windows registry
-            # jv_init() does not accept service_key parameter
+            self._configure_service_key()
             self.jvlink.jv_init()
+            self._configure_save_path()
 
             # Convert dates to fromtime format
             # fromtime format: "YYYYMMDDhhmmss" (single timestamp)

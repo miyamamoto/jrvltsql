@@ -46,13 +46,16 @@ class RealtimeFetcher(BaseFetcher):
     def __init__(
         self,
         sid: str = "JLTSQL",
+        service_key: Optional[str] = None,
     ):
         """Initialize realtime fetcher.
 
         Args:
             sid: Session ID for JV-Link API (default: "JLTSQL")
+            service_key: Optional JV-Link service key. If provided, it is
+                configured before JVInit, matching HistoricalFetcher.
         """
-        super().__init__(sid)
+        super().__init__(sid, service_key=service_key)
         self._stream_open = False
 
     def fetch(
@@ -108,9 +111,11 @@ class RealtimeFetcher(BaseFetcher):
         try:
             # Initialize JV-Link
             logger.info("Initializing JV-Link", has_service_key=self._service_key is not None)
+            self._configure_service_key()
             ret = self.jvlink.jv_init()
             if ret != JV_RT_SUCCESS:
                 raise FetcherError(f"JV-Link initialization failed: {ret}")
+            self._configure_save_path()
 
             logger.info(
                 "Starting realtime data fetch",
@@ -498,6 +503,7 @@ class RealtimeFetcher(BaseFetcher):
         ret = self.jvlink.jv_init()
         if ret != JV_RT_SUCCESS:
             raise FetcherError(f"JV-Link initialization failed: {ret}")
+        self._configure_save_path()
 
         # Statistics
         total_keys = len(race_rows)
@@ -798,6 +804,7 @@ class RealtimeFetcher(BaseFetcher):
         ret = self.jvlink.jv_init()
         if ret != JV_RT_SUCCESS:
             raise FetcherError(f"JV-Link initialization failed: {ret}")
+        self._configure_save_path()
 
         # Statistics
         total_keys = 0

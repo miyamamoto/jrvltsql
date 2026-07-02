@@ -115,6 +115,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File install_tasks.ps1 -DbType po
 | [対応データ種別一覧](docs/data_support.md) | JVOpen / JVRTOpen spec と保存先 |
 | [時系列オッズ](docs/timeseries_odds.md) | `0B41/0B42` と `0B30` 系の違い |
 | [PostgreSQL](docs/postgresql.md) | PostgreSQL 保存と日次同期 |
+| [Linux/Wine JV-Link](docs/linux_wine_jvlink.md) | Linux上の JV-Link / JVLinkBridge セットアップ |
 | [CLI](docs/CLI.md) | CLI リファレンス |
 | [スクリプト一覧](docs/scripts.md) | batch / script の役割 |
 | [アーキテクチャ](docs/architecture.md) | 実装構成 |

@@ -76,6 +76,10 @@ class TestExpandEnvVars:
         result = _expand_env_vars("${DEFINITELY_NOT_SET_XYZ}")
         assert result == ""
 
+    def test_empty_default_is_supported(self):
+        result = _expand_env_vars("${DEFINITELY_NOT_SET_XYZ:}")
+        assert result == ""
+
     def test_nested_dict(self, monkeypatch):
         monkeypatch.setenv("HOST", "localhost")
         result = _expand_env_vars({"db": {"host": "${HOST}"}})
@@ -188,6 +192,68 @@ class TestLoadConfig:
         })
         cfg = load_config(path)
         assert cfg.get("jvlink.service_key") == "ENVKEY12345678"
+
+    def test_postgres_url_env_overrides_config_and_generic_env(self, tmp_path, monkeypatch):
+        monkeypatch.setenv(
+            "JRVLTSQL_POSTGRES_URL",
+            "postgresql://writer:p%40ss@postgres:15432/keiba_staging?sslmode=require",
+        )
+        monkeypatch.setenv("POSTGRES_USER", "etl_readonly")
+        path = self._write_yaml(tmp_path, {
+            "jvlink": {"service_key": "TESTKEY12345"},
+            "database": {"type": "postgresql"},
+            "databases": {
+                "postgresql": {
+                    "enabled": True,
+                    "host": "localhost",
+                    "port": 5432,
+                    "database": "keiba",
+                    "user": "postgres",
+                    "password": "",
+                }
+            },
+        })
+
+        cfg = load_config(path)
+
+        assert cfg.get("databases.postgresql.host") == "postgres"
+        assert cfg.get("databases.postgresql.port") == 15432
+        assert cfg.get("databases.postgresql.database") == "keiba_staging"
+        assert cfg.get("databases.postgresql.user") == "writer"
+        assert cfg.get("databases.postgresql.password") == "p@ss"
+        assert cfg.get("databases.postgresql.sslmode") == "require"
+
+    def test_postgres_standard_env_overrides_config_without_url(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("JRVLTSQL_POSTGRES_URL", raising=False)
+        monkeypatch.delenv("POSTGRES_URL", raising=False)
+        monkeypatch.delenv("DATABASE_URL", raising=False)
+        monkeypatch.setenv("PGHOST", "pg-host")
+        monkeypatch.setenv("PGPORT", "25432")
+        monkeypatch.setenv("PGDATABASE", "pg_db")
+        monkeypatch.setenv("PGUSER", "pg_user")
+        monkeypatch.setenv("PGPASSWORD", "pg_pass")
+        path = self._write_yaml(tmp_path, {
+            "jvlink": {"service_key": "TESTKEY12345"},
+            "database": {"type": "postgresql"},
+            "databases": {
+                "postgresql": {
+                    "enabled": True,
+                    "host": "localhost",
+                    "port": 5432,
+                    "database": "keiba",
+                    "user": "postgres",
+                    "password": "",
+                }
+            },
+        })
+
+        cfg = load_config(path)
+
+        assert cfg.get("databases.postgresql.host") == "pg-host"
+        assert cfg.get("databases.postgresql.port") == 25432
+        assert cfg.get("databases.postgresql.database") == "pg_db"
+        assert cfg.get("databases.postgresql.user") == "pg_user"
+        assert cfg.get("databases.postgresql.password") == "pg_pass"
 
     def test_load_invalid_config_raises(self, tmp_path):
         path = self._write_yaml(tmp_path, {"only": "jvlink_missing"})

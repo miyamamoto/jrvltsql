@@ -63,6 +63,7 @@ def _sync_realtime_spec(
     from_date: str,
     to_date: str,
     sid: str,
+    service_key: str | None = None,
     jvlink=None,
     updater=None,
 ) -> dict:
@@ -78,7 +79,10 @@ def _sync_realtime_spec(
         from_date: Start date YYYYMMDD (inclusive).
         to_date: End date YYYYMMDD (inclusive).
         sid: JV-Link session ID.
-        jvlink: Optional JV-Link wrapper override (tests).
+    service_key: Optional JV-Link service key. Passed through to the
+        RealtimeFetcher before JVInit so speed-report sync does not assume a
+        previously primed registry.
+    jvlink: Optional JV-Link wrapper override (tests).
         updater: Optional RealtimeUpdater override (tests).
     """
 
@@ -89,7 +93,7 @@ def _sync_realtime_spec(
     if jvlink is None:
         from src.fetcher.realtime import RealtimeFetcher
 
-        jvlink = RealtimeFetcher(sid=sid).jvlink
+        jvlink = RealtimeFetcher(sid=sid, service_key=service_key).jvlink
     if updater is None:
         updater = RealtimeUpdater(database=database)
 
@@ -261,6 +265,7 @@ def main() -> int:
                         from_date=from_date,
                         to_date=to_date,
                         sid=config.get("jvlink.sid", "JLTSQL"),
+                        service_key=config.get("jvlink.service_key"),
                     )
                 except Exception as exc:
                     code = _error_code_from_exception(exc)

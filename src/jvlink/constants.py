@@ -24,9 +24,10 @@ JV_RT_DATABASE_ERROR = -201  # データベースエラー
 JV_RT_FILE_ERROR = -202  # ファイルエラー
 JV_RT_OTHER_ERROR = -203  # その他エラー
 
-# Download Status Codes
-JV_RT_DOWNLOADING = -301  # ダウンロード中
-JV_RT_DOWNLOAD_WAITING = -302  # ダウンロード待ち
+# Authentication / service key errors returned by JVOpen/JVRTOpen.
+JV_RT_AUTH_ERROR = -301  # 認証エラー
+JV_RT_OPEN_SERVICE_KEY_EXPIRED = -302  # サービスキー有効期限切れ
+JV_RT_OPEN_SERVICE_KEY_NOT_SET = -303  # サービスキー未設定・空値
 
 # Internal Error Codes
 JV_RT_INTERNAL_ERROR = -401  # 内部エラー
@@ -495,9 +496,10 @@ ERROR_MESSAGES = {
     -201: "データベースエラーが発生しました",
     -202: "ファイルエラーが発生しました",
     -203: "その他のエラーが発生しました",
-    # Download Status
-    -301: "ダウンロード中です",
-    -302: "ダウンロード待ちです",
+    # Authentication / service key errors returned by JVOpen/JVRTOpen
+    -301: "認証エラーです",
+    -302: "サービスキーの有効期限が切れています",
+    -303: "サービスキーが設定されていません",
     # Internal Errors
     -401: "内部エラーが発生しました",
     # Resource Errors

@@ -4,17 +4,22 @@ This module provides the base class for fetching JV-Data from JV-Link.
 """
 
 import gc
+import os
+import re
+import subprocess
 import time
 from abc import ABC, abstractmethod
 from typing import Iterator, Optional
 
 from src.jvlink.constants import JV_READ_NO_MORE_DATA, JV_READ_SUCCESS
-from src.jvlink.wrapper import JVLinkWrapper
+from src.jvlink.wrapper import JVLinkError, JVLinkWrapper
 from src.parser.factory import ParserFactory
 from src.utils.logger import get_logger
 from src.utils.progress import JVLinkProgressDisplay
 
 logger = get_logger(__name__)
+
+SERVICE_KEY_SETUP_ENABLED_VALUES = {"1", "true", "yes", "on"}
 
 
 class FetcherError(Exception):
@@ -50,20 +55,30 @@ class BaseFetcher(ABC):
             sid: Session ID for JV-Link API (default: "UNKNOWN")
             service_key: Optional JV-Link service key. If provided, it will be set
                         programmatically without requiring registry configuration.
+                        Under Wine, this requires JVLINK_SET_SERVICE_KEY=1.
                         If not provided, the service key must be configured in
                         JRA-VAN DataLab application or registry.
             show_progress: Show stylish progress display (default: True)
         """
-        # Prefer C# JVLinkBridge over Python win32com for JRA operations.
+        # Prefer JVLinkBridge over Python win32com for JRA operations.
+        # On Linux, JVLinkBridge runs under Wine.
         # Eliminates 32-bit Python requirement and COM instability.
         from src.jvlink.bridge import find_bridge_executable
         bridge_exe = find_bridge_executable()
         if bridge_exe is not None:
             from src.jvlink.bridge import JVLinkBridge
-            logger.info("Using JVLinkBridge (C#) for JRA", bridge_path=str(bridge_exe))
+            logger.info("Using JVLinkBridge for JRA", bridge_path=str(bridge_exe))
             self.jvlink = JVLinkBridge(sid, bridge_path=bridge_exe)
         else:
-            self.jvlink = JVLinkWrapper(sid)
+            try:
+                logger.info("Using JVLinkWrapper for JRA")
+                self.jvlink = JVLinkWrapper(sid)
+            except JVLinkError as e:
+                raise FetcherError(
+                    "JV-Link is not available. "
+                    "Linux requires Wine + JVLinkBridge.exe + COM DLL registered. "
+                    "Run: scripts/setup_wine_jvlink.sh"
+                ) from e
 
         self.parser_factory = ParserFactory()
         self._records_fetched = 0
@@ -78,6 +93,80 @@ class BaseFetcher(ABC):
 
         logger.info(f"{self.__class__.__name__} initialized", sid=sid,
                    has_service_key=service_key is not None)
+
+    def _configure_service_key(self) -> None:
+        if not self._service_key:
+            return
+        service_key = str(self._service_key).strip()
+        if not service_key or (service_key.startswith("${") and service_key.endswith("}")):
+            return
+        service_key = re.sub(r"[^A-Za-z0-9]", "", service_key)
+        if not service_key:
+            return
+        service_key_setup_enabled = (
+            os.environ.get("JVLINK_SET_SERVICE_KEY", "").lower()
+            in SERVICE_KEY_SETUP_ENABLED_VALUES
+        )
+        if getattr(self.jvlink, "uses_wine", False) and not service_key_setup_enabled:
+            logger.warning(
+                "Skipping JV-Link service key setup under Wine. "
+                "Set JVLINK_SET_SERVICE_KEY=1 to explicitly register it."
+            )
+            return
+        if getattr(self.jvlink, "uses_wine", False):
+            self._configure_wine_service_key(service_key)
+            return
+        if not hasattr(self.jvlink, "jv_set_service_key"):
+            return
+        ret = self.jvlink.jv_set_service_key(service_key)
+        if ret != 0:
+            raise FetcherError(f"JV-Link service key setup failed: {ret}")
+
+    def _configure_wine_service_key(self, service_key: str) -> None:
+        wine = os.environ.get("JVLINK_WINE", "wine")
+        registry_targets = [
+            (r"HKLM\Software\JRA-VAN Data Lab.\uid_pass", "servicekey"),
+            (r"HKLM\Software\WOW6432Node\JRA-VAN Data Lab.\uid_pass", "servicekey"),
+            (r"HKCU\Software\JRA-VAN Data Lab.\uid_pass", "servicekey"),
+            (r"HKLM\SOFTWARE\JRA-VAN\JV-Link", "ServiceKey"),
+            (r"HKLM\SOFTWARE\WOW6432Node\JRA-VAN\JV-Link", "ServiceKey"),
+            (r"HKCU\Software\JRA-VAN\JV-Link", "ServiceKey"),
+        ]
+        failures = []
+        for reg_path, value_name in registry_targets:
+            completed = subprocess.run(
+                [
+                    wine,
+                    "reg",
+                    "add",
+                    reg_path,
+                    "/v",
+                    value_name,
+                    "/t",
+                    "REG_SZ",
+                    "/d",
+                    service_key,
+                    "/f",
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+            if completed.returncode != 0:
+                failures.append(f"{reg_path}\\{value_name}")
+        if failures:
+            raise FetcherError("JV-Link service key registry setup failed")
+        logger.info("JV-Link service key configured in Wine registry")
+
+    def _configure_save_path(self) -> None:
+        if not getattr(self.jvlink, "uses_wine", False):
+            return
+        if not hasattr(self.jvlink, "jv_set_save_path"):
+            return
+        save_path = os.environ.get("JVLINK_SAVE_PATH_WIN", r"C:\ProgramData\JRA-VAN\Data Lab")
+        ret = self.jvlink.jv_set_save_path(save_path)
+        if ret != 0:
+            logger.warning("JV-Link save path setup returned non-zero", code=ret, path=save_path)
 
     @abstractmethod
     def fetch(self, **kwargs) -> Iterator[dict]:

@@ -18,7 +18,8 @@ def bridge(tmp_path):
     """Create bridge with mocked process."""
     exe = tmp_path / "JVLinkBridge.exe"
     exe.touch()
-    with patch("src.jvlink.bridge.find_bridge_executable", return_value=exe):
+    with patch("src.jvlink.bridge.find_bridge_executable", return_value=exe), \
+         patch("src.jvlink.bridge._is_wine_available", return_value=True):
         b = JVLinkBridge(sid="TEST", bridge_path=exe)
     mock_proc = MagicMock()
     mock_proc.poll.return_value = None
@@ -42,13 +43,14 @@ class TestJVLinkBridgeInit:
     def test_init_with_valid_path(self, tmp_path):
         exe = tmp_path / "JVLinkBridge.exe"
         exe.touch()
-        b = JVLinkBridge(bridge_path=exe)
+        with patch("src.jvlink.bridge._is_wine_available", return_value=True):
+            b = JVLinkBridge(bridge_path=exe)
         assert b._bridge_path == exe
 
 
 class TestJVLinkBridgeAPI:
     def test_jv_init_success(self, bridge):
-        _patch_responses(bridge, {"status": "ok", "hwnd": 12345, "linkType": "jra"})
+        _patch_responses(bridge, {"status": "ok", "code": 0, "hwnd": 12345, "linkType": "jra"})
         assert bridge.jv_init() == 0
 
     def test_jv_init_error(self, bridge):
@@ -63,7 +65,7 @@ class TestJVLinkBridgeAPI:
 
         def capture_send(cmd, **kwargs):
             sent_cmds.append(cmd)
-            return {"status": "ok", "hwnd": 1, "linkType": "jra"}
+            return {"status": "ok", "code": 0, "hwnd": 1, "linkType": "jra"}
 
         bridge._send_command = capture_send
         bridge.jv_init()
@@ -147,8 +149,9 @@ class TestJVLinkBridgeAPI:
         code, rc = bridge.jv_rt_open("0B12")
         assert code == 0
 
-    def test_jv_set_service_key_stub(self, bridge):
-        """Service key setting is a stub in bridge mode."""
+    def test_jv_set_service_key(self, bridge):
+        """Service key setting sends command to bridge."""
+        _patch_responses(bridge, {"status": "ok", "code": 0})
         assert bridge.jv_set_service_key("test-key") == 0
 
 
@@ -163,7 +166,7 @@ class TestJVLinkBridgeLifecycle:
     def test_context_manager(self, bridge):
         _patch_responses(
             bridge,
-            {"status": "ok", "hwnd": 1, "linkType": "jra"},  # init
+            {"status": "ok", "code": 0, "hwnd": 1, "linkType": "jra"},  # init
             {"status": "ok"},  # close
             {"status": "ok", "message": "bye"},  # quit
         )

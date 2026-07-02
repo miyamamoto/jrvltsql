@@ -34,7 +34,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-postgres = ["psycopg[binary]"]
+postgres = ["psycopg[binary]", "pg8000>=1.30"]
 s3 = ["boto3>=1.26", "cryptography>=41.0"]
 dev = [
     "pytest>=7.4",

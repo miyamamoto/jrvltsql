@@ -1,0 +1,11 @@
+LIBRARY "wtsapi32"
+EXPORTS
+  WTSOpenServerA
+  WTSOpenServerW
+  WTSCloseServer
+  WTSEnumerateSessionsA
+  WTSEnumerateSessionsW
+  WTSFreeMemory
+  WTSGetActiveConsoleSessionId
+  WTSQuerySessionInformationA
+  WTSQuerySessionInformationW
