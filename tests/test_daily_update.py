@@ -193,3 +193,10 @@ def test_sync_realtime_spec_is_idempotent_across_reruns(rt_database):
 
     rows = rt_database.fetch_all("SELECT COUNT(*) AS cnt FROM RT_RA")
     assert rows[0]["cnt"] == 1
+
+def test_daily_update_includes_mining_spec():
+    """MING (data-mining) must be collected so NL_DM / SE mining fields populate."""
+    specs = [spec for spec, _ in UPDATE_SPECS]
+    assert "MING" in specs
+    assert _select_update_specs("ming") == [("MING", 1)]
+

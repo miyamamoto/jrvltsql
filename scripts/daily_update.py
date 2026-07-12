@@ -27,6 +27,11 @@ UPDATE_SPECS = [
     # HC=坂路調教, WC=ウッドチップ調教. option=1 is the incremental fetch.
     ("SLOP", 1),
     ("WOOD", 1),
+    # MING=データマイニング予想 (DM レコード -> NL_DM)。SE の mining ブロック
+    # (DMTime/DMJyuni/KyakusituKubun) と NL_DM を供給する。option=1 の
+    # incremental。レース当日発表のため過去分の一括 backfill は不可
+    # (前向きにのみ蓄積される)。
+    ("MING", 1),
     # Speed-report specs fetched via JVRTOpen with a date key (option unused).
     # 0B12: 速報レース情報・払戻 (RA/SE/HR 成績確定後), 0B15: 速報レース情報
     # (RA/SE/HR 出走馬名表～)。RT_* テーブルは PRIMARY KEY + INSERT OR REPLACE
