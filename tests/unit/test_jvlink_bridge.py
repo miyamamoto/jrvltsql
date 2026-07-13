@@ -88,7 +88,7 @@ class TestJVLinkBridgeAPI:
 
     def test_jv_read_data(self, bridge):
         bridge._is_open = True
-        raw = b"RA2026test record data"
+        raw = b"SE2026test record data\r\n"
         b64 = base64.b64encode(raw).decode()
         _patch_responses(bridge, {"status": "ok", "code": len(raw), "data": b64, "filename": "f.jvd", "size": len(raw)})
         code, buff, fname = bridge.jv_read()

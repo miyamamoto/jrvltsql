@@ -83,7 +83,7 @@ class TestIndividualParsers:
             'H1': 28955, 'H6': 102890, 'HC': 60, 'HN': 251, 'HR': 719, 'HS': 200, 'HY': 123,
             'JC': 252, 'JG': 251, 'KS': 282,
             'O1': 962, 'O2': 2042, 'O3': 2654, 'O4': 4031, 'O5': 12293, 'O6': 83285,
-            'RA': 856, 'RC': 1926, 'SE': 463, 'SK': 263, 'TC': 71, 'TK': 240, 'TM': 216,
+            'RA': 856, 'RC': 1926, 'SE': 555, 'SK': 263, 'TC': 71, 'TK': 240, 'TM': 216,
             'UM': 969, 'WC': 72, 'WE': 195, 'WF': 3416, 'WH': 1356, 'YS': 424,
         }
 
@@ -355,7 +355,7 @@ class TestParserFieldExtraction:
         data += b'11'  # RaceNum (26-27)
         data += b'1'  # Wakuban (28)
         data += b'01'  # Umaban (29-30)
-        data += b' ' * (463 - len(data))  # 残りをスペースで埋める
+        data += b' ' * (555 - len(data))  # 残りをスペースで埋める
 
         result = parser.parse(data)
 

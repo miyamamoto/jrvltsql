@@ -1184,6 +1184,10 @@ SCHEMAS = {
             HaronTimeL3 REAL,
             KettoNum1 TEXT,
             Bamei1 TEXT,
+            KettoNum2 TEXT,
+            Bamei2 TEXT,
+            KettoNum3 TEXT,
+            Bamei3 TEXT,
             TimeDiff REAL,
             RecordUpKubun TEXT,
             DMKubun TEXT,
@@ -1192,7 +1196,6 @@ SCHEMAS = {
             DMGosaM REAL,
             DMJyuni INTEGER,
             KyakusituKubun TEXT,
-            Reserved_462 TEXT,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
         )
     """,
@@ -2146,6 +2149,10 @@ SCHEMAS = {
             HaronTimeL3 REAL,
             KettoNum1 TEXT,
             Bamei1 TEXT,
+            KettoNum2 TEXT,
+            Bamei2 TEXT,
+            KettoNum3 TEXT,
+            Bamei3 TEXT,
             TimeDiff REAL,
             RecordUpKubun TEXT,
             DMKubun TEXT,
@@ -2154,7 +2161,6 @@ SCHEMAS = {
             DMGosaM REAL,
             DMJyuni INTEGER,
             KyakusituKubun TEXT,
-            Reserved_462 TEXT,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
         )
     """,

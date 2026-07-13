@@ -123,9 +123,9 @@ class TestSEParser:
         assert result["Bamei"] == "テストウマサン"
 
     def test_se_record_length(self, factory):
-        """SE record should be 463 bytes."""
+        """SE record should be 555 bytes including CRLF."""
         data = make_se_record()
-        assert len(data) == 463
+        assert len(data) == 555
 
 
 class TestH1Parser:
@@ -232,7 +232,7 @@ class TestAllParsersBasic:
         'HS': 200, 'HY': 123,
         'JG': 80, 'KS': 772,
         'O1': 962, 'O2': 2042, 'O3': 2654, 'O4': 4031, 'O5': 12293, 'O6': 83285,
-        'RA': 856, 'RC': 241, 'SE': 463, 'SK': 78,
+        'RA': 856, 'RC': 241, 'SE': 555, 'SK': 78,
         'TK': 727, 'TM': 39,
         'UM': 1110, 'WF': 169, 'YS': 146,
     }

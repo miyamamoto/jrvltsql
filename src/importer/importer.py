@@ -300,6 +300,7 @@ class DataImporter:
             '_raw_data',
             '_parse_errors',
             'RecordDelimiter',
+            'RecordSeparator',
         }
 
         return {k: v for k, v in record.items() if k not in metadata_fields and not k.startswith('_')}
