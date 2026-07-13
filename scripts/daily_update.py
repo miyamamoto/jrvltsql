@@ -146,16 +146,17 @@ def _sync_realtime_spec(
                     if not result:
                         stats["records_failed"] += 1
                         continue
-                    # process_record は成功/失敗に関わらず dict(または list)を
-                    # 返す。dict は truthy なので `if result` だけでは
-                    # {"success": False}(PK不備・insert失敗)も imported に
-                    # 数えてしまう。success フラグで実際の投入可否を判定する。
-                    stats["records_parsed"] += 1
+                    # process_record は成功/失敗に関わらず dict(または list)を返す。
+                    # dict は truthy なので `if result` だけでは {"success": False}
+                    # (PK不備・insert失敗)も成功に数えてしまう。オッズ/票数など複数行
+                    # レコードは list を返すため、サブレコード単位で success を判定する。
                     items = result if isinstance(result, list) else [result]
-                    if items and all(item.get("success") for item in items):
-                        stats["records_imported"] += 1
-                    else:
-                        stats["records_failed"] += 1
+                    for item in items:
+                        stats["records_parsed"] += 1
+                        if item and item.get("success"):
+                            stats["records_imported"] += 1
+                        else:
+                            stats["records_failed"] += 1
             finally:
                 try:
                     jvlink.jv_close()

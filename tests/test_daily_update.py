@@ -251,3 +251,30 @@ def test_sync_realtime_spec_counts_failed_inserts_as_failed():
     assert stats["records_fetched"] == 3
     assert stats["records_imported"] == 1
     assert stats["records_failed"] == 2
+
+
+def test_sync_realtime_spec_counts_list_results_per_subrecord():
+    """オッズ/票数など複数行レコードは list を返す。集計はサブレコード単位で行い、
+    一部失敗しても成功分は imported、失敗分だけ failed に数える。"""
+    jvlink = FakeJVLink({"20260607": [b"x", b"y"]})
+    updater = _FakeUpdater(
+        [
+            [{"success": True}, {"success": True}, {"success": False}],
+            [{"success": True}],
+        ]
+    )
+
+    stats = _sync_realtime_spec(
+        database=_NullDatabase(),
+        spec="0B14",
+        from_date="20260607",
+        to_date="20260607",
+        sid="JLTSQL",
+        jvlink=jvlink,
+        updater=updater,
+    )
+
+    assert stats["records_fetched"] == 2
+    assert stats["records_parsed"] == 4
+    assert stats["records_imported"] == 3
+    assert stats["records_failed"] == 1
