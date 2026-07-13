@@ -96,9 +96,10 @@ class TestRAParserJRAVAN(unittest.TestCase):
         sample_data[881:883] = b"18"
         sample_data[883:885] = b"16"
         sample_data[885:887] = b"16"
+        # JV-Data 4.9.0.1 拡張レイアウト(1-indexed): 天候888/芝馬場889/ダート馬場890。
         sample_data[887:888] = b"2"
         sample_data[888:889] = b"1"
-        sample_data[889:890] = b"1"
+        sample_data[889:890] = b"3"
 
         result = self.parser.parse(bytes(sample_data))
 
@@ -108,9 +109,54 @@ class TestRAParserJRAVAN(unittest.TestCase):
         self.assertEqual(result["TorokuTosu"], "18")
         self.assertEqual(result["SyussoTosu"], "16")
         self.assertEqual(result["NyusenTosu"], "16")
-        self.assertEqual(result["Syukaisu"], "2")
-        self.assertEqual(result["RecordUpKubun"], "1")
+        self.assertEqual(result["TenkoCD"], "2")
+        self.assertEqual(result["SibaBabaCD"], "1")
+        self.assertEqual(result["DirtBabaCD"], "3")
+        # 周回数(Syukaisu)は<コーナー通過順位>節のフィールドで、コーナー不在なら空。
+        self.assertEqual(result["Syukaisu"], "")
+
+    def test_extended_layout_reads_weather_baba_and_haron(self):
+        """拡張レイアウトで 天候/芝ダート馬場/ラップ/前後ハロン を仕様位置から読む。
+
+        JV-Data 4.9.0.1 (1-indexed): 天候=888 芝馬場=889 ダート馬場=890
+        ラップ=891 障害マイル=966 前3=970 前4=973 後3=976 後4=979。
+        従来は入線頭数の直後で +2 ずれ、ダート馬場を TenkoCD として読み、
+        芝/ダート馬場とラップ/ハロンは 856byte 互換位置の賞金断片に化けていた。
+        """
+        data = bytearray(b" " * 1272)
+        data[0:2] = b"RA"
+        data[2:3] = b"7"
+        data[3:11] = b"20260508"
+        data[11:15] = b"2026"
+        data[15:19] = b"0508"
+        data[19:21] = b"05"
+        data[21:23] = b"02"
+        data[23:25] = b"03"
+        data[25:27] = b"12"
+        data[873:877] = b"1540"  # 発走時刻 -> 拡張レイアウト判定
+        data[887:888] = b"1"     # 天候=晴
+        data[888:889] = b"2"     # 芝馬場=稍重
+        data[889:890] = b"0"     # ダート馬場=なし(芝レース)
+        data[890:893] = b"122"   # ラップ先頭ハロン
+        data[965:969] = b"0000"  # 障害マイルタイム
+        data[969:972] = b"341"   # 前3ハロン
+        data[972:975] = b"455"   # 前4ハロン
+        data[975:978] = b"363"   # 後3ハロン
+        data[978:981] = b"476"   # 後4ハロン
+        data[1269:1270] = b"1"   # レコード更新区分
+
+        result = self.parser.parse(bytes(data))
+
         self.assertEqual(result["TenkoCD"], "1")
+        self.assertEqual(result["SibaBabaCD"], "2")
+        self.assertEqual(result["DirtBabaCD"], "0")
+        self.assertEqual(result["LapTime"], "122")
+        self.assertEqual(result["SyogaiMileTime"], "0000")
+        self.assertEqual(result["Haron3F"], "341")
+        self.assertEqual(result["Haron4F"], "455")
+        self.assertEqual(result["Haron3L"], "363")
+        self.assertEqual(result["Haron4L"], "476")
+        self.assertEqual(result["RecordUpKubun"], "1")
 
     @staticmethod
     def _build_extended_record(corner_sets=(), legacy_corner_bytes=None):
@@ -200,14 +246,12 @@ class TestRAParserJRAVAN(unittest.TestCase):
                 legacy_corner_bytes=b"0001234500067890",
             )
         )
-        sample_data[887:888] = b"2"  # extended-layout Syukaisu position
-
         result = self.parser.parse(bytes(sample_data))
 
         self.assertEqual(result["Corner"], "")
         self.assertEqual(result["TsukaJyuni"], "")
-        # Syukaisu comes from the extended scalar position and is preserved.
-        self.assertEqual(result["Syukaisu"], "2")
+        # 周回数(Syukaisu)は<コーナー通過順位>節のフィールド。空コーナーでは空。
+        self.assertEqual(result["Syukaisu"], "")
         for idx in (2, 3, 4):
             self.assertEqual(result[f"Corner{idx}"], "")
             self.assertEqual(result[f"Syukaisu{idx}"], "")

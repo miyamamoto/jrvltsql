@@ -280,10 +280,33 @@ class RAParser:
                     result["TorokuTosu"] = self.decode_field(data[881:883])
                     result["SyussoTosu"] = self.decode_field(data[883:885])
                     result["NyusenTosu"] = self.decode_field(data[885:887])
-                    result["Syukaisu"] = self.decode_field(data[887:888])
-                    result["RecordUpKubun"] = self.decode_field(data[888:889])
+                    # JV-Data 4.9.0 拡張レイアウトでは入線頭数(pos886)の直後に
+                    # 天候(888)/芝馬場(889)/ダート馬場(890)/ラップタイム(891)/
+                    # 障害マイル(966)/前後ハロン(970-981)が並ぶ (1-indexed)。
+                    # 従来はここで +2 ずれて ダート馬場を TenkoCD として読み、
+                    # 芝/ダート馬場・ラップ・ハロンタイムは全く読まれず、856byte
+                    # 互換位置の賞金配列断片('0'/'000')に化けていた。
+                    # 周回数(Syukaisu)は RA レコードでは <コーナー通過順位> 内の
+                    # フィールドなので、ここでは初期化しコーナー展開で設定する。
+                    result["Syukaisu"] = ""
                     if len(data) >= 890:
-                        result["TenkoCD"] = self.decode_field(data[889:890])
+                        result["TenkoCD"] = self.decode_field(data[887:888])
+                        result["SibaBabaCD"] = self.decode_field(data[888:889])
+                        result["DirtBabaCD"] = self.decode_field(data[889:890])
+                    if len(data) >= 981:
+                        # field52 ラップタイムは 25x3=75byte 配列 (pos891-965)。
+                        # nl_ra.laptime は単一 TEXT カラムのため、base レイアウト
+                        # (data[762:765]) と同じく先頭1ハロンのみを格納する。
+                        # 全25ハロンの取り込みは schema/importer/materialize の
+                        # 拡張が必要な別課題。
+                        result["LapTime"] = self.decode_field(data[890:893])
+                        result["SyogaiMileTime"] = self.decode_field(data[965:969])
+                        result["Haron3F"] = self.decode_field(data[969:972])
+                        result["Haron4F"] = self.decode_field(data[972:975])
+                        result["Haron3L"] = self.decode_field(data[975:978])
+                        result["Haron4L"] = self.decode_field(data[978:981])
+                    if len(data) >= 1270:
+                        result["RecordUpKubun"] = self.decode_field(data[1269:1270])
 
                     # フルレイアウトの<コーナー通過順位>4セットを展開する。
                     # 856byte互換位置 (781-853) はフルレイアウトでは賞金配列の
