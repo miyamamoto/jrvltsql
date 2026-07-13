@@ -65,6 +65,7 @@ def _sync_realtime_spec(
     sid: str,
     jvlink=None,
     updater=None,
+    ensure_tables: bool = True,
 ) -> dict:
     """Fetch a JVRTOpen speed-report spec for each date key and upsert rows.
 
@@ -83,7 +84,11 @@ def _sync_realtime_spec(
     """
 
     from src.jvlink.wrapper import JVLinkError
-    from src.realtime.updater import RealtimeUpdater
+    from src.database.schema import create_all_tables
+    from src.realtime.updater import RealtimeUpdater, summarize_update_result
+
+    if ensure_tables:
+        create_all_tables(database)
 
     owns_jvlink = jvlink is None
     if jvlink is None:
@@ -111,11 +116,12 @@ def _sync_realtime_spec(
                 if code == -114:
                     print(f"[daily-sync] {spec} not subscribed, skipping spec")
                     break
-                print(f"[daily-sync] {spec} {key} open failed: {exc}", file=sys.stderr)
-                continue
+                raise
             if ret == -1:
                 # No data published for this date key (normal).
                 continue
+            if ret < -1:
+                raise RuntimeError(f"{spec} {key} JVRTOpen failed: {ret}")
             try:
                 while True:
                     ret_code, buff, _fname = jvlink.jv_read()
@@ -124,28 +130,40 @@ def _sync_realtime_spec(
                     if ret_code == -1:
                         # File switch; keep reading.
                         continue
-                    if ret_code < 0 or not buff:
-                        break
+                    if ret_code < 0:
+                        raise RuntimeError(
+                            f"{spec} {key} JVRead failed: {ret_code}"
+                        )
+                    if not buff:
+                        raise RuntimeError(
+                            f"{spec} {key} JVRead returned no buffer"
+                        )
                     stats["records_fetched"] += 1
                     try:
                         result = updater.process_record(buff)
-                    except Exception as exc:  # noqa: BLE001 - keep daily sync alive
+                    except Exception as exc:  # noqa: BLE001 - drain, then fail closed
                         stats["records_failed"] += 1
                         print(
                             f"[daily-sync] {spec} {key} record failed: {exc}",
                             file=sys.stderr,
                         )
                         continue
-                    if result:
+                    successful, failed = summarize_update_result(result)
+                    if successful:
                         stats["records_parsed"] += 1
-                        stats["records_imported"] += 1
-                    else:
-                        stats["records_failed"] += 1
+                        stats["records_imported"] += len(successful)
+                    stats["records_failed"] += failed
             finally:
                 try:
                     jvlink.jv_close()
                 except Exception:
                     pass
+        if stats["records_failed"]:
+            database.rollback()
+            raise RuntimeError(
+                f"{spec} realtime import rejected "
+                f"{stats['records_failed']} record(s)"
+            )
         database.commit()
     finally:
         if owns_jvlink:
@@ -261,6 +279,7 @@ def main() -> int:
                         from_date=from_date,
                         to_date=to_date,
                         sid=config.get("jvlink.sid", "JLTSQL"),
+                        ensure_tables=args.ensure_tables,
                     )
                 except Exception as exc:
                     code = _error_code_from_exception(exc)

@@ -96,6 +96,8 @@ class TestIndividualParsers:
             # 残りのフィールドをスペースで埋める
             remaining = length - len(data)
             data += b' ' * remaining
+            if record_type == "SE":
+                data = data[:-2] + b"\r\n"
             samples[record_type] = data
 
         return samples
@@ -355,7 +357,7 @@ class TestParserFieldExtraction:
         data += b'11'  # RaceNum (26-27)
         data += b'1'  # Wakuban (28)
         data += b'01'  # Umaban (29-30)
-        data += b' ' * (555 - len(data))  # 残りをスペースで埋める
+        data += b' ' * (555 - len(data) - 2) + b'\r\n'
 
         result = parser.parse(data)
 
@@ -417,6 +419,8 @@ class TestParserRobustness:
         data += b'1'
         data += b'20240601'
         data += b' ' * (parser.RECORD_LENGTH - len(data))
+        if record_type == "SE":
+            data = data[:-2] + b"\r\n"
 
         assert len(data) == parser.RECORD_LENGTH
 
@@ -435,10 +439,13 @@ class TestParserRobustness:
         data += b'20240601'
         data += b' ' * (parser.RECORD_LENGTH + 100)
 
-        # 長すぎるデータでも処理できることを確認
+        # Fixed-width SE must reject trailing bytes; legacy parsers remain lenient.
         result = parser.parse(data)
-        assert result is not None
-        assert result['RecordSpec'] == record_type
+        if record_type == "SE":
+            assert result is None
+        else:
+            assert result is not None
+            assert result['RecordSpec'] == record_type
 
 
 class TestAllParsersComprehensive:

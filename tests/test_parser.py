@@ -142,7 +142,7 @@ class TestSEParser:
         record += b"1"   # Wakuban (offset 27, 1 byte)
         record += b"02"  # Umaban (offset 28, 2 bytes)
         record += b"2024012345"  # KettoNum (offset 30, 10 bytes)
-        record += b" " * (555 - len(record))  # Pad to correct length
+        record += b" " * (555 - len(record) - 2) + b"\r\n"
 
         data = parser.parse(record)
         assert data is not None
@@ -189,6 +189,10 @@ class TestSEParser:
 
     def test_rejects_obsolete_463_byte_layout(self):
         assert SEParser().parse(b"SE" + b" " * 461) is None
+
+    def test_rejects_missing_crlf_and_trailing_bytes(self):
+        assert SEParser().parse(b"SE" + b" " * 553) is None
+        assert SEParser().parse(b"SE" + b" " * 551 + b"\r\nX") is None
 
 
 class TestHRParser:

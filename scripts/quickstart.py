@@ -1969,7 +1969,9 @@ class QuickstartRunner:
         # 時系列オッズ取得（オプション）
         if self._should_fetch_timeseries():
             if not self._run_fetch_timeseries_rich():
-                self.warnings.append("時系列オッズの取得に失敗（一部またはすべて）")
+                self.errors.append("時系列オッズの取得に失敗（一部またはすべて）")
+                self._print_summary_rich(success=False)
+                return 1
 
         # 速報系データ取得（オプション）
         if self._should_fetch_realtime():
@@ -2242,7 +2244,8 @@ class QuickstartRunner:
 
         try:
             from src.fetcher.realtime import RealtimeFetcher
-            from src.realtime.updater import RealtimeUpdater
+            from src.database.schema import create_all_tables
+            from src.realtime.updater import RealtimeUpdater, summarize_update_result
             from src.jvlink.constants import JYO_CODES, generate_time_series_key
 
             jyo_codes = JYO_CODES
@@ -2259,6 +2262,7 @@ class QuickstartRunner:
             cumulative_records = 0  # 累計レコード数（リアルタイム表示用）
 
             with db:
+                create_all_tables(db)
                 fetcher = RealtimeFetcher(sid="JLTSQL")
                 updater = RealtimeUpdater(db)
 
@@ -2314,10 +2318,22 @@ class QuickstartRunner:
                                         continuous=False,
                                     ):
                                         raw_buff = record.get("_raw", "")
-                                        if raw_buff:
-                                            updater.process_record(raw_buff, timeseries=True, source_spec=spec)
-                                            spec_records += 1
-                                            cumulative_records += 1
+                                        if not raw_buff:
+                                            raise RuntimeError(
+                                                f"{spec} returned a record without raw bytes"
+                                            )
+                                        result = updater.process_record(
+                                            raw_buff,
+                                            timeseries=True,
+                                            source_spec=spec,
+                                        )
+                                        successful, failed = summarize_update_result(result)
+                                        if failed:
+                                            raise RuntimeError(
+                                                f"{spec} updater rejected {failed} operation(s)"
+                                            )
+                                        spec_records += len(successful)
+                                        cumulative_records += len(successful)
 
                                     # 統計を更新（リアルタイム）
                                     elapsed = time.time() - start_time
@@ -2403,7 +2419,7 @@ class QuickstartRunner:
             self.stats['timeseries_failed'] = failed_count
             self.stats['timeseries_records'] = cumulative_records
 
-            return (success_count + nodata_count) > 0
+            return failed_count == 0 and (success_count + nodata_count) > 0
 
         except Exception as e:
             console.print(f"\n    [red]✗[/red] 初期化エラー")
@@ -2478,8 +2494,10 @@ class QuickstartRunner:
         for result in results:
             console.print(result)
 
-        # 成功またはデータなしがあれば成功とみなす
-        return (self.stats['specs_success'] + self.stats['specs_nodata']) > 0
+        return (
+            self.stats['specs_failed'] == 0
+            and (self.stats['specs_success'] + self.stats['specs_nodata']) > 0
+        )
 
     def _print_spec_list(self, specs: list, status_map: dict):
         """スペック一覧をチェックボックス形式で2列表示"""
@@ -2697,7 +2715,10 @@ class QuickstartRunner:
             time.sleep(0.5)
 
         print(f"\n  取得成功: {self.stats['specs_success']}, データなし: {self.stats['specs_nodata']}, 契約外: {self.stats['specs_skipped']}, エラー: {self.stats['specs_failed']}")
-        return (self.stats['specs_success'] + self.stats['specs_nodata']) > 0
+        return (
+            self.stats['specs_failed'] == 0
+            and (self.stats['specs_success'] + self.stats['specs_nodata']) > 0
+        )
 
     # === リアルタイムデータ取得（JVRTOpen）===
 
@@ -2725,7 +2746,10 @@ class QuickstartRunner:
         for idx, (spec, description) in enumerate(time_specs, 1):
             self._fetch_and_display_realtime(idx, len(time_specs), spec, description)
 
-        return (self.stats['specs_success'] + self.stats['specs_nodata']) > 0
+        return (
+            self.stats['specs_failed'] == 0
+            and (self.stats['specs_success'] + self.stats['specs_nodata']) > 0
+        )
 
     def _fetch_and_display_realtime(self, idx: int, total: int, spec: str, description: str):
         """リアルタイムデータの取得と表示"""
@@ -2782,7 +2806,10 @@ class QuickstartRunner:
             time.sleep(0.3)
 
         print(f"\n  取得成功: {self.stats['specs_success']}, データなし: {self.stats['specs_nodata']}, 契約外: {self.stats['specs_skipped']}, エラー: {self.stats['specs_failed']}")
-        return (self.stats['specs_success'] + self.stats['specs_nodata']) > 0
+        return (
+            self.stats['specs_failed'] == 0
+            and (self.stats['specs_success'] + self.stats['specs_nodata']) > 0
+        )
 
     def _print_realtime_status(self, status: str, spec: str):
         """リアルタイム取得ステータスを表示"""
@@ -2868,7 +2895,8 @@ class QuickstartRunner:
 
         try:
             from src.fetcher.realtime import RealtimeFetcher
-            from src.realtime.updater import RealtimeUpdater
+            from src.database.schema import create_all_tables
+            from src.realtime.updater import RealtimeUpdater, summarize_update_result
 
             # データベース接続
             db = self._create_database()
@@ -2880,8 +2908,10 @@ class QuickstartRunner:
                 return ("nodata", details)
 
             total_records = 0
+            failed_records = 0
 
             with db:
+                create_all_tables(db)
                 fetcher = RealtimeFetcher(sid="JLTSQL")
                 # RealtimeUpdater は record_type を RT_*（速報系）/ TS_O*（時系列）に
                 # 正しくルーティングする。DataImporter を使うと NL_* に書き込まれ
@@ -2900,21 +2930,16 @@ class QuickstartRunner:
                             for record in fetcher.fetch(data_spec=spec, key=key, continuous=False):
                                 raw_buff = record.get("_raw")
                                 if not raw_buff:
+                                    failed_records += 1
                                     continue
                                 result = updater.process_record(
                                     raw_buff,
                                     timeseries=is_time_series,
                                     source_spec=spec if is_time_series else None,
                                 )
-                                if result is None:
-                                    continue
-                                # process_record は dict または list[dict] を返す
-                                if isinstance(result, list):
-                                    total_records += sum(
-                                        1 for r in result if r and r.get("success")
-                                    )
-                                elif result.get("success"):
-                                    total_records += 1
+                                successful, failed = summarize_update_result(result)
+                                total_records += len(successful)
+                                failed_records += failed
                         except Exception as e:
                             error_str = str(e)
                             # 契約外チェック
@@ -2926,6 +2951,14 @@ class QuickstartRunner:
                             raise
 
                 details['records_saved'] = total_records
+                details['records_failed'] = failed_records
+
+                if failed_records:
+                    db.rollback()
+                    details['error_message'] = (
+                        f"{failed_records} realtime record(s) failed to import"
+                    )
+                    return ("failed", details)
 
                 if total_records > 0:
                     return ("success", details)
@@ -3194,11 +3227,8 @@ class QuickstartRunner:
             database = self._create_database()
 
             with database:
-                # テーブル作成（必要に応じて）
-                try:
-                    create_all_tables(database)
-                except Exception:
-                    pass  # 既存テーブルがあってもOK
+                # Fail closed when an existing schema cannot be upgraded safely.
+                create_all_tables(database)
 
                 # BatchProcessorを直接呼び出し（show_progress=Trueでリッチ進捗表示）
                 processor = BatchProcessor(
@@ -3221,9 +3251,22 @@ class QuickstartRunner:
                 details['records_fetched'] = result.get('records_fetched', 0)
                 details['records_parsed'] = result.get('records_parsed', 0)
                 details['records_saved'] = result.get('records_imported', 0)
+                details['records_failed'] = result.get('records_failed', 0)
 
                 # 成功判定
-                if result.get('records_fetched', 0) == 0:
+                if details['records_failed'] > 0:
+                    details['error_type'] = 'import'
+                    details['error_message'] = (
+                        f"{details['records_failed']} record(s) failed to import"
+                    )
+                    self.errors.append({
+                        'spec': spec,
+                        'type': details['error_type'],
+                        'message': details['error_message'],
+                    })
+                    return ("failed", details)
+
+                if details['records_fetched'] == 0 or details['records_saved'] == 0:
                     return ("nodata", details)
 
                 return ("success", details)

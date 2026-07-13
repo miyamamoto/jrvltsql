@@ -46,10 +46,13 @@ class SEParser:
         """
         try:
             # レコード長チェック
-            if len(data) < self.RECORD_LENGTH:
+            if len(data) != self.RECORD_LENGTH:
                 self.logger.warning(
-                    f"SEレコード長不足: expected={self.RECORD_LENGTH}, actual={len(data)}"
+                    f"SEレコード長不正: expected={self.RECORD_LENGTH}, actual={len(data)}"
                 )
+                return None
+            if data[-2:] != b"\r\n":
+                self.logger.warning("SEレコード終端不正: expected=CRLF")
                 return None
 
             # フィールド抽出

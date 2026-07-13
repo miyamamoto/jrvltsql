@@ -193,3 +193,71 @@ def test_sync_realtime_spec_is_idempotent_across_reruns(rt_database):
 
     rows = rt_database.fetch_all("SELECT COUNT(*) AS cnt FROM RT_RA")
     assert rows[0]["cnt"] == 1
+
+
+def test_sync_realtime_spec_stops_before_open_when_schema_setup_fails(
+    rt_database, monkeypatch
+):
+    jvlink = FakeJVLink({"20260607": [_build_rt_ra_record()]})
+
+    def fail_schema_setup(_database):
+        raise RuntimeError("unsafe RT_SE schema")
+
+    monkeypatch.setattr(
+        "src.database.schema.create_all_tables",
+        fail_schema_setup,
+    )
+
+    with pytest.raises(RuntimeError, match="unsafe RT_SE schema"):
+        _sync_realtime_spec(
+            database=rt_database,
+            spec="0B12",
+            from_date="20260607",
+            to_date="20260607",
+            sid="JLTSQL",
+            jvlink=jvlink,
+        )
+
+    assert jvlink.opened_keys == []
+
+
+def test_sync_realtime_spec_fails_when_any_record_is_rejected(rt_database):
+    jvlink = FakeJVLink({"20260607": [_build_rt_ra_record()]})
+
+    class RejectingUpdater:
+        def process_record(self, _record):
+            return {
+                "operation": "insert",
+                "table": "RT_SE",
+                "success": False,
+                "error": "obsolete schema",
+            }
+
+    with pytest.raises(RuntimeError, match="rejected 1 record"):
+        _sync_realtime_spec(
+            database=rt_database,
+            spec="0B12",
+            from_date="20260607",
+            to_date="20260607",
+            sid="JLTSQL",
+            jvlink=jvlink,
+            updater=RejectingUpdater(),
+        )
+
+
+def test_sync_realtime_spec_fails_on_transport_error(rt_database):
+    class ReadFailingJVLink(FakeJVLink):
+        def jv_read(self):
+            return -202, None, None
+
+    jvlink = ReadFailingJVLink({"20260607": [b"placeholder"]})
+
+    with pytest.raises(RuntimeError, match="JVRead failed: -202"):
+        _sync_realtime_spec(
+            database=rt_database,
+            spec="0B12",
+            from_date="20260607",
+            to_date="20260607",
+            sid="JLTSQL",
+            jvlink=jvlink,
+        )

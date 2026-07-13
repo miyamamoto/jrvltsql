@@ -463,6 +463,12 @@ class DataImporter:
             )
 
         except DatabaseError as e:
+            if not auto_commit:
+                # The database handler has already rolled back the enclosing
+                # transaction. Individual retries here would create a partial
+                # import and invalidate BatchProcessor's atomicity guarantee.
+                raise
+
             # Rollback failed batch transaction
             logger.warning(
                 "Batch insert failed, trying individual inserts",

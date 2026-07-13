@@ -92,7 +92,7 @@ class TestIntegration:
                 "NL_SE": 73,   # Horse race results table (three opponent slots)
                 "NL_UM": 61,   # Horse master table
                 "NL_KS": 68,   # Jockey master table
-                "NL_HR": 110,  # Refund table
+                "NL_HR": 194,  # Expanded payout combinations
                 "NL_O1": 29,   # Odds table
             }
 

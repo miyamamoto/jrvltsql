@@ -92,7 +92,7 @@ def load_fixture_records(record_type, record_length):
             # 463-byte parser and has no official tail. Preserve its core-field
             # checks while the tail is covered by a dedicated 555-byte test.
             if record_type == "SE" and len(chunk) == 463:
-                chunk = chunk.ljust(SEParser.RECORD_LENGTH, b" ")
+                chunk = chunk.ljust(SEParser.RECORD_LENGTH - 2, b" ") + b"\r\n"
             records.append(chunk)
     return records
 

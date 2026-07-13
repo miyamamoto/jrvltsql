@@ -75,6 +75,42 @@ def test_dedupe_rows_by_primary_key_keeps_last_row():
     assert deduped[1]["Kumi"] == "01-03"
 
 
+def test_pg8000_explicit_batch_transaction(monkeypatch):
+    """The native fallback must not autocommit each batch row."""
+    from unittest.mock import MagicMock, call
+
+    import src.database.postgresql_handler as postgresql_handler
+
+    database = postgresql_handler.PostgreSQLDatabase({})
+    database._connection = MagicMock()
+    monkeypatch.setattr(postgresql_handler, "DRIVER", "pg8000")
+
+    database.begin_transaction()
+    database.begin_transaction()
+    database.commit()
+    database.commit()
+
+    assert database._connection.run.call_args_list == [call("BEGIN"), call("COMMIT")]
+
+
+def test_pg8000_caller_managed_transaction_can_roll_back(monkeypatch):
+    """auto_commit=False callers retain one explicit transaction."""
+    from unittest.mock import MagicMock, call
+
+    import src.database.postgresql_handler as postgresql_handler
+
+    database = postgresql_handler.PostgreSQLDatabase({})
+    database._connection = MagicMock()
+    monkeypatch.setattr(postgresql_handler, "DRIVER", "pg8000")
+
+    database.begin_transaction()
+    database.begin_transaction()
+    database.rollback()
+    database.rollback()
+
+    assert database._connection.run.call_args_list == [call("BEGIN"), call("ROLLBACK")]
+
+
 def print_installation_guide():
     """PostgreSQLのインストールガイドを表示"""
     print("""

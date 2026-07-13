@@ -27,6 +27,12 @@ from src.fetcher.historical import HistoricalFetcher
 from src.importer.batch import BatchProcessor
 
 
+pytestmark = pytest.mark.skipif(
+    os.getenv("JLTSQL_RUN_REAL_INTEGRATION") != "1",
+    reason="set JLTSQL_RUN_REAL_INTEGRATION=1 on an authenticated JV-Link host",
+)
+
+
 @pytest.fixture
 def temp_db():
     """Create temporary database for testing."""
