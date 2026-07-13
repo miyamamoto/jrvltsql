@@ -257,6 +257,28 @@ class TestRAParserJRAVAN(unittest.TestCase):
             self.assertEqual(result[f"Syukaisu{idx}"], "")
             self.assertEqual(result[f"TsukaJyuni{idx}"], "")
 
+    def test_extended_layout_short_record_does_not_leak_legacy_corner(self):
+        """拡張レイアウトだがコーナー節に届かない短いレコードでも、856byte互換
+        位置(781-853)の賞金配列断片が Corner/TsukaJyuni に漏れないこと。
+
+        HassoTime(873) が有効なので拡張判定は真になるが、レコード長が
+        コーナー1セット目(981+72=1053)未満のため展開ループは即 break する。
+        """
+        # 拡張判定は成立、しかしコーナー節(1053)には届かない長さ。
+        sample_data = bytearray(b" " * 1000)
+        sample_data[0:2] = b"RA"
+        sample_data[2:3] = b"1"
+        sample_data[3:11] = b"20260607"
+        sample_data[873:877] = b"1545"  # 発走時刻 -> 拡張レイアウト判定
+        # 856byte互換位置には賞金配列断片が入る。
+        sample_data[781:797] = b"0001234500067890"
+
+        result = self.parser.parse(bytes(sample_data))
+
+        self.assertEqual(result["Corner"], "")
+        self.assertEqual(result["TsukaJyuni"], "")
+        self.assertEqual(result["Syukaisu"], "")
+
     def test_empty_values_convert_to_empty_string(self):
         """Test that empty/whitespace values convert to empty string.
 

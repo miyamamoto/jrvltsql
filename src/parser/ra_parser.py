@@ -286,9 +286,14 @@ class RAParser:
                     # 従来はここで +2 ずれて ダート馬場を TenkoCD として読み、
                     # 芝/ダート馬場・ラップ・ハロンタイムは全く読まれず、856byte
                     # 互換位置の賞金配列断片('0'/'000')に化けていた。
-                    # 周回数(Syukaisu)は RA レコードでは <コーナー通過順位> 内の
-                    # フィールドなので、ここでは初期化しコーナー展開で設定する。
+                    # 周回数(Syukaisu)/コーナー/各通過順位は RA では
+                    # <コーナー通過順位>内のフィールドで、フルレイアウトの正しい
+                    # 位置(982+)で展開する。856byte互換位置(781-853)の値は
+                    # 賞金配列の断片なので、展開ループが短いデータで break しても
+                    # 断片が残らないよう、ここで初期化する。
                     result["Syukaisu"] = ""
+                    result["Corner"] = ""
+                    result["TsukaJyuni"] = ""
                     if len(data) >= 890:
                         result["TenkoCD"] = self.decode_field(data[887:888])
                         result["SibaBabaCD"] = self.decode_field(data[888:889])
