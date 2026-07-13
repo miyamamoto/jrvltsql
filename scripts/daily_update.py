@@ -42,6 +42,12 @@ UPDATE_SPECS = [
 
 REALTIME_SPEC_PREFIX = "0B"
 
+# JV-Link は未契約データ種別に対し購読エラーを返す (-111 契約無し / -114 未購読
+# 一括 / -115 未購読当該)。MING 等の任意契約スペックが未購読でも日次同期を
+# 止めないよう、これらは --ignore-jvopen-error-codes の指定に関わらず警告して
+# スキップする。realtime 経路(JVRTOpen)は _sync_realtime_spec 内で -114 を処理済み。
+SUBSCRIPTION_ERROR_CODES = frozenset({-111, -114, -115})
+
 
 def _is_realtime_spec(spec: str) -> bool:
     """Return True for JVRTOpen speed-report specs (e.g., 0B12, 0B15)."""
@@ -269,8 +275,8 @@ def main() -> int:
                     )
                 except Exception as exc:
                     code = _error_code_from_exception(exc)
-                    if code in ignored_error_codes:
-                        print(f"[daily-sync] {spec} skipped: ignored JVOpen code {code}")
+                    if code in ignored_error_codes or code in SUBSCRIPTION_ERROR_CODES:
+                        print(f"[daily-sync] {spec} skipped: JVOpen code {code} (unsubscribed/ignored)")
                         continue
                     raise
                 print(
@@ -292,8 +298,8 @@ def main() -> int:
                 )
             except Exception as exc:
                 code = _error_code_from_exception(exc)
-                if code in ignored_error_codes:
-                    print(f"[daily-sync] {spec} skipped: ignored JVOpen code {code}")
+                if code in ignored_error_codes or code in SUBSCRIPTION_ERROR_CODES:
+                    print(f"[daily-sync] {spec} skipped: JVOpen code {code} (unsubscribed/ignored)")
                     continue
                 raise
             print(

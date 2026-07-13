@@ -12,6 +12,7 @@ from scripts.daily_update import (
     _parse_ignored_error_codes,
     _select_update_specs,
     _sync_realtime_spec,
+    SUBSCRIPTION_ERROR_CODES,
 )
 
 
@@ -199,4 +200,18 @@ def test_daily_update_includes_mining_spec():
     specs = [spec for spec, _ in UPDATE_SPECS]
     assert "MING" in specs
     assert _select_update_specs("ming") == [("MING", 1)]
+
+
+def test_subscription_error_codes_cover_jvlink_unsubscribed_codes():
+    """MING 等の任意契約スペックが未購読でも日次同期が止まらないよう、JV-Link の
+    購読エラー(-111/-114/-115)は ignore 指定に関わらずスキップ対象とする。"""
+    assert SUBSCRIPTION_ERROR_CODES == frozenset({-111, -114, -115})
+    for msg, code in (
+        ("JVOpen failed (code: -114)", -114),
+        ("JVOpen failed (code: -111)", -111),
+        ("JVOpen failed (code: -115)", -115),
+    ):
+        parsed = _error_code_from_exception(Exception(msg))
+        assert parsed == code
+        assert parsed in SUBSCRIPTION_ERROR_CODES
 
