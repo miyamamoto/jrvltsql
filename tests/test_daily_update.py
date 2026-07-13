@@ -57,6 +57,17 @@ def test_daily_update_selects_speed_report_specs_case_insensitively():
     assert _select_update_specs("0b12,0b15") == [("0B12", 1), ("0B15", 1)]
 
 
+def test_daily_update_includes_event_report_specs():
+    """0B14/0B16 (速報開催情報) must be collected so WE (天候馬場) populates RT_WE."""
+    specs = [spec for spec, _ in UPDATE_SPECS]
+    assert "0B14" in specs
+    assert "0B16" in specs
+
+
+def test_daily_update_selects_event_report_specs_case_insensitively():
+    assert _select_update_specs("0b14,0b16") == [("0B14", 1), ("0B16", 1)]
+
+
 def test_is_realtime_spec_detects_jvrtopen_specs():
     assert _is_realtime_spec("0B12")
     assert _is_realtime_spec("0b15")
@@ -193,3 +204,50 @@ def test_sync_realtime_spec_is_idempotent_across_reruns(rt_database):
 
     rows = rt_database.fetch_all("SELECT COUNT(*) AS cnt FROM RT_RA")
     assert rows[0]["cnt"] == 1
+
+
+class _NullDatabase:
+    def commit(self):
+        return None
+
+
+class _FakeUpdater:
+    """Updater double returning process_record results verbatim.
+
+    process_record は失敗時も {"success": False} という truthy な dict を返す
+    ため、集計側が success フラグを見ずに数えると失敗が imported に紛れ込む。
+    """
+
+    def __init__(self, results):
+        self._results = list(results)
+        self.seen = 0
+
+    def process_record(self, buff):
+        result = self._results[self.seen]
+        self.seen += 1
+        return result
+
+
+def test_sync_realtime_spec_counts_failed_inserts_as_failed():
+    jvlink = FakeJVLink({"20260607": [b"x", b"y", b"z"]})
+    updater = _FakeUpdater(
+        [
+            {"success": True},
+            {"success": False, "error": "Incomplete primary key"},
+            None,
+        ]
+    )
+
+    stats = _sync_realtime_spec(
+        database=_NullDatabase(),
+        spec="0B14",
+        from_date="20260607",
+        to_date="20260607",
+        sid="JLTSQL",
+        jvlink=jvlink,
+        updater=updater,
+    )
+
+    assert stats["records_fetched"] == 3
+    assert stats["records_imported"] == 1
+    assert stats["records_failed"] == 2
