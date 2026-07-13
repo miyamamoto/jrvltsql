@@ -1821,6 +1821,10 @@ class QuickstartRunner:
         ("TOKU", "特別登録馬", 2),
         ("RACE", "レース情報", 2),
         ("DIFN", "蓄積系ソフト用蓄積情報", 1),
+        # MING(データマイニング予想)は蓄積系(option=1)。SE の脚質(kyakusitukubun)
+        # ブロックと NL_DM を埋めるため、定期実行の実経路である update モードにも
+        # 含める。未購読環境では下の -111/-114/-115 判定で skipped 扱いになる。
+        ("MING", "蓄積系ソフト用マイニング情報", 1),
         ("TCVN", "調教師変更情報", 2),
         ("RCVN", "騎手変更情報", 2),
     ]
@@ -3233,7 +3237,7 @@ class QuickstartRunner:
             error_str = str(e)
 
             # エラーコード別の判定
-            if error_code == -111 or '契約' in error_str:
+            if error_code in (-111, -114, -115) or '契約' in error_str:
                 details['error_type'] = 'contract'
                 # オッズ系(O1-O6)は別契約が必要な場合がある
                 if spec.startswith('O'):

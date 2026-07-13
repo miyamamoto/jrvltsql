@@ -275,3 +275,17 @@ class TestQuickstartBatchRoles:
         assert "--db" in text
         assert "$DbType" in text
         assert "PersistPostgresEnvironment" in text
+
+
+class TestQuickstartUpdateSpecs:
+    """update モード(定期実行の実経路)のスペック定義を検証する。"""
+
+    def test_update_specs_include_mining(self):
+        """MING は SE 脚質ブロック / NL_DM 生成に必須。update モードに含めること。"""
+        from scripts.quickstart import QuickstartRunner
+
+        specs = [spec for spec, _desc, _opt in QuickstartRunner.UPDATE_SPECS]
+        assert "MING" in specs
+        # MING は蓄積系のため option=1 (option=2 は TOKU/RACE/TCVN/RCVN のみ)
+        ming = [row for row in QuickstartRunner.UPDATE_SPECS if row[0] == "MING"]
+        assert ming and ming[0][2] == 1
