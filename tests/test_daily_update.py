@@ -3,6 +3,7 @@ from datetime import datetime
 import pytest
 
 from scripts.daily_update import (
+    SUBSCRIPTION_ERROR_CODES,
     UPDATE_SPECS,
     _effective_option,
     _error_code_from_exception,
@@ -12,7 +13,6 @@ from scripts.daily_update import (
     _parse_ignored_error_codes,
     _select_update_specs,
     _sync_realtime_spec,
-    SUBSCRIPTION_ERROR_CODES,
 )
 
 
@@ -215,3 +215,32 @@ def test_subscription_error_codes_cover_jvlink_unsubscribed_codes():
         assert parsed == code
         assert parsed in SUBSCRIPTION_ERROR_CODES
 
+
+@pytest.mark.parametrize("error_code", sorted(SUBSCRIPTION_ERROR_CODES))
+def test_sync_realtime_spec_stops_after_subscription_error(rt_database, error_code):
+    """未購読の速報 spec は後続日を再照会せず spec 単位で終了する。"""
+    from src.jvlink.wrapper import JVLinkError
+
+    class UnsubscribedJVLink(FakeJVLink):
+        def jv_rt_open(self, data_spec, key):
+            self.opened_keys.append((data_spec, key))
+            raise JVLinkError("not subscribed", error_code=error_code)
+
+    jvlink = UnsubscribedJVLink({})
+
+    stats = _sync_realtime_spec(
+        database=rt_database,
+        spec="0B12",
+        from_date="20260606",
+        to_date="20260608",
+        sid="JLTSQL",
+        jvlink=jvlink,
+    )
+
+    assert stats == {
+        "records_fetched": 0,
+        "records_parsed": 0,
+        "records_imported": 0,
+        "records_failed": 0,
+    }
+    assert jvlink.opened_keys == [("0B12", "20260606")]

@@ -119,7 +119,7 @@ def _sync_realtime_spec(
                 ret, _count = jvlink.jv_rt_open(spec, key)
             except JVLinkError as exc:
                 code = getattr(exc, "error_code", None)
-                if code == -114:
+                if code in SUBSCRIPTION_ERROR_CODES:
                     print(f"[daily-sync] {spec} not subscribed, skipping spec")
                     break
                 print(f"[daily-sync] {spec} {key} open failed: {exc}", file=sys.stderr)
