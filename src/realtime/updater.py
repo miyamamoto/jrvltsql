@@ -403,15 +403,15 @@ class RealtimeUpdater:
                 logger.warning(f"Unknown record type: {record_type}")
                 return None
 
-            # headDataKubun is an explicit mutation instruction. Record-level
-            # DataKubun=9 is a cancellation state only for RA/SE/WF; other
-            # record types use it as a physical deletion instruction.
+            # headDataKubun is an explicit mutation instruction. RA/SE/WF use
+            # record-level DataKubun for domain state (including finalized 7
+            # and cancelled 9). Only 0 is an erase instruction for these rows.
             explicit_operation = parsed_data.get("headDataKubun")
             if explicit_operation:
                 head_data_kubun = explicit_operation
             elif (
                 record_type in {"RA", "SE", "WF"}
-                and parsed_data.get("DataKubun") == DATA_KUBUN_DELETE
+                and parsed_data.get("DataKubun") != DATA_KUBUN_ERASE
             ):
                 head_data_kubun = DATA_KUBUN_NEW
             else:

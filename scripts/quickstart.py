@@ -2935,7 +2935,10 @@ class QuickstartRunner:
         is_time_series = spec.startswith("0B2") or spec.startswith("0B3") or spec in {"0B41", "0B42"}
 
         try:
-            from src.fetcher.realtime import RealtimeFetcher
+            from src.fetcher.realtime import (
+                RealtimeFetcher,
+                materialize_complete_records,
+            )
             from src.database.schema import create_all_tables
             from src.realtime.updater import RealtimeUpdater, summarize_update_result
 

@@ -1112,6 +1112,49 @@ class TestRealtimeUpdater(unittest.TestCase):
         self.mock_db.execute.assert_called_once()
         self.mock_db.insert.assert_not_called()
 
+    def test_finalized_ra_data_kubun_is_stored_as_state(self):
+        updater = RealtimeUpdater(self.mock_db)
+
+        result = updater.process_parsed_record(
+            {
+                "RecordSpec": "RA",
+                "DataKubun": "7",
+                "Year": "2026",
+                "MonthDay": "0715",
+                "JyoCD": "05",
+                "Kaiji": "1",
+                "Nichiji": "1",
+                "RaceNum": "1",
+            }
+        )
+
+        self.assertEqual(result["operation"], "insert")
+        self.assertTrue(result["success"])
+        self.mock_db.insert.assert_called_once()
+        self.mock_db.execute.assert_not_called()
+
+    def test_finalized_se_data_kubun_is_stored_as_state(self):
+        updater = RealtimeUpdater(self.mock_db)
+
+        result = updater.process_parsed_record(
+            {
+                "RecordSpec": "SE",
+                "DataKubun": "7",
+                "Year": "2026",
+                "MonthDay": "0715",
+                "JyoCD": "05",
+                "Kaiji": "1",
+                "Nichiji": "1",
+                "RaceNum": "1",
+                "Umaban": "1",
+            }
+        )
+
+        self.assertEqual(result["operation"], "insert")
+        self.assertTrue(result["success"])
+        self.mock_db.insert.assert_called_once()
+        self.mock_db.execute.assert_not_called()
+
     @patch('src.realtime.updater.ParserFactory')
     def test_head_data_kubun_default_fallback(self, mock_factory_class):
         """Test fallback to default value when both headDataKubun and DataKubun are missing."""
