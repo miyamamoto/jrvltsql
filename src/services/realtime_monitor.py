@@ -11,6 +11,7 @@ from datetime import datetime
 
 from src.fetcher.realtime import RealtimeFetcher
 from src.jvlink.constants import is_time_series_spec
+from src.jvlink.bridge import JVLinkBridgeError
 from src.jvlink.wrapper import JVLinkError
 from src.realtime.updater import RealtimeUpdater, summarize_update_result
 from src.database.base import BaseDatabase
@@ -230,14 +231,14 @@ class RealtimeMonitor:
         today and poll each one, storing速報 odds results in TS_SOKUHO_O*
         tables with timeseries=True so multiple odds snapshots are preserved.
         """
-        fetcher = RealtimeFetcher(sid=self.sid)
-        jvlink = fetcher.jvlink
-        updater = RealtimeUpdater(database=self.database)
-
         try:
+            fetcher = RealtimeFetcher(sid=self.sid)
+            jvlink = fetcher.jvlink
+            updater = RealtimeUpdater(database=self.database)
             jvlink.jv_init()
         except Exception as e:
-            logger.error(f"JV-Link init failed: {e}")
+            logger.error(f"JV-Link monitor initialization failed: {e}")
+            self._add_error("initialization", str(e))
             with self._lock:
                 self.status.is_running = False
                 self.status.stopped_at = datetime.now()
@@ -369,7 +370,7 @@ class RealtimeMonitor:
             jvlink.jv_close()
             return n, failed_count
 
-        except JVLinkError as e:
+        except (JVLinkError, JVLinkBridgeError) as e:
             code = getattr(e, "error_code", None)
             if snapshot_replaced:
                 logger.error(

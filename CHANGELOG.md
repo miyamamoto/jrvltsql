@@ -9,6 +9,14 @@
 
 現時点で未リリースの変更はありません。
 
+## [1.6.3] - 2026-07-15
+
+### Fixed
+
+- Wine bridge の `JVLinkBridgeError` を未購読・busy の正常なリトライ判定に含め、任意 spec の未購読で同一 polling cycle の正常データを rollback しないよう修正
+- JVRead の回復可能エラーも不完全取得として追跡し、欠損した 0B14 応答で既存の開催変更 snapshot を置換しないよう修正
+- Wine bridge 初期化失敗時に realtime monitor の health を停止状態へ更新するよう修正
+
 ## [1.6.2] - 2026-07-15
 
 ### Fixed
