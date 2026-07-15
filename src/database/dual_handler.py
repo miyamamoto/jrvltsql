@@ -145,9 +145,12 @@ class DualDatabase(BaseDatabase):
         """
         return self._primary.get_db_type()
 
-    def get_migration_targets(self) -> tuple[BaseDatabase, BaseDatabase]:
-        """Return concrete backends for backend-specific schema migration."""
-        return self._primary, self._secondary
+    def get_migration_targets(self) -> tuple[BaseDatabase, ...]:
+        """Return connected backends for backend-specific schema migration."""
+        targets = [self._primary]
+        if self._secondary.is_connected():
+            targets.append(self._secondary)
+        return tuple(targets)
 
     # ------------------------------------------------------------------
     # Reads: primary only

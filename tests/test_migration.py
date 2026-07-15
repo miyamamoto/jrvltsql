@@ -32,6 +32,9 @@ class MockPostgreSQLDatabase(BaseDatabase):
     def get_db_type(self) -> str:
         return "postgresql"
 
+    def is_connected(self) -> bool:
+        return True
+
     def connect(self): pass
     def disconnect(self): pass
     def commit(self): pass
@@ -451,3 +454,20 @@ def test_dual_migration_uses_each_backends_identifier_rules(db, pg_db):
         for statement in pg_db._executed
     )
     verify_table_schema(dual, "NL_H1", NEW_SCHEMA)
+
+
+def test_dual_migration_skips_unavailable_best_effort_secondary(db, pg_db):
+    db.execute(ADDITIVE_OLD_SCHEMA)
+    db.commit()
+    pg_db.execute(ADDITIVE_OLD_SCHEMA)
+    pg_db.is_connected = lambda: False
+    dual = DualDatabase(db, pg_db)
+
+    assert migrate_table_if_needed(dual, "NL_H1", NEW_SCHEMA) is True
+    verify_table_schema(dual, "NL_H1", NEW_SCHEMA)
+
+    sqlite_columns = {
+        row["name"] for row in db.fetch_all('PRAGMA table_info("NL_H1")')
+    }
+    assert "Hyo" in sqlite_columns
+    assert "Hyo" not in pg_db._tables["nl_h1"]
