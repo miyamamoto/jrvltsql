@@ -1336,8 +1336,15 @@ class BackgroundUpdater:
                     break
                 continue
 
-            # 速報系データ更新を実行
-            self._run_realtime_update(reason)
+            # A transient JV-Link or database error must not terminate the
+            # long-running collection thread. Record the failed poll and let
+            # the scheduler try again at the next interval.
+            try:
+                self._run_realtime_update(reason)
+            except Exception as e:
+                self._stats["realtime_errors"] += 1
+                self._stats["last_realtime_update"] = datetime.now()
+                logger.exception(f"Realtime polling cycle failed: {e}")
 
             # 次の更新まで待機
             if self._stop_event.wait(timeout=interval):
