@@ -259,6 +259,33 @@ def test_sync_realtime_spec_stops_after_subscription_error(rt_database, error_co
     assert jvlink.opened_keys == [("0B12", "20260606")]
 
 
+@pytest.mark.parametrize("error_code", sorted(SUBSCRIPTION_ERROR_CODES))
+def test_sync_realtime_spec_stops_after_wine_bridge_subscription_error(
+    rt_database, error_code
+):
+    """Wine bridge の未購読応答も spec 単位の正常スキップにする。"""
+    from src.jvlink.bridge import JVLinkBridgeError
+
+    class UnsubscribedBridge(FakeJVLink):
+        def jv_rt_open(self, data_spec, key):
+            self.opened_keys.append((data_spec, key))
+            raise JVLinkBridgeError("not subscribed", error_code=error_code)
+
+    jvlink = UnsubscribedBridge({})
+
+    stats = _sync_realtime_spec(
+        database=rt_database,
+        spec="0B51",
+        from_date="20260606",
+        to_date="20260608",
+        sid="JLTSQL",
+        jvlink=jvlink,
+    )
+
+    assert stats["records_failed"] == 0
+    assert jvlink.opened_keys == [("0B51", "20260606")]
+
+
 def test_sync_realtime_spec_stops_before_open_when_schema_setup_fails(rt_database, monkeypatch):
     jvlink = FakeJVLink({"20260607": [_build_rt_ra_record()]})
 

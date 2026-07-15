@@ -9,6 +9,12 @@
 
 現時点で未リリースの変更はありません。
 
+## [1.6.4] - 2026-07-15
+
+### Fixed
+
+- 非対話 `daily_update.py` でも Wine bridge の未購読例外を正常な spec スキップとして扱い、0B14/0B51 など任意購読 feed が未契約でも他 feed の収集を継続するよう修正
+
 ## [1.6.3] - 2026-07-15
 
 ### Fixed
@@ -197,7 +203,9 @@
 - quickstart.py 対話形式セットアップウィザード
 - CLI コマンド（fetch, status, monitor, init）
 
-[Unreleased]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.2...HEAD
+[Unreleased]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.4...HEAD
+[1.6.4]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.3...v1.6.4
+[1.6.3]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.2...v1.6.3
 [1.6.2]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.1...v1.6.2
 [1.6.1]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/miyamamoto/jrvltsql/releases/tag/v1.6.0
