@@ -69,6 +69,7 @@ class BaseFetcher(ABC):
         self._records_fetched = 0
         self._records_parsed = 0
         self._records_failed = 0
+        self._recoverable_read_errors = 0
         self._files_processed = 0
         self._total_files = 0
         self._service_key = service_key
@@ -253,6 +254,10 @@ class BaseFetcher(ABC):
                         filename=filename,
                         recommended_action="Deleting corrupted file and continuing",
                     )
+                    # Continuing lets non-snapshot imports drain later files,
+                    # but the current response is no longer complete. Snapshot
+                    # callers use this counter to reject destructive replacement.
+                    self._recoverable_read_errors += 1
 
                     # Delete corrupted file for file-related errors
                     if ret_code in (-203, -402, -403, -502, -503) and filename and hasattr(self.jvlink, 'jv_file_delete'):
@@ -287,6 +292,7 @@ class BaseFetcher(ABC):
             "records_fetched": self._records_fetched,
             "records_parsed": self._records_parsed,
             "records_failed": self._records_failed,
+            "recoverable_read_errors": self._recoverable_read_errors,
         }
 
     def reset_statistics(self):
@@ -294,6 +300,7 @@ class BaseFetcher(ABC):
         self._records_fetched = 0
         self._records_parsed = 0
         self._records_failed = 0
+        self._recoverable_read_errors = 0
 
     def _is_within_date_range(self, data: dict, to_date: str) -> bool:
         """Check if a record's date is within the specified range (up to to_date).

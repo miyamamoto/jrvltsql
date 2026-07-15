@@ -179,15 +179,52 @@ def test_summarize_update_result_counts_explicit_failures():
 
 def test_materialize_complete_records_rejects_parser_loss():
     fetcher = MagicMock()
-    fetcher.get_statistics.return_value = {"records_failed": 1}
+    fetcher.get_statistics.return_value = {
+        "records_failed": 1,
+        "recoverable_read_errors": 0,
+    }
 
-    with pytest.raises(Exception, match="0B14 20260715 parser rejected 1"):
+    with pytest.raises(Exception, match="parser_failed=1, recoverable_read_errors=0"):
         materialize_complete_records(
             fetcher,
             iter([{"RecordSpec": "WE"}]),
             data_spec="0B14",
             key="20260715",
         )
+
+
+def test_materialize_complete_records_rejects_recoverable_read_loss():
+    fetcher = MagicMock()
+    fetcher.get_statistics.return_value = {
+        "records_failed": 0,
+        "recoverable_read_errors": 1,
+    }
+
+    with pytest.raises(Exception, match="parser_failed=0, recoverable_read_errors=1"):
+        materialize_complete_records(
+            fetcher,
+            iter([{"RecordSpec": "WE"}]),
+            data_spec="0B14",
+            key="20260715",
+        )
+
+
+def test_realtime_fetcher_tracks_recoverable_read_loss():
+    fetcher = RealtimeFetcher.__new__(RealtimeFetcher)
+    fetcher.reset_statistics()
+    fetcher._files_processed = 0
+    fetcher._total_files = 0
+    fetcher.progress_display = None
+    fetcher.parser_factory = MagicMock()
+    fetcher.jvlink = MagicMock()
+    fetcher.jvlink.jv_read.side_effect = [
+        (-203, None, "corrupt.jvd"),
+        (0, None, None),
+    ]
+
+    assert list(fetcher._fetch_and_parse()) == []
+    assert fetcher.get_statistics()["recoverable_read_errors"] == 1
+    fetcher.jvlink.jv_file_delete.assert_called_once_with("corrupt.jvd")
 
 
 def test_process_parsed_record_preserves_failed_expanded_rows():
@@ -458,6 +495,22 @@ class TestRealtimeMonitor(unittest.TestCase):
         self.assertEqual(monitor.status.records_failed, 1)
         self.assertFalse(monitor.status.is_running)
         self.assertIsNotNone(monitor.status.stopped_at)
+
+    @patch("src.services.realtime_monitor.RealtimeFetcher")
+    def test_fetcher_initialization_failure_marks_monitor_unhealthy(self, fetcher_cls):
+        from src.jvlink.bridge import JVLinkBridgeError
+
+        monitor = RealtimeMonitor(database=self.mock_db, data_specs=["0B12"])
+        monitor.status.is_running = True
+        fetcher_cls.side_effect = JVLinkBridgeError(
+            "bridge executable unavailable", error_code=-1
+        )
+
+        monitor._monitor_sequential()
+
+        self.assertFalse(monitor.status.is_running)
+        self.assertIsNotNone(monitor.status.stopped_at)
+        self.assertEqual(monitor.status.errors[-1]["context"], "initialization")
 
     def test_error_limit(self):
         """Test error list size limit."""
@@ -801,6 +854,38 @@ class TestRealtimeUpdater(unittest.TestCase):
 
         self.assertEqual((imported, failed), (0, 1))
         updater.replace_date_snapshot.assert_called_once_with("20260715")
+
+    def test_wine_bridge_unsubscribed_spec_does_not_fail_cycle(self):
+        from src.jvlink.bridge import JVLinkBridgeError
+
+        monitor = RealtimeMonitor(database=self.mock_db)
+        jvlink = MagicMock()
+        jvlink.jv_rt_open.side_effect = JVLinkBridgeError(
+            "not subscribed", error_code=-114
+        )
+
+        imported, failed = monitor._drain_key(
+            jvlink, MagicMock(), "0B51", "20260715"
+        )
+
+        self.assertEqual((imported, failed), (0, 0))
+        jvlink.jv_close.assert_called_once()
+
+    def test_wine_bridge_busy_spec_retries_without_failing_cycle(self):
+        from src.jvlink.bridge import JVLinkBridgeError
+
+        monitor = RealtimeMonitor(database=self.mock_db)
+        jvlink = MagicMock()
+        jvlink.jv_rt_open.side_effect = JVLinkBridgeError(
+            "bridge busy", error_code=-202
+        )
+
+        imported, failed = monitor._drain_key(
+            jvlink, MagicMock(), "0B12", "20260715"
+        )
+
+        self.assertEqual((imported, failed), (0, 0))
+        jvlink.jv_close.assert_called_once()
 
     @patch('src.realtime.updater.ParserFactory')
     def test_process_record_rc_mapping(self, mock_factory_class):

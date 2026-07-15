@@ -27,12 +27,15 @@ def materialize_complete_records(
     data_spec: str,
     key: str,
 ) -> list[dict]:
-    """Materialize one realtime response and reject parser loss."""
+    """Materialize one realtime response and reject parser or transport loss."""
     materialized = list(records)
-    failed = int(fetcher.get_statistics().get("records_failed", 0) or 0)
-    if failed:
+    statistics = fetcher.get_statistics()
+    parser_failed = int(statistics.get("records_failed", 0) or 0)
+    read_errors = int(statistics.get("recoverable_read_errors", 0) or 0)
+    if parser_failed or read_errors:
         raise FetcherError(
-            f"{data_spec} {key} parser rejected {failed} record(s)"
+            f"{data_spec} {key} response incomplete: "
+            f"parser_failed={parser_failed}, recoverable_read_errors={read_errors}"
         )
     return materialized
 
