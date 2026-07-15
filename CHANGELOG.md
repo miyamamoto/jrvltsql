@@ -9,6 +9,16 @@
 
 現時点で未リリースの変更はありません。
 
+## [1.6.2] - 2026-07-15
+
+### Fixed
+
+- `DataKubun=9` を RA/SE/WF の中止状態として保持しつつ、オッズ・票数など他レコードでは削除命令として処理するよう修正
+- 0B14 のパース失敗を検知した場合、不完全な速報開催情報スナップショットで既存行を置換しないよう fail-closed 化
+- 一時的な JV-Link / DB エラー後も background realtime polling を継続するよう修正
+- 再利用される historical/realtime fetcher の統計を呼び出しごとに初期化し、前回の失敗が次の spec/key に混入しないよう修正
+- realtime polling 中の全スキーマ準備を常駐プロセスにつき一度に制限し、締切前ポーリングの不要な DDL/metadata 負荷を削減
+
 ## [1.6.1] - 2026-07-15
 
 ### Fixed
@@ -179,7 +189,8 @@
 - quickstart.py 対話形式セットアップウィザード
 - CLI コマンド（fetch, status, monitor, init）
 
-[Unreleased]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.1...HEAD
+[Unreleased]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.2...HEAD
+[1.6.2]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.1...v1.6.2
 [1.6.1]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/miyamamoto/jrvltsql/releases/tag/v1.6.0
 [1.5.0]: https://github.com/miyamamoto/jrvltsql/releases/tag/v1.5.0
