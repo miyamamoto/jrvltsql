@@ -1835,13 +1835,18 @@ class QuickstartRunner:
     # 速報系データ (0B1x, 0B5x) - レース確定情報・変更情報
     # 0B41/0B42 は公式仕様上、変更情報ではなく時系列オッズ。
     SPEED_REPORT_SPECS = [
-        ("0B11", "開催情報"),              # WE
-        ("0B12", "レース情報"),            # RA, SE
-        ("0B13", "データマイニング予想"),   # DM
-        ("0B14", "出走取消・競走除外"),     # AV
-        ("0B15", "払戻情報"),              # HR
-        ("0B17", "対戦型データマイニング予想"),  # TM
-        ("0B51", "コース情報"),            # CC
+        # JVRTOpen データ種別ID (JV-Data 4.9.0.1 「データ種別一覧」準拠)。
+        # 従来のラベルは 0B11/0B14/0B15/0B51 が実仕様と食い違っており、
+        # 特に WE(天候馬場状態=0B14/0B16) を誤って 0B11 と記述、0B16 を欠落
+        # していた。RT_WE を埋めるのは 0B14/0B16 (速報開催情報)。
+        ("0B11", "速報馬体重"),                     # WH
+        ("0B12", "速報レース情報(成績確定後)"),      # RA, SE
+        ("0B13", "速報タイム型データマイニング予想"),  # DM
+        ("0B14", "速報開催情報(一括)"),             # WE 天候馬場状態
+        ("0B15", "速報レース情報(出走馬名表～)"),     # RA
+        ("0B16", "速報開催情報(指定)"),             # WE 天候馬場状態
+        ("0B17", "速報対戦型データマイニング予想"),   # TM
+        ("0B51", "速報重勝式(WIN5)"),               # WF
     ]
 
     # オッズ/票数データ - レース単位キー(YYYYMMDDJJRR)を使用
@@ -2804,7 +2809,12 @@ class QuickstartRunner:
             print("NG")
 
     def _get_recent_race_dates(self, days: int = 7) -> list:
-        """過去N日間の開催日（土日）を取得
+        """過去N日間の日付を取得（新しい順）
+
+        速報系(0B1x)は当日発表・過去 backfill 不能のため、開催日を曜日で
+        絞ると祝日月曜など土日以外の開催日で WE(天候馬場)等が永久欠損する。
+        JVRTOpen は非開催日には -1(nodata) を返すだけなので、曜日でフィルタ
+        せず全日付を照会する(daily_update.py の realtime 経路と同じ挙動)。
 
         Args:
             days: 遡る日数（デフォルト: 7日間）
@@ -2814,16 +2824,11 @@ class QuickstartRunner:
         """
         from datetime import datetime, timedelta
 
-        race_dates = []
         now = datetime.now()
-
-        for i in range(days):
-            date = now - timedelta(days=i)
-            # 競馬開催日は土曜(5)と日曜(6)
-            if date.weekday() in (5, 6):
-                race_dates.append(date.strftime("%Y%m%d"))
-
-        return race_dates
+        return [
+            (now - timedelta(days=i)).strftime("%Y%m%d")
+            for i in range(days)
+        ]
 
     def _get_race_keys_for_date(self, date_str: str) -> list:
         """指定日の全レースキー（YYYYMMDDJJRR形式）を生成

@@ -38,6 +38,13 @@ UPDATE_SPECS = [
     # なので再実行しても重複しない（冪等）。
     ("0B12", 1),
     ("0B15", 1),
+    # 0B14: 速報開催情報・一括, 0B16: 速報開催情報・変更。WE(天候馬場状態)/
+    # AV(出走取消・除外)/JC/TC/CC を供給する。WE は NL 蓄積が存在しない
+    # 速報専用レコードで、RT_WE を埋める唯一の経路。RT_* は PRIMARY KEY +
+    # INSERT OR REPLACE で冪等。レース当日発表のため過去分 backfill は不可
+    # (前向きにのみ蓄積)。過去の馬場状態は RA レコード側(field50/51)が供給する。
+    ("0B14", 1),
+    ("0B16", 1),
 ]
 
 REALTIME_SPEC_PREFIX = "0B"
@@ -147,11 +154,20 @@ def _sync_realtime_spec(
                             file=sys.stderr,
                         )
                         continue
-                    if result:
-                        stats["records_parsed"] += 1
-                        stats["records_imported"] += 1
-                    else:
+                    if not result:
                         stats["records_failed"] += 1
+                        continue
+                    # process_record は成功/失敗に関わらず dict(または list)を返す。
+                    # dict は truthy なので `if result` だけでは {"success": False}
+                    # (PK不備・insert失敗)も成功に数えてしまう。オッズ/票数など複数行
+                    # レコードは list を返すため、サブレコード単位で success を判定する。
+                    items = result if isinstance(result, list) else [result]
+                    for item in items:
+                        stats["records_parsed"] += 1
+                        if item and item.get("success"):
+                            stats["records_imported"] += 1
+                        else:
+                            stats["records_failed"] += 1
             finally:
                 try:
                     jvlink.jv_close()

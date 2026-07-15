@@ -99,7 +99,7 @@ if "%INCLUDE_TIMESERIES%"=="0" if "%INCLUDE_REALTIME%"=="0" (
     rem Task Scheduler production path: avoid quickstart's rich progress UI and
     rem use the non-interactive daily updater. 0B12/0B15 are speed-report
     rem specs (JVRTOpen, idempotent INSERT OR REPLACE into RT_* tables).
-    if not defined JRA_DAILY_UPDATE_SPECS set "JRA_DAILY_UPDATE_SPECS=RACE,DIFN,SLOP,WOOD,MING,0B12,0B15"
+    if not defined JRA_DAILY_UPDATE_SPECS set "JRA_DAILY_UPDATE_SPECS=RACE,DIFN,SLOP,WOOD,MING,0B12,0B15,0B14,0B16"
     set "SYNC_SCRIPT=scripts/daily_update.py"
     set "SYNC_ARGS=--days-back %DAYS_BACK% --days-forward %DAYS_FORWARD% --db %DB_TYPE% --specs !JRA_DAILY_UPDATE_SPECS! --force-incremental --ignore-jvopen-error-codes -303"
     if "%ENSURE_TABLES%"=="0" set "SYNC_ARGS=!SYNC_ARGS! --no-ensure-tables"
