@@ -124,7 +124,7 @@ class TestSEParser:
         """Test SE parser initialization."""
         parser = SEParser()
         assert parser.RECORD_TYPE == "SE"
-        assert parser.RECORD_LENGTH == 463
+        assert parser.RECORD_LENGTH == 555
 
     def test_parse_se_record(self):
         """Test parsing SE record."""
@@ -142,12 +142,57 @@ class TestSEParser:
         record += b"1"   # Wakuban (offset 27, 1 byte)
         record += b"02"  # Umaban (offset 28, 2 bytes)
         record += b"2024012345"  # KettoNum (offset 30, 10 bytes)
-        record += b" " * (463 - len(record))  # Pad to correct length
+        record += b" " * (555 - len(record) - 2) + b"\r\n"
 
         data = parser.parse(record)
         assert data is not None
         assert data["RecordSpec"] == "SE"
         assert data["KettoNum"] == "2024012345"
+
+    def test_parse_official_repeated_opponents_and_tail(self):
+        parser = SEParser()
+        record = bytearray(b" " * 555)
+        record[0:2] = b"SE"
+        record[393:403] = b"2020100001"
+        record[403:439] = b"WINNER-ONE".ljust(36)
+        record[439:449] = b"2020100002"
+        record[449:485] = b"WINNER-TWO".ljust(36)
+        record[485:495] = b"2020100003"
+        record[495:531] = b"WINNER-THREE".ljust(36)
+        record[531:535] = b"+123"
+        record[535:536] = b"2"
+        record[536:537] = b"3"
+        record[537:542] = b"12345"
+        record[542:546] = b"0123"
+        record[546:550] = b"0456"
+        record[550:552] = b"07"
+        record[552:553] = b"4"
+        record[553:555] = b"\r\n"
+
+        data = parser.parse(bytes(record))
+
+        assert data is not None
+        assert data["KettoNum1"] == "2020100001"
+        assert data["Bamei1"] == "WINNER-ONE"
+        assert data["KettoNum2"] == "2020100002"
+        assert data["Bamei2"] == "WINNER-TWO"
+        assert data["KettoNum3"] == "2020100003"
+        assert data["Bamei3"] == "WINNER-THREE"
+        assert data["TimeDiff"] == "+123"
+        assert data["RecordUpKubun"] == "2"
+        assert data["DMKubun"] == "3"
+        assert data["DMTime"] == "12345"
+        assert data["DMGosaP"] == "0123"
+        assert data["DMGosaM"] == "0456"
+        assert data["DMJyuni"] == "07"
+        assert data["KyakusituKubun"] == "4"
+
+    def test_rejects_obsolete_463_byte_layout(self):
+        assert SEParser().parse(b"SE" + b" " * 461) is None
+
+    def test_rejects_missing_crlf_and_trailing_bytes(self):
+        assert SEParser().parse(b"SE" + b" " * 553) is None
+        assert SEParser().parse(b"SE" + b" " * 551 + b"\r\nX") is None
 
 
 class TestHRParser:

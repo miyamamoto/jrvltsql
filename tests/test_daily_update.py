@@ -3,6 +3,7 @@ from datetime import datetime
 import pytest
 
 from scripts.daily_update import (
+    SUBSCRIPTION_ERROR_CODES,
     UPDATE_SPECS,
     _effective_option,
     _error_code_from_exception,
@@ -55,6 +56,18 @@ def test_daily_update_includes_speed_report_specs():
 
 def test_daily_update_selects_speed_report_specs_case_insensitively():
     assert _select_update_specs("0b12,0b15") == [("0B12", 1), ("0B15", 1)]
+
+
+def test_daily_update_includes_date_keyed_weather_and_win5_specs():
+    """Daily polling includes date-keyed 0B14/0B51 but not event-keyed 0B16."""
+    specs = [spec for spec, _ in UPDATE_SPECS]
+    assert "0B14" in specs
+    assert "0B16" not in specs
+    assert "0B51" in specs
+
+
+def test_daily_update_selects_event_report_specs_case_insensitively():
+    assert _select_update_specs("0b14,0b51") == [("0B14", 1), ("0B51", 1)]
 
 
 def test_is_realtime_spec_detects_jvrtopen_specs():
@@ -127,9 +140,9 @@ def _build_rt_ra_record() -> bytes:
     ]
     for idx, (corner, syukaisu, jyuni) in enumerate(corner_sets):
         base = 981 + idx * 72
-        data[base:base + 1] = corner
-        data[base + 1:base + 2] = syukaisu
-        data[base + 2:base + 2 + len(jyuni)] = jyuni
+        data[base : base + 1] = corner
+        data[base + 1 : base + 2] = syukaisu
+        data[base + 2 : base + 2 + len(jyuni)] = jyuni
     return bytes(data)
 
 
@@ -193,3 +206,273 @@ def test_sync_realtime_spec_is_idempotent_across_reruns(rt_database):
 
     rows = rt_database.fetch_all("SELECT COUNT(*) AS cnt FROM RT_RA")
     assert rows[0]["cnt"] == 1
+
+
+def test_daily_update_includes_mining_spec():
+    """MING (data-mining) must be collected so NL_DM / SE mining fields populate."""
+    specs = [spec for spec, _ in UPDATE_SPECS]
+    assert "MING" in specs
+    assert _select_update_specs("ming") == [("MING", 1)]
+
+
+def test_subscription_error_codes_cover_jvlink_unsubscribed_codes():
+    """MING 等の任意契約スペックが未購読でも日次同期が止まらないよう、JV-Link の
+    購読エラー(-111/-114/-115)は ignore 指定に関わらずスキップ対象とする。"""
+    assert SUBSCRIPTION_ERROR_CODES == frozenset({-111, -114, -115})
+    for msg, code in (
+        ("JVOpen failed (code: -114)", -114),
+        ("JVOpen failed (code: -111)", -111),
+        ("JVOpen failed (code: -115)", -115),
+    ):
+        parsed = _error_code_from_exception(Exception(msg))
+        assert parsed == code
+        assert parsed in SUBSCRIPTION_ERROR_CODES
+
+
+@pytest.mark.parametrize("error_code", sorted(SUBSCRIPTION_ERROR_CODES))
+def test_sync_realtime_spec_stops_after_subscription_error(rt_database, error_code):
+    """未購読の速報 spec は後続日を再照会せず spec 単位で終了する。"""
+    from src.jvlink.wrapper import JVLinkError
+
+    class UnsubscribedJVLink(FakeJVLink):
+        def jv_rt_open(self, data_spec, key):
+            self.opened_keys.append((data_spec, key))
+            raise JVLinkError("not subscribed", error_code=error_code)
+
+    jvlink = UnsubscribedJVLink({})
+
+    stats = _sync_realtime_spec(
+        database=rt_database,
+        spec="0B12",
+        from_date="20260606",
+        to_date="20260608",
+        sid="JLTSQL",
+        jvlink=jvlink,
+    )
+
+    assert stats == {
+        "records_fetched": 0,
+        "records_parsed": 0,
+        "records_imported": 0,
+        "records_failed": 0,
+    }
+    assert jvlink.opened_keys == [("0B12", "20260606")]
+
+
+def test_sync_realtime_spec_stops_before_open_when_schema_setup_fails(rt_database, monkeypatch):
+    jvlink = FakeJVLink({"20260607": [_build_rt_ra_record()]})
+
+    def fail_schema_setup(_database):
+        raise RuntimeError("unsafe RT_SE schema")
+
+    monkeypatch.setattr(
+        "src.database.schema.create_all_tables",
+        fail_schema_setup,
+    )
+
+    with pytest.raises(RuntimeError, match="unsafe RT_SE schema"):
+        _sync_realtime_spec(
+            database=rt_database,
+            spec="0B12",
+            from_date="20260607",
+            to_date="20260607",
+            sid="JLTSQL",
+            jvlink=jvlink,
+        )
+    assert jvlink.opened_keys == []
+
+
+def test_sync_realtime_spec_starts_transaction_before_import(rt_database):
+    record = _build_rt_ra_record()
+    jvlink = FakeJVLink({"20260607": [record]})
+    original = rt_database.begin_transaction
+    calls = []
+
+    def tracked_begin():
+        calls.append("begin")
+        return original()
+
+    rt_database.begin_transaction = tracked_begin
+    try:
+        _sync_realtime_spec(
+            database=rt_database,
+            spec="0B12",
+            from_date="20260607",
+            to_date="20260607",
+            sid="JLTSQL",
+            jvlink=jvlink,
+        )
+    finally:
+        rt_database.begin_transaction = original
+
+    assert calls == ["begin"]
+
+
+def test_sync_realtime_spec_fails_when_any_record_is_rejected(rt_database):
+    jvlink = FakeJVLink({"20260607": [_build_rt_ra_record()]})
+
+    class RejectingUpdater:
+        def process_record(self, _record):
+            return {
+                "operation": "insert",
+                "table": "RT_SE",
+                "success": False,
+                "error": "obsolete schema",
+            }
+
+    with pytest.raises(RuntimeError, match="rejected 1 record"):
+        _sync_realtime_spec(
+            database=rt_database,
+            spec="0B12",
+            from_date="20260607",
+            to_date="20260607",
+            sid="JLTSQL",
+            jvlink=jvlink,
+            updater=RejectingUpdater(),
+        )
+
+
+def test_sync_realtime_spec_fails_on_transport_error(rt_database):
+    class ReadFailingJVLink(FakeJVLink):
+        def jv_read(self):
+            return -202, None, None
+
+    jvlink = ReadFailingJVLink({"20260607": [b"placeholder"]})
+
+    with pytest.raises(RuntimeError, match="JVRead failed: -202"):
+        _sync_realtime_spec(
+            database=rt_database,
+            spec="0B12",
+            from_date="20260607",
+            to_date="20260607",
+            sid="JLTSQL",
+            jvlink=jvlink,
+        )
+
+
+def test_sync_realtime_spec_rolls_back_rows_before_transport_error(rt_database):
+    class PartialReadFailingJVLink(FakeJVLink):
+        def __init__(self):
+            super().__init__({"20260607": [_build_rt_ra_record()]})
+            self.read_count = 0
+
+        def jv_read(self):
+            self.read_count += 1
+            if self.read_count == 1:
+                return 1, _build_rt_ra_record(), "RT"
+            return -202, None, None
+
+    with pytest.raises(RuntimeError, match="JVRead failed: -202"):
+        _sync_realtime_spec(
+            database=rt_database,
+            spec="0B12",
+            from_date="20260607",
+            to_date="20260607",
+            sid="JLTSQL",
+            jvlink=PartialReadFailingJVLink(),
+        )
+
+    assert rt_database.fetch_all("SELECT * FROM RT_RA") == []
+
+
+def test_sync_realtime_spec_counts_list_results_per_subrecord(rt_database):
+    """複数行レコードはサブレコード単位で parsed/imported を集計する。"""
+    jvlink = FakeJVLink({"20260607": [b"x", b"y"]})
+
+    class ListUpdater:
+        results = iter(
+            [
+                [{"success": True}, {"success": True}, {"success": True}],
+                [{"success": True}],
+            ]
+        )
+
+        def process_record(self, _record):
+            return next(self.results)
+
+        def replace_date_snapshot(self, date_key):
+            assert date_key == "20260607"
+
+    stats = _sync_realtime_spec(
+        database=rt_database,
+        spec="0B14",
+        from_date="20260607",
+        to_date="20260607",
+        sid="JLTSQL",
+        jvlink=jvlink,
+        updater=ListUpdater(),
+    )
+
+    assert stats["records_fetched"] == 2
+    assert stats["records_parsed"] == 4
+    assert stats["records_imported"] == 4
+    assert stats["records_failed"] == 0
+
+
+def test_sync_0b14_replaces_stale_date_snapshot(rt_database):
+    from src.database.schema import create_all_tables
+    from src.realtime.updater import RealtimeUpdater
+
+    create_all_tables(rt_database)
+    updater = RealtimeUpdater(rt_database)
+    rt_database.execute(
+        "INSERT INTO RT_TC "
+        "(Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, HappyoTime) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        ("2026", "0607", "05", "1", "1", "1", "1200"),
+    )
+    rt_database.commit()
+
+    class EmptySnapshotJVLink(FakeJVLink):
+        def jv_rt_open(self, data_spec, key):
+            self.opened_keys.append((data_spec, key))
+            self._pending = []
+            return 0, 0
+
+    stats = _sync_realtime_spec(
+        database=rt_database,
+        spec="0B14",
+        from_date="20260607",
+        to_date="20260607",
+        sid="JLTSQL",
+        jvlink=EmptySnapshotJVLink({}),
+        updater=updater,
+    )
+
+    assert stats["records_imported"] == 0
+    assert rt_database.fetch_all(
+        "SELECT * FROM RT_TC WHERE Year = ? AND MonthDay = ?",
+        ("2026", "0607"),
+    ) == []
+
+
+def test_sync_0b14_keeps_snapshot_when_no_data_is_published(rt_database):
+    from src.database.schema import create_all_tables
+    from src.realtime.updater import RealtimeUpdater
+
+    create_all_tables(rt_database)
+    updater = RealtimeUpdater(rt_database)
+    rt_database.execute(
+        "INSERT INTO RT_TC "
+        "(Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, HappyoTime) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        ("2026", "0607", "05", "1", "1", "1", "1200"),
+    )
+    rt_database.commit()
+
+    _sync_realtime_spec(
+        database=rt_database,
+        spec="0B14",
+        from_date="20260607",
+        to_date="20260607",
+        sid="JLTSQL",
+        jvlink=FakeJVLink({}),
+        updater=updater,
+    )
+
+    assert len(
+        rt_database.fetch_all(
+            "SELECT * FROM RT_TC WHERE Year = ? AND MonthDay = ?",
+            ("2026", "0607"),
+        )
+    ) == 1

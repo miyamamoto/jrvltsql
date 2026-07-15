@@ -381,12 +381,9 @@ def fetch(ctx, date_from, date_to, data_spec, jv_option, db, batch_size, progres
 
         # Connect to database
         with database:
-            # Ensure tables exist
-            try:
-                create_all_tables(database)
-            except Exception:
-                # Tables might already exist, that's OK
-                pass
+            # A migration failure must stop the fetch; otherwise new parser
+            # fields can be rejected by an obsolete table schema.
+            create_all_tables(database)
 
             sid = config.get("jvlink.sid", "JLTSQL") if config else "JLTSQL"
             service_key = config.get("jvlink.service_key") if config else None
@@ -824,12 +821,9 @@ def monitor(ctx, daemon, data_spec, interval, db):
 
         # Connect to database
         with database:
-            # Ensure tables exist
-            try:
-                create_all_tables(database)
-            except Exception:
-                # Tables might already exist, that's OK
-                pass
+            # Schema preparation is fail-closed: monitoring must not write into
+            # an obsolete table layout.
+            create_all_tables(database)
 
             sid = config.get("jvlink.sid", "JLTSQL") if config else "JLTSQL"
             monitor_obj = RealtimeMonitor(
@@ -895,7 +889,8 @@ def create_tables(ctx, db, create_all, nl_only, rt_only):
     """
     from rich.progress import Progress, TextColumn
     from src.database import create_database_from_config, DatabaseError
-    from src.database.schema import SCHEMAS, create_all_tables
+    from src.database.migration import migrate_all_tables, verify_table_schema
+    from src.database.schema import SCHEMAS
 
     config = ctx.obj.get("config")
     if not config and not db:
@@ -928,6 +923,9 @@ def create_tables(ctx, db, create_all, nl_only, rt_only):
             else:
                 tables_to_create = SCHEMAS
 
+            # CREATE TABLE IF NOT EXISTS cannot upgrade existing tables.
+            migrate_all_tables(database, tables_to_create)
+
             # Create tables with progress bar
             created_count = 0
             failed_count = 0
@@ -943,6 +941,7 @@ def create_tables(ctx, db, create_all, nl_only, rt_only):
 
                     try:
                         database.execute(schema_sql)
+                        verify_table_schema(database, table_name, schema_sql)
                         created_count += 1
                     except Exception as e:
                         console.print(f"[yellow]Warning:[/yellow] Failed to create {table_name}: {e}")
@@ -955,6 +954,9 @@ def create_tables(ctx, db, create_all, nl_only, rt_only):
             console.print(f"[green][OK][/green] Created {created_count} tables")
             if failed_count > 0:
                 console.print(f"[yellow][!!][/yellow] Failed to create {failed_count} tables")
+                raise RuntimeError(
+                    f"Schema preparation failed for {failed_count} table(s)"
+                )
 
             # Show table statistics
             nl_tables = len([n for n in tables_to_create if n.startswith("NL_")])

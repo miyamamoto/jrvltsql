@@ -83,8 +83,8 @@ class TestIndividualParsers:
             'H1': 28955, 'H6': 102890, 'HC': 60, 'HN': 251, 'HR': 719, 'HS': 200, 'HY': 123,
             'JC': 252, 'JG': 251, 'KS': 282,
             'O1': 962, 'O2': 2042, 'O3': 2654, 'O4': 4031, 'O5': 12293, 'O6': 83285,
-            'RA': 856, 'RC': 1926, 'SE': 463, 'SK': 263, 'TC': 71, 'TK': 240, 'TM': 216,
-            'UM': 969, 'WC': 72, 'WE': 195, 'WF': 3416, 'WH': 1356, 'YS': 424,
+            'RA': 856, 'RC': 1926, 'SE': 555, 'SK': 263, 'TC': 71, 'TK': 240, 'TM': 216,
+            'UM': 969, 'WC': 72, 'WE': 195, 'WF': 7215, 'WH': 1356, 'YS': 424,
         }
 
         for record_type in ALL_RECORD_TYPES:
@@ -96,6 +96,8 @@ class TestIndividualParsers:
             # 残りのフィールドをスペースで埋める
             remaining = length - len(data)
             data += b' ' * remaining
+            if record_type == "SE":
+                data = data[:-2] + b"\r\n"
             samples[record_type] = data
 
         return samples
@@ -355,7 +357,7 @@ class TestParserFieldExtraction:
         data += b'11'  # RaceNum (26-27)
         data += b'1'  # Wakuban (28)
         data += b'01'  # Umaban (29-30)
-        data += b' ' * (463 - len(data))  # 残りをスペースで埋める
+        data += b' ' * (555 - len(data) - 2) + b'\r\n'
 
         result = parser.parse(data)
 
@@ -417,6 +419,8 @@ class TestParserRobustness:
         data += b'1'
         data += b'20240601'
         data += b' ' * (parser.RECORD_LENGTH - len(data))
+        if record_type == "SE":
+            data = data[:-2] + b"\r\n"
 
         assert len(data) == parser.RECORD_LENGTH
 
@@ -435,10 +439,13 @@ class TestParserRobustness:
         data += b'20240601'
         data += b' ' * (parser.RECORD_LENGTH + 100)
 
-        # 長すぎるデータでも処理できることを確認
+        # Fixed-width SE must reject trailing bytes; legacy parsers remain lenient.
         result = parser.parse(data)
-        assert result is not None
-        assert result['RecordSpec'] == record_type
+        if record_type == "SE":
+            assert result is None
+        else:
+            assert result is not None
+            assert result['RecordSpec'] == record_type
 
 
 class TestAllParsersComprehensive:

@@ -73,8 +73,8 @@ def make_se_record(
     umaban="01", kettonum="0000000001", bamei="テストウマ",
     **kwargs,
 ) -> bytes:
-    """Create SE record (463 bytes)."""
-    data = bytearray(463)
+    """Create official SE record (555 bytes including CRLF)."""
+    data = bytearray(555)
     data[0:2] = _pad("SE", 2)
     data[2:3] = _pad(data_kubun, 1)
     data[3:11] = _pad(make_date, 8)
@@ -88,7 +88,7 @@ def make_se_record(
     data[28:30] = _pad(umaban, 2)
     data[30:40] = _pad(kettonum, 10)
     data[40:76] = _pad(bamei, 36)
-    data[461:463] = b'\r\n'
+    data[553:555] = b'\r\n'
     return bytes(data)
 
 
@@ -200,12 +200,22 @@ def make_hr_record(
 
 
 def make_wf_record(data_kubun="1", make_date="20260101", **kwargs) -> bytes:
-    """Create WF record (169 bytes)."""
-    data = bytearray(169)
+    """Create an official-layout WF record (7,215 bytes)."""
+    data = bytearray(b" " * 7215)
     data[0:2] = _pad("WF", 2)
     data[2:3] = _pad(data_kubun, 1)
     data[3:11] = _pad(make_date, 8)
-    data[167:169] = b'\r\n'
+    data[11:15] = _pad(kwargs.get("year", "2026"), 4)
+    data[15:19] = _pad(kwargs.get("month_day", "0101"), 4)
+    data[78:89] = _pad(kwargs.get("yuko_hyosu1", "123"), 11)
+    data[166:176] = _pad(kwargs.get("kumi1", "0102030405"), 10)
+    data[176:185] = _pad(kwargs.get("pay1", "123456"), 9)
+    data[185:195] = _pad(kwargs.get("hit_votes1", "7"), 10)
+    last = 166 + 242 * 29
+    data[last:last + 10] = _pad(kwargs.get("kumi243", "1516171818"), 10)
+    data[last + 10:last + 19] = _pad(kwargs.get("pay243", "654321"), 9)
+    data[last + 19:last + 29] = _pad(kwargs.get("hit_votes243", "3"), 10)
+    data[7213:7215] = b'\r\n'
     return bytes(data)
 
 
@@ -217,5 +227,3 @@ def make_bn_record(data_kubun="1", make_date="20260101", **kwargs) -> bytes:
     data[3:11] = _pad(make_date, 8)
     data[385:387] = b'\r\n'
     return bytes(data)
-
-

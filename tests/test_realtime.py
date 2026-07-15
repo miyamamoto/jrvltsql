@@ -9,13 +9,14 @@ import time
 
 from src.fetcher.realtime import RealtimeFetcher
 from src.services.realtime_monitor import RealtimeMonitor, MonitorStatus
-from src.realtime.updater import RealtimeUpdater
+from src.realtime.updater import RealtimeUpdater, summarize_update_result
 from src.jvlink.constants import (
     JV_RT_SUCCESS,
     JV_READ_SUCCESS,
     DATA_KUBUN_NEW,
     DATA_KUBUN_UPDATE,
     DATA_KUBUN_DELETE,
+    DATA_KUBUN_ERASE,
 )
 
 
@@ -159,6 +160,34 @@ class TestMonitorStatus(unittest.TestCase):
         self.assertIn("0B15", status_dict["monitored_specs"])
 
 
+def test_summarize_update_result_counts_explicit_failures():
+    successful, failed = summarize_update_result(
+        [
+            {"operation": "insert", "success": True},
+            {"operation": "insert", "success": False},
+        ]
+    )
+
+    assert len(successful) == 1
+    assert failed == 1
+    assert summarize_update_result(None) == ([], 1)
+
+
+def test_process_parsed_record_preserves_failed_expanded_rows():
+    updater = RealtimeUpdater(MagicMock())
+    successful = {"operation": "insert", "success": True}
+    updater._process_single_record = MagicMock(side_effect=[successful, None])
+
+    result = updater.process_parsed_record(
+        [{"RecordSpec": "RA"}, {"RecordSpec": "SE"}]
+    )
+
+    assert result == [successful, None]
+    accepted, failed = summarize_update_result(result)
+    assert accepted == [successful]
+    assert failed == 1
+
+
 class TestRealtimeMonitor(unittest.TestCase):
     """Test RealtimeMonitor class."""
 
@@ -204,6 +233,7 @@ class TestRealtimeMonitor(unittest.TestCase):
         # Mock schema manager
         mock_mgr_instance = MagicMock()
         mock_mgr_instance.get_missing_tables.return_value = []
+        mock_mgr_instance.create_all_tables.return_value = {}
         mock_schema_mgr.return_value = mock_mgr_instance
 
         # Mock thread
@@ -217,6 +247,7 @@ class TestRealtimeMonitor(unittest.TestCase):
         self.assertIsNotNone(monitor.status.started_at)
 
         # Verify thread was created and started
+        mock_mgr_instance.create_all_tables.assert_called_once()
         mock_thread.assert_called()
         mock_thread_instance.start.assert_called()
 
@@ -330,6 +361,10 @@ class TestRealtimeMonitor(unittest.TestCase):
         # Mock schema manager
         mock_mgr_instance = MagicMock()
         mock_mgr_instance.get_missing_tables.return_value = ["NL_RA", "NL_SE"]
+        mock_mgr_instance.create_all_tables.return_value = {
+            "NL_RA": True,
+            "NL_SE": True,
+        }
         mock_schema_mgr.return_value = mock_mgr_instance
 
         monitor._ensure_tables()
@@ -347,6 +382,65 @@ class TestRealtimeMonitor(unittest.TestCase):
         self.assertEqual(len(monitor.status.errors), 1)
         self.assertEqual(monitor.status.errors[0]["context"], "0B12")
         self.assertEqual(monitor.status.errors[0]["error"], "Test error")
+
+    def test_drain_key_reports_rejected_operations_to_cycle(self):
+        monitor = RealtimeMonitor(database=self.mock_db)
+        jvlink = MagicMock()
+        jvlink.jv_rt_open.return_value = (0, 1)
+        jvlink.jv_read.side_effect = [
+            (100, b"record", "RT"),
+            (0, None, None),
+        ]
+        updater = MagicMock()
+        updater.process_record.return_value = [
+            {"operation": "insert", "success": True},
+            None,
+        ]
+
+        imported, failed = monitor._drain_key(
+            jvlink, updater, "0B12", "20260715"
+        )
+
+        self.assertEqual((imported, failed), (1, 1))
+        self.assertEqual(monitor.status.records_imported, 0)
+        self.assertEqual(monitor.status.records_failed, 0)
+
+    def test_today_race_keys_uses_parameterized_query(self):
+        monitor = RealtimeMonitor(database=self.mock_db)
+        self.mock_db.fetch_all.return_value = [{"JyoCD": "05", "RaceNum": 3}]
+
+        keys = monitor._get_today_race_keys("20260715")
+
+        self.assertEqual(keys, ["202607150503"])
+        self.mock_db.fetch_all.assert_called_once_with(
+            "SELECT JyoCD, RaceNum FROM NL_RA "
+            "WHERE Year=? AND MonthDay=? "
+            "ORDER BY JyoCD, RaceNum",
+            (2026, 715),
+        )
+
+    def test_today_race_keys_propagates_database_failure(self):
+        monitor = RealtimeMonitor(database=self.mock_db)
+        self.mock_db.fetch_all.side_effect = RuntimeError("query failed")
+
+        with self.assertRaisesRegex(RuntimeError, "query failed"):
+            monitor._get_today_race_keys("20260715")
+
+    @patch("src.services.realtime_monitor.RealtimeFetcher")
+    def test_begin_failure_is_accounted_and_monitor_becomes_unhealthy(self, fetcher_cls):
+        monitor = RealtimeMonitor(database=self.mock_db, data_specs=["0B12"])
+        monitor.status.is_running = True
+        self.mock_db.begin_transaction.side_effect = RuntimeError("begin failed")
+        monitor._stop_event = MagicMock()
+        monitor._stop_event.is_set.side_effect = [False, True]
+        fetcher_cls.return_value.jvlink = MagicMock()
+
+        monitor._monitor_sequential()
+
+        self.mock_db.rollback.assert_called_once_with()
+        self.assertEqual(monitor.status.records_failed, 1)
+        self.assertFalse(monitor.status.is_running)
+        self.assertIsNotNone(monitor.status.stopped_at)
 
     def test_error_limit(self):
         """Test error list size limit."""
@@ -386,6 +480,7 @@ class TestRealtimeUpdater(unittest.TestCase):
             "HR": "RT_HR",  # Payout
             "WH": "RT_WH",  # Horse weight
             "TM": "RT_TM",  # Data mining (match type)
+            "WF": "RT_WF",  # WIN5
             # Time Series (0B2x-0B3x)
             "H1": "RT_H1",  # Vote count
             "H6": "RT_H6",  # Vote count (3rentan)
@@ -603,6 +698,92 @@ class TestRealtimeUpdater(unittest.TestCase):
         self.mock_db.execute.assert_called_once()
         call_args = self.mock_db.execute.call_args
         self.assertIn("DELETE FROM RT_RA", call_args[0][0])
+
+    def test_record_data_kubun_zero_physically_deletes(self):
+        updater = RealtimeUpdater(self.mock_db)
+
+        result = updater.process_parsed_record(
+            {
+                "RecordSpec": "RA",
+                "DataKubun": DATA_KUBUN_ERASE,
+                "Year": "2026",
+                "MonthDay": "0715",
+                "JyoCD": "05",
+                "Kaiji": "2",
+                "Nichiji": "3",
+                "RaceNum": "1",
+            }
+        )
+
+        self.assertEqual(result["operation"], "delete")
+        self.assertTrue(result["success"])
+        self.mock_db.execute.assert_called_once()
+        sql, parameters = self.mock_db.execute.call_args.args
+        self.assertIn("DELETE FROM RT_RA", sql)
+        self.assertEqual(parameters, (2026, 715, "05", 2, 3, 1))
+
+    def test_replace_date_snapshot_uses_integer_postgresql_keys(self):
+        updater = RealtimeUpdater(self.mock_db)
+
+        updater.replace_date_snapshot("20260715")
+
+        self.assertEqual(self.mock_db.execute.call_count, 5)
+        for call_args in self.mock_db.execute.call_args_list:
+            self.assertEqual(call_args.args[1], (2026, 715))
+
+    def test_drain_0b14_replaces_date_snapshot_before_import(self):
+        monitor = RealtimeMonitor(database=self.mock_db)
+        jvlink = MagicMock()
+        jvlink.jv_rt_open.return_value = (0, 0)
+        jvlink.jv_read.return_value = (0, None, None)
+        updater = MagicMock()
+
+        imported, failed = monitor._drain_key(
+            jvlink, updater, "0B14", "20260715"
+        )
+
+        self.assertEqual((imported, failed), (0, 0))
+        updater.replace_date_snapshot.assert_called_once_with("20260715")
+
+    def test_drain_0b14_interruption_rejects_partial_snapshot(self):
+        monitor = RealtimeMonitor(database=self.mock_db)
+        jvlink = MagicMock()
+        jvlink.jv_rt_open.return_value = (0, 1)
+
+        def stop_during_read():
+            monitor._stop_event.set()
+            return (100, b"record", "RT")
+
+        jvlink.jv_read.side_effect = stop_during_read
+        updater = MagicMock()
+        updater.process_record.return_value = {
+            "operation": "insert",
+            "success": True,
+        }
+
+        imported, failed = monitor._drain_key(
+            jvlink, updater, "0B14", "20260715"
+        )
+
+        self.assertEqual(imported, 1)
+        self.assertEqual(failed, 1)
+        updater.replace_date_snapshot.assert_called_once_with("20260715")
+
+    def test_drain_0b14_busy_after_clear_rejects_snapshot(self):
+        from src.jvlink.wrapper import JVLinkError
+
+        monitor = RealtimeMonitor(database=self.mock_db)
+        jvlink = MagicMock()
+        jvlink.jv_rt_open.return_value = (0, 1)
+        jvlink.jv_read.side_effect = JVLinkError("busy", error_code=-202)
+        updater = MagicMock()
+
+        imported, failed = monitor._drain_key(
+            jvlink, updater, "0B14", "20260715"
+        )
+
+        self.assertEqual((imported, failed), (0, 1))
+        updater.replace_date_snapshot.assert_called_once_with("20260715")
 
     @patch('src.realtime.updater.ParserFactory')
     def test_process_record_rc_mapping(self, mock_factory_class):
@@ -837,13 +1018,13 @@ class TestRealtimeUpdater(unittest.TestCase):
         self.assertIn("Year", inserted_data)
 
     @patch('src.realtime.updater.ParserFactory')
-    def test_head_data_kubun_fallback_to_datakubun(self, mock_factory_class):
-        """Test fallback from headDataKubun to DataKubun."""
+    def test_record_data_kubun_is_persisted_not_used_as_delete(self, mock_factory_class):
+        """RA DataKubun=9 is a cancelled-race state, not a DELETE command."""
         # Setup mock parser - only DataKubun is present
         mock_parser = MagicMock()
         mock_parser.parse.return_value = {
             "RecordSpec": "RA",
-            "DataKubun": DATA_KUBUN_NEW,  # Fallback to this
+            "DataKubun": DATA_KUBUN_DELETE,
             "Year": "2024",
             "MonthDay": "0101",
             "JyoCD": "05",
@@ -862,10 +1043,36 @@ class TestRealtimeUpdater(unittest.TestCase):
         # Process record
         result = updater.process_record("RA20240101...")
 
-        # Verify it was processed as NEW
+        # Record-level status is stored through the normal upsert path.
         self.assertIsNotNone(result)
         self.assertEqual(result["operation"], "insert")
         self.mock_db.insert.assert_called_once()
+        self.mock_db.execute.assert_not_called()
+
+    def test_cancellation_status_is_upserted_for_realtime_state_records(self):
+        updater = RealtimeUpdater(self.mock_db)
+
+        for record_type in ("RA", "SE", "WF"):
+            with self.subTest(record_type=record_type):
+                self.mock_db.reset_mock()
+                result = updater.process_parsed_record(
+                    {
+                        "RecordSpec": record_type,
+                        "DataKubun": DATA_KUBUN_DELETE,
+                        "Year": "2026",
+                        "MonthDay": "0715",
+                        "JyoCD": "05",
+                        "Kaiji": "1",
+                        "Nichiji": "1",
+                        "RaceNum": "1",
+                        "Umaban": "1",
+                    }
+                )
+
+                self.assertEqual(result["operation"], "insert")
+                self.assertTrue(result["success"])
+                self.mock_db.insert.assert_called_once()
+                self.mock_db.execute.assert_not_called()
 
     @patch('src.realtime.updater.ParserFactory')
     def test_head_data_kubun_default_fallback(self, mock_factory_class):

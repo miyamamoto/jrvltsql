@@ -27,15 +27,34 @@ UPDATE_SPECS = [
     # HC=坂路調教, WC=ウッドチップ調教. option=1 is the incremental fetch.
     ("SLOP", 1),
     ("WOOD", 1),
+    # MING=データマイニング予想 (DM レコード -> NL_DM)。SE の mining ブロック
+    # (DMTime/DMJyuni/KyakusituKubun) と NL_DM を供給する。option=1 の
+    # incremental。レース当日発表のため過去分の一括 backfill は不可
+    # (前向きにのみ蓄積される)。
+    ("MING", 1),
     # Speed-report specs fetched via JVRTOpen with a date key (option unused).
     # 0B12: 速報レース情報・払戻 (RA/SE/HR 成績確定後), 0B15: 速報レース情報
     # (RA/SE/HR 出走馬名表～)。RT_* テーブルは PRIMARY KEY + INSERT OR REPLACE
     # なので再実行しても重複しない（冪等）。
     ("0B12", 1),
     ("0B15", 1),
+    # 0B14: 速報開催情報・一括。WE(天候馬場状態)/
+    # AV(出走取消・除外)/JC/TC/CC を供給する。WE は NL 蓄積が存在しない
+    # 速報専用レコードで、RT_WE を埋める唯一の経路。RT_* は PRIMARY KEY +
+    # INSERT OR REPLACE で冪等。レース当日発表のため過去分 backfill は不可
+    # (前向きにのみ蓄積)。過去の馬場状態は RA レコード側(field50/51)が供給する。
+    ("0B14", 1),
+    # 0B16 is event-keyed (JVWatchEvent), not YYYYMMDD-keyed.
+    ("0B51", 1),
 ]
 
 REALTIME_SPEC_PREFIX = "0B"
+
+# JV-Link は未契約データ種別に対し購読エラーを返す (-111 契約無し / -114 未購読
+# 一括 / -115 未購読当該)。MING 等の任意契約スペックが未購読でも日次同期を
+# 止めないよう、これらは --ignore-jvopen-error-codes の指定に関わらず警告して
+# スキップする。realtime 経路(JVRTOpen)も同じ3コードを処理する。
+SUBSCRIPTION_ERROR_CODES = frozenset({-111, -114, -115})
 
 
 def _is_realtime_spec(spec: str) -> bool:
@@ -65,6 +84,7 @@ def _sync_realtime_spec(
     sid: str,
     jvlink=None,
     updater=None,
+    ensure_tables: bool = True,
 ) -> dict:
     """Fetch a JVRTOpen speed-report spec for each date key and upsert rows.
 
@@ -83,7 +103,13 @@ def _sync_realtime_spec(
     """
 
     from src.jvlink.wrapper import JVLinkError
-    from src.realtime.updater import RealtimeUpdater
+    from src.database.schema import create_all_tables
+    from src.realtime.updater import RealtimeUpdater, summarize_update_result
+
+    if ensure_tables:
+        create_all_tables(database)
+
+    database.begin_transaction()
 
     owns_jvlink = jvlink is None
     if jvlink is None:
@@ -100,23 +126,26 @@ def _sync_realtime_spec(
         "records_failed": 0,
     }
 
-    if owns_jvlink:
-        jvlink.jv_init()
     try:
+        if owns_jvlink:
+            jvlink.jv_init()
         for key in _iter_date_keys(from_date, to_date):
             try:
                 ret, _count = jvlink.jv_rt_open(spec, key)
             except JVLinkError as exc:
                 code = getattr(exc, "error_code", None)
-                if code == -114:
+                if code in SUBSCRIPTION_ERROR_CODES:
                     print(f"[daily-sync] {spec} not subscribed, skipping spec")
                     break
-                print(f"[daily-sync] {spec} {key} open failed: {exc}", file=sys.stderr)
-                continue
+                raise
             if ret == -1:
                 # No data published for this date key (normal).
                 continue
+            if ret < -1:
+                raise RuntimeError(f"{spec} {key} JVRTOpen failed: {ret}")
             try:
+                if spec == "0B14":
+                    updater.replace_date_snapshot(key)
                 while True:
                     ret_code, buff, _fname = jvlink.jv_read()
                     if ret_code == 0:
@@ -124,29 +153,37 @@ def _sync_realtime_spec(
                     if ret_code == -1:
                         # File switch; keep reading.
                         continue
-                    if ret_code < 0 or not buff:
-                        break
+                    if ret_code < 0:
+                        raise RuntimeError(f"{spec} {key} JVRead failed: {ret_code}")
+                    if not buff:
+                        raise RuntimeError(f"{spec} {key} JVRead returned no buffer")
                     stats["records_fetched"] += 1
                     try:
                         result = updater.process_record(buff)
-                    except Exception as exc:  # noqa: BLE001 - keep daily sync alive
+                    except Exception as exc:  # noqa: BLE001 - drain, then fail closed
                         stats["records_failed"] += 1
                         print(
                             f"[daily-sync] {spec} {key} record failed: {exc}",
                             file=sys.stderr,
                         )
                         continue
-                    if result:
-                        stats["records_parsed"] += 1
-                        stats["records_imported"] += 1
-                    else:
-                        stats["records_failed"] += 1
+                    successful, failed = summarize_update_result(result)
+                    stats["records_parsed"] += len(successful) + failed
+                    stats["records_imported"] += len(successful)
+                    stats["records_failed"] += failed
             finally:
                 try:
                     jvlink.jv_close()
                 except Exception:
                     pass
+        if stats["records_failed"]:
+            raise RuntimeError(
+                f"{spec} realtime import rejected " f"{stats['records_failed']} record(s)"
+            )
         database.commit()
+    except Exception:
+        database.rollback()
+        raise
     finally:
         if owns_jvlink:
             try:
@@ -205,8 +242,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Run daily JRA incremental sync")
     parser.add_argument("--config", default=None, help="Path to config.yaml")
     parser.add_argument("--days-back", type=int, default=7, help="Fetch window size in days")
-    parser.add_argument("--days-forward", type=int, default=0, help="Fetch future card window size in days")
-    parser.add_argument("--db", default=None, choices=["sqlite", "postgresql"], help="Override database type")
+    parser.add_argument(
+        "--days-forward", type=int, default=0, help="Fetch future card window size in days"
+    )
+    parser.add_argument(
+        "--db", default=None, choices=["sqlite", "postgresql"], help="Override database type"
+    )
     parser.add_argument(
         "--ensure-tables",
         dest="ensure_tables",
@@ -220,11 +261,19 @@ def main() -> int:
         action="store_false",
         help="Skip table creation/migration before sync",
     )
-    parser.add_argument("--specs", default=None, help="Comma-separated subset of daily update specs")
-    parser.add_argument("--force-incremental", action="store_true",
-                        help="Use JVOpen option=1 instead of option=2 for selected update specs")
-    parser.add_argument("--ignore-jvopen-error-codes", default=None,
-                        help="Comma-separated JVOpen error codes to warn-and-skip for daily tasks")
+    parser.add_argument(
+        "--specs", default=None, help="Comma-separated subset of daily update specs"
+    )
+    parser.add_argument(
+        "--force-incremental",
+        action="store_true",
+        help="Use JVOpen option=1 instead of option=2 for selected update specs",
+    )
+    parser.add_argument(
+        "--ignore-jvopen-error-codes",
+        default=None,
+        help="Comma-separated JVOpen error codes to warn-and-skip for daily tasks",
+    )
     args = parser.parse_args()
 
     config_path = args.config or str(PROJECT_ROOT / "config" / "config.yaml")
@@ -261,11 +310,14 @@ def main() -> int:
                         from_date=from_date,
                         to_date=to_date,
                         sid=config.get("jvlink.sid", "JLTSQL"),
+                        ensure_tables=args.ensure_tables,
                     )
                 except Exception as exc:
                     code = _error_code_from_exception(exc)
-                    if code in ignored_error_codes:
-                        print(f"[daily-sync] {spec} skipped: ignored JVOpen code {code}")
+                    if code in ignored_error_codes or code in SUBSCRIPTION_ERROR_CODES:
+                        print(
+                            f"[daily-sync] {spec} skipped: JVOpen code {code} (unsubscribed/ignored)"
+                        )
                         continue
                     raise
                 print(
@@ -287,8 +339,8 @@ def main() -> int:
                 )
             except Exception as exc:
                 code = _error_code_from_exception(exc)
-                if code in ignored_error_codes:
-                    print(f"[daily-sync] {spec} skipped: ignored JVOpen code {code}")
+                if code in ignored_error_codes or code in SUBSCRIPTION_ERROR_CODES:
+                    print(f"[daily-sync] {spec} skipped: JVOpen code {code} (unsubscribed/ignored)")
                     continue
                 raise
             print(

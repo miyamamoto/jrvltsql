@@ -67,6 +67,7 @@ class PostgreSQLDatabase(BaseDatabase):
         self.password = config.get("password", "")
         self.sslmode = config.get("sslmode", "prefer")
         self.connect_timeout = config.get("connect_timeout", 10)
+        self._transaction_active = False
 
     def get_db_type(self) -> str:
         """Get database type identifier.
@@ -124,6 +125,8 @@ class PostgreSQLDatabase(BaseDatabase):
                     result.append(str(row).lower())
             return result
         except Exception as e:
+            if self._transaction_active:
+                raise
             logger.warning(f"Could not get primary key for {table_name}: {e}")
             return []
 
@@ -202,6 +205,7 @@ class PostgreSQLDatabase(BaseDatabase):
                 f"Connected to PostgreSQL database: {self.host}:{self.port}/{self.database}",
                 driver=DRIVER
             )
+            self._transaction_active = False
 
         except Exception as e:
             raise DatabaseError(f"Failed to connect to PostgreSQL database: {e}")
@@ -215,8 +219,27 @@ class PostgreSQLDatabase(BaseDatabase):
         if self._connection:
             self._connection.close()
             self._connection = None
+        self._transaction_active = False
 
         logger.info("Disconnected from PostgreSQL database")
+
+    def begin_transaction(self) -> None:
+        """Begin an explicit transaction for pg8000's native interface.
+
+        psycopg starts a transaction implicitly on the first statement. The
+        pg8000 native interface otherwise executes each statement separately,
+        so batch imports must issue BEGIN explicitly to remain atomic.
+        """
+        if not self._connection:
+            raise DatabaseError("Database not connected")
+        if self._transaction_active:
+            return
+        try:
+            if DRIVER == "pg8000":
+                self._connection.run("BEGIN")
+            self._transaction_active = True
+        except Exception as e:
+            raise DatabaseError(f"Failed to begin transaction: {e}")
 
     def execute(self, sql: str, parameters: Optional[tuple] = None) -> int:
         """Execute SQL statement.
@@ -251,7 +274,7 @@ class PostgreSQLDatabase(BaseDatabase):
 
         except Exception as e:
             logger.error(f"SQL execution failed: {sql[:100]}", error=str(e))
-            if self._connection:
+            if self._connection and not self._transaction_active:
                 self.rollback()
             raise DatabaseError(f"SQL execution failed: {e}")
 
@@ -292,7 +315,7 @@ class PostgreSQLDatabase(BaseDatabase):
 
         except Exception as e:
             logger.error(f"SQL executemany failed: {sql[:100]}", error=str(e))
-            if self._connection:
+            if self._connection and not self._transaction_active:
                 self.rollback()
             raise DatabaseError(f"SQL executemany failed: {e}")
 
@@ -339,7 +362,7 @@ class PostgreSQLDatabase(BaseDatabase):
 
         except Exception as e:
             logger.error(f"SQL query failed: {sql[:100]}", error=str(e))
-            if self._connection:
+            if self._connection and not self._transaction_active:
                 self.rollback()
             raise DatabaseError(f"SQL query failed: {e}")
 
@@ -386,7 +409,7 @@ class PostgreSQLDatabase(BaseDatabase):
 
         except Exception as e:
             logger.error(f"SQL query failed: {sql[:100]}", error=str(e))
-            if self._connection:
+            if self._connection and not self._transaction_active:
                 self.rollback()
             raise DatabaseError(f"SQL query failed: {e}")
 
@@ -510,8 +533,8 @@ class PostgreSQLDatabase(BaseDatabase):
     def commit(self) -> None:
         """Commit current transaction.
 
-        pg8000.native is always in autocommit mode and doesn't require explicit commits.
-        psycopg requires explicit commits.
+        pg8000 batch imports use an explicit transaction; psycopg starts one
+        implicitly on the first statement.
 
         Raises:
             DatabaseError: If commit fails
@@ -521,11 +544,13 @@ class PostgreSQLDatabase(BaseDatabase):
 
         try:
             if DRIVER == "pg8000":
-                # pg8000.native is in autocommit mode, no commit needed
-                pass
+                if self._transaction_active:
+                    self._connection.run("COMMIT")
+                    self._transaction_active = False
             else:  # psycopg
                 self._connection.commit()
                 logger.debug("Transaction committed")
+                self._transaction_active = False
 
         except Exception as e:
             raise DatabaseError(f"Failed to commit transaction: {e}")
@@ -547,17 +572,22 @@ class PostgreSQLDatabase(BaseDatabase):
 
         try:
             if DRIVER == "pg8000":
+                if not self._transaction_active:
+                    return
                 try:
                     self._connection.run("ROLLBACK")
+                    self._transaction_active = False
                     logger.debug("pg8000 ROLLBACK sent")
                 except Exception as e:
                     logger.warning(
                         f"pg8000 ROLLBACK failed ({e}); reconnecting"
                     )
                     self._reconnect()
+                    self._transaction_active = False
             else:  # psycopg
                 self._connection.rollback()
                 logger.debug("Transaction rolled back")
+                self._transaction_active = False
 
         except DatabaseError:
             raise

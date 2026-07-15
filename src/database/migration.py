@@ -3,13 +3,12 @@
 Detects schema mismatches in existing tables and applies safe migrations.
 
 The production PostgreSQL database is used by near-real-time collectors, so
-``quickstart`` must never wipe tables implicitly.  The default migration policy
-is therefore additive only: missing columns are added with ``ALTER TABLE`` and
-extra/renamed columns are preserved with a warning.  Destructive DROP+recreate
-is available only when ``JLTSQL_ALLOW_DESTRUCTIVE_MIGRATIONS=1`` is set.
+``quickstart`` must never wipe tables implicitly. Migrations are additive only:
+missing columns are added with ``ALTER TABLE`` and extra/renamed columns are
+preserved. Primary-key changes fail closed and require an operator-managed
+migration outside these startup paths.
 """
 
-import os
 import re
 from typing import Dict, List, Optional, Set
 
@@ -17,6 +16,10 @@ from src.database.base import BaseDatabase
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+class SchemaMigrationError(RuntimeError):
+    """Raised when a table cannot satisfy its required schema safely."""
 
 
 def _schema_body(create_sql: str) -> Optional[str]:
@@ -109,15 +112,6 @@ def _extract_primary_key_columns(create_sql: str) -> Optional[List[str]]:
     return inline_pk
 
 
-def _destructive_migrations_enabled() -> bool:
-    return os.getenv("JLTSQL_ALLOW_DESTRUCTIVE_MIGRATIONS", "").lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
-
-
 def _table_identifier(db: BaseDatabase, table_name: str) -> str:
     if db.get_db_type() == "postgresql":
         return table_name.lower()
@@ -154,8 +148,15 @@ def _get_existing_primary_key_columns(db: BaseDatabase, table_name: str) -> List
         return [row["name"] for row in rows]
 
     rows = db.fetch_all(f'PRAGMA table_info("{table_name}")')
-    pk_rows = [row for row in rows if row.get("pk", 0)]
-    pk_rows.sort(key=lambda row: row.get("pk", 0))
+
+    def pk_position(row) -> int:
+        try:
+            return int(row["pk"] or 0)
+        except (KeyError, TypeError, ValueError):
+            return 0
+
+    pk_rows = [row for row in rows if pk_position(row)]
+    pk_rows.sort(key=pk_position)
     return [row["name"] for row in pk_rows]
 
 
@@ -183,9 +184,8 @@ def _add_missing_columns(
 def migrate_table_if_needed(db: BaseDatabase, table_name: str, schema_sql: str) -> bool:
     """Check if an existing table's columns match the expected schema.
 
-    By default, only additive migrations are applied.  Existing rows are
-    preserved.  Destructive DROP+recreate is opt-in via
-    ``JLTSQL_ALLOW_DESTRUCTIVE_MIGRATIONS=1``.
+    Only additive migrations are applied. Existing rows are preserved and
+    tables are never dropped automatically.
 
     Args:
         db: Database instance (must be connected)
@@ -211,24 +211,12 @@ def migrate_table_if_needed(db: BaseDatabase, table_name: str, schema_sql: str) 
     existing_pk_lower = [column.lower() for column in existing_pk]
     expected_pk_lower = [column.lower() for column in expected_pk]
     if existing_pk_lower != expected_pk_lower:
-        if not _destructive_migrations_enabled():
-            logger.warning(
-                f"Primary key mismatch for {table_name}: "
-                f"existing={existing_pk}, expected={expected_pk}. "
-                "Destructive migration skipped. "
-                "Set JLTSQL_ALLOW_DESTRUCTIVE_MIGRATIONS=1 to allow DROP+recreate."
-            )
-            return False
-
         logger.warning(
             f"Primary key mismatch for {table_name}: "
             f"existing={existing_pk}, expected={expected_pk}. "
-            "Dropping and recreating table."
+            "Automatic migration refused; operator action is required."
         )
-        db.execute(f"DROP TABLE IF EXISTS {_table_identifier(db, table_name)}")
-        db.execute(schema_sql)
-        db.commit()
-        return True
+        return False
 
     # PostgreSQL lowercases all unquoted identifiers, so compare case-insensitively.
     # Without this, every PG run sees a "mismatch" between schema.py's CamelCase
@@ -259,24 +247,10 @@ def migrate_table_if_needed(db: BaseDatabase, table_name: str, schema_sql: str) 
     if not extra_columns:
         return False
 
-    if not _destructive_migrations_enabled():
-        logger.warning(
-            f"Schema mismatch for {table_name}: extra columns preserved and "
-            f"destructive migration skipped. extra={extra_columns}. "
-            "Set JLTSQL_ALLOW_DESTRUCTIVE_MIGRATIONS=1 to allow DROP+recreate."
-        )
-        return False
-
     logger.warning(
-        f"Schema mismatch for {table_name}: "
-        f"existing={sorted(existing_columns)}, "
-        f"expected={sorted(expected_columns)}. "
-        f"Dropping and recreating table."
+        f"Schema for {table_name} has extra columns preserved: {extra_columns}"
     )
-    db.execute(f"DROP TABLE IF EXISTS {_table_identifier(db, table_name)}")
-    db.execute(schema_sql)
-    db.commit()
-    return True
+    return False
 
 
 def migrate_all_tables(db: BaseDatabase, schemas: Dict[str, str]) -> int:
@@ -296,3 +270,45 @@ def migrate_all_tables(db: BaseDatabase, schemas: Dict[str, str]) -> int:
     if migrated:
         logger.info(f"Migrated {migrated} table(s) due to schema changes")
     return migrated
+
+
+def verify_table_schema(db: BaseDatabase, table_name: str, schema_sql: str) -> None:
+    """Verify required columns and primary key after migration/creation.
+
+    Extra legacy columns are allowed because the default migration policy is
+    additive. Missing required columns or a primary-key mismatch are unsafe:
+    imports must stop instead of writing records against an obsolete layout.
+    """
+    if not db.table_exists(table_name):
+        raise SchemaMigrationError(f"Required table does not exist: {table_name}")
+
+    expected_definitions = _extract_column_definitions(schema_sql)
+    expected_pk = _extract_primary_key_columns(schema_sql)
+    if expected_definitions is None or expected_pk is None:
+        raise SchemaMigrationError(
+            f"Could not parse expected schema for {table_name}"
+        )
+
+    existing_columns = _get_existing_columns(db, table_name)
+    existing_lower = {column.lower() for column in existing_columns}
+    missing_columns = sorted(
+        column
+        for column in expected_definitions
+        if column.lower() not in existing_lower
+    )
+
+    existing_pk = _get_existing_primary_key_columns(db, table_name)
+    existing_pk_lower = [column.lower() for column in existing_pk]
+    expected_pk_lower = [column.lower() for column in expected_pk]
+
+    problems = []
+    if missing_columns:
+        problems.append(f"missing columns={missing_columns}")
+    if existing_pk_lower != expected_pk_lower:
+        problems.append(
+            f"primary key existing={existing_pk}, expected={expected_pk}"
+        )
+    if problems:
+        raise SchemaMigrationError(
+            f"Schema verification failed for {table_name}: " + "; ".join(problems)
+        )

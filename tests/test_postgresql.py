@@ -75,6 +75,154 @@ def test_dedupe_rows_by_primary_key_keeps_last_row():
     assert deduped[1]["Kumi"] == "01-03"
 
 
+def test_pg8000_explicit_batch_transaction(monkeypatch):
+    """The native fallback must not autocommit each batch row."""
+    from unittest.mock import MagicMock, call
+
+    import src.database.postgresql_handler as postgresql_handler
+
+    database = postgresql_handler.PostgreSQLDatabase({})
+    database._connection = MagicMock()
+    monkeypatch.setattr(postgresql_handler, "DRIVER", "pg8000")
+
+    database.begin_transaction()
+    database.begin_transaction()
+    database.commit()
+    database.commit()
+
+    assert database._connection.run.call_args_list == [call("BEGIN"), call("COMMIT")]
+
+
+def test_pg8000_caller_managed_transaction_can_roll_back(monkeypatch):
+    """auto_commit=False callers retain one explicit transaction."""
+    from unittest.mock import MagicMock, call
+
+    import src.database.postgresql_handler as postgresql_handler
+
+    database = postgresql_handler.PostgreSQLDatabase({})
+    database._connection = MagicMock()
+    monkeypatch.setattr(postgresql_handler, "DRIVER", "pg8000")
+
+    database.begin_transaction()
+    database.begin_transaction()
+    database.rollback()
+    database.rollback()
+
+    assert database._connection.run.call_args_list == [call("BEGIN"), call("ROLLBACK")]
+
+
+def test_pg8000_statement_failure_does_not_end_caller_transaction(monkeypatch):
+    """A row failure must leave the batch transaction for the caller to roll back."""
+    from unittest.mock import MagicMock, call
+
+    import src.database.postgresql_handler as postgresql_handler
+    from src.database.base import DatabaseError
+
+    database = postgresql_handler.PostgreSQLDatabase({})
+    database._connection = MagicMock()
+    database._connection.run.side_effect = [[], RuntimeError("constraint failure"), []]
+    monkeypatch.setattr(postgresql_handler, "DRIVER", "pg8000")
+
+    database.begin_transaction()
+    with pytest.raises(DatabaseError, match="constraint failure"):
+        database.execute("BAD")
+
+    assert database._transaction_active
+    database.rollback()
+    assert database._connection.run.call_args_list == [
+        call("BEGIN"),
+        call("BAD"),
+        call("ROLLBACK"),
+    ]
+
+
+def test_pg8000_execute_converts_realtime_delete_placeholders(monkeypatch):
+    """RealtimeUpdater's SQLite-style DELETE executes through pg8000."""
+    from unittest.mock import MagicMock, call
+
+    import src.database.postgresql_handler as postgresql_handler
+
+    database = postgresql_handler.PostgreSQLDatabase({})
+    database._connection = MagicMock()
+    monkeypatch.setattr(postgresql_handler, "DRIVER", "pg8000")
+
+    database.execute(
+        "DELETE FROM RT_RA WHERE Year = ? AND MonthDay = ?",
+        (2026, "0715"),
+    )
+
+    assert database._connection.run.call_args_list == [
+        call(
+            "DELETE FROM RT_RA WHERE Year = :param1 AND MonthDay = :param2",
+            param1=2026,
+            param2="0715",
+        )
+    ]
+
+
+def test_pg8000_primary_key_lookup_failure_aborts_caller_transaction(monkeypatch):
+    """Metadata failures must propagate without inserting outside the transaction."""
+    from unittest.mock import MagicMock, call
+
+    import src.database.postgresql_handler as postgresql_handler
+    from src.database.base import DatabaseError
+
+    database = postgresql_handler.PostgreSQLDatabase({})
+    database._connection = MagicMock()
+    database._connection.run.side_effect = [
+        [],
+        RuntimeError("metadata statement failed"),
+        [],
+    ]
+    monkeypatch.setattr(postgresql_handler, "DRIVER", "pg8000")
+
+    database.begin_transaction()
+    with pytest.raises(DatabaseError, match="metadata statement failed"):
+        database.insert("RT_RA", {"Year": 2026})
+
+    assert database._transaction_active
+    database.rollback()
+    assert database._connection.run.call_args_list == [
+        call("BEGIN"),
+        call(
+            """
+                SELECT a.attname
+                FROM pg_index i
+                JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+                WHERE i.indrelid = :param1::regclass
+                AND i.indisprimary
+                ORDER BY array_position(i.indkey, a.attnum)
+            """,
+            param1="rt_ra",
+        ),
+        call("ROLLBACK"),
+    ]
+
+
+def test_psycopg_primary_key_lookup_failure_aborts_caller_transaction(monkeypatch):
+    """The psycopg path must preserve transaction ownership on metadata failure."""
+    from unittest.mock import MagicMock
+
+    import src.database.postgresql_handler as postgresql_handler
+    from src.database.base import DatabaseError
+
+    database = postgresql_handler.PostgreSQLDatabase({})
+    database._connection = MagicMock()
+    database._cursor = MagicMock()
+    database._cursor.execute.side_effect = RuntimeError("metadata statement failed")
+    monkeypatch.setattr(postgresql_handler, "DRIVER", "psycopg")
+
+    database.begin_transaction()
+    with pytest.raises(DatabaseError, match="metadata statement failed"):
+        database.insert("RT_RA", {"Year": 2026})
+
+    assert database._transaction_active
+    database.rollback()
+    assert database._cursor.execute.call_count == 1
+    database._connection.rollback.assert_called_once_with()
+    database._connection.commit.assert_not_called()
+
+
 def print_installation_guide():
     """PostgreSQLのインストールガイドを表示"""
     print("""

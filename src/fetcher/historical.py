@@ -300,18 +300,33 @@ class HistoricalFetcher(BaseFetcher):
         """
         if cache_manager.has_nl_range(data_spec, from_date, to_date):
             # Full cache hit: yield from cache
-            from src.parser.factory import ParserFactory
-            factory = ParserFactory()
+            self.reset_statistics()
             for raw in cache_manager.read_nl(data_spec, from_date, to_date):
-                parsed = factory.parse(raw)
-                if parsed:
-                    if isinstance(parsed, list):
-                        for p in parsed:
-                            p["_raw"] = raw
-                            yield p
-                    else:
-                        parsed["_raw"] = raw
-                        yield parsed
+                self._records_fetched += 1
+                try:
+                    parsed = self.parser_factory.parse(raw)
+                    if not parsed:
+                        self._records_failed += 1
+                        logger.warning(
+                            "Failed to parse cached record",
+                            record_num=self._records_fetched,
+                            data_spec=data_spec,
+                        )
+                        continue
+
+                    records = parsed if isinstance(parsed, list) else [parsed]
+                    for record in records:
+                        self._records_parsed += 1
+                        record["_raw"] = raw
+                        yield record
+                except Exception as error:
+                    self._records_failed += 1
+                    logger.error(
+                        "Error parsing cached record",
+                        record_num=self._records_fetched,
+                        data_spec=data_spec,
+                        error=str(error),
+                    )
         else:
             # Cache miss: fetch from JV-Link, write to cache
             self.cache_manager = cache_manager

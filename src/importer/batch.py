@@ -9,7 +9,7 @@ from typing import Iterator, List, Optional, Tuple
 from src.database.base import BaseDatabase
 from src.database.schema import create_all_tables
 from src.fetcher.historical import HistoricalFetcher
-from src.importer.importer import DataImporter
+from src.importer.importer import DataImporter, ImporterError
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -139,10 +139,7 @@ class BatchProcessor:
         # Ensure tables exist
         if ensure_tables:
             logger.info("Ensuring all tables exist")
-            try:
-                create_all_tables(self.database)
-            except Exception as e:
-                logger.debug(f"Tables might already exist: {e}")
+            create_all_tables(self.database)
 
         # Fetch and import records (use cache if available)
         try:
@@ -152,20 +149,46 @@ class BatchProcessor:
                 )
             else:
                 records = self.fetcher.fetch(data_spec, from_date, to_date, option)
-            import_stats = self.importer.import_records(records, auto_commit)
+            # Keep the whole data-spec import in one transaction. Committing
+            # inside DataImporter would make a later parser/import rejection
+            # impossible to roll back.
+            begin_transaction = getattr(self.database, "begin_transaction", None)
+            if begin_transaction is not None:
+                begin_transaction()
+            import_stats = self.importer.import_records(records, auto_commit=False)
 
             # Combine statistics
             fetch_stats = self.fetcher.get_statistics()
             combined_stats = {
                 **fetch_stats,
                 **import_stats,
+                "records_failed": (
+                    int(fetch_stats.get("records_failed", 0) or 0)
+                    + int(import_stats.get("records_failed", 0) or 0)
+                ),
             }
+
+            failed_records = int(combined_stats.get("records_failed", 0) or 0)
+            if failed_records:
+                raise ImporterError(
+                    f"Import rejected {failed_records} record(s)"
+                )
+
+            if auto_commit:
+                self.database.commit()
 
             logger.info("Batch processing completed", **combined_stats)
 
             return combined_stats
 
         except Exception as e:
+            try:
+                self.database.rollback()
+            except Exception as rollback_error:
+                logger.warning(
+                    "Batch rollback failed",
+                    error=str(rollback_error),
+                )
             logger.error("Batch processing failed", error=str(e))
             raise
 
@@ -206,29 +229,51 @@ class BatchProcessor:
             to_date=to_date,
             option=option,
         )
+        if ensure_tables:
+            create_all_tables(self.database)
+
         combined_stats: dict = {}
-        for idx, (chunk_from, chunk_to) in enumerate(self._iter_year_chunks(from_date, to_date), start=1):
-            logger.info(
-                "Processing setup chunk",
-                chunk_index=idx,
-                chunk_from=chunk_from,
-                chunk_to=chunk_to,
-                data_spec=data_spec,
-            )
-            chunk_stats = self.process_date_range(
-                data_spec=data_spec,
-                from_date=chunk_from,
-                to_date=chunk_to,
-                option=option,
-                auto_commit=auto_commit,
-                ensure_tables=ensure_tables and idx == 1,
-            )
-            for key, value in chunk_stats.items():
-                if isinstance(value, (int, float)):
-                    combined_stats[key] = combined_stats.get(key, 0) + value
-                else:
-                    combined_stats[key] = value
-        return combined_stats
+        try:
+            begin_transaction = getattr(self.database, "begin_transaction", None)
+            if begin_transaction is not None:
+                begin_transaction()
+
+            for idx, (chunk_from, chunk_to) in enumerate(
+                self._iter_year_chunks(from_date, to_date), start=1
+            ):
+                logger.info(
+                    "Processing setup chunk",
+                    chunk_index=idx,
+                    chunk_from=chunk_from,
+                    chunk_to=chunk_to,
+                    data_spec=data_spec,
+                )
+                chunk_stats = self.process_date_range(
+                    data_spec=data_spec,
+                    from_date=chunk_from,
+                    to_date=chunk_to,
+                    option=option,
+                    auto_commit=False,
+                    ensure_tables=False,
+                )
+                for key, value in chunk_stats.items():
+                    if isinstance(value, (int, float)):
+                        combined_stats[key] = combined_stats.get(key, 0) + value
+                    else:
+                        combined_stats[key] = value
+
+            if auto_commit:
+                self.database.commit()
+            return combined_stats
+        except Exception:
+            try:
+                self.database.rollback()
+            except Exception as rollback_error:
+                logger.warning(
+                    "Split setup rollback failed",
+                    error=str(rollback_error),
+                )
+            raise
 
     def process_month(
         self,
@@ -331,10 +376,10 @@ class BatchProcessor:
 
             try:
                 stats = self.process_date_range(
-                    data_spec,
-                    from_date,
-                    to_date,
-                    auto_commit,
+                    data_spec=data_spec,
+                    from_date=from_date,
+                    to_date=to_date,
+                    auto_commit=auto_commit,
                     ensure_tables=False,  # Only check once
                 )
                 results[data_spec] = stats

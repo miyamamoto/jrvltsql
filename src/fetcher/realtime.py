@@ -54,6 +54,8 @@ class RealtimeFetcher(BaseFetcher):
         """
         super().__init__(sid)
         self._stream_open = False
+        self.last_open_result: Optional[int] = None
+        self.last_open_key: Optional[str] = None
 
     def fetch(
         self,
@@ -92,6 +94,9 @@ class RealtimeFetcher(BaseFetcher):
             >>> for record in fetcher.fetch("0B12", continuous=True):
             ...     print(record)  # Will keep running until stopped
         """
+        self.last_open_result = None
+        self.last_open_key = None
+
         if data_spec not in RT_DATA_SPECS:
             logger.warning(
                 f"Unknown data spec: {data_spec}. "
@@ -122,6 +127,8 @@ class RealtimeFetcher(BaseFetcher):
 
             # Open realtime stream
             ret, read_count = self.jvlink.jv_rt_open(data_spec, key)
+            self.last_open_result = ret
+            self.last_open_key = key
 
             # Mark stream as potentially open (will be closed in finally block)
             # This ensures jv_close() is called even if an error occurs

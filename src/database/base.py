@@ -277,6 +277,14 @@ class BaseDatabase(ABC):
         else:
             raise DatabaseError("No active connection")
 
+    def begin_transaction(self) -> None:
+        """Begin an explicit transaction when the backend requires one.
+
+        SQLite starts a transaction on the first write, so the base
+        implementation is intentionally a no-op. PostgreSQL overrides this
+        method because pg8000 otherwise executes every statement separately.
+        """
+
     def rollback(self) -> None:
         """Rollback current transaction.
 

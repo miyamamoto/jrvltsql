@@ -4,7 +4,6 @@ This test verifies that the to_date parameter correctly filters records.
 """
 
 import pytest
-from unittest.mock import MagicMock
 from src.fetcher.base import BaseFetcher
 
 
@@ -19,12 +18,14 @@ class ConcreteFetcher(BaseFetcher):
 class TestDateFiltering:
     """Test date filtering functionality."""
 
-    def test_is_within_date_range_valid_records(self):
+    @pytest.fixture
+    def fetcher(self):
+        """Date filtering does not require a live JV-Link wrapper."""
+        return ConcreteFetcher.__new__(ConcreteFetcher)
+
+    def test_is_within_date_range_valid_records(self, fetcher):
         """Test that records within the date range are accepted."""
         # Create fetcher with mocked dependencies
-        mock_wrapper = MagicMock()
-        fetcher = ConcreteFetcher(mock_wrapper)
-
         # Test record within range
         record1 = {"Year": "2024", "MonthDay": "0615"}
         assert fetcher._is_within_date_range(record1, "20240630") is True
@@ -37,11 +38,8 @@ class TestDateFiltering:
         record3 = {"Year": "2024", "MonthDay": "0101"}
         assert fetcher._is_within_date_range(record3, "20240630") is True
 
-    def test_is_within_date_range_outside_records(self):
+    def test_is_within_date_range_outside_records(self, fetcher):
         """Test that records outside the date range are rejected."""
-        mock_wrapper = MagicMock()
-        fetcher = ConcreteFetcher(mock_wrapper)
-
         # Test record after end date
         record1 = {"Year": "2024", "MonthDay": "0701"}
         assert fetcher._is_within_date_range(record1, "20240630") is False
@@ -54,11 +52,8 @@ class TestDateFiltering:
         record3 = {"Year": "2025", "MonthDay": "0101"}
         assert fetcher._is_within_date_range(record3, "20241231") is False
 
-    def test_is_within_date_range_missing_fields(self):
+    def test_is_within_date_range_missing_fields(self, fetcher):
         """Test that records missing date fields are included."""
-        mock_wrapper = MagicMock()
-        fetcher = ConcreteFetcher(mock_wrapper)
-
         # Record with no date fields
         record1 = {"SomeField": "Value"}
         assert fetcher._is_within_date_range(record1, "20240630") is True
@@ -75,11 +70,8 @@ class TestDateFiltering:
         record4 = {"Year": "", "MonthDay": "0615"}
         assert fetcher._is_within_date_range(record4, "20240630") is True
 
-    def test_is_within_date_range_edge_cases(self):
+    def test_is_within_date_range_edge_cases(self, fetcher):
         """Test edge cases for date filtering."""
-        mock_wrapper = MagicMock()
-        fetcher = ConcreteFetcher(mock_wrapper)
-
         # Test year boundary
         record1 = {"Year": "2023", "MonthDay": "1231"}
         assert fetcher._is_within_date_range(record1, "20240101") is True
