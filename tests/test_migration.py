@@ -9,6 +9,7 @@ import pytest
 
 from src.database.base import BaseDatabase
 from src.database.sqlite_handler import SQLiteDatabase
+from src.database.dual_handler import DualDatabase
 from src.database.migration import (
     SchemaMigrationError,
     _extract_columns_from_sql,
@@ -430,3 +431,23 @@ def test_pg_migrate_all_tables(pg_db):
     # Real PG stores unquoted identifiers lowercased.
     assert "BetType" in pg_db._tables["nl_h1"]
     assert "SanrentanKumi" in pg_db._tables["nl_h6"]
+
+
+def test_dual_migration_uses_each_backends_identifier_rules(db, pg_db):
+    db.execute(ADDITIVE_OLD_SCHEMA)
+    db.commit()
+    pg_db.execute(ADDITIVE_OLD_SCHEMA)
+    dual = DualDatabase(db, pg_db)
+
+    assert migrate_table_if_needed(dual, "NL_H1", NEW_SCHEMA) is True
+
+    sqlite_columns = {
+        row["name"] for row in db.fetch_all('PRAGMA table_info("NL_H1")')
+    }
+    assert "Hyo" in sqlite_columns
+    assert "Hyo" in pg_db._tables["nl_h1"]
+    assert any(
+        statement.startswith("ALTER TABLE nl_h1 ADD COLUMN Hyo")
+        for statement in pg_db._executed
+    )
+    verify_table_schema(dual, "NL_H1", NEW_SCHEMA)

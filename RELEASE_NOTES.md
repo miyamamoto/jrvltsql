@@ -1,6 +1,12 @@
-# jrvltsql v1.6.4 Release Notes
+# jrvltsql v1.6.5 Release Notes
 
 ## Highlights
+
+- Rejects every realtime stream that exits before the official completion
+  code, including positive-length reads with an empty buffer, so an incomplete
+  0B14 response cannot replace a valid stored snapshot.
+- Migrates dual SQLite/PostgreSQL schemas against each concrete backend, using
+  backend-specific table identifiers and verifying both copies before import.
 
 - Treats Wine bridge subscription responses as normal optional-spec skips in
   the non-interactive daily collector path.

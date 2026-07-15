@@ -22,6 +22,15 @@ class SchemaMigrationError(RuntimeError):
     """Raised when a table cannot satisfy its required schema safely."""
 
 
+def _migration_targets(db: BaseDatabase) -> tuple[BaseDatabase, ...]:
+    """Return concrete databases that must be migrated independently."""
+    getter = getattr(db, "get_migration_targets", None)
+    if getter is None:
+        return (db,)
+    targets = tuple(getter())
+    return targets or (db,)
+
+
 def _schema_body(create_sql: str) -> Optional[str]:
     """Return the body inside the CREATE TABLE parentheses."""
     match = re.search(r'\((.+)\)', create_sql, re.DOTALL)
@@ -195,6 +204,13 @@ def migrate_table_if_needed(db: BaseDatabase, table_name: str, schema_sql: str) 
     Returns:
         True if a schema change was applied, False otherwise
     """
+    targets = _migration_targets(db)
+    if targets != (db,):
+        migrated = False
+        for target in targets:
+            migrated = migrate_table_if_needed(target, table_name, schema_sql) or migrated
+        return migrated
+
     if not db.table_exists(table_name):
         return False
 
@@ -279,6 +295,12 @@ def verify_table_schema(db: BaseDatabase, table_name: str, schema_sql: str) -> N
     additive. Missing required columns or a primary-key mismatch are unsafe:
     imports must stop instead of writing records against an obsolete layout.
     """
+    targets = _migration_targets(db)
+    if targets != (db,):
+        for target in targets:
+            verify_table_schema(target, table_name, schema_sql)
+        return
+
     if not db.table_exists(table_name):
         raise SchemaMigrationError(f"Required table does not exist: {table_name}")
 

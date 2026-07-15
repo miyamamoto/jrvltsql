@@ -839,6 +839,20 @@ class TestRealtimeUpdater(unittest.TestCase):
         self.assertEqual(failed, 1)
         updater.replace_date_snapshot.assert_called_once_with("20260715")
 
+    def test_drain_0b14_positive_read_without_buffer_rejects_snapshot(self):
+        monitor = RealtimeMonitor(database=self.mock_db)
+        jvlink = MagicMock()
+        jvlink.jv_rt_open.return_value = (0, 1)
+        jvlink.jv_read.return_value = (100, None, "RT")
+        updater = MagicMock()
+
+        imported, failed = monitor._drain_key(
+            jvlink, updater, "0B14", "20260715"
+        )
+
+        self.assertEqual((imported, failed), (0, 1))
+        updater.replace_date_snapshot.assert_called_once_with("20260715")
+
     def test_drain_0b14_busy_after_clear_rejects_snapshot(self):
         from src.jvlink.wrapper import JVLinkError
 

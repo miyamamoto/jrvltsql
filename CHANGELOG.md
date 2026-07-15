@@ -9,6 +9,13 @@
 
 現時点で未リリースの変更はありません。
 
+## [1.6.5] - 2026-07-15
+
+### Fixed
+
+- `JVRead` が正の長さと空バッファを返した不完全な速報取得を失敗として扱い、0B14 の既存 snapshot を空または部分データで置換しないよう修正
+- dual SQLite/PostgreSQL の additive schema migration を各 backend へ個別適用し、PostgreSQL の小文字 table identifier を誤って引用して追加列移行が止まる問題を修正
+
 ## [1.6.4] - 2026-07-15
 
 ### Fixed
@@ -203,7 +210,8 @@
 - quickstart.py 対話形式セットアップウィザード
 - CLI コマンド（fetch, status, monitor, init）
 
-[Unreleased]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.4...HEAD
+[Unreleased]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.5...HEAD
+[1.6.5]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.4...v1.6.5
 [1.6.4]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.3...v1.6.4
 [1.6.3]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.2...v1.6.3
 [1.6.2]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.1...v1.6.2

@@ -356,8 +356,12 @@ class RealtimeMonitor:
                         logger.error(f"process_record error ({data_spec}/{key}): {e}")
                         failed_count += 1
                 else:
-                    if ret_code < 0:
-                        failed_count += 1
+                    failed_count += 1
+                    self._add_error(
+                        data_spec,
+                        f"Incomplete JVRead response for {key}: "
+                        f"code={ret_code}, buffer_present={bool(buff)}",
+                    )
                     break
 
             if not stream_complete and self._stop_event.is_set():
