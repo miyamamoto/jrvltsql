@@ -118,8 +118,8 @@ class RealtimeUpdater:
         """
         if len(date_key) != 8 or not date_key.isdigit():
             raise ValueError(f"Invalid 0B14 date key: {date_key!r}")
-        year = date_key[:4]
-        month_day = date_key[4:]
+        year = int(date_key[:4])
+        month_day = int(date_key[4:])
         for table_name in self.DATE_SNAPSHOT_TABLES:
             self.database.execute(
                 f"DELETE FROM {table_name} WHERE Year = ? AND MonthDay = ?",

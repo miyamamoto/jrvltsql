@@ -416,7 +416,7 @@ class TestRealtimeMonitor(unittest.TestCase):
             "SELECT JyoCD, RaceNum FROM NL_RA "
             "WHERE Year=? AND MonthDay=? "
             "ORDER BY JyoCD, RaceNum",
-            ("2026", "0715"),
+            (2026, 715),
         )
 
     def test_today_race_keys_propagates_database_failure(self):
@@ -721,6 +721,15 @@ class TestRealtimeUpdater(unittest.TestCase):
         sql, parameters = self.mock_db.execute.call_args.args
         self.assertIn("DELETE FROM RT_RA", sql)
         self.assertEqual(parameters, (2026, 715, "05", 2, 3, 1))
+
+    def test_replace_date_snapshot_uses_integer_postgresql_keys(self):
+        updater = RealtimeUpdater(self.mock_db)
+
+        updater.replace_date_snapshot("20260715")
+
+        self.assertEqual(self.mock_db.execute.call_count, 5)
+        for call_args in self.mock_db.execute.call_args_list:
+            self.assertEqual(call_args.args[1], (2026, 715))
 
     def test_drain_0b14_replaces_date_snapshot_before_import(self):
         monitor = RealtimeMonitor(database=self.mock_db)

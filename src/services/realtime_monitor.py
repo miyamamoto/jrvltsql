@@ -413,8 +413,8 @@ class RealtimeMonitor:
         Returns:
             List of keys like ['202604180301', '202604180302', ...]
         """
-        year = today[:4]
-        md = today[4:6] + today[6:8]  # MMDD
+        year = int(today[:4])
+        md = int(today[4:8])
         rows = self.database.fetch_all(
             "SELECT JyoCD, RaceNum FROM NL_RA "
             "WHERE Year=? AND MonthDay=? "
