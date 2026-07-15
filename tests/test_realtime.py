@@ -7,7 +7,9 @@ from unittest.mock import Mock, MagicMock, patch, call, ANY
 import threading
 import time
 
-from src.fetcher.realtime import RealtimeFetcher
+import pytest
+
+from src.fetcher.realtime import RealtimeFetcher, materialize_complete_records
 from src.services.realtime_monitor import RealtimeMonitor, MonitorStatus
 from src.realtime.updater import RealtimeUpdater, summarize_update_result
 from src.jvlink.constants import (
@@ -83,12 +85,14 @@ class TestRealtimeFetcher(unittest.TestCase):
 
         # Create fetcher and fetch
         fetcher = RealtimeFetcher(sid=self.sid)
+        fetcher._records_failed = 7
         records = list(fetcher.fetch(data_spec="0B12", continuous=False))
 
         # Verify results
         self.assertEqual(len(records), 2)
         self.assertEqual(records[0]["レコード種別ID"], "RA")
         self.assertEqual(records[1]["レコード種別ID"], "RA")
+        self.assertEqual(fetcher.get_statistics()["records_failed"], 0)
 
         # Verify JV-Link calls
         mock_jvlink.jv_init.assert_called_once()
@@ -171,6 +175,19 @@ def test_summarize_update_result_counts_explicit_failures():
     assert len(successful) == 1
     assert failed == 1
     assert summarize_update_result(None) == ([], 1)
+
+
+def test_materialize_complete_records_rejects_parser_loss():
+    fetcher = MagicMock()
+    fetcher.get_statistics.return_value = {"records_failed": 1}
+
+    with pytest.raises(Exception, match="0B14 20260715 parser rejected 1"):
+        materialize_complete_records(
+            fetcher,
+            iter([{"RecordSpec": "WE"}]),
+            data_spec="0B14",
+            key="20260715",
+        )
 
 
 def test_process_parsed_record_preserves_failed_expanded_rows():
@@ -1073,6 +1090,27 @@ class TestRealtimeUpdater(unittest.TestCase):
                 self.assertTrue(result["success"])
                 self.mock_db.insert.assert_called_once()
                 self.mock_db.execute.assert_not_called()
+
+    def test_data_kubun_9_deletes_non_state_expanded_records(self):
+        updater = RealtimeUpdater(self.mock_db)
+
+        result = updater.process_parsed_record(
+            {
+                "RecordSpec": "O1",
+                "DataKubun": DATA_KUBUN_DELETE,
+                "Year": "2026",
+                "MonthDay": "0715",
+                "JyoCD": "05",
+                "Kaiji": "1",
+                "Nichiji": "1",
+                "RaceNum": "1",
+            }
+        )
+
+        self.assertEqual(result["operation"], "delete")
+        self.assertTrue(result["success"])
+        self.mock_db.execute.assert_called_once()
+        self.mock_db.insert.assert_not_called()
 
     @patch('src.realtime.updater.ParserFactory')
     def test_head_data_kubun_default_fallback(self, mock_factory_class):

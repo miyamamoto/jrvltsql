@@ -2280,7 +2280,10 @@ class QuickstartRunner:
         ))
 
         try:
-            from src.fetcher.realtime import RealtimeFetcher
+            from src.fetcher.realtime import (
+                RealtimeFetcher,
+                materialize_complete_records,
+            )
             from src.database.schema import create_all_tables
             from src.realtime.updater import RealtimeUpdater, summarize_update_result
             from src.jvlink.constants import JYO_CODES, generate_time_series_key
@@ -2972,7 +2975,12 @@ class QuickstartRunner:
                                 continuous=False,
                             )
                             if spec == "0B14":
-                                records = list(records)
+                                records = materialize_complete_records(
+                                    fetcher,
+                                    records,
+                                    data_spec=spec,
+                                    key=key,
+                                )
                                 if getattr(fetcher, "last_open_result", None) == 0:
                                     updater.replace_date_snapshot(date_str)
                             for record in records:

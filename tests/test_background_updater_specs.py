@@ -43,6 +43,11 @@ def test_background_realtime_paths_use_realtime_table_router():
     assert "DataImporter" not in timeseries_source
     assert "process_parsed_record" in timeseries_source
     assert "process_record(" not in timeseries_source
+    assert "create_all_tables" not in realtime_source
+    assert "create_all_tables" not in timeseries_source
+    assert "create_all_tables" in inspect.getsource(
+        BackgroundUpdater._ensure_realtime_schema
+    )
 
 
 def test_background_realtime_loop_survives_transient_poll_error():

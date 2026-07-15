@@ -1548,6 +1548,7 @@ class BackgroundUpdater:
 
         try:
             self._realtime_updating.set()
+            self._ensure_realtime_schema()
 
             now = datetime.now()
             logger.info(f"Starting realtime update: {reason}")
@@ -1562,15 +1563,16 @@ class BackgroundUpdater:
 
                 spec_success_count = 0
                 try:
-                    from src.fetcher.realtime import RealtimeFetcher
-                    from src.database.schema import create_all_tables
+                    from src.fetcher.realtime import (
+                        RealtimeFetcher,
+                        materialize_complete_records,
+                    )
                     from src.database.sqlite_handler import SQLiteDatabase
                     from src.realtime.updater import RealtimeUpdater, summarize_update_result
 
                     db = SQLiteDatabase({"path": str(self.db_path)})
 
                     with db:
-                        create_all_tables(db)
                         db.begin_transaction()
                         fetcher = RealtimeFetcher(sid="BGUPDATE")
                         updater = RealtimeUpdater(db)
@@ -1583,7 +1585,12 @@ class BackgroundUpdater:
                                 continuous=False,
                             )
                             if spec == "0B14":
-                                records = list(records)
+                                records = materialize_complete_records(
+                                    fetcher,
+                                    records,
+                                    data_spec=spec,
+                                    key=date_key,
+                                )
                                 if getattr(fetcher, "last_open_result", None) == 0:
                                     updater.replace_date_snapshot(date_key)
                             for record in records:
@@ -1629,6 +1636,19 @@ class BackgroundUpdater:
             self._realtime_updating.clear()
             self._jvlink_lock.release()
 
+    def _ensure_realtime_schema(self) -> None:
+        """Prepare realtime tables once for the lifetime of this updater."""
+        if getattr(self, "_realtime_schema_prepared", False):
+            return
+
+        from src.database.schema import create_all_tables
+        from src.database.sqlite_handler import SQLiteDatabase
+
+        database = SQLiteDatabase({"path": str(self.db_path)})
+        with database:
+            create_all_tables(database)
+        self._realtime_schema_prepared = True
+
     def _run_time_series_update(self) -> int:
         """時系列データ（オッズ・票数）の取得
 
@@ -1667,14 +1687,12 @@ class BackgroundUpdater:
         db = None
         try:
             from src.fetcher.realtime import RealtimeFetcher
-            from src.database.schema import create_all_tables
             from src.database.sqlite_handler import SQLiteDatabase
             from src.realtime.updater import RealtimeUpdater, summarize_update_result
 
             db = SQLiteDatabase({"path": str(self.db_path)})
 
             with db:
-                create_all_tables(db)
                 db.begin_transaction()
                 fetcher = RealtimeFetcher(sid="BGUPDATE")
                 updater = RealtimeUpdater(db)
