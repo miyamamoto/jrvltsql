@@ -102,6 +102,7 @@ def _sync_realtime_spec(
         updater: Optional RealtimeUpdater override (tests).
     """
 
+    from src.jvlink.bridge import JVLinkBridgeError
     from src.jvlink.wrapper import JVLinkError
     from src.database.schema import create_all_tables
     from src.realtime.updater import RealtimeUpdater, summarize_update_result
@@ -132,7 +133,7 @@ def _sync_realtime_spec(
         for key in _iter_date_keys(from_date, to_date):
             try:
                 ret, _count = jvlink.jv_rt_open(spec, key)
-            except JVLinkError as exc:
+            except (JVLinkError, JVLinkBridgeError) as exc:
                 code = getattr(exc, "error_code", None)
                 if code in SUBSCRIPTION_ERROR_CODES:
                     print(f"[daily-sync] {spec} not subscribed, skipping spec")
