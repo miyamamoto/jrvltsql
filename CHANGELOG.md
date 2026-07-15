@@ -9,6 +9,12 @@
 
 現時点で未リリースの変更はありません。
 
+## [1.6.6] - 2026-07-15
+
+### Fixed
+
+- dual mode で secondary PostgreSQL が接続不能な場合は migration/verification 対象から除外し、documented best-effort 動作どおり primary の収集を継続
+
 ## [1.6.5] - 2026-07-15
 
 ### Fixed
@@ -210,7 +216,8 @@
 - quickstart.py 対話形式セットアップウィザード
 - CLI コマンド（fetch, status, monitor, init）
 
-[Unreleased]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.5...HEAD
+[Unreleased]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.6...HEAD
+[1.6.6]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.5...v1.6.6
 [1.6.5]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.4...v1.6.5
 [1.6.4]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.3...v1.6.4
 [1.6.3]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.2...v1.6.3

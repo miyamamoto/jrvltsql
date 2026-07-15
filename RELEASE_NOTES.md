@@ -1,4 +1,4 @@
-# jrvltsql v1.6.5 Release Notes
+# jrvltsql v1.6.6 Release Notes
 
 ## Highlights
 
@@ -7,6 +7,8 @@
   0B14 response cannot replace a valid stored snapshot.
 - Migrates dual SQLite/PostgreSQL schemas against each concrete backend, using
   backend-specific table identifiers and verifying both copies before import.
+- Preserves best-effort dual-mode availability by excluding an unavailable
+  secondary mirror from migration while still validating connected mirrors.
 
 - Treats Wine bridge subscription responses as normal optional-spec skips in
   the non-interactive daily collector path.
