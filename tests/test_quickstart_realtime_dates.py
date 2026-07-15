@@ -11,7 +11,8 @@ from datetime import datetime, timedelta
 
 from scripts.quickstart import (
     QuickstartRunner,
-    _is_no_data_error,
+    _is_historical_no_data_error,
+    _is_realtime_no_data_error,
     _is_subscription_error,
     _jvlink_error_code,
 )
@@ -52,14 +53,37 @@ def test_wrapped_jvlink_errors_are_classified_by_exact_code():
     wrapped = RuntimeError("Historical fetch failed: JVOpen failed (code: -115)")
     assert _jvlink_error_code(wrapped) == -115
     assert _is_subscription_error(wrapped)
-    assert not _is_no_data_error(wrapped)
+    assert not _is_realtime_no_data_error(wrapped)
 
     no_data = RuntimeError("JVRTOpen failed (code: -1)")
-    assert _is_no_data_error(no_data)
+    assert not _is_realtime_no_data_error(no_data)
     assert not _is_subscription_error(no_data)
 
-    assert _is_no_data_error(RuntimeError("No data returned"))
-    assert not _is_no_data_error(RuntimeError("No database connection"))
+    assert _is_realtime_no_data_error(RuntimeError("No data returned"))
+    assert not _is_realtime_no_data_error(RuntimeError("No database connection"))
+
+
+def test_jvread_minus_two_is_not_realtime_no_data():
+    error = RuntimeError("JVRead failed (code: -2)")
+
+    assert not _is_realtime_no_data_error(error)
+    assert not _is_historical_no_data_error(error)
+
+
+def test_failed_colon_error_code_is_extracted_before_text_fallback():
+    error = RuntimeError("JVRead failed: -2 (no data)")
+
+    assert _jvlink_error_code(error) == -2
+    assert not _is_realtime_no_data_error(error)
+    assert not _is_historical_no_data_error(error)
+
+
+def test_jvread_minus_one_exception_is_not_no_data():
+    error = RuntimeError("JVRead failed: -1 (no data)")
+
+    assert _jvlink_error_code(error) == -1
+    assert not _is_realtime_no_data_error(error)
+    assert not _is_historical_no_data_error(error)
 
 
 def test_quickstart_does_not_reparse_expanded_realtime_rows():

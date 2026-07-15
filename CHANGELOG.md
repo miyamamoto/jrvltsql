@@ -9,6 +9,12 @@
 
 現時点で未リリースの変更はありません。
 
+## [1.6.7] - 2026-07-15
+
+### Fixed
+
+- 速報・蓄積ストリーム中の `JVRead -2` をデータなしとして扱わず、途中まで取得した応答を正常終了として commit しないよう修正
+
 ## [1.6.6] - 2026-07-15
 
 ### Fixed
@@ -216,7 +222,8 @@
 - quickstart.py 対話形式セットアップウィザード
 - CLI コマンド（fetch, status, monitor, init）
 
-[Unreleased]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.6...HEAD
+[Unreleased]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.7...HEAD
+[1.6.7]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.6...v1.6.7
 [1.6.6]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.5...v1.6.6
 [1.6.5]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.4...v1.6.5
 [1.6.4]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.3...v1.6.4

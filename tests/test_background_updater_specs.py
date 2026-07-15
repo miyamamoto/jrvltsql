@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 
 from scripts.background_updater import (
     BackgroundUpdater,
-    _is_no_data_error,
+    _is_realtime_no_data_error,
     _is_subscription_error,
     _jvlink_error_code,
 )
@@ -24,9 +24,21 @@ def test_background_error_classification_uses_exact_codes():
 
     assert _jvlink_error_code(wrapped) == -115
     assert _is_subscription_error(wrapped)
-    assert _is_no_data_error(no_data)
+    assert not _is_realtime_no_data_error(no_data)
     assert not _is_subscription_error(unrelated)
-    assert not _is_no_data_error(unrelated)
+    assert not _is_realtime_no_data_error(unrelated)
+
+
+def test_background_does_not_hide_jvread_minus_two():
+    assert not _is_realtime_no_data_error(
+        RuntimeError("Realtime fetch failed: JVRead failed (code: -2)")
+    )
+
+
+def test_background_does_not_hide_jvread_minus_one_exception():
+    assert not _is_realtime_no_data_error(
+        RuntimeError("Realtime fetch failed: JVRead failed: -1 (no data)")
+    )
 
 
 def test_background_realtime_paths_use_realtime_table_router():
