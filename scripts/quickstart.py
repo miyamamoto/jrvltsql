@@ -105,7 +105,11 @@ def _jvlink_error_code(exc: BaseException) -> Optional[int]:
         code = getattr(current, "error_code", None)
         if isinstance(code, int):
             return code
-        match = re.search(r"(?:code\s*[:=]|with code)\s*(-?\d+)\b", str(current), re.I)
+        match = re.search(
+            r"(?:code\s*[:=]|with code|failed\s*:)\s*(-?\d+)\b",
+            str(current),
+            re.I,
+        )
         if match:
             return int(match.group(1))
         current = current.__cause__ or current.__context__
@@ -116,10 +120,28 @@ def _is_subscription_error(exc: BaseException) -> bool:
     return _jvlink_error_code(exc) in SUBSCRIPTION_ERROR_CODES or "契約" in str(exc)
 
 
-def _is_no_data_error(exc: BaseException) -> bool:
-    return _jvlink_error_code(exc) in {-1, -2} or bool(
-        re.search(r"\bno[ _-]?data\b", str(exc), re.I)
-    )
+def _is_realtime_no_data_error(exc: BaseException) -> bool:
+    """Return whether a realtime exception explicitly reports no data.
+
+    JVRead uses -2 for a transport/read error, so realtime paths must never
+    classify it as an empty response after records may already have arrived.
+    """
+    code = _jvlink_error_code(exc)
+    if code is not None:
+        return False
+    return bool(re.search(r"\bno[ _-]?data\b", str(exc), re.I))
+
+
+def _is_historical_no_data_error(exc: BaseException) -> bool:
+    """Return whether a historical exception explicitly reports no data.
+
+    JVOpen returns -2 directly for no data; it does not raise. An exception
+    carrying -2 therefore came from JVRead and must fail the import.
+    """
+    code = _jvlink_error_code(exc)
+    if code is not None:
+        return False
+    return bool(re.search(r"\bno[ _-]?data\b", str(exc), re.I))
 
 
 def _load_setup_history() -> Optional[dict]:
@@ -2389,7 +2411,7 @@ class QuickstartRunner:
                                         status = "skipped"
                                         error_msg = "契約外"
                                         break
-                                    if not _is_no_data_error(e):
+                                    if not _is_realtime_no_data_error(e):
                                         # その他のエラーを記録
                                         status = "failed"
                                         error_msg = error_str[:80] if len(error_str) > 80 else error_str
@@ -2999,7 +3021,7 @@ class QuickstartRunner:
                             if _is_subscription_error(e):
                                 return ("skipped", details)
                             # データなし (-1) は次のキーへ
-                            if _is_no_data_error(e):
+                            if _is_realtime_no_data_error(e):
                                 continue
                             raise
 
@@ -3364,7 +3386,7 @@ class QuickstartRunner:
                 details['error_message'] = 'データ提供サービス契約外です'
                 self.warnings.append(f"{spec}: {details['error_message']}")
                 return ("skipped", details)
-            if _is_no_data_error(e):
+            if _is_historical_no_data_error(e):
                 return ("nodata", details)
             else:
                 details['error_type'] = 'fetch'

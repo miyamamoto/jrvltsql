@@ -1,7 +1,9 @@
-# jrvltsql v1.6.6 Release Notes
+# jrvltsql v1.6.7 Release Notes
 
 ## Highlights
 
+- Treats `JVRead -2` as a read failure rather than no data, preventing partial
+  realtime and historical responses from being committed.
 - Rejects every realtime stream that exits before the official completion
   code, including positive-length reads with an empty buffer, so an incomplete
   0B14 response cannot replace a valid stored snapshot.

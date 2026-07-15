@@ -103,10 +103,12 @@ def _is_subscription_error(exc: BaseException) -> bool:
     return _jvlink_error_code(exc) in SUBSCRIPTION_ERROR_CODES or "契約" in str(exc)
 
 
-def _is_no_data_error(exc: BaseException) -> bool:
-    return _jvlink_error_code(exc) in {-1, -2} or bool(
-        re.search(r"\bno[ _-]?data\b", str(exc), re.I)
-    )
+def _is_realtime_no_data_error(exc: BaseException) -> bool:
+    """Accept only code-less no-data exceptions; coded read errors fail closed."""
+    code = _jvlink_error_code(exc)
+    if code is not None:
+        return False
+    return bool(re.search(r"\bno[ _-]?data\b", str(exc), re.I))
 
 
 def get_pid() -> Optional[int]:
@@ -1605,7 +1607,7 @@ class BackgroundUpdater:
                             db.rollback()
                             if _is_subscription_error(e):
                                 continue
-                            if _is_no_data_error(e):
+                            if _is_realtime_no_data_error(e):
                                 continue
                             raise
                         else:
@@ -1727,7 +1729,7 @@ class BackgroundUpdater:
                         # 契約外・データなしエラーはスキップ
                         if _is_subscription_error(e):
                             continue
-                        if _is_no_data_error(e):
+                        if _is_realtime_no_data_error(e):
                             continue
                         raise
 
