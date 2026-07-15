@@ -6,6 +6,7 @@ import pytest
 
 from src.importer.batch import BatchProcessor
 from src.importer.importer import DataImporter, ImporterError
+from src.fetcher.historical import HistoricalFetcher
 from src.database.schema import SCHEMAS
 from src.database.sqlite_handler import SQLiteDatabase
 
@@ -21,6 +22,27 @@ def test_option_4_setup_range_does_not_split_long_periods():
 def test_diff_options_do_not_split_long_periods():
     assert BatchProcessor._should_split_setup_range("20200101", "20220101", 1) is False
     assert BatchProcessor._should_split_setup_range("20200101", "20220101", 2) is False
+
+
+def test_historical_no_data_resets_statistics_from_previous_spec():
+    fetcher = HistoricalFetcher.__new__(HistoricalFetcher)
+    fetcher.show_progress = False
+    fetcher.progress_display = None
+    fetcher.cache_manager = None
+    fetcher._service_key = None
+    fetcher._records_fetched = 9
+    fetcher._records_parsed = 8
+    fetcher._records_failed = 1
+    fetcher.jvlink = MagicMock()
+    fetcher.jvlink.uses_wine = False
+    fetcher.jvlink.jv_open.return_value = (-1, 0, 0, "")
+
+    assert list(fetcher.fetch("RACE", "20260701", "20260714")) == []
+    assert fetcher.get_statistics() == {
+        "records_fetched": 0,
+        "records_parsed": 0,
+        "records_failed": 0,
+    }
 
 
 def test_schema_preparation_failure_stops_before_fetch(monkeypatch):

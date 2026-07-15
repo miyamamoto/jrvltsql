@@ -89,6 +89,11 @@ class HistoricalFetcher(BaseFetcher):
             ...     # Process all records up to 20240630
             ...     pass
         """
+        # Fetcher instances are reused across data specs and setup chunks.
+        # Reset before JVOpen so no-data/error early exits cannot expose
+        # statistics left over from the preceding invocation.
+        self.reset_statistics()
+
         # Create progress display if enabled
         if self.show_progress:
             self.progress_display = JVLinkProgressDisplay()
@@ -176,8 +181,7 @@ class HistoricalFetcher(BaseFetcher):
                     )
                 self._wait_for_download(download_task_id, download_count=download_count)
 
-            # Reset statistics and set total files
-            self.reset_statistics()
+            # Set total files after JVOpen reports the stream size.
             self._total_files = read_count
 
             # Create fetch progress task

@@ -1,4 +1,5 @@
 import inspect
+from unittest.mock import MagicMock
 
 from scripts.background_updater import (
     BackgroundUpdater,
@@ -42,3 +43,39 @@ def test_background_realtime_paths_use_realtime_table_router():
     assert "DataImporter" not in timeseries_source
     assert "process_parsed_record" in timeseries_source
     assert "process_record(" not in timeseries_source
+    assert "create_all_tables" not in realtime_source
+    assert "create_all_tables" not in timeseries_source
+    assert "create_all_tables" in inspect.getsource(
+        BackgroundUpdater._ensure_realtime_schema
+    )
+
+
+def test_background_realtime_loop_survives_transient_poll_error():
+    updater = BackgroundUpdater.__new__(BackgroundUpdater)
+    updater._running = True
+    updater._stop_event = MagicMock()
+    updater._stop_event.is_set.return_value = False
+    updater._stop_event.wait.return_value = False
+    updater.schedule_manager = MagicMock()
+    updater.schedule_manager.get_update_interval.return_value = (1, "test")
+    updater._stats = {
+        "realtime_errors": 0,
+        "last_realtime_update": None,
+    }
+
+    calls = 0
+
+    def run_poll(_reason):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise RuntimeError("temporary JV-Link failure")
+        updater._running = False
+
+    updater._run_realtime_update = run_poll
+
+    updater._realtime_update_loop()
+
+    assert calls == 2
+    assert updater._stats["realtime_errors"] == 1
+    assert updater._stats["last_realtime_update"] is not None

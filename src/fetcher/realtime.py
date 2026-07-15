@@ -3,7 +3,7 @@
 This module provides realtime data fetching from JV-Link.
 """
 
-from typing import Callable, Iterator, Optional, List
+from typing import Callable, Iterable, Iterator, Optional, List
 
 from src.fetcher.base import BaseFetcher, FetcherError
 from src.jvlink.constants import (
@@ -18,6 +18,23 @@ from src.jvlink.constants import (
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+def materialize_complete_records(
+    fetcher,
+    records: Iterable[dict],
+    *,
+    data_spec: str,
+    key: str,
+) -> list[dict]:
+    """Materialize one realtime response and reject parser loss."""
+    materialized = list(records)
+    failed = int(fetcher.get_statistics().get("records_failed", 0) or 0)
+    if failed:
+        raise FetcherError(
+            f"{data_spec} {key} parser rejected {failed} record(s)"
+        )
+    return materialized
 
 
 # Realtime data specification codes (速報系 + 時系列)
@@ -94,6 +111,10 @@ class RealtimeFetcher(BaseFetcher):
             >>> for record in fetcher.fetch("0B12", continuous=True):
             ...     print(record)  # Will keep running until stopped
         """
+        # One fetcher may process several date/spec keys. Statistics must be
+        # scoped to this response so snapshot completeness checks cannot see
+        # failures left over from an earlier key.
+        self.reset_statistics()
         self.last_open_result = None
         self.last_open_key = None
 

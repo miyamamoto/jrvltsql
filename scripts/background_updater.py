@@ -909,8 +909,8 @@ class BackgroundUpdater:
     #   0B30: 速報オッズ・全賭式 (O1-O6)
     #   0B31: 速報オッズ・単複枠 (O1)
     #
-    # 表5.1-1 E行: 時系列データ (→蓄積系テーブル群) - 過去1年分取得可能
-    #   0B31, 0B32等を過去日付で取得
+    # 0B20/0B30-0B36 は開催週の速報票数・オッズ（保持1週間）。
+    # 公式1年保持の時系列オッズは 0B41/0B42 の単複枠・馬連のみ。
     REALTIME_SPECS = [
         # 速報系データ（開催日単位キー: YYYYMMDD）
         ("0B11", "速報馬体重"),
@@ -1336,8 +1336,15 @@ class BackgroundUpdater:
                     break
                 continue
 
-            # 速報系データ更新を実行
-            self._run_realtime_update(reason)
+            # A transient JV-Link or database error must not terminate the
+            # long-running collection thread. Record the failed poll and let
+            # the scheduler try again at the next interval.
+            try:
+                self._run_realtime_update(reason)
+            except Exception as e:
+                self._stats["realtime_errors"] += 1
+                self._stats["last_realtime_update"] = datetime.now()
+                logger.exception(f"Realtime polling cycle failed: {e}")
 
             # 次の更新まで待機
             if self._stop_event.wait(timeout=interval):
@@ -1541,6 +1548,7 @@ class BackgroundUpdater:
 
         try:
             self._realtime_updating.set()
+            self._ensure_realtime_schema()
 
             now = datetime.now()
             logger.info(f"Starting realtime update: {reason}")
@@ -1555,15 +1563,16 @@ class BackgroundUpdater:
 
                 spec_success_count = 0
                 try:
-                    from src.fetcher.realtime import RealtimeFetcher
-                    from src.database.schema import create_all_tables
+                    from src.fetcher.realtime import (
+                        RealtimeFetcher,
+                        materialize_complete_records,
+                    )
                     from src.database.sqlite_handler import SQLiteDatabase
                     from src.realtime.updater import RealtimeUpdater, summarize_update_result
 
                     db = SQLiteDatabase({"path": str(self.db_path)})
 
                     with db:
-                        create_all_tables(db)
                         db.begin_transaction()
                         fetcher = RealtimeFetcher(sid="BGUPDATE")
                         updater = RealtimeUpdater(db)
@@ -1576,7 +1585,12 @@ class BackgroundUpdater:
                                 continuous=False,
                             )
                             if spec == "0B14":
-                                records = list(records)
+                                records = materialize_complete_records(
+                                    fetcher,
+                                    records,
+                                    data_spec=spec,
+                                    key=date_key,
+                                )
                                 if getattr(fetcher, "last_open_result", None) == 0:
                                     updater.replace_date_snapshot(date_key)
                             for record in records:
@@ -1622,6 +1636,19 @@ class BackgroundUpdater:
             self._realtime_updating.clear()
             self._jvlink_lock.release()
 
+    def _ensure_realtime_schema(self) -> None:
+        """Prepare realtime tables once for the lifetime of this updater."""
+        if getattr(self, "_realtime_schema_prepared", False):
+            return
+
+        from src.database.schema import create_all_tables
+        from src.database.sqlite_handler import SQLiteDatabase
+
+        database = SQLiteDatabase({"path": str(self.db_path)})
+        with database:
+            create_all_tables(database)
+        self._realtime_schema_prepared = True
+
     def _run_time_series_update(self) -> int:
         """時系列データ（オッズ・票数）の取得
 
@@ -1660,14 +1687,12 @@ class BackgroundUpdater:
         db = None
         try:
             from src.fetcher.realtime import RealtimeFetcher
-            from src.database.schema import create_all_tables
             from src.database.sqlite_handler import SQLiteDatabase
             from src.realtime.updater import RealtimeUpdater, summarize_update_result
 
             db = SQLiteDatabase({"path": str(self.db_path)})
 
             with db:
-                create_all_tables(db)
                 db.begin_transaction()
                 fetcher = RealtimeFetcher(sid="BGUPDATE")
                 updater = RealtimeUpdater(db)
