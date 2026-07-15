@@ -15,7 +15,7 @@ IMPORTANT - Duplicate Handling & Primary Keys:
 ==============================================
 
 Current Status:
-- ALL 58 tables now have PRIMARY KEY constraints defined
+- ALL tables now have PRIMARY KEY constraints defined
 - INSERT OR REPLACE is used by default in the importer
 - WITH primary keys, duplicate records will be UPDATED instead of created
 
@@ -56,7 +56,7 @@ Additional Data Tables:
     NL_CK: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, KettoNum)
     NL_HC: PRIMARY KEY (TresenKubun, ChokyoDate, ChokyoTime, KettoNum)
     NL_TM, RT_TM: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
-    NL_WF: PRIMARY KEY (Year, MonthDay)
+    NL_WF, RT_WF: PRIMARY KEY (Year, MonthDay)
 
 Change Information Tables:
     NL_CC, RT_CC: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
@@ -1470,16 +1470,17 @@ SCHEMAS = {
             RaceInfo5 TEXT,
             Yobi2 TEXT,
             HatubaiHyosu BIGINT,
-            YukoHyosu BIGINT,
+            YukoHyosu1 BIGINT,
+            YukoHyosu2 BIGINT,
+            YukoHyosu3 BIGINT,
+            YukoHyosu4 BIGINT,
+            YukoHyosu5 BIGINT,
             HenkanFlag TEXT,
             FuseirituFlag TEXT,
             TekichuNasiFlag TEXT,
             CarryOverStart BIGINT,
             CarryOverBalance BIGINT,
-            Kumi TEXT,
-            PayJyushosiki BIGINT,
-            TekichuHyosu BIGINT,
-            Yobi3 TEXT,
+            PayoutsJson TEXT,
             RecordDelimiter TEXT,
             PRIMARY KEY (Year, MonthDay)
         )
@@ -2264,6 +2265,36 @@ SCHEMAS = {
             MaeSibaBabaCD TEXT,
             MaeDirtBabaCD TEXT,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, HappyoTime, HenkoID)
+        )
+    """,
+    "RT_WF": """
+        CREATE TABLE IF NOT EXISTS RT_WF (
+            RecordSpec TEXT,
+            DataKubun TEXT,
+            MakeDate TEXT,
+            Year INTEGER,
+            MonthDay INTEGER,
+            Yobi1 TEXT,
+            RaceInfo1 TEXT,
+            RaceInfo2 TEXT,
+            RaceInfo3 TEXT,
+            RaceInfo4 TEXT,
+            RaceInfo5 TEXT,
+            Yobi2 TEXT,
+            HatubaiHyosu BIGINT,
+            YukoHyosu1 BIGINT,
+            YukoHyosu2 BIGINT,
+            YukoHyosu3 BIGINT,
+            YukoHyosu4 BIGINT,
+            YukoHyosu5 BIGINT,
+            HenkanFlag TEXT,
+            FuseirituFlag TEXT,
+            TekichuNasiFlag TEXT,
+            CarryOverStart BIGINT,
+            CarryOverBalance BIGINT,
+            PayoutsJson TEXT,
+            RecordDelimiter TEXT,
+            PRIMARY KEY (Year, MonthDay)
         )
     """,
     # ========================================

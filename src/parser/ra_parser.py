@@ -273,7 +273,10 @@ class RAParser:
             extended_layout_applied = False
             if len(data) >= 889:
                 extended_hasso_time = self.decode_field(data[873:877])
-                if self._looks_like_hhmm(extended_hasso_time):
+                # Official full records are 1,272 bytes even when a cancelled
+                # race has HassoTime=0000. Keep the HHMM heuristic only for
+                # truncated full-layout records used during recovery.
+                if len(data) >= 1272 or self._looks_like_hhmm(extended_hasso_time):
                     extended_layout_applied = True
                     result["HassoTime"] = extended_hasso_time
                     result["HassoTimeBefore"] = self.decode_field(data[877:881])
@@ -351,8 +354,9 @@ class RAParser:
             if not extended_layout_applied:
                 result["RecordUpKubun"] = self.decode_field(data[853:854])
 
-            # 63. レコード区切 (位置:855, 長さ:2)
-            result["Crlf"] = self.decode_field(data[854:856])
+            # 63. レコード区切。拡張レイアウトでは終端位置も後方へ移動する。
+            delimiter_offset = 1270 if extended_layout_applied and len(data) >= 1272 else 854
+            result["Crlf"] = self.decode_field(data[delimiter_offset:delimiter_offset + 2])
 
             return result
 

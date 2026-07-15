@@ -52,7 +52,7 @@ class TestIntegration:
         return ParserFactory()
 
     def test_create_all_tables(self, temp_db):
-        """Test creating all 58 tables and verify their column counts.
+        """Test creating all tables and verify their column counts.
 
         This test verifies that:
         - All tables can be created without errors

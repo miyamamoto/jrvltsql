@@ -8,10 +8,12 @@ secondary=PostgreSQLDatabase (mirror for analytics / cross-host consumers).
 
 Failure policy
 --------------
-The primary is the source of truth. Secondary failures (connect, create_table,
-insert, insert_many, commit, DDL via execute) are logged as warnings and
-tracked via ``self._secondary_errors`` but **do NOT raise**, preserving
-ingestion throughput if the secondary is unavailable.
+The primary is the source of truth. A caller-owned transaction prevents
+partial writes before commit, but SQLite and PostgreSQL cannot be committed as
+one distributed transaction. If the secondary commit fails after the primary
+commit, the primary remains authoritative and ``secondary_in_sync`` becomes
+false. Production collectors should use PostgreSQL directly; dual mode exists
+only as a best-effort migration aid.
 """
 
 import re
@@ -42,6 +44,15 @@ _DDL_RE = re.compile(
     re.IGNORECASE | re.VERBOSE,
 )
 
+_DML_RE = re.compile(
+    r"""^\s*
+        (?:--[^\n]*\n\s*)*              # skip line comments
+        (?:INSERT|UPDATE|DELETE)         # data mutation verbs
+        \b
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
 
 def _is_ddl(sql: str) -> bool:
     """Return True if the SQL looks like a CREATE / DROP / ALTER DDL.
@@ -52,6 +63,13 @@ def _is_ddl(sql: str) -> bool:
     if not sql:
         return False
     return bool(_DDL_RE.match(sql))
+
+
+def _is_dml(sql: str) -> bool:
+    """Return True for raw INSERT / UPDATE / DELETE statements."""
+    if not sql:
+        return False
+    return bool(_DML_RE.match(sql))
 
 
 class DualDatabase(BaseDatabase):
@@ -76,6 +94,8 @@ class DualDatabase(BaseDatabase):
         self._primary = primary
         self._secondary = secondary
         self._secondary_errors = 0
+        self._secondary_in_sync = True
+        self._transaction_active = False
         logger.info(
             f"DualDatabase initialized: primary={primary.get_db_type()}, "
             f"secondary={secondary.get_db_type()}"
@@ -97,6 +117,7 @@ class DualDatabase(BaseDatabase):
                 f"DualDatabase: secondary connect failed ({self._secondary.get_db_type()}): {e}"
             )
             self._secondary_errors += 1
+            self._secondary_in_sync = False
 
     def disconnect(self) -> None:
         """Disconnect both backends."""
@@ -129,15 +150,18 @@ class DualDatabase(BaseDatabase):
     # ------------------------------------------------------------------
 
     def execute(self, sql: str, parameters: Optional[tuple] = None) -> Any:
-        """Execute SQL on primary, and mirror DDL to secondary.
+        """Execute SQL on primary, and mirror schema/data mutations.
 
         - DDL (CREATE / DROP / ALTER of TABLE / INDEX / VIEW / SEQUENCE /
           SCHEMA) is issued against both backends so schema migrations and
           ``create-tables`` / ``create-indexes`` commands work transparently
           in dual mode.
-        - Everything else (SELECT, PRAGMA, VACUUM, parameterised one-off
-          writes, etc.) is executed on the primary only. Mirroring arbitrary
-          SQL is unsafe because the statement may be engine-specific
+        - INSERT / UPDATE / DELETE are issued against both backends. This is
+          required for realtime physical deletions, which use raw SQL instead
+          of :meth:`insert`.
+        - Everything else (SELECT, PRAGMA, VACUUM, etc.) is executed on the
+          primary only. Mirroring arbitrary SQL is unsafe because it may be
+          engine-specific
           (``PRAGMA journal_mode`` on SQLite, ``VACUUM FULL`` on PostgreSQL,
           etc.) and because primary-only reads do not need to round-trip to
           the secondary.
@@ -146,19 +170,40 @@ class DualDatabase(BaseDatabase):
         :meth:`insert_many`, which always mirror to both.
         """
         result = self._primary.execute(sql, parameters)
-        if _is_ddl(sql):
+        mirrored_write = _is_ddl(sql) or _is_dml(sql)
+        if mirrored_write:
             try:
                 self._secondary.execute(sql, parameters)
             except Exception as e:
                 logger.warning(
-                    f"DualDatabase: secondary DDL execute failed: {e} "
+                    f"DualDatabase: secondary execute failed: {e} "
                     f"(sql={sql[:80]!r})"
                 )
                 self._secondary_errors += 1
+                self._secondary_in_sync = False
+                if self._transaction_active:
+                    raise DatabaseError(
+                        f"DualDatabase: secondary execute failed: {e}"
+                    ) from e
         return result
 
     def executemany(self, sql: str, parameters_list: List[tuple]) -> Any:
-        return self._primary.executemany(sql, parameters_list)
+        result = self._primary.executemany(sql, parameters_list)
+        if _is_dml(sql):
+            try:
+                self._secondary.executemany(sql, parameters_list)
+            except Exception as e:
+                logger.warning(
+                    f"DualDatabase: secondary executemany failed: {e} "
+                    f"(sql={sql[:80]!r})"
+                )
+                self._secondary_errors += 1
+                self._secondary_in_sync = False
+                if self._transaction_active:
+                    raise DatabaseError(
+                        f"DualDatabase: secondary executemany failed: {e}"
+                    ) from e
+        return result
 
     def fetch_one(
         self, sql: str, parameters: Optional[tuple] = None
@@ -177,6 +222,23 @@ class DualDatabase(BaseDatabase):
     # Writes: dual
     # ------------------------------------------------------------------
 
+    def begin_transaction(self) -> None:
+        """Start the same caller-owned transaction on both backends."""
+        if self._transaction_active:
+            return
+        self._primary.begin_transaction()
+        try:
+            self._secondary.begin_transaction()
+        except Exception as e:
+            self._secondary_errors += 1
+            self._secondary_in_sync = False
+            try:
+                self._primary.rollback()
+            except Exception:
+                pass
+            raise DatabaseError(f"DualDatabase: secondary begin failed: {e}") from e
+        self._transaction_active = True
+
     def create_table(self, table_name: str, schema: str) -> None:
         """Create table in both backends.
 
@@ -192,6 +254,7 @@ class DualDatabase(BaseDatabase):
                 f"DualDatabase: secondary create_table failed for {table_name}: {e}"
             )
             self._secondary_errors += 1
+            self._secondary_in_sync = False
 
     def insert(
         self,
@@ -207,6 +270,11 @@ class DualDatabase(BaseDatabase):
                 f"DualDatabase: secondary insert failed for {table_name}: {e}"
             )
             self._secondary_errors += 1
+            self._secondary_in_sync = False
+            if self._transaction_active:
+                raise DatabaseError(
+                    f"DualDatabase: secondary insert failed for {table_name}: {e}"
+                ) from e
         return rows
 
     def insert_many(
@@ -224,29 +292,47 @@ class DualDatabase(BaseDatabase):
                 f"({len(data_list)} rows): {e}"
             )
             self._secondary_errors += 1
+            self._secondary_in_sync = False
+            if self._transaction_active:
+                raise DatabaseError(
+                    f"DualDatabase: secondary insert_many failed for {table_name}: {e}"
+                ) from e
         return rows
 
     def commit(self) -> None:
+        """Commit primary then the best-effort secondary mirror.
+
+        Once the primary commit succeeds it cannot be rolled back if the
+        secondary commit subsequently fails. In that case the primary remains
+        authoritative and callers can detect the required mirror rebuild via
+        :attr:`secondary_in_sync`.
+        """
         self._primary.commit()
         try:
             self._secondary.commit()
+            self._transaction_active = False
         except Exception as e:
             logger.warning(f"DualDatabase: secondary commit failed: {e}")
             self._secondary_errors += 1
+            self._secondary_in_sync = False
+            self._transaction_active = False
 
     def rollback(self) -> None:
-        """Rollback primary only.
-
-        The secondary (typically PostgreSQL) may run in autocommit mode and
-        not support rollback. Callers that care about atomicity across both
-        stores must manage at a higher level; dual-write is a best-effort
-        mirror, not a distributed transaction.
-        """
+        """Rollback the caller-owned transaction on both backends."""
+        errors = []
         try:
             self._primary.rollback()
-        except DatabaseError:
-            # Primary already raised; don't double-report.
-            raise
+        except Exception as e:
+            errors.append(f"primary: {e}")
+        try:
+            self._secondary.rollback()
+        except Exception as e:
+            self._secondary_errors += 1
+            self._secondary_in_sync = False
+            errors.append(f"secondary: {e}")
+        self._transaction_active = False
+        if errors:
+            raise DatabaseError("DualDatabase rollback failed (" + "; ".join(errors) + ")")
 
     # ------------------------------------------------------------------
     # Diagnostics
@@ -256,6 +342,11 @@ class DualDatabase(BaseDatabase):
     def secondary_error_count(self) -> int:
         """Number of secondary-side failures since startup (read-only)."""
         return self._secondary_errors
+
+    @property
+    def secondary_in_sync(self) -> bool:
+        """Whether every secondary operation has succeeded since startup."""
+        return self._secondary_in_sync
 
     def __repr__(self) -> str:
         return (

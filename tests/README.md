@@ -142,7 +142,7 @@ UM, WC, WE, WF, WH, YS
 #### Test Coverage
 
 1. **test_create_all_tables**
-   - Creates all 58 database tables
+   - Creates all defined database tables
    - Verifies table existence and column structure
    - Tests idempotent table creation
 

@@ -198,8 +198,8 @@ class TestMultiDatabaseConsistency(unittest.TestCase):
             # All databases should create same number of tables
             successful = sum(1 for success in results.values() if success)
             failed_tables = [name for name, success in results.items() if not success]
-            self.assertEqual(successful, 58,
-                f"{db.__class__.__name__}: Should create 58 tables, failed: {failed_tables}")
+            self.assertEqual(successful, len(SCHEMAS),
+                f"{db.__class__.__name__}: Should create all tables, failed: {failed_tables}")
 
     def test_data_storage_consistency(self):
         """Test that same data is stored consistently across databases."""

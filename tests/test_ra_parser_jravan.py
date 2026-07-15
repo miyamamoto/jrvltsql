@@ -144,6 +144,8 @@ class TestRAParserJRAVAN(unittest.TestCase):
         data[975:978] = b"363"   # 後3ハロン
         data[978:981] = b"476"   # 後4ハロン
         data[1269:1270] = b"1"   # レコード更新区分
+        data[854:856] = b"XX"    # 互換位置は拡張レイアウトでは終端ではない
+        data[1270:1272] = b"YZ"  # 拡張レイアウトのレコード区切
 
         result = self.parser.parse(bytes(data))
 
@@ -157,6 +159,7 @@ class TestRAParserJRAVAN(unittest.TestCase):
         self.assertEqual(result["Haron3L"], "363")
         self.assertEqual(result["Haron4L"], "476")
         self.assertEqual(result["RecordUpKubun"], "1")
+        self.assertEqual(result["Crlf"], "YZ")
 
     @staticmethod
     def _build_extended_record(corner_sets=(), legacy_corner_bytes=None):
@@ -278,6 +281,45 @@ class TestRAParserJRAVAN(unittest.TestCase):
         self.assertEqual(result["Corner"], "")
         self.assertEqual(result["TsukaJyuni"], "")
         self.assertEqual(result["Syukaisu"], "")
+
+    def test_cancelled_full_layout_with_zero_post_time_uses_extended_offsets(self):
+        sample_data = bytearray(b" " * 1272)
+        sample_data[0:2] = b"RA"
+        sample_data[2:3] = b"9"
+        sample_data[3:11] = b"20260715"
+        sample_data[873:877] = b"0000"
+        sample_data[887:888] = b"1"
+        sample_data[888:889] = b"2"
+        sample_data[889:890] = b"3"
+        sample_data[1269:1270] = b"4"
+        sample_data[1270:1272] = b"\r\n"
+
+        result = self.parser.parse(bytes(sample_data))
+
+        self.assertEqual(result["HassoTime"], "0000")
+        self.assertEqual(result["TenkoCD"], "1")
+        self.assertEqual(result["SibaBabaCD"], "2")
+        self.assertEqual(result["DirtBabaCD"], "3")
+        self.assertEqual(result["RecordUpKubun"], "4")
+        self.assertEqual(result["Crlf"], "")
+
+    def test_official_ab_full_layout_without_post_time_uses_extended_offsets(self):
+        for data_kubun in (b"A", b"B"):
+            with self.subTest(data_kubun=data_kubun):
+                sample_data = bytearray(b" " * 1272)
+                sample_data[0:2] = b"RA"
+                sample_data[2:3] = data_kubun
+                sample_data[887:888] = b"2"
+                sample_data[888:889] = b"3"
+                sample_data[889:890] = b"4"
+                sample_data[1270:1272] = b"\r\n"
+
+                result = self.parser.parse(bytes(sample_data))
+
+                self.assertEqual(result["TenkoCD"], "2")
+                self.assertEqual(result["SibaBabaCD"], "3")
+                self.assertEqual(result["DirtBabaCD"], "4")
+                self.assertEqual(result["Crlf"], "")
 
     def test_empty_values_convert_to_empty_string(self):
         """Test that empty/whitespace values convert to empty string.

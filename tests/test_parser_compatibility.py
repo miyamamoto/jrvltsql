@@ -12,6 +12,7 @@ with arrays for all bet type combinations), but our parsers also handle
 per-combination flat records (H1 = 317 bytes). Both formats are tested here.
 """
 
+import json
 import os
 import sys
 import pytest
@@ -234,7 +235,7 @@ class TestAllParsersBasic:
         'O1': 962, 'O2': 2042, 'O3': 2654, 'O4': 4031, 'O5': 12293, 'O6': 83285,
         'RA': 856, 'RC': 241, 'SE': 555, 'SK': 78,
         'TK': 727, 'TM': 39,
-        'UM': 1110, 'WF': 169, 'YS': 146,
+        'UM': 1110, 'WF': 7215, 'YS': 146,
     }
 
     @pytest.mark.parametrize("record_type", ALL_RECORD_TYPES)
@@ -292,6 +293,35 @@ class TestAllParsersBasic:
             result = parser.parse(short_data)
         except Exception:
             pytest.fail(f"{record_type} parser crashed on short data")
+
+
+def test_wf_parser_preserves_all_official_payout_slots(factory):
+    data = make_wf_record(
+        yuko_hyosu1="123",
+        kumi1="0102030405",
+        pay1="123456",
+        hit_votes1="7",
+        kumi243="1516171818",
+        pay243="654321",
+        hit_votes243="3",
+    )
+
+    result = factory.get_parser("WF").parse(data)
+
+    assert result is not None
+    assert result["YukoHyosu1"] == "123"
+    payouts = json.loads(result["PayoutsJson"])
+    assert len(payouts) == 243
+    assert payouts[0] == {
+        "Kumi": "0102030405",
+        "PayJyushosiki": "123456",
+        "TekichuHyosu": "7",
+    }
+    assert payouts[242] == {
+        "Kumi": "1516171818",
+        "PayJyushosiki": "654321",
+        "TekichuHyosu": "3",
+    }
 
 
 class TestJyoCodeFormatCompatibility:

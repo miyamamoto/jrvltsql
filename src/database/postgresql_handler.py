@@ -125,6 +125,8 @@ class PostgreSQLDatabase(BaseDatabase):
                     result.append(str(row).lower())
             return result
         except Exception as e:
+            if self._transaction_active:
+                raise
             logger.warning(f"Could not get primary key for {table_name}: {e}")
             return []
 
@@ -230,12 +232,14 @@ class PostgreSQLDatabase(BaseDatabase):
         """
         if not self._connection:
             raise DatabaseError("Database not connected")
-        if DRIVER == "pg8000" and not self._transaction_active:
-            try:
+        if self._transaction_active:
+            return
+        try:
+            if DRIVER == "pg8000":
                 self._connection.run("BEGIN")
-                self._transaction_active = True
-            except Exception as e:
-                raise DatabaseError(f"Failed to begin transaction: {e}")
+            self._transaction_active = True
+        except Exception as e:
+            raise DatabaseError(f"Failed to begin transaction: {e}")
 
     def execute(self, sql: str, parameters: Optional[tuple] = None) -> int:
         """Execute SQL statement.
@@ -270,7 +274,7 @@ class PostgreSQLDatabase(BaseDatabase):
 
         except Exception as e:
             logger.error(f"SQL execution failed: {sql[:100]}", error=str(e))
-            if self._connection:
+            if self._connection and not self._transaction_active:
                 self.rollback()
             raise DatabaseError(f"SQL execution failed: {e}")
 
@@ -311,7 +315,7 @@ class PostgreSQLDatabase(BaseDatabase):
 
         except Exception as e:
             logger.error(f"SQL executemany failed: {sql[:100]}", error=str(e))
-            if self._connection:
+            if self._connection and not self._transaction_active:
                 self.rollback()
             raise DatabaseError(f"SQL executemany failed: {e}")
 
@@ -358,7 +362,7 @@ class PostgreSQLDatabase(BaseDatabase):
 
         except Exception as e:
             logger.error(f"SQL query failed: {sql[:100]}", error=str(e))
-            if self._connection:
+            if self._connection and not self._transaction_active:
                 self.rollback()
             raise DatabaseError(f"SQL query failed: {e}")
 
@@ -405,7 +409,7 @@ class PostgreSQLDatabase(BaseDatabase):
 
         except Exception as e:
             logger.error(f"SQL query failed: {sql[:100]}", error=str(e))
-            if self._connection:
+            if self._connection and not self._transaction_active:
                 self.rollback()
             raise DatabaseError(f"SQL query failed: {e}")
 
@@ -546,6 +550,7 @@ class PostgreSQLDatabase(BaseDatabase):
             else:  # psycopg
                 self._connection.commit()
                 logger.debug("Transaction committed")
+                self._transaction_active = False
 
         except Exception as e:
             raise DatabaseError(f"Failed to commit transaction: {e}")
@@ -582,6 +587,7 @@ class PostgreSQLDatabase(BaseDatabase):
             else:  # psycopg
                 self._connection.rollback()
                 logger.debug("Transaction rolled back")
+                self._transaction_active = False
 
         except DatabaseError:
             raise

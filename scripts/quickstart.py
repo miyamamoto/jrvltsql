@@ -13,6 +13,7 @@ import argparse
 import io
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -91,6 +92,34 @@ def interactive_setup() -> dict:
 
 # セットアップ履歴ファイルのパス
 SETUP_HISTORY_FILE = project_root / "data" / "setup_history.json"
+
+SUBSCRIPTION_ERROR_CODES = frozenset({-111, -114, -115})
+
+
+def _jvlink_error_code(exc: BaseException) -> Optional[int]:
+    """Extract an exact JV-Link error code through wrapped exceptions."""
+    current: Optional[BaseException] = exc
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        code = getattr(current, "error_code", None)
+        if isinstance(code, int):
+            return code
+        match = re.search(r"(?:code\s*[:=]|with code)\s*(-?\d+)\b", str(current), re.I)
+        if match:
+            return int(match.group(1))
+        current = current.__cause__ or current.__context__
+    return None
+
+
+def _is_subscription_error(exc: BaseException) -> bool:
+    return _jvlink_error_code(exc) in SUBSCRIPTION_ERROR_CODES or "契約" in str(exc)
+
+
+def _is_no_data_error(exc: BaseException) -> bool:
+    return _jvlink_error_code(exc) in {-1, -2} or bool(
+        re.search(r"\bno[ _-]?data\b", str(exc), re.I)
+    )
 
 
 def _load_setup_history() -> Optional[dict]:
@@ -1837,14 +1866,13 @@ class QuickstartRunner:
     SPEED_REPORT_SPECS = [
         # JVRTOpen データ種別ID (JV-Data 4.9.0.1 「データ種別一覧」準拠)。
         # 従来のラベルは 0B11/0B14/0B15/0B51 が実仕様と食い違っており、
-        # 特に WE(天候馬場状態=0B14/0B16) を誤って 0B11 と記述、0B16 を欠落
-        # していた。RT_WE を埋めるのは 0B14/0B16 (速報開催情報)。
+        # WE(天候馬場状態) の日付指定一括取得は 0B14。0B16 は
+        # JVWatchEvent が返すイベントキー専用なので、この日付ループには含めない。
         ("0B11", "速報馬体重"),                     # WH
         ("0B12", "速報レース情報(成績確定後)"),      # RA, SE
         ("0B13", "速報タイム型データマイニング予想"),  # DM
         ("0B14", "速報開催情報(一括)"),             # WE 天候馬場状態
         ("0B15", "速報レース情報(出走馬名表～)"),     # RA
-        ("0B16", "速報開催情報(指定)"),             # WE 天候馬場状態
         ("0B17", "速報対戦型データマイニング予想"),   # TM
         ("0B51", "速報重勝式(WIN5)"),               # WF
     ]
@@ -2272,6 +2300,7 @@ class QuickstartRunner:
 
             with db:
                 create_all_tables(db)
+                db.begin_transaction()
                 fetcher = RealtimeFetcher(sid="JLTSQL")
                 updater = RealtimeUpdater(db)
 
@@ -2326,13 +2355,8 @@ class QuickstartRunner:
                                         key=odds_key,
                                         continuous=False,
                                     ):
-                                        raw_buff = record.get("_raw", "")
-                                        if not raw_buff:
-                                            raise RuntimeError(
-                                                f"{spec} returned a record without raw bytes"
-                                            )
-                                        result = updater.process_record(
-                                            raw_buff,
+                                        result = updater.process_parsed_record(
+                                            record,
                                             timeseries=True,
                                             source_spec=spec,
                                         )
@@ -2357,13 +2381,12 @@ class QuickstartRunner:
 
                                 except Exception as e:
                                     error_str = str(e)
-                                    if '-111' in error_str or '-114' in error_str:
+                                    if _is_subscription_error(e):
                                         # 契約外はスキップ
                                         status = "skipped"
                                         error_msg = "契約外"
                                         break
-                                    # -1はデータなし（正常）
-                                    elif '-1' not in error_str:
+                                    if not _is_no_data_error(e):
                                         # その他のエラーを記録
                                         status = "failed"
                                         error_msg = error_str[:80] if len(error_str) > 80 else error_str
@@ -2371,7 +2394,7 @@ class QuickstartRunner:
 
                         except Exception as e:
                             error_str = str(e)
-                            if '-111' in error_str or '-114' in error_str or '契約' in error_str:
+                            if _is_subscription_error(e):
                                 status = "skipped"
                                 error_msg = "データ提供サービス契約外"
                             else:
@@ -2416,6 +2439,12 @@ class QuickstartRunner:
                         failed=failed_count,
                         speed=speed,
                     )
+
+                if failed_count:
+                    db.rollback()
+                    cumulative_records = 0
+                else:
+                    db.commit()
 
             # 完了メッセージ
             elapsed = time.time() - start_time
@@ -2921,6 +2950,7 @@ class QuickstartRunner:
 
             with db:
                 create_all_tables(db)
+                db.begin_transaction()
                 fetcher = RealtimeFetcher(sid="JLTSQL")
                 # RealtimeUpdater は record_type を RT_*（速報系）/ TS_O*（時系列）に
                 # 正しくルーティングする。DataImporter を使うと NL_* に書き込まれ
@@ -2936,13 +2966,18 @@ class QuickstartRunner:
 
                     for key in keys:
                         try:
-                            for record in fetcher.fetch(data_spec=spec, key=key, continuous=False):
-                                raw_buff = record.get("_raw")
-                                if not raw_buff:
-                                    failed_records += 1
-                                    continue
-                                result = updater.process_record(
-                                    raw_buff,
+                            records = fetcher.fetch(
+                                data_spec=spec,
+                                key=key,
+                                continuous=False,
+                            )
+                            if spec == "0B14":
+                                records = list(records)
+                                if getattr(fetcher, "last_open_result", None) == 0:
+                                    updater.replace_date_snapshot(date_str)
+                            for record in records:
+                                result = updater.process_parsed_record(
+                                    record,
                                     timeseries=is_time_series,
                                     source_spec=spec if is_time_series else None,
                                 )
@@ -2950,12 +2985,10 @@ class QuickstartRunner:
                                 total_records += len(successful)
                                 failed_records += failed
                         except Exception as e:
-                            error_str = str(e)
-                            # 契約外チェック
-                            if '-111' in error_str or '-114' in error_str or '契約' in error_str:
+                            if _is_subscription_error(e):
                                 return ("skipped", details)
                             # データなし (-1) は次のキーへ
-                            if '-1' in error_str or 'no data' in error_str.lower():
+                            if _is_no_data_error(e):
                                 continue
                             raise
 
@@ -2978,7 +3011,7 @@ class QuickstartRunner:
             error_str = str(e)
             # エラー種別判定
             # -111, -114, -115: 契約外データ種別
-            if '-111' in error_str or '-114' in error_str or '-115' in error_str or '契約' in error_str:
+            if _is_subscription_error(e):
                 return ("skipped", details)
             if '-100' in error_str or 'サービスキー' in error_str:
                 details['error_message'] = 'サービスキーが未設定です'
@@ -3285,7 +3318,7 @@ class QuickstartRunner:
             error_str = str(e)
 
             # エラーコード別の判定
-            if error_code in (-111, -114, -115) or '契約' in error_str:
+            if _is_subscription_error(e):
                 details['error_type'] = 'contract'
                 # オッズ系(O1-O6)は別契約が必要な場合がある
                 if spec.startswith('O'):
@@ -3315,11 +3348,13 @@ class QuickstartRunner:
             error_str = str(e)
 
             # FetcherError の内容からエラー種別を判定
-            if '契約' in error_str:
+            if _is_subscription_error(e):
                 details['error_type'] = 'contract'
                 details['error_message'] = 'データ提供サービス契約外です'
                 self.warnings.append(f"{spec}: {details['error_message']}")
                 return ("skipped", details)
+            if _is_no_data_error(e):
+                return ("nodata", details)
             else:
                 details['error_type'] = 'fetch'
                 details['error_message'] = f'データ取得エラー: {error_str[:100]}'

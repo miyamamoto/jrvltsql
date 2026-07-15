@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """全データベース包括テスト
 
-PostgreSQL、SQLiteで全57スキーマーをテストします。
+PostgreSQL、SQLiteで全スキーマをテストします。
 """
 
 import sys
@@ -87,7 +87,7 @@ class DatabaseTester:
 
                 print(f"\nテーブル統計:")
                 print(f"  NL_* (蓄積系): {nl_tables}/38")
-                print(f"  RT_* (速報系): {rt_tables}/20")
+                print(f"  RT_* (速報系): {rt_tables}/21")
 
                 return failed == 0
 
@@ -204,7 +204,7 @@ class DatabaseTester:
         print(f"\n{'='*70}")
         print(f"{self.db_type} テスト結果サマリー")
         print(f"{'='*70}")
-        print(f"  テーブル作成: {self.results['tables_created']}/58")
+        print(f"  テーブル作成: {self.results['tables_created']}/{len(SCHEMAS)}")
         print(f"  テーブル失敗: {self.results['tables_failed']}")
         print(f"  データ取込: {self.results['data_imported']}件")
         if self.results['errors']:

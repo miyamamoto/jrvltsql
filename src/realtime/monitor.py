@@ -191,48 +191,63 @@ class RealtimeMonitor:
         logger.debug("Polling JV-Link for updates")
 
         records_in_poll = 0
+        failed_in_poll = 0
+        operations = {"insert": 0, "update": 0, "delete": 0}
+        self.database.begin_transaction()
 
-        while True:
-            # Read next record
-            ret_code, buff, filename = self.jvlink.jv_read()
+        try:
+            while True:
+                # Read next record
+                ret_code, buff, filename = self.jvlink.jv_read()
 
-            if ret_code == 0:  # JV_READ_COMPLETE
-                logger.debug(f"Poll complete: processed {records_in_poll} records")
-                break
+                if ret_code == 0:  # JV_READ_COMPLETE
+                    logger.debug(f"Poll complete: processed {records_in_poll} records")
+                    break
 
-            elif ret_code == -1:  # JV_READ_FILE_SWITCH
-                logger.debug("File switch")
-                continue
+                elif ret_code == -1:  # JV_READ_FILE_SWITCH
+                    logger.debug("File switch")
+                    continue
 
-            elif ret_code > 0:  # JV_READ_SUCCESS (has data)
-                try:
-                    # Process record
-                    result = self.updater.process_record(buff)
-                    successful, failed = summarize_update_result(result)
+                elif ret_code > 0:  # JV_READ_SUCCESS (has data)
+                    try:
+                        # Process record
+                        result = self.updater.process_record(buff)
+                        successful, failed = summarize_update_result(result)
 
-                    self._stats["errors"] += failed
-                    self._stats["records_processed"] += len(successful)
-                    records_in_poll += len(successful)
+                        failed_in_poll += failed
+                        records_in_poll += len(successful)
 
-                    for operation in successful:
-                        if operation.get("operation") == "insert":
-                            self._stats["records_inserted"] += 1
-                        elif operation.get("operation") == "update":
-                            self._stats["records_updated"] += 1
-                        elif operation.get("operation") == "delete":
-                            self._stats["records_deleted"] += 1
+                        for operation in successful:
+                            name = operation.get("operation")
+                            if name in operations:
+                                operations[name] += 1
 
-                    if successful:
-                        self._stats["last_update"] = datetime.now()
+                    except Exception as e:
+                        logger.error(f"Error processing record: {e}", exc_info=True)
+                        failed_in_poll += 1
 
-                except Exception as e:
-                    logger.error(f"Error processing record: {e}", exc_info=True)
-                    self._stats["errors"] += 1
+                else:  # Error
+                    logger.error(f"JVRead error: {ret_code}")
+                    failed_in_poll += 1
+                    break
 
-            else:  # Error
-                logger.error(f"JVRead error: {ret_code}")
-                self._stats["errors"] += 1
-                break
+            if failed_in_poll:
+                self.database.rollback()
+                self._stats["errors"] += failed_in_poll
+                return
+
+            self.database.commit()
+        except Exception:
+            self.database.rollback()
+            self._stats["errors"] += max(failed_in_poll, 1)
+            raise
+
+        self._stats["records_processed"] += records_in_poll
+        self._stats["records_inserted"] += operations["insert"]
+        self._stats["records_updated"] += operations["update"]
+        self._stats["records_deleted"] += operations["delete"]
+        if records_in_poll:
+            self._stats["last_update"] = datetime.now()
 
         if records_in_poll > 0:
             logger.info(

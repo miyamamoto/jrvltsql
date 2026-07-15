@@ -38,13 +38,14 @@ UPDATE_SPECS = [
     # なので再実行しても重複しない（冪等）。
     ("0B12", 1),
     ("0B15", 1),
-    # 0B14: 速報開催情報・一括, 0B16: 速報開催情報・変更。WE(天候馬場状態)/
+    # 0B14: 速報開催情報・一括。WE(天候馬場状態)/
     # AV(出走取消・除外)/JC/TC/CC を供給する。WE は NL 蓄積が存在しない
     # 速報専用レコードで、RT_WE を埋める唯一の経路。RT_* は PRIMARY KEY +
     # INSERT OR REPLACE で冪等。レース当日発表のため過去分 backfill は不可
     # (前向きにのみ蓄積)。過去の馬場状態は RA レコード側(field50/51)が供給する。
     ("0B14", 1),
-    ("0B16", 1),
+    # 0B16 is event-keyed (JVWatchEvent), not YYYYMMDD-keyed.
+    ("0B51", 1),
 ]
 
 REALTIME_SPEC_PREFIX = "0B"
@@ -52,7 +53,7 @@ REALTIME_SPEC_PREFIX = "0B"
 # JV-Link は未契約データ種別に対し購読エラーを返す (-111 契約無し / -114 未購読
 # 一括 / -115 未購読当該)。MING 等の任意契約スペックが未購読でも日次同期を
 # 止めないよう、これらは --ignore-jvopen-error-codes の指定に関わらず警告して
-# スキップする。realtime 経路(JVRTOpen)は _sync_realtime_spec 内で -114 を処理済み。
+# スキップする。realtime 経路(JVRTOpen)も同じ3コードを処理する。
 SUBSCRIPTION_ERROR_CODES = frozenset({-111, -114, -115})
 
 
@@ -108,6 +109,8 @@ def _sync_realtime_spec(
     if ensure_tables:
         create_all_tables(database)
 
+    database.begin_transaction()
+
     owns_jvlink = jvlink is None
     if jvlink is None:
         from src.fetcher.realtime import RealtimeFetcher
@@ -123,9 +126,9 @@ def _sync_realtime_spec(
         "records_failed": 0,
     }
 
-    if owns_jvlink:
-        jvlink.jv_init()
     try:
+        if owns_jvlink:
+            jvlink.jv_init()
         for key in _iter_date_keys(from_date, to_date):
             try:
                 ret, _count = jvlink.jv_rt_open(spec, key)
@@ -141,6 +144,8 @@ def _sync_realtime_spec(
             if ret < -1:
                 raise RuntimeError(f"{spec} {key} JVRTOpen failed: {ret}")
             try:
+                if spec == "0B14":
+                    updater.replace_date_snapshot(key)
                 while True:
                     ret_code, buff, _fname = jvlink.jv_read()
                     if ret_code == 0:
@@ -172,11 +177,13 @@ def _sync_realtime_spec(
                 except Exception:
                     pass
         if stats["records_failed"]:
-            database.rollback()
             raise RuntimeError(
                 f"{spec} realtime import rejected " f"{stats['records_failed']} record(s)"
             )
         database.commit()
+    except Exception:
+        database.rollback()
+        raise
     finally:
         if owns_jvlink:
             try:

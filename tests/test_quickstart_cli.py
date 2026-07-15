@@ -312,7 +312,11 @@ class TestQuickstartBatchRoles:
         assert "SYNC_SCRIPT=scripts/quickstart.py" in text
         assert "SYNC_SCRIPT=scripts/daily_update.py" in text
         assert "--days-forward %DAYS_FORWARD%" in text
-        assert "JRA_DAILY_UPDATE_SPECS=RACE,DIFN" in text
+        assert (
+            "JRA_DAILY_UPDATE_SPECS="
+            "RACE,DIFN,SLOP,WOOD,MING,0B12,0B15,0B14,0B51"
+        ) in text
+        assert "JRA_DAILY_UPDATE_SPECS=RACE,DIFN,SLOP,WOOD,MING,0B12,0B15,0B14,0B16" not in text
         assert "--specs !JRA_DAILY_UPDATE_SPECS!" in text
         assert "--force-incremental" in text
         assert "--ignore-jvopen-error-codes -303" in text

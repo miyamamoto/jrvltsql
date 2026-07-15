@@ -84,7 +84,7 @@ JVRTOPEN_SPEED_REPORT_SPECS = {
     "0B13": "データマイニング予想",     # DM: タイム型データマイニング
     "0B14": "速報開催情報・一括",       # WE, AV, JC, TC, CC: 開催日単位
     "0B15": "速報レース情報",          # RA, SE, HR: 出走馬名表～
-    "0B16": "速報開催情報・変更",       # WE, AV, JC, TC, CC: 騎手変更等
+    "0B16": "速報開催情報(指定)",       # JVWatchEvent event-key request
     "0B17": "対戦型データマイニング予想", # TM: 対戦型データマイニング
     "0B51": "速報重勝式(WIN5)",        # WF: 重勝式(WIN5)
 }

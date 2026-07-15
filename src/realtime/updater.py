@@ -55,31 +55,33 @@ class RealtimeUpdater:
     # Real-time updates use RT_ prefix, historical data uses NL_ prefix
     #
     # JVRTOpen provides two categories of data:
-    # - 速報系データ (0B1x): レース確定情報
+    # - 速報系データ (0B1x): 馬体重、レース、開催変更、マイニング
     # - 時系列データ (0B2x-0B3x): 継続更新オッズ・票数
     RECORD_TYPE_TABLE = {
         # === 速報系データ (Speed Report - 0B1x) ===
-        # 0B11: 開催情報
-        "WE": "RT_WE",  # 開催情報
+        # 0B11: 速報馬体重
+        "WH": "RT_WH",  # 馬体重
 
-        # 0B12: レース情報
+        # 0B12/0B15: レース情報・払戻
         "RA": "RT_RA",  # レース詳細
         "SE": "RT_SE",  # 馬毎レース情報
+        "HR": "RT_HR",  # 払戻
 
         # 0B13: データマイニング予想
         "DM": "RT_DM",  # データマイニング（タイム型）
 
-        # 0B14: 速報開催情報一括
+        # 0B14/0B16: 速報開催情報
+        "WE": "RT_WE",  # 天候・馬場状態
         "AV": "RT_AV",  # 出走取消・競走除外
-
-        # 0B15: 払戻情報
-        "HR": "RT_HR",  # 払戻
-
-        # 0B16: 馬体重
-        "WH": "RT_WH",  # 馬体重
+        "JC": "RT_JC",  # 騎手変更
+        "TC": "RT_TC",  # 発走時刻変更
+        "CC": "RT_CC",  # コース変更
 
         # 0B17: 対戦型データマイニング予想
         "TM": "RT_TM",  # データマイニング（対戦型）
+
+        # 0B51: 速報重勝式 (WIN5)
+        "WF": "RT_WF",
 
         # === オッズ/票数データ ===
         # 0B20: 票数情報
@@ -94,14 +96,35 @@ class RealtimeUpdater:
         "O5": "RT_O5",  # オッズ（３連複）
         "O6": "RT_O6",  # オッズ（３連単）
 
-        # === その他 (成績データ) ===
-        "JC": "RT_JC",  # 騎手成績
-        "TC": "RT_TC",  # 調教師成績/調教師変更情報
-        "CC": "RT_CC",  # 競走馬成績
-
         # === 変更情報データ ===
-        "RC": "RT_RC",  # 騎手変更情報 (Row D, E両方)
+        "RC": "RT_RC",
     }
+
+    DATE_SNAPSHOT_TABLES = (
+        "RT_WE",
+        "RT_AV",
+        "RT_JC",
+        "RT_TC",
+        "RT_CC",
+    )
+
+    def replace_date_snapshot(self, date_key: str) -> None:
+        """Clear the previous 0B14 snapshot for one race date.
+
+        JRA-VAN 0B14 is a complete current snapshot. Withdrawn changes are
+        omitted from later responses, so upserts alone leave stale rows.
+        Call this only after JVRTOpen succeeds and inside the same transaction
+        as the replacement inserts.
+        """
+        if len(date_key) != 8 or not date_key.isdigit():
+            raise ValueError(f"Invalid 0B14 date key: {date_key!r}")
+        year = date_key[:4]
+        month_day = date_key[4:]
+        for table_name in self.DATE_SNAPSHOT_TABLES:
+            self.database.execute(
+                f"DELETE FROM {table_name} WHERE Year = ? AND MonthDay = ?",
+                (year, month_day),
+            )
 
     SOKUHO_TIMESERIES_SPECS = {
         "0B30",
@@ -141,7 +164,7 @@ class RealtimeUpdater:
     # - UM, KS, CH, BR, BN, HN, SK (Master data) - Updated via DIFF/DIFN
     # - CK, HC, HS, HY (Code/Status data) - Updated via SNAP/SNPN
     # - YS, BT, CS (Change data) - Updated via YSCH, SLOP, etc.
-    # - WF (WIN5), JG (重賞), WC (天候) - Not in real-time stream
+    # - JG, WC - Not in the supported realtime stream
 
     def __init__(self, database: BaseDatabase, cache_manager=None):
         """Initialize real-time updater.
@@ -222,9 +245,10 @@ class RealtimeUpdater:
                 if timeseries and source_spec:
                     item.setdefault("SourceSpec", source_spec)
                 result = self._process_single_record(item, timeseries=timeseries)
-                if result:
-                    results.append(result)
-            return results if results else None
+                # Keep rejected subrecords as None so fail-closed callers can
+                # count every parser expansion, not only successful inserts.
+                results.append(result)
+            return results
 
         if timeseries and source_spec:
             parsed_data.setdefault("SourceSpec", source_spec)
@@ -379,12 +403,16 @@ class RealtimeUpdater:
                 logger.warning(f"Unknown record type: {record_type}")
                 return None
 
-            # Get headDataKubun with fallback to DataKubun
-            head_data_kubun = (
-                parsed_data.get("headDataKubun")
-                or parsed_data.get("DataKubun")
-                or "1"
-            )
+            # headDataKubun is an explicit mutation instruction. For the
+            # record-level DataKubun, only "0" is a physical deletion; "9"
+            # represents cancellation for RA/SE/WF and must remain queryable.
+            explicit_operation = parsed_data.get("headDataKubun")
+            if explicit_operation:
+                head_data_kubun = explicit_operation
+            elif parsed_data.get("DataKubun") == DATA_KUBUN_ERASE:
+                head_data_kubun = DATA_KUBUN_ERASE
+            else:
+                head_data_kubun = DATA_KUBUN_NEW
 
             # Process based on headDataKubun
             # Note: Per-record debug logging removed to reduce verbosity
@@ -604,6 +632,7 @@ class RealtimeUpdater:
             "RT_JC": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "Umaban"],
             "RT_TC": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum"],
             "RT_CC": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum"],
+            "RT_WF": ["Year", "MonthDay"],
         }
 
         return PRIMARY_KEY_MAP.get(lookup_name, [])

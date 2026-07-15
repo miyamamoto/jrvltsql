@@ -21,19 +21,20 @@ JVRTOpen の速報系データ種別ID（正）:
 | 0B17 | 速報対戦型データマイニング予想 | TM |
 | 0B51 | 速報重勝式(WIN5) | WF |
 
-→ WE を供給し `RT_WE` を埋めるのは **0B14 / 0B16 のみ**。
+→ WE を供給し `RT_WE` を埋めるのは **0B14 / 0B16 のみ**。ただし 0B14 は
+`YYYYMMDD` による一括取得、0B16 は `JVWatchEvent()` のイベントメソッドが返す
+リクエストパラメータによる指定取得であり、同じ日付ループでは扱えない。
 
 ## 欠陥
 
 1. **`scripts/quickstart.py` の `SPEED_REPORT_SPECS` のラベルが仕様と食い違って
    いた**（本番の既定収集経路）。`0B11` を「開催情報(WE)」と誤記（実際は馬体重
    WH）、`0B14` を「出走取消・除外(AV)」と誤記（実際は WE）、`0B15` を「払戻(HR)」、
-   `0B51` を「コース情報(CC)」と誤記。**さらに WE の指定版 `0B16` が丸ごと欠落**。
+   `0B51` を「コース情報(CC)」と誤記。
    dataspec コード自体は fetch に使われるためラベル誤りは直接の収集欠落では
-   ないが、`0B16` 欠落は WE 変更情報の取りこぼしになり、誤ラベルは本監査でも
-   混乱を招いた（`constants.py` は正しく WE=0B14/0B16 と定義していた）。
+   ないが、誤ラベルは本監査でも混乱を招いた。
 
-2. **`scripts/daily_update.py` の `UPDATE_SPECS` に 0B14/0B16 が無かった**。
+2. **`scripts/daily_update.py` の `UPDATE_SPECS` に日付指定用 0B14 が無かった**。
    `daily_sync.bat` の非対話パス（`--no-timeseries --no-realtime` 指定時）で
    使われる。
 
@@ -53,11 +54,14 @@ JVRTOpen の速報系データ種別ID（正）:
 ## 修正
 
 - `scripts/quickstart.py`: `SPEED_REPORT_SPECS` を仕様準拠のラベルへ訂正し、
-  欠落していた `0B16`（WE 指定）を追加。
-- `scripts/daily_update.py`: `UPDATE_SPECS` に `0B14`/`0B16` を追加。投入失敗を
+  日付指定ループには一括取得の `0B14` のみを設定。
+- `scripts/daily_update.py`: `UPDATE_SPECS` に `0B14` を追加。投入失敗を
   `success` フラグで正しく `records_failed` に集計するよう修正。
-- `daily_sync.bat`: `JRA_DAILY_UPDATE_SPECS` に `0B14,0B16` を追加。
-- `tests/test_daily_update.py`: 0B14/0B16 の収集・選択テスト、および失敗集計の
+- `daily_sync.bat`: `JRA_DAILY_UPDATE_SPECS` に日付指定用 `0B14` を追加。
+- 0B14 は差分ではなく一括スナップショットのため、取得成功後に同一日付の
+  `RT_WE` / `RT_AV` / `RT_JC` / `RT_TC` / `RT_CC` を同一トランザクション内で
+  削除してから再投入する。後続応答から消えた変更情報を残さない。
+- `tests/test_daily_update.py`: 0B14 の収集・選択テスト、および失敗集計の
   回帰テストを追加。
 
 ## 影響と限界
@@ -68,7 +72,8 @@ JVRTOpen の速報系データ種別ID（正）:
 - `0B14`/`0B16` はレース当日発表のため**過去分 backfill は不可**（前向き蓄積）。
 - 一日一回のタスクでは開催中に変化する天候・馬場を完全には追随できない
   （厳密なライブ発走前馬場には開催中の定期実行 / realtime monitor への
-  0B14/0B16 組込みが必要）。本 PR はスペック定義と集計の正当化に留め、
+  0B14 の定期取得と、別経路での JVWatchEvent/0B16 組込みが必要）。本 PR は
+  日付指定の 0B14 と集計の正当化に留め、
   実収集開始は JV-Link ライブコレクタの realtime 実行（運用承認）が前提。
 
 ## 残課題

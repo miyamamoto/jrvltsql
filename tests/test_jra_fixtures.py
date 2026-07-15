@@ -71,7 +71,7 @@ PARSER_MAP = {
     "TK": (TKParser, 727),
     "TM": (TMParser, 39),
     "UM": (UMParser, 1110),
-    "WF": (WFParser, 169),
+    "WF": (WFParser, 169),  # Historical fixture uses the obsolete compact layout.
     "YS": (YSParser, 146),
 }
 EXPANDED_RECORD_TYPES = {"O1", "O2", "O3", "O4", "O5", "O6"}
@@ -93,6 +93,8 @@ def load_fixture_records(record_type, record_length):
             # checks while the tail is covered by a dedicated 555-byte test.
             if record_type == "SE" and len(chunk) == 463:
                 chunk = chunk.ljust(SEParser.RECORD_LENGTH - 2, b" ") + b"\r\n"
+            if record_type == "WF" and len(chunk) == 169:
+                chunk = chunk[:11].ljust(WFParser.RECORD_LENGTH - 2, b" ") + b"\r\n"
             records.append(chunk)
     return records
 

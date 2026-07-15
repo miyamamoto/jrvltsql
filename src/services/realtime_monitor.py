@@ -18,6 +18,8 @@ from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+SUBSCRIPTION_ERROR_CODES = frozenset({-111, -114, -115})
+
 
 class MonitorStatus:
     """Monitor status tracking."""
@@ -133,11 +135,10 @@ class RealtimeMonitor:
                 daemon=True,
                 name="Monitor-Sequential",
             )
-            self._thread.start()
-
             self.status.is_running = True
             self.status.started_at = datetime.now()
             self.status.stopped_at = None
+            self._thread.start()
 
             logger.info(
                 "Realtime monitor started",
@@ -146,6 +147,8 @@ class RealtimeMonitor:
             return True
 
         except Exception as e:
+            self.status.is_running = False
+            self.status.stopped_at = datetime.now()
             logger.error("Failed to start monitor", error=str(e))
             self._add_error("start", str(e))
             return False
@@ -235,42 +238,67 @@ class RealtimeMonitor:
             jvlink.jv_init()
         except Exception as e:
             logger.error(f"JV-Link init failed: {e}")
+            with self._lock:
+                self.status.is_running = False
+                self.status.stopped_at = datetime.now()
             return
 
         logger.info("Sequential RT monitoring loop started", specs=self.data_specs)
 
         while not self._stop_event.is_set():
-            any_data = False
+            cycle_imported = 0
+            cycle_failed = 0
             today = datetime.now().strftime("%Y%m%d")
 
-            for data_spec in list(self.data_specs):
-                if self._stop_event.is_set():
-                    break
+            try:
+                self.database.begin_transaction()
+                for data_spec in list(self.data_specs):
+                    if self._stop_event.is_set():
+                        break
 
-                if is_time_series_spec(data_spec):
-                    # Time-series specs need YYYYMMDDJJRR keys — one per race
-                    race_keys = self._get_today_race_keys(today)
-                    for race_key in race_keys:
-                        if self._stop_event.is_set():
-                            break
-                        n = self._drain_key(
-                            jvlink, updater, data_spec, race_key, timeseries=True
+                    if is_time_series_spec(data_spec):
+                        # Time-series specs need YYYYMMDDJJRR keys — one per race
+                        race_keys = self._get_today_race_keys(today)
+                        for race_key in race_keys:
+                            if self._stop_event.is_set():
+                                break
+                            n, failed = self._drain_key(
+                                jvlink, updater, data_spec, race_key, timeseries=True
+                            )
+                            cycle_imported += n
+                            cycle_failed += failed
+                    else:
+                        # Speed-report specs use the plain date key
+                        n, failed = self._drain_key(
+                            jvlink, updater, data_spec, today, timeseries=False
                         )
-                        if n > 0:
-                            any_data = True
-                else:
-                    # Speed-report specs use the plain date key
-                    n = self._drain_key(
-                        jvlink, updater, data_spec, today, timeseries=False
-                    )
-                    if n > 0:
-                        any_data = True
+                        cycle_imported += n
+                        cycle_failed += failed
 
-            if any_data:
-                try:
+                any_data = cycle_imported > 0
+                if cycle_failed:
+                    self.database.rollback()
+                    with self._lock:
+                        self.status.records_failed += cycle_failed
+                    self._add_error(
+                        "transaction",
+                        f"Rolled back cycle after {cycle_failed} rejected operation(s)",
+                    )
+                    any_data = False
+                else:
                     self.database.commit()
-                except Exception as e:
-                    logger.error(f"Commit failed: {e}")
+                    with self._lock:
+                        self.status.records_imported += cycle_imported
+            except Exception as e:
+                logger.error(f"Realtime cycle failed: {e}")
+                try:
+                    self.database.rollback()
+                except Exception as rollback_error:
+                    logger.error(f"Rollback after cycle failure failed: {rollback_error}")
+                with self._lock:
+                    self.status.records_failed += max(cycle_failed, cycle_imported, 1)
+                self._add_error("transaction", str(e))
+                any_data = False
 
             wait = 0.5 if any_data else 2.0
             self._stop_event.wait(timeout=wait)
@@ -280,19 +308,31 @@ class RealtimeMonitor:
             jvlink.jv_close()
         except Exception:
             pass
+        with self._lock:
+            self.status.is_running = False
+            self.status.stopped_at = datetime.now()
 
     def _drain_key(self, jvlink, updater, data_spec: str, key: str,
-                   timeseries: bool = False) -> int:
-        """Open spec with key, drain all records, close. Returns record count."""
+                   timeseries: bool = False) -> tuple[int, int]:
+        """Open and drain one key, returning successful and failed counts."""
+        snapshot_replaced = False
         try:
             ret, _cnt = jvlink.jv_rt_open(data_spec, key)
             if ret == -1:
-                return 0
+                return 0, 0
+            if ret < -1:
+                raise RuntimeError(f"JVRTOpen failed with code {ret}")
+            if data_spec == "0B14":
+                updater.replace_date_snapshot(key)
+                snapshot_replaced = True
 
             n = 0
+            failed_count = 0
+            stream_complete = False
             while not self._stop_event.is_set():
                 ret_code, buff, _fname = jvlink.jv_read()
                 if ret_code == 0:
+                    stream_complete = True
                     break
                 if ret_code == -1:
                     continue
@@ -304,10 +344,8 @@ class RealtimeMonitor:
                             source_spec=data_spec if timeseries else None,
                         )
                         successful, failed = summarize_update_result(result)
-                        with self._lock:
-                            self.status.records_imported += len(successful)
-                            self.status.records_failed += failed
-                            n += len(successful)
+                        n += len(successful)
+                        failed_count += failed
                         if failed:
                             self._add_error(
                                 data_spec,
@@ -315,17 +353,36 @@ class RealtimeMonitor:
                             )
                     except Exception as e:
                         logger.error(f"process_record error ({data_spec}/{key}): {e}")
-                        with self._lock:
-                            self.status.records_failed += 1
+                        failed_count += 1
                 else:
+                    if ret_code < 0:
+                        failed_count += 1
                     break
 
+            if not stream_complete and self._stop_event.is_set():
+                failed_count += 1
+                self._add_error(
+                    data_spec,
+                    f"Interrupted before completing snapshot for {key}",
+                )
+
             jvlink.jv_close()
-            return n
+            return n, failed_count
 
         except JVLinkError as e:
             code = getattr(e, "error_code", None)
-            if code == -114:
+            if snapshot_replaced:
+                logger.error(
+                    f"0B14 snapshot drain failed after replacement started "
+                    f"({data_spec}/{key}): {e}"
+                )
+                self._add_error(data_spec, str(e))
+                try:
+                    jvlink.jv_close()
+                except Exception:
+                    pass
+                return 0, 1
+            if code in SUBSCRIPTION_ERROR_CODES:
                 logger.debug(f"Spec {data_spec} not subscribed")
             elif code == -202:
                 logger.warning(f"JV-Link busy ({data_spec}/{key}), retry next cycle")
@@ -336,7 +393,7 @@ class RealtimeMonitor:
                 jvlink.jv_close()
             except Exception:
                 pass
-            return 0
+            return 0, 0 if code in SUBSCRIPTION_ERROR_CODES or code == -202 else 1
 
         except Exception as e:
             logger.error(f"Unexpected error ({data_spec}/{key}): {e}")
@@ -345,7 +402,7 @@ class RealtimeMonitor:
                 jvlink.jv_close()
             except Exception:
                 pass
-            return 0
+            return 0, 1
 
     def _get_today_race_keys(self, today: str) -> list:
         """Return all YYYYMMDDJJRR race keys from NL_RA for the given date.
@@ -358,16 +415,13 @@ class RealtimeMonitor:
         """
         year = today[:4]
         md = today[4:6] + today[6:8]  # MMDD
-        try:
-            rows = self.database.fetch_all(
-                f'SELECT JyoCD, RaceNum FROM NL_RA '
-                f'WHERE Year="{year}" AND MonthDay="{md}" '
-                f'ORDER BY JyoCD, RaceNum'
-            )
-            return [f'{today}{row["JyoCD"]}{int(row["RaceNum"]):02d}' for row in rows]
-        except Exception as e:
-            logger.warning(f"Could not fetch race keys for {today}: {e}")
-            return []
+        rows = self.database.fetch_all(
+            "SELECT JyoCD, RaceNum FROM NL_RA "
+            "WHERE Year=? AND MonthDay=? "
+            "ORDER BY JyoCD, RaceNum",
+            (year, md),
+        )
+        return [f'{today}{row["JyoCD"]}{int(row["RaceNum"]):02d}' for row in rows]
 
     def _ensure_tables(self):
         """Additively migrate schemas and ensure all required tables exist."""

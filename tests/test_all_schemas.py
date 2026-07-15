@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """包括的スキーマ・パーサーテスト
 
-蓄積系(NL_*)と速報系(RT_*)の全58テーブル (NL_38 + RT_20) とパーサーをテスト
+蓄積系(NL_*)、速報系(RT_*)、時系列(TS_*)の全テーブルとパーサーをテスト
 """
 
 import sys
@@ -59,7 +59,7 @@ def test_parsers():
     assert len(failed) == 0, f"Failed parsers: {failed}"
 
 def test_schemas():
-    """全58スキーマの作成テスト (NL_38 + RT_20)"""
+    """全スキーマの作成テスト。"""
     print("\n" + "=" * 70)
     print("スキーマテスト")
     print("=" * 70)
@@ -218,7 +218,7 @@ def test_data_import():
         for table in nl_with_data:
             print(f"  {table:20s}: {table_stats[table]:6,} 件")
 
-        print(f"\n速報系 (RT_*): {len(rt_with_data)}/20 テーブルにデータ")
+        print(f"\n速報系 (RT_*): {len(rt_with_data)}/21 テーブルにデータ")
         if rt_with_data:
             for table in rt_with_data:
                 print(f"  {table:20s}: {table_stats[table]:6,} 件")

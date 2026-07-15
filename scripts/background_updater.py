@@ -33,6 +33,7 @@ import argparse
 import io
 import json
 import os
+import re
 import signal
 import socketserver
 import sqlite3
@@ -79,6 +80,33 @@ logger = get_logger(__name__)
 
 # PIDファイルパス
 PID_FILE = project_root / "data" / "background_updater.pid"
+SUBSCRIPTION_ERROR_CODES = frozenset({-111, -114, -115})
+
+
+def _jvlink_error_code(exc: BaseException) -> Optional[int]:
+    """Extract an exact JV-Link error code through wrapped exceptions."""
+    current: Optional[BaseException] = exc
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        code = getattr(current, "error_code", None)
+        if isinstance(code, int):
+            return code
+        match = re.search(r"(?:code\s*[:=]|failed\s*:)\s*(-?\d+)\b", str(current), re.I)
+        if match:
+            return int(match.group(1))
+        current = current.__cause__ or current.__context__
+    return None
+
+
+def _is_subscription_error(exc: BaseException) -> bool:
+    return _jvlink_error_code(exc) in SUBSCRIPTION_ERROR_CODES or "契約" in str(exc)
+
+
+def _is_no_data_error(exc: BaseException) -> bool:
+    return _jvlink_error_code(exc) in {-1, -2} or bool(
+        re.search(r"\bno[ _-]?data\b", str(exc), re.I)
+    )
 
 
 def get_pid() -> Optional[int]:
@@ -877,7 +905,7 @@ class BackgroundUpdater:
     #   0B12: 速報レース情報・払戻 (RA, SE, HR) - 成績確定後
     #   0B14: 速報開催情報・一括 (WE, AV, JC, TC, CC)
     #   0B15: 速報レース情報 (RA, SE, HR) - 出走馬名表～
-    #   0B16: 速報開催情報・変更 (WE, AV, JC, TC, CC) - 騎手変更等
+    #   0B16: 速報開催情報(指定) (WE, AV, JC, TC, CC) - JVWatchEvent key only
     #   0B30: 速報オッズ・全賭式 (O1-O6)
     #   0B31: 速報オッズ・単複枠 (O1)
     #
@@ -889,8 +917,9 @@ class BackgroundUpdater:
         ("0B12", "速報レース情報・払戻"),
         ("0B14", "速報開催情報・一括"),
         ("0B15", "速報レース情報"),
-        # 注意: 0B16（速報開催情報・変更）は-114エラーを返すため除外
-        # 0B14（一括）で同等の情報が取得可能
+        ("0B51", "速報重勝式(WIN5)"),
+        # 0B16 は JVWatchEvent が返すイベントキー専用なので日付ループから除外。
+        # 日付指定の一括取得には 0B14 を使う。
     ]
 
     # 時系列データ（レース単位キー: YYYYMMDDJJRR）
@@ -1524,35 +1553,50 @@ class BackgroundUpdater:
                 if not self._running:
                     break
 
+                spec_success_count = 0
                 try:
                     from src.fetcher.realtime import RealtimeFetcher
+                    from src.database.schema import create_all_tables
                     from src.database.sqlite_handler import SQLiteDatabase
-                    from src.importer.importer import DataImporter
+                    from src.realtime.updater import RealtimeUpdater, summarize_update_result
 
                     db = SQLiteDatabase({"path": str(self.db_path)})
 
                     with db:
+                        create_all_tables(db)
+                        db.begin_transaction()
                         fetcher = RealtimeFetcher(sid="BGUPDATE")
-                        importer = DataImporter(db, batch_size=1000)
+                        updater = RealtimeUpdater(db)
 
-                        records = []
                         try:
-                            for record in fetcher.fetch(data_spec=spec, continuous=False):
-                                records.append(record)
+                            date_key = now.strftime("%Y%m%d")
+                            records = fetcher.fetch(
+                                data_spec=spec,
+                                key=date_key,
+                                continuous=False,
+                            )
+                            if spec == "0B14":
+                                records = list(records)
+                                if getattr(fetcher, "last_open_result", None) == 0:
+                                    updater.replace_date_snapshot(date_key)
+                            for record in records:
+                                result = updater.process_parsed_record(record)
+                                successful, failed = summarize_update_result(result)
+                                if failed:
+                                    raise RuntimeError(
+                                        f"{spec} updater rejected {failed} operation(s)"
+                                    )
+                                spec_success_count += len(successful)
                         except Exception as e:
-                            error_str = str(e)
-                            # 契約外エラーはスキップ (-111, -114, -115など)
-                            if '-111' in error_str or '-114' in error_str or '-115' in error_str:
+                            db.rollback()
+                            if _is_subscription_error(e):
                                 continue
-                            if '契約' in error_str:
-                                continue
-                            if 'no data' in error_str.lower():
+                            if _is_no_data_error(e):
                                 continue
                             raise
-
-                        if records:
-                            importer.import_records(iter(records), auto_commit=True)
-                            success_count += len(records)
+                        else:
+                            db.commit()
+                            success_count += spec_success_count
 
                 except Exception as e:
                     error_count += 1
@@ -1613,16 +1657,20 @@ class BackgroundUpdater:
 
         success_count = 0
 
+        db = None
         try:
             from src.fetcher.realtime import RealtimeFetcher
+            from src.database.schema import create_all_tables
             from src.database.sqlite_handler import SQLiteDatabase
-            from src.importer.importer import DataImporter
+            from src.realtime.updater import RealtimeUpdater, summarize_update_result
 
             db = SQLiteDatabase({"path": str(self.db_path)})
 
             with db:
+                create_all_tables(db)
+                db.begin_transaction()
                 fetcher = RealtimeFetcher(sid="BGUPDATE")
-                importer = DataImporter(db, batch_size=1000)
+                updater = RealtimeUpdater(db)
 
                 # 単勝・複勝オッズを優先取得（0B30, 0B31）
                 priority_specs = [("0B30", "単勝オッズ"), ("0B31", "複勝・枠連オッズ")]
@@ -1632,31 +1680,42 @@ class BackgroundUpdater:
                         break
 
                     try:
-                        records = []
                         for record in fetcher.fetch_time_series(
                             data_spec=spec,
                             jyo_code=jyo_code,
                             race_num=int(race_num),
                             date=date,
                         ):
-                            records.append(record)
-
-                        if records:
-                            importer.import_records(iter(records), auto_commit=True)
-                            success_count += len(records)
-                            logger.debug(f"Time series {spec}: {len(records)} records")
+                            result = updater.process_parsed_record(
+                                record,
+                                timeseries=True,
+                                source_spec=spec,
+                            )
+                            successful, failed = summarize_update_result(result)
+                            if failed:
+                                raise RuntimeError(
+                                    f"{spec} updater rejected {failed} operation(s)"
+                                )
+                            success_count += len(successful)
 
                     except Exception as e:
-                        error_str = str(e)
                         # 契約外・データなしエラーはスキップ
-                        if '-111' in error_str or '-114' in error_str or '-115' in error_str:
+                        if _is_subscription_error(e):
                             continue
-                        if '契約' in error_str or 'no data' in error_str.lower():
+                        if _is_no_data_error(e):
                             continue
-                        logger.warning(f"Time series update error for {spec}: {e}")
+                        raise
+
+                db.commit()
 
         except Exception as e:
-            logger.warning(f"Time series update failed: {e}")
+            try:
+                if db is not None:
+                    db.rollback()
+            except Exception:
+                pass
+            logger.error(f"Time series update failed: {e}")
+            raise
 
         return success_count
 
