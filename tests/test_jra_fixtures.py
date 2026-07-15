@@ -88,6 +88,11 @@ def load_fixture_records(record_type, record_length):
     for i in range(0, len(data), record_length):
         chunk = data[i : i + record_length]
         if len(chunk) == record_length:
+            # The historical SE fixture was reconstructed with the obsolete
+            # 463-byte parser and has no official tail. Preserve its core-field
+            # checks while the tail is covered by a dedicated 555-byte test.
+            if record_type == "SE" and len(chunk) == 463:
+                chunk = chunk.ljust(SEParser.RECORD_LENGTH - 2, b" ") + b"\r\n"
             records.append(chunk)
     return records
 
@@ -274,3 +279,20 @@ class TestSEParserRealData:
             if ketto.strip():
                 assert ketto.isdigit(), f"KettoNum not numeric: {ketto}"
                 assert len(ketto) == 10, f"KettoNum wrong length: {len(ketto)}"
+
+
+def test_se_storage_schemas_keep_all_three_opponent_slots():
+    from src.database.schema import SCHEMAS
+
+    for table_name in ("NL_SE", "RT_SE"):
+        schema = SCHEMAS[table_name]
+        for column in (
+            "KettoNum1",
+            "Bamei1",
+            "KettoNum2",
+            "Bamei2",
+            "KettoNum3",
+            "Bamei3",
+        ):
+            assert f"{column} TEXT" in schema
+        assert "Reserved_462" not in schema

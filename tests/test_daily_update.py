@@ -139,9 +139,9 @@ def _build_rt_ra_record() -> bytes:
     ]
     for idx, (corner, syukaisu, jyuni) in enumerate(corner_sets):
         base = 981 + idx * 72
-        data[base:base + 1] = corner
-        data[base + 1:base + 2] = syukaisu
-        data[base + 2:base + 2 + len(jyuni)] = jyuni
+        data[base : base + 1] = corner
+        data[base + 1 : base + 2] = syukaisu
+        data[base + 2 : base + 2 + len(jyuni)] = jyuni
     return bytes(data)
 
 
@@ -206,6 +206,7 @@ def test_sync_realtime_spec_is_idempotent_across_reruns(rt_database):
     rows = rt_database.fetch_all("SELECT COUNT(*) AS cnt FROM RT_RA")
     assert rows[0]["cnt"] == 1
 
+
 def test_daily_update_includes_mining_spec():
     """MING (data-mining) must be collected so NL_DM / SE mining fields populate."""
     specs = [spec for spec, _ in UPDATE_SPECS]
@@ -255,75 +256,100 @@ def test_sync_realtime_spec_stops_after_subscription_error(rt_database, error_co
         "records_failed": 0,
     }
     assert jvlink.opened_keys == [("0B12", "20260606")]
-class _NullDatabase:
-    def commit(self):
-        return None
 
 
-class _FakeUpdater:
-    """Updater double returning process_record results verbatim.
+def test_sync_realtime_spec_stops_before_open_when_schema_setup_fails(rt_database, monkeypatch):
+    jvlink = FakeJVLink({"20260607": [_build_rt_ra_record()]})
 
-    process_record は失敗時も {"success": False} という truthy な dict を返す
-    ため、集計側が success フラグを見ずに数えると失敗が imported に紛れ込む。
-    """
+    def fail_schema_setup(_database):
+        raise RuntimeError("unsafe RT_SE schema")
 
-    def __init__(self, results):
-        self._results = list(results)
-        self.seen = 0
-
-    def process_record(self, buff):
-        result = self._results[self.seen]
-        self.seen += 1
-        return result
-
-
-def test_sync_realtime_spec_counts_failed_inserts_as_failed():
-    jvlink = FakeJVLink({"20260607": [b"x", b"y", b"z"]})
-    updater = _FakeUpdater(
-        [
-            {"success": True},
-            {"success": False, "error": "Incomplete primary key"},
-            None,
-        ]
+    monkeypatch.setattr(
+        "src.database.schema.create_all_tables",
+        fail_schema_setup,
     )
 
-    stats = _sync_realtime_spec(
-        database=_NullDatabase(),
-        spec="0B14",
-        from_date="20260607",
-        to_date="20260607",
-        sid="JLTSQL",
-        jvlink=jvlink,
-        updater=updater,
-    )
+    with pytest.raises(RuntimeError, match="unsafe RT_SE schema"):
+        _sync_realtime_spec(
+            database=rt_database,
+            spec="0B12",
+            from_date="20260607",
+            to_date="20260607",
+            sid="JLTSQL",
+            jvlink=jvlink,
+        )
 
-    assert stats["records_fetched"] == 3
-    assert stats["records_imported"] == 1
-    assert stats["records_failed"] == 2
+    assert jvlink.opened_keys == []
 
 
-def test_sync_realtime_spec_counts_list_results_per_subrecord():
-    """オッズ/票数など複数行レコードは list を返す。集計はサブレコード単位で行い、
-    一部失敗しても成功分は imported、失敗分だけ failed に数える。"""
+def test_sync_realtime_spec_fails_when_any_record_is_rejected(rt_database):
+    jvlink = FakeJVLink({"20260607": [_build_rt_ra_record()]})
+
+    class RejectingUpdater:
+        def process_record(self, _record):
+            return {
+                "operation": "insert",
+                "table": "RT_SE",
+                "success": False,
+                "error": "obsolete schema",
+            }
+
+    with pytest.raises(RuntimeError, match="rejected 1 record"):
+        _sync_realtime_spec(
+            database=rt_database,
+            spec="0B12",
+            from_date="20260607",
+            to_date="20260607",
+            sid="JLTSQL",
+            jvlink=jvlink,
+            updater=RejectingUpdater(),
+        )
+
+
+def test_sync_realtime_spec_fails_on_transport_error(rt_database):
+    class ReadFailingJVLink(FakeJVLink):
+        def jv_read(self):
+            return -202, None, None
+
+    jvlink = ReadFailingJVLink({"20260607": [b"placeholder"]})
+
+    with pytest.raises(RuntimeError, match="JVRead failed: -202"):
+        _sync_realtime_spec(
+            database=rt_database,
+            spec="0B12",
+            from_date="20260607",
+            to_date="20260607",
+            sid="JLTSQL",
+            jvlink=jvlink,
+        )
+
+
+def test_sync_realtime_spec_counts_list_results_per_subrecord(rt_database):
+    """複数行レコードはサブレコード単位で parsed/imported を集計する。"""
     jvlink = FakeJVLink({"20260607": [b"x", b"y"]})
-    updater = _FakeUpdater(
-        [
-            [{"success": True}, {"success": True}, {"success": False}],
-            [{"success": True}],
-        ]
-    )
+
+    class ListUpdater:
+        results = iter(
+            [
+                [{"success": True}, {"success": True}, {"success": True}],
+                [{"success": True}],
+            ]
+        )
+
+        def process_record(self, _record):
+            return next(self.results)
 
     stats = _sync_realtime_spec(
-        database=_NullDatabase(),
+        database=rt_database,
         spec="0B14",
         from_date="20260607",
         to_date="20260607",
         sid="JLTSQL",
         jvlink=jvlink,
-        updater=updater,
+        updater=ListUpdater(),
     )
 
     assert stats["records_fetched"] == 2
     assert stats["records_parsed"] == 4
-    assert stats["records_imported"] == 3
-    assert stats["records_failed"] == 1
+    assert stats["records_imported"] == 4
+    assert stats["records_failed"] == 0

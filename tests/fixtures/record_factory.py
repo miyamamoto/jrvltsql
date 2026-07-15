@@ -73,8 +73,8 @@ def make_se_record(
     umaban="01", kettonum="0000000001", bamei="テストウマ",
     **kwargs,
 ) -> bytes:
-    """Create SE record (463 bytes)."""
-    data = bytearray(463)
+    """Create official SE record (555 bytes including CRLF)."""
+    data = bytearray(555)
     data[0:2] = _pad("SE", 2)
     data[2:3] = _pad(data_kubun, 1)
     data[3:11] = _pad(make_date, 8)
@@ -88,7 +88,7 @@ def make_se_record(
     data[28:30] = _pad(umaban, 2)
     data[30:40] = _pad(kettonum, 10)
     data[40:76] = _pad(bamei, 36)
-    data[461:463] = b'\r\n'
+    data[553:555] = b'\r\n'
     return bytes(data)
 
 
@@ -217,5 +217,4 @@ def make_bn_record(data_kubun="1", make_date="20260101", **kwargs) -> bytes:
     data[3:11] = _pad(make_date, 8)
     data[385:387] = b'\r\n'
     return bytes(data)
-
 

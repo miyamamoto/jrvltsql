@@ -5,24 +5,51 @@ defined in schema.py, enabling type-safe data processing.
 """
 
 import re
-from typing import Dict, List, Optional
 
 from src.database.schema import SCHEMAS
+from src.database.schema_jravan import JRAVAN_SCHEMAS
 
 # キャッシュ（テーブル名 → カラム型マッピング）
-_table_column_types_cache: Dict[str, Dict[str, str]] = {}
-_table_primary_keys_cache: Dict[str, List[str]] = {}
+_table_column_types_cache: dict[str, dict[str, str]] = {}
+_table_primary_keys_cache: dict[str, list[str]] = {}
 
 # コンパイル済み正規表現パターン
-_column_pattern = re.compile(r'^\s*(\w+)\s+(INTEGER|BIGINT|REAL|TEXT)\s*[,)]?\s*$', re.MULTILINE)
+_column_pattern = re.compile(r'^\s*(\w+)\s+([A-Z]+)(?:\s*\([^)]*\))?', re.IGNORECASE)
 _primary_key_pattern = re.compile(r'PRIMARY\s+KEY\s*\(([^)]*)\)', re.IGNORECASE)
 
+_INTEGER_TYPES = {"INT", "INTEGER", "BIGINT", "SMALLINT"}
+_REAL_TYPES = {"DECIMAL", "DOUBLE", "FLOAT", "NUMERIC", "REAL"}
+_TEXT_TYPES = {
+    "CHAR",
+    "DATE",
+    "DATETIME",
+    "TEXT",
+    "TIME",
+    "TIMESTAMP",
+    "VARCHAR",
+}
 
-def get_table_column_types(table_name: str) -> Dict[str, str]:
+
+def _schema_for_table(table_name: str) -> str | None:
+    return SCHEMAS.get(table_name) or JRAVAN_SCHEMAS.get(table_name)
+
+
+def _normalized_column_type(raw_type: str) -> str | None:
+    sql_type = raw_type.upper()
+    if sql_type in _INTEGER_TYPES:
+        return "BIGINT" if sql_type == "BIGINT" else "INTEGER"
+    if sql_type in _REAL_TYPES:
+        return "REAL"
+    if sql_type in _TEXT_TYPES:
+        return "TEXT"
+    return None
+
+
+def get_table_column_types(table_name: str) -> dict[str, str]:
     """Get column name to type mapping for a specific table.
 
-    Parses the CREATE TABLE statement from SCHEMAS dictionary and extracts
-    column definitions, returning a mapping of column names to their SQL types.
+    Parses the CREATE TABLE statement from the native or JRA-VAN schema and
+    returns normalized INTEGER/BIGINT/REAL/TEXT types.
 
     Args:
         table_name: Name of the table (e.g., "NL_RA", "RT_SE")
@@ -44,10 +71,10 @@ def get_table_column_types(table_name: str) -> Dict[str, str]:
     if table_name in _table_column_types_cache:
         return _table_column_types_cache[table_name]
 
-    if table_name not in SCHEMAS:
+    create_statement = _schema_for_table(table_name)
+    if not create_statement:
         return {}
 
-    create_statement = SCHEMAS[table_name]
     column_types = {}
 
     # Match column definitions: column_name TYPE
@@ -67,15 +94,16 @@ def get_table_column_types(table_name: str) -> Dict[str, str]:
         match = _column_pattern.match(line)
         if match:
             column_name = match.group(1)
-            column_type = match.group(2)
-            column_types[column_name] = column_type
+            column_type = _normalized_column_type(match.group(2))
+            if column_type:
+                column_types[column_name] = column_type
 
     # キャッシュに保存
     _table_column_types_cache[table_name] = column_types
     return column_types
 
 
-def get_column_type(table_name: str, column_name: str) -> Optional[str]:
+def get_column_type(table_name: str, column_name: str) -> str | None:
     """Get the SQL type of a specific column in a table.
 
     Args:
@@ -99,12 +127,12 @@ def get_column_type(table_name: str, column_name: str) -> Optional[str]:
     return column_types.get(column_name)
 
 
-def get_table_primary_key_columns(table_name: str) -> List[str]:
+def get_table_primary_key_columns(table_name: str) -> list[str]:
     """Get primary-key columns for a specific table from SCHEMAS."""
     if table_name in _table_primary_keys_cache:
         return _table_primary_keys_cache[table_name]
 
-    create_statement = SCHEMAS.get(table_name)
+    create_statement = _schema_for_table(table_name)
     if not create_statement:
         return []
 

@@ -151,6 +151,95 @@ jvlink:
             # Should attempt to execute (may succeed or fail, but command should parse)
             self.assertIsNotNone(result)
 
+    def test_create_tables_rt_only_runs_additive_migration(self):
+        """Existing RT tables are migrated before CREATE IF NOT EXISTS."""
+        with self.runner.isolated_filesystem():
+            config_path = Path("config.yaml")
+            config_path.write_text(
+                """
+database:
+  type: sqlite
+databases:
+  sqlite:
+    enabled: true
+    path: test.db
+jvlink:
+  service_key: ""
+"""
+            )
+            database = MagicMock()
+
+            with patch(
+                "src.database.create_database_from_config",
+                return_value=database,
+            ), patch(
+                "src.database.migration.migrate_all_tables"
+            ) as migrate_all_tables, patch(
+                "src.database.migration.verify_table_schema"
+            ) as verify_table_schema:
+                result = self.runner.invoke(
+                    cli,
+                    [
+                        "--config",
+                        str(config_path),
+                        "create-tables",
+                        "--db",
+                        "sqlite",
+                        "--rt-only",
+                    ],
+                )
+
+            self.assertEqual(result.exit_code, 0, result.output)
+            migrate_all_tables.assert_called_once()
+            selected_schemas = migrate_all_tables.call_args.args[1]
+            self.assertTrue(selected_schemas)
+            self.assertTrue(all(name.startswith("RT_") for name in selected_schemas))
+            self.assertEqual(
+                verify_table_schema.call_count,
+                len(selected_schemas),
+            )
+
+    def test_create_tables_fails_when_schema_verification_fails(self):
+        with self.runner.isolated_filesystem():
+            config_path = Path("config.yaml")
+            config_path.write_text(
+                """
+database:
+  type: sqlite
+databases:
+  sqlite:
+    enabled: true
+    path: test.db
+jvlink:
+  service_key: ""
+"""
+            )
+            database = MagicMock()
+
+            with patch(
+                "src.database.create_database_from_config",
+                return_value=database,
+            ), patch(
+                "src.database.migration.migrate_all_tables"
+            ), patch(
+                "src.database.migration.verify_table_schema",
+                side_effect=RuntimeError("unsafe schema"),
+            ):
+                result = self.runner.invoke(
+                    cli,
+                    [
+                        "--config",
+                        str(config_path),
+                        "create-tables",
+                        "--db",
+                        "sqlite",
+                        "--rt-only",
+                    ],
+                )
+
+            self.assertEqual(result.exit_code, 1, result.output)
+            self.assertIn("Schema preparation failed", result.output)
+
 
 class TestFetchCommand(unittest.TestCase):
     """Test fetch command."""

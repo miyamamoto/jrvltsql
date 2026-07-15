@@ -11,6 +11,8 @@ from src.jvlink.bridge import (
     JVLinkBridge,
     JVLinkBridgeError,
 )
+from src.parser.se_parser import SEParser
+from tests.fixtures.record_factory import make_se_record
 
 
 @pytest.fixture
@@ -88,13 +90,16 @@ class TestJVLinkBridgeAPI:
 
     def test_jv_read_data(self, bridge):
         bridge._is_open = True
-        raw = b"RA2026test record data"
+        raw = make_se_record()
         b64 = base64.b64encode(raw).decode()
         _patch_responses(bridge, {"status": "ok", "code": len(raw), "data": b64, "filename": "f.jvd", "size": len(raw)})
         code, buff, fname = bridge.jv_read()
         assert code == len(raw)
         assert buff == raw
         assert fname == "f.jvd"
+        assert len(buff) == SEParser.RECORD_LENGTH
+        assert buff[-2:] == b"\r\n"
+        assert SEParser().parse(buff)["KettoNum"] == "0000000001"
 
     def test_jv_read_complete(self, bridge):
         bridge._is_open = True

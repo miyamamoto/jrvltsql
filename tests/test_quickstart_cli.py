@@ -203,6 +203,61 @@ class TestQuickstartInteractiveDetection:
         assert use_interactive is True
 
 
+class TestQuickstartFailureAggregation:
+    """A partial success must not hide a failed required data spec."""
+
+    @pytest.fixture
+    def runner(self, tmp_path):
+        from scripts.quickstart import QuickstartRunner
+
+        return QuickstartRunner(
+            {
+                "db_path": str(tmp_path / "quickstart.db"),
+                "mode": "update",
+            }
+        )
+
+    def test_historical_rich_fails_when_one_spec_fails(self, runner, monkeypatch):
+        monkeypatch.setattr(
+            runner,
+            "_get_specs_for_mode",
+            lambda: [("RACE", "race", 1), ("DIFN", "master", 1)],
+        )
+        outcomes = iter(
+            [
+                ("success", {"records_saved": 1}),
+                ("failed", {"error_message": "rejected SE"}),
+            ]
+        )
+        monkeypatch.setattr(
+            runner,
+            "_fetch_single_spec_with_progress",
+            lambda _spec, _option: next(outcomes),
+        )
+        monkeypatch.setattr(runner, "_print_spec_list", lambda *_args: None)
+
+        assert runner._run_fetch_all_rich() is False
+        assert runner.stats["specs_failed"] == 1
+
+    def test_realtime_rich_fails_when_one_spec_fails(self, runner, monkeypatch):
+        runner.SPEED_REPORT_SPECS = [("0B12", "race"), ("0B15", "payout")]
+        runner.TIME_SERIES_SPECS = []
+        outcomes = iter(
+            [
+                ("success", {"records_saved": 1}),
+                ("failed", {"error_message": "transport failure"}),
+            ]
+        )
+        monkeypatch.setattr(
+            runner,
+            "_fetch_single_realtime_spec",
+            lambda _spec: next(outcomes),
+        )
+
+        assert runner._run_fetch_realtime_rich() is False
+        assert runner.stats["specs_failed"] == 1
+
+
 class TestQuickstartBatchRoles:
     """Test Windows batch role separation."""
 

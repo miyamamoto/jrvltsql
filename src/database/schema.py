@@ -1184,6 +1184,10 @@ SCHEMAS = {
             HaronTimeL3 REAL,
             KettoNum1 TEXT,
             Bamei1 TEXT,
+            KettoNum2 TEXT,
+            Bamei2 TEXT,
+            KettoNum3 TEXT,
+            Bamei3 TEXT,
             TimeDiff REAL,
             RecordUpKubun TEXT,
             DMKubun TEXT,
@@ -1192,7 +1196,6 @@ SCHEMAS = {
             DMGosaM REAL,
             DMJyuni INTEGER,
             KyakusituKubun TEXT,
-            Reserved_462 TEXT,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
         )
     """,
@@ -2146,6 +2149,10 @@ SCHEMAS = {
             HaronTimeL3 REAL,
             KettoNum1 TEXT,
             Bamei1 TEXT,
+            KettoNum2 TEXT,
+            Bamei2 TEXT,
+            KettoNum3 TEXT,
+            Bamei3 TEXT,
             TimeDiff REAL,
             RecordUpKubun TEXT,
             DMKubun TEXT,
@@ -2154,7 +2161,6 @@ SCHEMAS = {
             DMGosaM REAL,
             DMJyuni INTEGER,
             KyakusituKubun TEXT,
-            Reserved_462 TEXT,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
         )
     """,
@@ -2549,7 +2555,7 @@ class SchemaManager:
         return list(SCHEMAS.keys())
 
     def create_table(self, table_name: str) -> bool:
-        """Create single table.
+        """Additively migrate and create a single table.
 
         Args:
             table_name: Name of table to create
@@ -2562,8 +2568,15 @@ class SchemaManager:
             return False
 
         try:
+            from src.database.migration import (
+                migrate_table_if_needed,
+                verify_table_schema,
+            )
+
             schema_sql = SCHEMAS[table_name]
+            migrate_table_if_needed(self.db, table_name, schema_sql)
             self.db.execute(schema_sql)
+            verify_table_schema(self.db, table_name, schema_sql)
             logger.info(f"Created table: {table_name}")
             return True
         except Exception as e:
@@ -2571,17 +2584,21 @@ class SchemaManager:
             return False
 
     def create_all_tables(self) -> Dict[str, bool]:
-        """Create all tables defined in SCHEMAS.
+        """Additively migrate and create all tables defined in SCHEMAS.
 
         Returns:
             Dictionary mapping table names to success status
         """
+        from src.database.migration import migrate_all_tables, verify_table_schema
+
         logger.info("Creating all tables...")
+        migrate_all_tables(self.db, SCHEMAS)
         results = {}
 
         for table_name, schema_sql in SCHEMAS.items():
             try:
                 self.db.execute(schema_sql)
+                verify_table_schema(self.db, table_name, schema_sql)
                 logger.debug(f"Created table: {table_name}")
                 results[table_name] = True
             except Exception as e:
@@ -2767,15 +2784,15 @@ class SchemaManager:
 
 
 def create_all_tables(db: BaseDatabase) -> None:
-    """Create all tables defined in SCHEMAS.
+    """Additively migrate and create all tables defined in SCHEMAS.
 
-    Before creating tables, checks for schema mismatches in existing tables
-    and recreates them if needed (e.g., when column definitions have changed).
+    Missing columns are added without dropping existing rows. Extra columns
+    are always preserved; primary-key changes fail closed.
 
     Args:
         db: Database instance
     """
-    from src.database.migration import migrate_all_tables
+    from src.database.migration import migrate_all_tables, verify_table_schema
 
     logger.info("Creating tables...")
 
@@ -2785,6 +2802,7 @@ def create_all_tables(db: BaseDatabase) -> None:
     for table_name, schema_sql in SCHEMAS.items():
         try:
             db.execute(schema_sql)
+            verify_table_schema(db, table_name, schema_sql)
             logger.debug(f"Created table: {table_name}")
         except Exception as e:
             logger.error(f"Failed to create table {table_name}: {e}")

@@ -10,10 +10,12 @@ import pytest
 from src.database.base import BaseDatabase
 from src.database.sqlite_handler import SQLiteDatabase
 from src.database.migration import (
+    SchemaMigrationError,
     _extract_columns_from_sql,
     _extract_primary_key_columns,
     migrate_table_if_needed,
     migrate_all_tables,
+    verify_table_schema,
 )
 
 
@@ -73,6 +75,8 @@ class MockPostgreSQLDatabase(BaseDatabase):
                 pk = _extract_primary_key_columns(sql)
                 # Real PG lowercases unquoted identifiers when storing.
                 table = m.group(1).lower()
+                if "IF NOT EXISTS" in upper and table in self._tables:
+                    return
                 self._tables[table] = list(cols or [])
                 self._primary_keys[table] = list(pk or [])
 
@@ -222,25 +226,41 @@ def test_migrate_adds_missing_columns_without_dropping(db):
     assert len(rows) == 1
 
 
-def test_migrate_drops_and_recreates_on_mismatch_when_explicitly_allowed(db, monkeypatch):
-    """DROP+recreate is opt-in because production DBs must not be wiped."""
-    monkeypatch.setenv("JLTSQL_ALLOW_DESTRUCTIVE_MIGRATIONS", "1")
+def test_migrate_never_drops_table_on_primary_key_mismatch(db):
+    """Production migration paths must never erase existing rows."""
     db.execute(OLD_SCHEMA)
     db.commit()
     db.execute("INSERT INTO NL_H1 (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, TanUma) VALUES (2025, 101, '01', 1, 1, 1, 'test')")
     db.commit()
 
-    assert migrate_table_if_needed(db, "NL_H1", NEW_SCHEMA) is True
+    assert migrate_table_if_needed(db, "NL_H1", NEW_SCHEMA) is False
 
     info = db.fetch_all("PRAGMA table_info(NL_H1)")
     new_cols = {r['name'] for r in info}
-    assert "BetType" in new_cols
-    assert "Kumi" in new_cols
-    assert "TanUma" not in new_cols
-    assert db.fetch_all("SELECT * FROM NL_H1") == []
+    assert "BetType" not in new_cols
+    assert "TanUma" in new_cols
+    assert len(db.fetch_all("SELECT * FROM NL_H1")) == 1
 
 
-def test_primary_key_mismatch_requires_destructive_opt_in(db):
+def test_extra_column_migration_preserves_rows_and_is_stable(db):
+    db.execute(ADDITIVE_OLD_SCHEMA)
+    db.execute("ALTER TABLE NL_H1 ADD COLUMN LegacyValue TEXT")
+    db.execute(
+        "INSERT INTO NL_H1 "
+        "(Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, BetType, Kumi) "
+        "VALUES (2026, 714, '05', 1, 1, 1, 'T', '01')"
+    )
+    db.commit()
+
+    assert migrate_table_if_needed(db, "NL_H1", NEW_SCHEMA) is True
+    assert len(db.fetch_all("SELECT * FROM NL_H1")) == 1
+    columns = {row["name"] for row in db.fetch_all("PRAGMA table_info(NL_H1)")}
+    assert "LegacyValue" in columns
+    assert "Hyo" in columns
+    assert migrate_table_if_needed(db, "NL_H1", NEW_SCHEMA) is False
+
+
+def test_primary_key_mismatch_requires_operator_migration(db):
     """Primary-key changes are not safe additive migrations."""
     db.execute(OLD_SCHEMA)
     db.commit()
@@ -251,6 +271,9 @@ def test_primary_key_mismatch_requires_destructive_opt_in(db):
     info = db.fetch_all("PRAGMA table_info(NL_H1)")
     cols = {r['name'] for r in info}
     assert "BetType" not in cols
+
+    with pytest.raises(SchemaMigrationError, match="primary key"):
+        verify_table_schema(db, "NL_H1", NEW_SCHEMA)
 
 
 def test_inline_primary_key_does_not_create_false_mismatch(db):
@@ -287,6 +310,19 @@ def test_migrate_no_op_when_table_missing(db):
     """If table doesn't exist, no migration needed."""
     result = migrate_table_if_needed(db, "NL_H1", NEW_SCHEMA)
     assert result is False
+
+
+def test_verify_table_schema_rejects_missing_table(db):
+    with pytest.raises(SchemaMigrationError, match="does not exist"):
+        verify_table_schema(db, "NL_H1", NEW_SCHEMA)
+
+
+def test_verify_table_schema_allows_extra_legacy_columns(db):
+    db.execute(ADDITIVE_OLD_SCHEMA)
+    db.execute("ALTER TABLE NL_H1 ADD COLUMN LegacyValue TEXT")
+    migrate_table_if_needed(db, "NL_H1", NEW_SCHEMA)
+
+    verify_table_schema(db, "NL_H1", NEW_SCHEMA)
 
 
 # --- migrate_all_tables tests ---
@@ -349,24 +385,25 @@ def test_pg_migrate_adds_missing_columns_without_dropping(pg_db):
     assert "Hyo" in pg_db._tables["nl_h1"]
 
 
-def test_pg_migrate_drops_and_recreates_on_mismatch_when_explicitly_allowed(pg_db, monkeypatch):
-    """PostgreSQL destructive migration requires explicit opt-in."""
-    monkeypatch.setenv("JLTSQL_ALLOW_DESTRUCTIVE_MIGRATIONS", "1")
+def test_pg_migrate_never_drops_on_primary_key_mismatch(pg_db):
+    """PostgreSQL startup migration is additive-only."""
     pg_db.execute(OLD_SCHEMA)
 
-    assert migrate_table_if_needed(pg_db, "NL_H1", NEW_SCHEMA) is True
+    assert migrate_table_if_needed(pg_db, "NL_H1", NEW_SCHEMA) is False
 
-    assert "BetType" in pg_db._tables["nl_h1"]
-    assert "TanUma" not in pg_db._tables["nl_h1"]
+    assert "BetType" not in pg_db._tables["nl_h1"]
+    assert "TanUma" in pg_db._tables["nl_h1"]
 
 
-def test_pg_primary_key_mismatch_requires_destructive_opt_in(pg_db):
-    """PostgreSQL path: primary-key changes require destructive opt-in."""
+def test_pg_primary_key_mismatch_requires_operator_migration(pg_db):
+    """PostgreSQL path: primary-key changes fail closed."""
     pg_db.execute(OLD_SCHEMA)
 
     result = migrate_table_if_needed(pg_db, "NL_H1", NEW_SCHEMA)
     assert result is False
     assert "BetType" not in pg_db._tables["nl_h1"]
+    with pytest.raises(SchemaMigrationError, match="primary key"):
+        verify_table_schema(pg_db, "NL_H1", NEW_SCHEMA)
 
 
 def test_pg_migrate_no_op_when_schema_matches(pg_db):

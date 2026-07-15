@@ -9,7 +9,7 @@ import time
 
 from src.fetcher.realtime import RealtimeFetcher
 from src.services.realtime_monitor import RealtimeMonitor, MonitorStatus
-from src.realtime.updater import RealtimeUpdater
+from src.realtime.updater import RealtimeUpdater, summarize_update_result
 from src.jvlink.constants import (
     JV_RT_SUCCESS,
     JV_READ_SUCCESS,
@@ -159,6 +159,19 @@ class TestMonitorStatus(unittest.TestCase):
         self.assertIn("0B15", status_dict["monitored_specs"])
 
 
+def test_summarize_update_result_counts_explicit_failures():
+    successful, failed = summarize_update_result(
+        [
+            {"operation": "insert", "success": True},
+            {"operation": "insert", "success": False},
+        ]
+    )
+
+    assert len(successful) == 1
+    assert failed == 1
+    assert summarize_update_result(None) == ([], 1)
+
+
 class TestRealtimeMonitor(unittest.TestCase):
     """Test RealtimeMonitor class."""
 
@@ -204,6 +217,7 @@ class TestRealtimeMonitor(unittest.TestCase):
         # Mock schema manager
         mock_mgr_instance = MagicMock()
         mock_mgr_instance.get_missing_tables.return_value = []
+        mock_mgr_instance.create_all_tables.return_value = {}
         mock_schema_mgr.return_value = mock_mgr_instance
 
         # Mock thread
@@ -217,6 +231,7 @@ class TestRealtimeMonitor(unittest.TestCase):
         self.assertIsNotNone(monitor.status.started_at)
 
         # Verify thread was created and started
+        mock_mgr_instance.create_all_tables.assert_called_once()
         mock_thread.assert_called()
         mock_thread_instance.start.assert_called()
 
@@ -330,6 +345,10 @@ class TestRealtimeMonitor(unittest.TestCase):
         # Mock schema manager
         mock_mgr_instance = MagicMock()
         mock_mgr_instance.get_missing_tables.return_value = ["NL_RA", "NL_SE"]
+        mock_mgr_instance.create_all_tables.return_value = {
+            "NL_RA": True,
+            "NL_SE": True,
+        }
         mock_schema_mgr.return_value = mock_mgr_instance
 
         monitor._ensure_tables()

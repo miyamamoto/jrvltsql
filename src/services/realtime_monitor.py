@@ -12,7 +12,7 @@ from datetime import datetime
 from src.fetcher.realtime import RealtimeFetcher
 from src.jvlink.constants import is_time_series_spec
 from src.jvlink.wrapper import JVLinkError
-from src.realtime.updater import RealtimeUpdater
+from src.realtime.updater import RealtimeUpdater, summarize_update_result
 from src.database.base import BaseDatabase
 from src.utils.logger import get_logger
 
@@ -303,12 +303,16 @@ class RealtimeMonitor:
                             timeseries=timeseries,
                             source_spec=data_spec if timeseries else None,
                         )
+                        successful, failed = summarize_update_result(result)
                         with self._lock:
-                            if result:
-                                self.status.records_imported += 1
-                                n += 1
-                            else:
-                                self.status.records_failed += 1
+                            self.status.records_imported += len(successful)
+                            self.status.records_failed += failed
+                            n += len(successful)
+                        if failed:
+                            self._add_error(
+                                data_spec,
+                                f"Updater rejected {failed} operation(s) for {key}",
+                            )
                     except Exception as e:
                         logger.error(f"process_record error ({data_spec}/{key}): {e}")
                         with self._lock:
@@ -366,7 +370,7 @@ class RealtimeMonitor:
             return []
 
     def _ensure_tables(self):
-        """Ensure required database tables exist."""
+        """Additively migrate schemas and ensure all required tables exist."""
         try:
             from src.database.schema import SchemaManager
 
@@ -378,10 +382,17 @@ class RealtimeMonitor:
                     f"Creating {len(missing_tables)} missing tables",
                     tables=missing_tables,
                 )
-                schema_mgr.create_all_tables()
+            results = schema_mgr.create_all_tables()
+            failed_tables = [name for name, success in results.items() if not success]
+            if failed_tables:
+                raise RuntimeError(
+                    "Failed to prepare database tables: "
+                    + ", ".join(failed_tables)
+                )
 
         except Exception as e:
-            logger.warning(f"Could not create tables: {e}")
+            logger.error(f"Could not prepare database tables: {e}")
+            raise
 
     def _add_error(self, context: str, error: str):
         """Add error to status tracking."""

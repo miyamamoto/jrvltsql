@@ -22,6 +22,19 @@ from src.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
+def summarize_update_result(result) -> tuple[List[Dict], int]:
+    """Return successful operations and the number of rejected operations."""
+    items = result if isinstance(result, list) else [result]
+    if not items:
+        return [], 1
+    successful = [
+        item
+        for item in items
+        if isinstance(item, dict) and item.get("success") is True
+    ]
+    return successful, len(items) - len(successful)
+
+
 class RealtimeUpdater:
     """Real-time data updater.
 

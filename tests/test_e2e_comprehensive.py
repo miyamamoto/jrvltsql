@@ -34,7 +34,7 @@ except ImportError:
 
 
 class TestAllTablesCreation(unittest.TestCase):
-    """Test that all 68 tables can be created in all databases."""
+    """Test that all 74 tables can be created in all databases."""
 
     def test_schema_count(self):
         """Verify we have exactly 58 schemas (42 NL + 20 RT)."""
@@ -43,7 +43,7 @@ class TestAllTablesCreation(unittest.TestCase):
 
         self.assertEqual(len(nl_tables), 42, "Should have 42 NL_* tables")
         self.assertEqual(len(rt_tables), 20, "Should have 20 RT_* tables")
-        self.assertEqual(len(SCHEMAS), 68, "Should have 64 total tables")
+        self.assertEqual(len(SCHEMAS), 74, "Should have 74 total tables")
 
     def test_realtime_tables_subset(self):
         """Verify RT tables are only for real-time record types."""
@@ -130,8 +130,8 @@ class TestSQLiteAllTables(unittest.TestCase):
         failed = sum(1 for success in results.values() if not success)
         failed_tables = [name for name, success in results.items() if not success]
 
-        # All 68 tables should create successfully (42 NL + 20 RT)
-        self.assertEqual(successful, 68, f"Should create all 68 tables, failed: {failed_tables}")
+        # All 74 tables should create successfully (42 NL + 20 RT + 12 TS)
+        self.assertEqual(successful, 74, f"Should create all 74 tables, failed: {failed_tables}")
         self.assertEqual(failed, 0, "Should have 0 failing tables")
 
         # Verify all tables exist

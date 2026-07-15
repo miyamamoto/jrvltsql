@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Optional
 
 from src.jvlink.constants import JV_RT_SUCCESS, JV_READ_SUCCESS
-from src.realtime.updater import RealtimeUpdater
+from src.realtime.updater import RealtimeUpdater, summarize_update_result
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -208,19 +208,21 @@ class RealtimeMonitor:
                 try:
                     # Process record
                     result = self.updater.process_record(buff)
+                    successful, failed = summarize_update_result(result)
 
-                    if result:
-                        self._stats["records_processed"] += 1
-                        records_in_poll += 1
+                    self._stats["errors"] += failed
+                    self._stats["records_processed"] += len(successful)
+                    records_in_poll += len(successful)
 
-                        # Update statistics based on operation
-                        if result.get("operation") == "insert":
+                    for operation in successful:
+                        if operation.get("operation") == "insert":
                             self._stats["records_inserted"] += 1
-                        elif result.get("operation") == "update":
+                        elif operation.get("operation") == "update":
                             self._stats["records_updated"] += 1
-                        elif result.get("operation") == "delete":
+                        elif operation.get("operation") == "delete":
                             self._stats["records_deleted"] += 1
 
+                    if successful:
                         self._stats["last_update"] = datetime.now()
 
                 except Exception as e:
