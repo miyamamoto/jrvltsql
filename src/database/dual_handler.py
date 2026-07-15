@@ -145,6 +145,10 @@ class DualDatabase(BaseDatabase):
         """
         return self._primary.get_db_type()
 
+    def get_migration_targets(self) -> tuple[BaseDatabase, BaseDatabase]:
+        """Return concrete backends for backend-specific schema migration."""
+        return self._primary, self._secondary
+
     # ------------------------------------------------------------------
     # Reads: primary only
     # ------------------------------------------------------------------
