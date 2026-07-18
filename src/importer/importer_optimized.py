@@ -71,7 +71,7 @@ class OptimizedDataImporter:
 
     def _migrate_existing_jravan_tables(self) -> None:
         """Add newly supported columns to existing standard-name tables."""
-        from src.database.migration import migrate_table_if_needed
+        from src.database.migration import migrate_table_if_needed, verify_table_schema
         from src.database.schema_jravan import JRAVAN_SCHEMAS
         from src.database.table_mappings import JLTSQL_TO_JRAVAN
 
@@ -80,6 +80,7 @@ class OptimizedDataImporter:
             schema_sql = JRAVAN_SCHEMAS.get(standard_name)
             if schema_sql and self.database.table_exists(standard_name):
                 migrate_table_if_needed(self.database, standard_name, schema_sql)
+                verify_table_schema(self.database, standard_name, schema_sql)
 
     def _detect_database_type(self) -> str:
         """Detect database type from handler class."""

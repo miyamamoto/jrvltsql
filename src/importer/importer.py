@@ -278,7 +278,7 @@ class DataImporter:
 
     def _migrate_existing_jravan_tables(self) -> None:
         """Add newly supported columns to existing standard-name tables."""
-        from src.database.migration import migrate_table_if_needed
+        from src.database.migration import migrate_table_if_needed, verify_table_schema
         from src.database.schema_jravan import JRAVAN_SCHEMAS
 
         for table_name in set(self._table_map.values()):
@@ -286,6 +286,7 @@ class DataImporter:
             schema_sql = JRAVAN_SCHEMAS.get(standard_name)
             if schema_sql and self.database.table_exists(standard_name):
                 migrate_table_if_needed(self.database, standard_name, schema_sql)
+                verify_table_schema(self.database, standard_name, schema_sql)
 
     @staticmethod
     def _get_table_name_for_native(table_name: str) -> str:
