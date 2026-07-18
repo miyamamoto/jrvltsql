@@ -1,6 +1,12 @@
-# jrvltsql v1.6.7 Release Notes
+# jrvltsql v1.6.8 Release Notes
 
 ## Highlights
+
+- Adds canonical numeric JRA SE columns for race time, final 3F, body weight,
+  body-weight change, finish position, and horse number while preserving the
+  official raw fixed-width fields unchanged.
+- Applies the new columns through additive SQLite/PostgreSQL migrations and
+  verifies both schema keys and representative official record conversions.
 
 - Treats `JVRead -2` as a read failure rather than no data, preventing partial
   realtime and historical responses from being committed.

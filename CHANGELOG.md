@@ -9,6 +9,13 @@
 
 現時点で未リリースの変更はありません。
 
+## [1.6.8] - 2026-07-18
+
+### Added
+
+- JRA SE の raw 固定幅値を保持したまま、走破タイム、上がり3F、馬体重、増減、着順、馬番の canonical 数値列を追加
+- SQLite/PostgreSQL の additive migration と primary-key 検証、および実レコード例を固定した parser contract test を追加
+
 ## [1.6.7] - 2026-07-15
 
 ### Fixed
@@ -222,7 +229,8 @@
 - quickstart.py 対話形式セットアップウィザード
 - CLI コマンド（fetch, status, monitor, init）
 
-[Unreleased]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.7...HEAD
+[Unreleased]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.8...HEAD
+[1.6.8]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.7...v1.6.8
 [1.6.7]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.6...v1.6.7
 [1.6.6]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.5...v1.6.6
 [1.6.5]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.4...v1.6.5
