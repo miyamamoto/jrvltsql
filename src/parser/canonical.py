@@ -12,11 +12,22 @@ from typing import Any
 
 SE_CONTRACT_VERSION = 2
 
+
 def _unsigned_digits(value: Any, width: int) -> int | None:
     if value is None:
         return None
-    text = str(value).strip()
-    if len(text) != width or not text.isascii() or not text.isdigit():
+    raw_text = str(value)
+    text = raw_text.strip()
+    # SEParser strips fixed-width fields before canonicalization. Accept a
+    # shorter digit string only when the original value fits in the field;
+    # over-width or non-numeric values still fail closed.
+    if (
+        not text
+        or len(raw_text) > width
+        or len(text) > width
+        or not text.isascii()
+        or not text.isdigit()
+    ):
         return None
     return int(text)
 
@@ -123,17 +134,11 @@ def canonicalize_se_fields(record: dict[str, Any]) -> dict[str, Any]:
             record.get("FutanBefore"), 3, 0.1, zero_is_missing=True, sentinels=(999,)
         ),
         "BaTaijyuKg": _body_weight_kg(record.get("BaTaijyu")),
-        "ZogenSaKg": _signed_weight_change(
-            record.get("ZogenSa"), record.get("ZogenFugo")
-        ),
+        "ZogenSaKg": _signed_weight_change(record.get("ZogenSa"), record.get("ZogenFugo")),
         "RaceTimeSeconds": _msss_seconds(record.get("Time")),
-        "OddsMultiplier": _scaled_unsigned(
-            record.get("Odds"), 4, 0.1, zero_is_missing=True
-        ),
+        "OddsMultiplier": _scaled_unsigned(record.get("Odds"), 4, 0.1, zero_is_missing=True),
         "HonsyokinYen": _prize_yen(record.get("Honsyokin"), record.get("DataKubun")),
-        "FukasyokinYen": _prize_yen(
-            record.get("Fukasyokin"), record.get("DataKubun")
-        ),
+        "FukasyokinYen": _prize_yen(record.get("Fukasyokin"), record.get("DataKubun")),
         "HaronTimeL4Seconds": _scaled_unsigned(
             record.get("HaronTimeL4"),
             3,
@@ -150,10 +155,6 @@ def canonicalize_se_fields(record: dict[str, Any]) -> dict[str, Any]:
         ),
         "TimeDiffSeconds": _signed_tenths(record.get("TimeDiff")),
         "DMTimeSeconds": _msshh_seconds(record.get("DMTime")),
-        "DMGosaPSeconds": _scaled_unsigned(
-            record.get("DMGosaP"), 4, 0.01, zero_is_missing=True
-        ),
-        "DMGosaMSeconds": _scaled_unsigned(
-            record.get("DMGosaM"), 4, 0.01, zero_is_missing=True
-        ),
+        "DMGosaPSeconds": _scaled_unsigned(record.get("DMGosaP"), 4, 0.01, zero_is_missing=True),
+        "DMGosaMSeconds": _scaled_unsigned(record.get("DMGosaM"), 4, 0.01, zero_is_missing=True),
     }

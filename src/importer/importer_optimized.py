@@ -41,22 +41,51 @@ class OptimizedDataImporter:
         self._records_imported = 0
         self._records_failed = 0
         self._batches_processed = 0
+        self._jravan_tables_ready = not use_jravan_schema
 
         # Detect database type for optimization
         self.db_type = self._detect_database_type()
 
         # Map record types to table names (same as original)
         self._table_map = {
-            "RA": "NL_RA", "SE": "NL_SE", "HR": "NL_HR", "JG": "NL_JG",
-            "H1": "NL_H1", "H6": "NL_H6", "O1": "NL_O1", "O2": "NL_O2",
-            "O3": "NL_O3", "O4": "NL_O4", "O5": "NL_O5", "O6": "NL_O6",
-            "YS": "NL_YS", "UM": "NL_UM", "KS": "NL_KS", "CH": "NL_CH",
-            "BR": "NL_BR", "BN": "NL_BN", "HN": "NL_HN", "SK": "NL_SK",
-            "RC": "NL_RC", "CC": "NL_CC", "TC": "NL_TC", "CS": "NL_CS",
-            "CK": "NL_CK", "WC": "NL_WC", "AV": "NL_AV", "JC": "NL_JC",
-            "HC": "NL_HC", "HS": "NL_HS", "HY": "NL_HY", "WE": "NL_WE",
-            "WF": "NL_WF", "WH": "NL_WH", "TM": "NL_TM", "TK": "NL_TK",
-            "BT": "NL_BT", "DM": "NL_DM",
+            "RA": "NL_RA",
+            "SE": "NL_SE",
+            "HR": "NL_HR",
+            "JG": "NL_JG",
+            "H1": "NL_H1",
+            "H6": "NL_H6",
+            "O1": "NL_O1",
+            "O2": "NL_O2",
+            "O3": "NL_O3",
+            "O4": "NL_O4",
+            "O5": "NL_O5",
+            "O6": "NL_O6",
+            "YS": "NL_YS",
+            "UM": "NL_UM",
+            "KS": "NL_KS",
+            "CH": "NL_CH",
+            "BR": "NL_BR",
+            "BN": "NL_BN",
+            "HN": "NL_HN",
+            "SK": "NL_SK",
+            "RC": "NL_RC",
+            "CC": "NL_CC",
+            "TC": "NL_TC",
+            "CS": "NL_CS",
+            "CK": "NL_CK",
+            "WC": "NL_WC",
+            "AV": "NL_AV",
+            "JC": "NL_JC",
+            "HC": "NL_HC",
+            "HS": "NL_HS",
+            "HY": "NL_HY",
+            "WE": "NL_WE",
+            "WF": "NL_WF",
+            "WH": "NL_WH",
+            "TM": "NL_TM",
+            "TK": "NL_TK",
+            "BT": "NL_BT",
+            "DM": "NL_DM",
         }
 
         logger.info(
@@ -66,10 +95,7 @@ class OptimizedDataImporter:
             use_jravan_schema=use_jravan_schema,
         )
 
-        if self.use_jravan_schema:
-            self._migrate_existing_jravan_tables()
-
-    def _migrate_existing_jravan_tables(self) -> None:
+    def _migrate_existing_jravan_tables(self, *, commit: bool) -> None:
         """Add newly supported columns to existing standard-name tables."""
         from src.database.migration import migrate_table_if_needed, verify_table_schema
         from src.database.schema_jravan import JRAVAN_SCHEMAS
@@ -79,8 +105,20 @@ class OptimizedDataImporter:
             standard_name = JLTSQL_TO_JRAVAN.get(native_name, native_name)
             schema_sql = JRAVAN_SCHEMAS.get(standard_name)
             if schema_sql and self.database.table_exists(standard_name):
-                migrate_table_if_needed(self.database, standard_name, schema_sql)
+                migrate_table_if_needed(self.database, standard_name, schema_sql, commit=commit)
                 verify_table_schema(self.database, standard_name, schema_sql)
+
+    def _ensure_jravan_tables_ready(self, *, auto_commit: bool) -> None:
+        """Migrate standard-name tables only after the DB is connected."""
+        if self._jravan_tables_ready:
+            return
+        if not self.database.is_connected():
+            from src.importer.importer import ImporterError
+
+            raise ImporterError("JRA-VAN schema import requires a connected database")
+        self._migrate_existing_jravan_tables(commit=auto_commit)
+        if auto_commit:
+            self._jravan_tables_ready = True
 
     def _detect_database_type(self) -> str:
         """Detect database type from handler class."""
@@ -100,6 +138,7 @@ class OptimizedDataImporter:
 
         if self.use_jravan_schema:
             from src.database.table_mappings import JLTSQL_TO_JRAVAN
+
             return JLTSQL_TO_JRAVAN.get(table_name, table_name)
 
         return table_name
@@ -131,12 +170,8 @@ class OptimizedDataImporter:
         from src.database.schema_types import get_table_primary_key_columns
         from src.database.table_mappings import JRAVAN_TO_JLTSQL
 
-        primary_keys = get_table_primary_key_columns(
-            JRAVAN_TO_JLTSQL.get(table_name, table_name)
-        )
-        return not primary_keys or all(
-            record.get(key) not in (None, "") for key in primary_keys
-        )
+        primary_keys = get_table_primary_key_columns(JRAVAN_TO_JLTSQL.get(table_name, table_name))
+        return not primary_keys or all(record.get(key) not in (None, "") for key in primary_keys)
 
     def import_records(
         self,
@@ -155,6 +190,10 @@ class OptimizedDataImporter:
         Returns:
             Dictionary with import statistics
         """
+        if not auto_commit:
+            self.database.begin_transaction()
+        self._ensure_jravan_tables_ready(auto_commit=auto_commit)
+
         # Reset statistics
         self._records_imported = 0
         self._records_failed = 0
@@ -163,21 +202,18 @@ class OptimizedDataImporter:
         # Group records by type for batch insertion
         batch_buffers: Dict[str, List[dict]] = {}
 
-        # Start transaction for entire import
-        transaction_started = False
-
         try:
             for record in records:
                 # Get record type and table name
                 record_type = (
-                    record.get("レコード種別ID") or
-                    record.get("RecordSpec") or
-                    record.get("headRecordSpec")
+                    record.get("レコード種別ID")
+                    or record.get("RecordSpec")
+                    or record.get("headRecordSpec")
                 )
                 if not record_type:
                     logger.warning(
                         "Record missing record type field",
-                        record_keys=list(record.keys())[:5] if record else None
+                        record_keys=list(record.keys())[:5] if record else None,
                     )
                     self._records_failed += 1
                     continue
@@ -211,7 +247,7 @@ class OptimizedDataImporter:
                     self._flush_batch_optimized(
                         table_name,
                         batch_buffers[table_name],
-                        commit_batch=(not transaction_started)  # Only commit if not in transaction
+                        commit_batch=auto_commit,
                     )
                     batch_buffers[table_name] = []
 
@@ -219,15 +255,8 @@ class OptimizedDataImporter:
             for table_name, batch in batch_buffers.items():
                 if batch:
                     self._flush_batch_optimized(
-                        table_name,
-                        batch,
-                        commit_batch=(not transaction_started)
+                        table_name, batch, commit_batch=auto_commit
                     )
-
-            # Commit if in transaction
-            if transaction_started and auto_commit:
-                self.database.commit()
-                logger.info("Committed transaction for entire import")
 
             # Log summary
             stats = self.get_statistics()
@@ -238,15 +267,8 @@ class OptimizedDataImporter:
         except Exception as e:
             logger.error("Import failed", error=str(e))
 
-            # Rollback if in transaction
-            if transaction_started:
-                try:
-                    self.database.rollback()
-                    logger.info("Rolled back transaction due to error")
-                except Exception:
-                    pass
-
             from src.importer.importer import ImporterError
+
             raise ImporterError(f"Failed to import records: {e}")
 
     def _flush_batch_optimized(
@@ -261,7 +283,7 @@ class OptimizedDataImporter:
 
         try:
             # Use optimized insert if available
-            if hasattr(self.database, 'insert_many_optimized'):
+            if hasattr(self.database, "insert_many_optimized"):
                 # Optimized path
                 rows = self.database.insert_many_optimized(table_name, batch)
             else:
@@ -283,6 +305,12 @@ class OptimizedDataImporter:
             )
 
         except DatabaseError as e:
+            if not commit_batch:
+                # The backend may already have rolled back the caller-owned
+                # transaction. Retrying rows here would create a partial import
+                # and make the reported statistics diverge from persisted data.
+                raise
+
             # Try inserting one by one on batch failure
             logger.warning(
                 "Batch insert failed, trying individual inserts",
@@ -313,8 +341,7 @@ class OptimizedDataImporter:
             "records_failed": self._records_failed,
             "batches_processed": self._batches_processed,
             "success_rate": (
-                self._records_imported * 100 /
-                (self._records_imported + self._records_failed)
+                self._records_imported * 100 / (self._records_imported + self._records_failed)
                 if (self._records_imported + self._records_failed) > 0
                 else 0
             ),

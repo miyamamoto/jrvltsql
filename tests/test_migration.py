@@ -12,6 +12,7 @@ from src.database.sqlite_handler import SQLiteDatabase
 from src.database.dual_handler import DualDatabase
 from src.database.migration import (
     SchemaMigrationError,
+    _extract_column_definitions,
     _extract_columns_from_sql,
     _extract_primary_key_columns,
     migrate_table_if_needed,
@@ -35,10 +36,17 @@ class MockPostgreSQLDatabase(BaseDatabase):
     def is_connected(self) -> bool:
         return True
 
-    def connect(self): pass
-    def disconnect(self): pass
-    def commit(self): pass
-    def rollback(self): pass
+    def connect(self):
+        pass
+
+    def disconnect(self):
+        pass
+
+    def commit(self):
+        pass
+
+    def rollback(self):
+        pass
 
     def table_exists(self, table_name: str) -> bool:
         # Real PostgreSQL stores unquoted identifiers in lowercase.
@@ -51,6 +59,7 @@ class MockPostgreSQLDatabase(BaseDatabase):
             # Extract table name: DROP TABLE "NL_H1" or DROP TABLE NL_H1
             # IF EXISTS is supported and silently no-ops on missing tables.
             import re
+
             m = re.search(r'DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?"?(\w+)"?', sql, re.IGNORECASE)
             if m:
                 # Real PG: unquoted name is lowercased; quoted name preserves case.
@@ -61,6 +70,7 @@ class MockPostgreSQLDatabase(BaseDatabase):
                 self._primary_keys.pop(table, None)
         elif upper.startswith("ALTER TABLE"):
             import re
+
             m = re.search(
                 r'ALTER\s+TABLE\s+"?(\w+)"?\s+ADD\s+COLUMN\s+"?(\w+)"?',
                 sql,
@@ -73,7 +83,10 @@ class MockPostgreSQLDatabase(BaseDatabase):
         elif upper.startswith("CREATE TABLE"):
             from src.database.migration import _extract_columns_from_sql
             import re
-            m = re.search(r'CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?"?(\w+)"?', sql, re.IGNORECASE)
+
+            m = re.search(
+                r'CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?"?(\w+)"?', sql, re.IGNORECASE
+            )
             if m:
                 cols = _extract_columns_from_sql(sql)
                 pk = _extract_primary_key_columns(sql)
@@ -84,7 +97,8 @@ class MockPostgreSQLDatabase(BaseDatabase):
                 self._tables[table] = list(cols or [])
                 self._primary_keys[table] = list(pk or [])
 
-    def executemany(self, sql: str, parameters): pass
+    def executemany(self, sql: str, parameters):
+        pass
 
     def fetch_one(self, sql: str, parameters=None) -> Optional[Dict[str, Any]]:
         rows = self.fetch_all(sql, parameters)
@@ -104,9 +118,11 @@ class MockPostgreSQLDatabase(BaseDatabase):
             return [{"name": c} for c in pk]
         return []
 
-    def create_table(self, table_name: str, schema: str): pass
+    def create_table(self, table_name: str, schema: str):
+        pass
 
-    def _execute_raw(self, sql: str, parameters=None): pass
+    def _execute_raw(self, sql: str, parameters=None):
+        pass
 
 
 @pytest.fixture
@@ -122,6 +138,7 @@ def db():
 
 # --- _extract_columns_from_sql tests ---
 
+
 def test_extract_columns_simple():
     sql = """CREATE TABLE IF NOT EXISTS T (
         A INTEGER, B TEXT, C REAL,
@@ -135,6 +152,20 @@ def test_extract_columns_no_pk():
     sql = "CREATE TABLE T (X TEXT, Y INTEGER)"
     cols = _extract_columns_from_sql(sql)
     assert cols == {"X", "Y"}
+
+
+def test_extract_columns_preserves_double_hyphen_inside_quoted_default():
+    sql = """CREATE TABLE T (
+        Note TEXT DEFAULT 'provider,--value', -- provider comment
+        Value INTEGER -- numeric comment
+    )"""
+
+    cols = _extract_columns_from_sql(sql)
+    definitions = _extract_column_definitions(sql)
+
+    assert cols == {"Note", "Value"}
+    assert definitions is not None
+    assert definitions["Note"] == "Note TEXT DEFAULT 'provider,--value'"
 
 
 def test_extract_primary_key_columns():
@@ -206,12 +237,14 @@ def test_migrate_adds_missing_columns_without_dropping(db):
 
     # Verify old columns exist
     info = db.fetch_all("PRAGMA table_info(NL_H1)")
-    old_cols = {r['name'] for r in info}
+    old_cols = {r["name"] for r in info}
     assert "BetType" in old_cols
     assert "Hyo" not in old_cols
 
     # Insert a row into old table
-    db.execute("INSERT INTO NL_H1 (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, BetType, Kumi) VALUES (2025, 101, '01', 1, 1, 1, 'T', '01')")
+    db.execute(
+        "INSERT INTO NL_H1 (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, BetType, Kumi) VALUES (2025, 101, '01', 1, 1, 1, 'T', '01')"
+    )
     db.commit()
 
     # Run migration
@@ -220,7 +253,7 @@ def test_migrate_adds_missing_columns_without_dropping(db):
 
     # Verify new columns were added and old columns were preserved.
     info = db.fetch_all("PRAGMA table_info(NL_H1)")
-    new_cols = {r['name'] for r in info}
+    new_cols = {r["name"] for r in info}
     assert "BetType" in new_cols
     assert "Kumi" in new_cols
     assert "Hyo" in new_cols
@@ -230,17 +263,31 @@ def test_migrate_adds_missing_columns_without_dropping(db):
     assert len(rows) == 1
 
 
+def test_migrate_without_commit_stays_in_callers_transaction(db):
+    db.execute(ADDITIVE_OLD_SCHEMA)
+    db.commit()
+
+    assert migrate_table_if_needed(db, "NL_H1", NEW_SCHEMA, commit=False) is True
+    assert "Hyo" in {row["name"] for row in db.fetch_all("PRAGMA table_info(NL_H1)")}
+
+    db.rollback()
+
+    assert "Hyo" not in {row["name"] for row in db.fetch_all("PRAGMA table_info(NL_H1)")}
+
+
 def test_migrate_never_drops_table_on_primary_key_mismatch(db):
     """Production migration paths must never erase existing rows."""
     db.execute(OLD_SCHEMA)
     db.commit()
-    db.execute("INSERT INTO NL_H1 (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, TanUma) VALUES (2025, 101, '01', 1, 1, 1, 'test')")
+    db.execute(
+        "INSERT INTO NL_H1 (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, TanUma) VALUES (2025, 101, '01', 1, 1, 1, 'test')"
+    )
     db.commit()
 
     assert migrate_table_if_needed(db, "NL_H1", NEW_SCHEMA) is False
 
     info = db.fetch_all("PRAGMA table_info(NL_H1)")
-    new_cols = {r['name'] for r in info}
+    new_cols = {r["name"] for r in info}
     assert "BetType" not in new_cols
     assert "TanUma" in new_cols
     assert len(db.fetch_all("SELECT * FROM NL_H1")) == 1
@@ -273,7 +320,7 @@ def test_primary_key_mismatch_requires_operator_migration(db):
     assert result is False
 
     info = db.fetch_all("PRAGMA table_info(NL_H1)")
-    cols = {r['name'] for r in info}
+    cols = {r["name"] for r in info}
     assert "BetType" not in cols
 
     with pytest.raises(SchemaMigrationError, match="primary key"):
@@ -289,7 +336,7 @@ def test_inline_primary_key_does_not_create_false_mismatch(db):
     result = migrate_table_if_needed(db, "INLINE_PK", INLINE_NEW_SCHEMA)
     assert result is True
 
-    cols = {r['name'] for r in db.fetch_all("PRAGMA table_info(INLINE_PK)")}
+    cols = {r["name"] for r in db.fetch_all("PRAGMA table_info(INLINE_PK)")}
     assert "Score" in cols
     rows = db.fetch_all("SELECT Id, Name FROM INLINE_PK")
     assert rows == [{"Id": 1, "Name": "keiba"}]
@@ -299,7 +346,9 @@ def test_migrate_no_op_when_schema_matches(db):
     """If schema already matches, no migration should occur."""
     db.execute(NEW_SCHEMA)
     db.commit()
-    db.execute("INSERT INTO NL_H1 (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, BetType, Kumi) VALUES (2025, 101, '01', 1, 1, 1, 'T', '01')")
+    db.execute(
+        "INSERT INTO NL_H1 (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, BetType, Kumi) VALUES (2025, 101, '01', 1, 1, 1, 'T', '01')"
+    )
     db.commit()
 
     result = migrate_table_if_needed(db, "NL_H1", NEW_SCHEMA)
@@ -364,13 +413,14 @@ def test_migrate_all_tables_multiple(db):
     assert count == 2
 
     # Verify both tables have new schemas
-    h1_cols = {r['name'] for r in db.fetch_all("PRAGMA table_info(NL_H1)")}
+    h1_cols = {r["name"] for r in db.fetch_all("PRAGMA table_info(NL_H1)")}
     assert "BetType" in h1_cols
-    h6_cols = {r['name'] for r in db.fetch_all("PRAGMA table_info(NL_H6)")}
+    h6_cols = {r["name"] for r in db.fetch_all("PRAGMA table_info(NL_H6)")}
     assert "SanrentanKumi" in h6_cols
 
 
 # --- PostgreSQL path tests (mock DB, no server required) ---
+
 
 @pytest.fixture
 def pg_db():
@@ -444,14 +494,11 @@ def test_dual_migration_uses_each_backends_identifier_rules(db, pg_db):
 
     assert migrate_table_if_needed(dual, "NL_H1", NEW_SCHEMA) is True
 
-    sqlite_columns = {
-        row["name"] for row in db.fetch_all('PRAGMA table_info("NL_H1")')
-    }
+    sqlite_columns = {row["name"] for row in db.fetch_all('PRAGMA table_info("NL_H1")')}
     assert "Hyo" in sqlite_columns
     assert "Hyo" in pg_db._tables["nl_h1"]
     assert any(
-        statement.startswith("ALTER TABLE nl_h1 ADD COLUMN Hyo")
-        for statement in pg_db._executed
+        statement.startswith("ALTER TABLE nl_h1 ADD COLUMN Hyo") for statement in pg_db._executed
     )
     verify_table_schema(dual, "NL_H1", NEW_SCHEMA)
 
@@ -466,8 +513,6 @@ def test_dual_migration_skips_unavailable_best_effort_secondary(db, pg_db):
     assert migrate_table_if_needed(dual, "NL_H1", NEW_SCHEMA) is True
     verify_table_schema(dual, "NL_H1", NEW_SCHEMA)
 
-    sqlite_columns = {
-        row["name"] for row in db.fetch_all('PRAGMA table_info("NL_H1")')
-    }
+    sqlite_columns = {row["name"] for row in db.fetch_all('PRAGMA table_info("NL_H1")')}
     assert "Hyo" in sqlite_columns
     assert "Hyo" not in pg_db._tables["nl_h1"]
