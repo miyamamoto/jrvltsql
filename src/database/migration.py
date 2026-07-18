@@ -33,7 +33,10 @@ def _migration_targets(db: BaseDatabase) -> tuple[BaseDatabase, ...]:
 
 def _schema_body(create_sql: str) -> Optional[str]:
     """Return the body inside the CREATE TABLE parentheses."""
-    match = re.search(r'\((.+)\)', create_sql, re.DOTALL)
+    # Generated schemas use trailing ``--`` comments.  They must not become
+    # part of an ALTER TABLE column definition during additive migration.
+    sql_without_line_comments = re.sub(r"--[^\r\n]*", "", create_sql)
+    match = re.search(r'\((.+)\)', sql_without_line_comments, re.DOTALL)
     if not match:
         return None
     return match.group(1)
@@ -226,7 +229,7 @@ def migrate_table_if_needed(db: BaseDatabase, table_name: str, schema_sql: str) 
 
     existing_pk_lower = [column.lower() for column in existing_pk]
     expected_pk_lower = [column.lower() for column in expected_pk]
-    if existing_pk_lower != expected_pk_lower:
+    if expected_pk_lower and existing_pk_lower != expected_pk_lower:
         logger.warning(
             f"Primary key mismatch for {table_name}: "
             f"existing={existing_pk}, expected={expected_pk}. "
@@ -326,7 +329,7 @@ def verify_table_schema(db: BaseDatabase, table_name: str, schema_sql: str) -> N
     problems = []
     if missing_columns:
         problems.append(f"missing columns={missing_columns}")
-    if existing_pk_lower != expected_pk_lower:
+    if expected_pk_lower and existing_pk_lower != expected_pk_lower:
         problems.append(
             f"primary key existing={existing_pk}, expected={expected_pk}"
         )

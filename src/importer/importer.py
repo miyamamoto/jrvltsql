@@ -32,12 +32,22 @@ DIVIDE_BY_10_PREFIXES = frozenset([
 # 完全一致で10で割るべきフィールド名
 DIVIDE_BY_10_EXACT = frozenset(["Odds", "Time"])
 
+# Explicit-unit fields are already canonicalized by the parser contract.
+CANONICAL_SE_FIELDS = frozenset([
+    "FutanKg", "FutanBeforeKg", "BaTaijyuKg", "ZogenSaKg",
+    "RaceTimeSeconds", "OddsMultiplier", "HonsyokinYen", "FukasyokinYen",
+    "HaronTimeL4Seconds", "HaronTimeL3Seconds", "TimeDiffSeconds",
+    "DMTimeSeconds", "DMGosaPSeconds", "DMGosaMSeconds",
+])
+
 # キャッシュ（フィールド名 → 10で割るべきか）
 _divide_cache: dict = {}
 
 
 def _should_divide_by_10(field_name: str) -> bool:
     """フィールドが10で割る必要があるかチェック（キャッシュ付き）"""
+    if field_name in CANONICAL_SE_FIELDS:
+        return False
     # キャッシュから取得
     result = _divide_cache.get(field_name)
     if result is not None:
@@ -263,6 +273,26 @@ class DataImporter:
             use_jravan_schema=use_jravan_schema,
         )
 
+        if self.use_jravan_schema:
+            self._migrate_existing_jravan_tables()
+
+    def _migrate_existing_jravan_tables(self) -> None:
+        """Add newly supported columns to existing standard-name tables."""
+        from src.database.migration import migrate_table_if_needed
+        from src.database.schema_jravan import JRAVAN_SCHEMAS
+
+        for table_name in set(self._table_map.values()):
+            standard_name = self._get_table_name_for_native(table_name)
+            schema_sql = JRAVAN_SCHEMAS.get(standard_name)
+            if schema_sql and self.database.table_exists(standard_name):
+                migrate_table_if_needed(self.database, standard_name, schema_sql)
+
+    @staticmethod
+    def _get_table_name_for_native(table_name: str) -> str:
+        from src.database.table_mappings import JLTSQL_TO_JRAVAN
+
+        return JLTSQL_TO_JRAVAN.get(table_name, table_name)
+
     def _get_table_name(self, record_type: str) -> Optional[str]:
         """Get table name for record type.
 
@@ -316,7 +346,11 @@ class DataImporter:
     @staticmethod
     def _has_complete_primary_key(table_name: str, record: dict) -> bool:
         """Return True when a converted row has all schema primary-key values."""
-        primary_keys = get_table_primary_key_columns(table_name)
+        from src.database.table_mappings import JRAVAN_TO_JLTSQL
+
+        primary_keys = get_table_primary_key_columns(
+            JRAVAN_TO_JLTSQL.get(table_name, table_name)
+        )
         if not primary_keys:
             return True
         return all(record.get(key) not in (None, "") for key in primary_keys)
