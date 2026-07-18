@@ -55,7 +55,10 @@ def test_se_canonical_units_and_import_schema() -> None:
     )
     parsed = SEParser().parse(raw)
     assert parsed is not None
-    assert sha256(raw).hexdigest() == "d56a31980c3c35663736fd9f6da4098b84a1d2b1ea41450af1ba208972157df7"
+    assert (
+        sha256(raw).hexdigest()
+        == "d56a31980c3c35663736fd9f6da4098b84a1d2b1ea41450af1ba208972157df7"
+    )
     assert parsed["Futan"] == "570"
     assert parsed["BaTaijyu"] == "508"
     assert parsed["Time"] == "1351"
@@ -102,9 +105,7 @@ def test_se_canonical_units_and_import_schema() -> None:
         ("Odds", "----", "OddsMultiplier"),
     ],
 )
-def test_se_canonical_malformed_values_fail_closed(
-    field: str, value: str, canonical: str
-) -> None:
+def test_se_canonical_malformed_values_fail_closed(field: str, value: str, canonical: str) -> None:
     assert canonicalize_se_fields({field: value})[canonical] is None
 
 
@@ -161,11 +162,21 @@ def test_haron_cancellation_sentinel_is_missing() -> None:
     assert parsed["HaronTimeL3Seconds"] is None
 
 
-def test_existing_jravan_table_is_additively_migrated(tmp_path) -> None:
+def test_space_padded_fixed_width_numeric_value_is_canonicalized() -> None:
+    canonical = canonicalize_se_fields({"BaTaijyu": " 57"})
+
+    assert canonical["BaTaijyuKg"] == 57
+
+
+@pytest.mark.parametrize("optimized", [False, True])
+def test_existing_jravan_table_is_additively_migrated(tmp_path, optimized: bool) -> None:
     from src.database.sqlite_handler import SQLiteDatabase
     from src.importer.importer import DataImporter
+    from src.importer.importer_optimized import OptimizedDataImporter
 
-    db = SQLiteDatabase({"path": str(tmp_path / "legacy-jravan.db")})
+    db = SQLiteDatabase({"path": str(tmp_path / f"legacy-jravan-{optimized}.db")})
+    importer_class = OptimizedDataImporter if optimized else DataImporter
+    importer = importer_class(db, use_jravan_schema=True)
     with db:
         db.execute(
             "CREATE TABLE UMA_RACE (Year INTEGER, MonthDay INTEGER, JyoCD TEXT, "
@@ -178,17 +189,126 @@ def test_existing_jravan_table_is_additively_migrated(tmp_path) -> None:
             "(Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban, DataKubun, Time) "
             "VALUES (2026, 718, '05', 1, 1, 1, 1, '7', '1148')"
         )
-        DataImporter(db, use_jravan_schema=True)
+        stats = importer.import_records(iter([]))
         columns = {row["name"] for row in db.fetch_all('PRAGMA table_info("UMA_RACE")')}
-        migrated = db.fetch_one(
-            "SELECT ParserContractVersion, RaceTimeSeconds FROM UMA_RACE"
-        )
+        migrated = db.fetch_one("SELECT ParserContractVersion, RaceTimeSeconds FROM UMA_RACE")
 
     assert {"ParserContractVersion", "RaceTimeSeconds", "ProviderRaceTimeRaw"} <= columns
+    assert stats["records_imported"] == 0
     # Legacy JRA columns were already numerically normalized by the old
     # importer, so reconstructing fixed-width raw values would be ambiguous.
     # Existing rows remain explicitly unversioned until setup data is reimported.
     assert migrated == {"ParserContractVersion": None, "RaceTimeSeconds": None}
+
+
+@pytest.mark.parametrize("optimized", [False, True])
+def test_jravan_importer_auto_commit_false_keeps_migration_and_row_in_caller_transaction(
+    tmp_path, optimized: bool
+) -> None:
+    from src.database.sqlite_handler import SQLiteDatabase
+    from src.importer.importer import DataImporter
+    from src.importer.importer_optimized import OptimizedDataImporter
+
+    db = SQLiteDatabase({"path": str(tmp_path / f"transaction-{optimized}.db")})
+    importer_class = OptimizedDataImporter if optimized else DataImporter
+    importer = importer_class(db, batch_size=1, use_jravan_schema=True)
+    with db:
+        db.execute(
+            "CREATE TABLE UMA_RACE (Year INTEGER, MonthDay INTEGER, JyoCD TEXT, "
+            "Kaiji INTEGER, Nichiji INTEGER, RaceNum INTEGER, Umaban INTEGER, "
+            "PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban))"
+        )
+        db.commit()
+        record = {
+            "RecordSpec": "SE",
+            "Year": "2026",
+            "MonthDay": "0718",
+            "JyoCD": "05",
+            "Kaiji": "1",
+            "Nichiji": "1",
+            "RaceNum": "1",
+            "Umaban": "1",
+        }
+
+        stats = importer.import_records(iter([record]), auto_commit=False)
+        assert stats["records_imported"] == 1
+        assert "ParserContractVersion" in {
+            row["name"] for row in db.fetch_all('PRAGMA table_info("UMA_RACE")')
+        }
+        assert db.fetch_one("SELECT COUNT(*) AS n FROM UMA_RACE")["n"] == 1
+
+        db.rollback()
+
+        assert "ParserContractVersion" not in {
+            row["name"] for row in db.fetch_all('PRAGMA table_info("UMA_RACE")')
+        }
+        assert db.fetch_one("SELECT COUNT(*) AS n FROM UMA_RACE")["n"] == 0
+
+
+def test_jravan_single_record_auto_commit_false_stays_in_caller_transaction(tmp_path) -> None:
+    from src.database.sqlite_handler import SQLiteDatabase
+    from src.importer.importer import DataImporter
+
+    db = SQLiteDatabase({"path": str(tmp_path / "single-transaction.db")})
+    importer = DataImporter(db, use_jravan_schema=True)
+    with db:
+        db.execute(
+            "CREATE TABLE UMA_RACE (Year INTEGER, MonthDay INTEGER, JyoCD TEXT, "
+            "Kaiji INTEGER, Nichiji INTEGER, RaceNum INTEGER, Umaban INTEGER, "
+            "PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban))"
+        )
+        db.commit()
+        inserted = importer.import_single_record(
+            {
+                "RecordSpec": "SE",
+                "Year": "2026",
+                "MonthDay": "0718",
+                "JyoCD": "05",
+                "Kaiji": "1",
+                "Nichiji": "1",
+                "RaceNum": "1",
+                "Umaban": "1",
+            },
+            auto_commit=False,
+        )
+        assert inserted is True
+
+        db.rollback()
+
+        assert "ParserContractVersion" not in {
+            row["name"] for row in db.fetch_all('PRAGMA table_info("UMA_RACE")')
+        }
+        assert db.fetch_one("SELECT COUNT(*) AS n FROM UMA_RACE")["n"] == 0
+
+
+def test_optimized_importer_does_not_retry_inside_caller_transaction(tmp_path) -> None:
+    from src.database.sqlite_handler import SQLiteDatabase
+    from src.importer.importer import ImporterError
+    from src.importer.importer_optimized import OptimizedDataImporter
+
+    db = SQLiteDatabase({"path": str(tmp_path / "optimized-failure.db")})
+    with db:
+        db.execute(
+            "CREATE TABLE TX_TEST (RecordSpec TEXT, id INTEGER PRIMARY KEY, "
+            "value TEXT CHECK(value != 'bad'))"
+        )
+        db.commit()
+        importer = OptimizedDataImporter(db, batch_size=2)
+        importer._table_map["TX"] = "TX_TEST"
+        records = iter(
+            [
+                {"RecordSpec": "TX", "id": 1, "value": "a"},
+                {"RecordSpec": "TX", "id": 2, "value": "b"},
+                {"RecordSpec": "TX", "id": 3, "value": "bad"},
+                {"RecordSpec": "TX", "id": 4, "value": "c"},
+            ]
+        )
+
+        with pytest.raises(ImporterError):
+            importer.import_records(records, auto_commit=False)
+        db.rollback()
+
+        assert db.fetch_one("SELECT COUNT(*) AS n FROM TX_TEST")["n"] == 0
 
 
 def test_initial_card_prize_zero_is_missing_but_settled_zero_is_real() -> None:
@@ -256,9 +376,7 @@ def test_optimized_importer_rejects_null_primary_key_after_conversion(tmp_path) 
 
 
 @pytest.mark.parametrize("optimized", [False, True])
-def test_jravan_importers_reject_null_semantic_primary_key(
-    tmp_path, optimized: bool
-) -> None:
+def test_jravan_importers_reject_null_semantic_primary_key(tmp_path, optimized: bool) -> None:
     from src.database.sqlite_handler import SQLiteDatabase
     from src.importer.importer import DataImporter
     from src.importer.importer_optimized import OptimizedDataImporter

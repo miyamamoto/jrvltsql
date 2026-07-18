@@ -31,12 +31,51 @@ def _migration_targets(db: BaseDatabase) -> tuple[BaseDatabase, ...]:
     return targets or (db,)
 
 
+def _strip_sql_line_comments(sql: str) -> str:
+    """Strip ``--`` comments without touching quoted SQL text."""
+    result: List[str] = []
+    quote_end: Optional[str] = None
+    index = 0
+    while index < len(sql):
+        char = sql[index]
+        if quote_end is not None:
+            result.append(char)
+            if char == quote_end:
+                if quote_end != "]" and index + 1 < len(sql) and sql[index + 1] == quote_end:
+                    result.append(sql[index + 1])
+                    index += 2
+                    continue
+                quote_end = None
+            index += 1
+            continue
+
+        if char in {"'", '"', "`"}:
+            quote_end = char
+            result.append(char)
+            index += 1
+            continue
+        if char == "[":
+            quote_end = "]"
+            result.append(char)
+            index += 1
+            continue
+        if char == "-" and index + 1 < len(sql) and sql[index + 1] == "-":
+            index += 2
+            while index < len(sql) and sql[index] not in "\r\n":
+                index += 1
+            continue
+
+        result.append(char)
+        index += 1
+    return "".join(result)
+
+
 def _schema_body(create_sql: str) -> Optional[str]:
     """Return the body inside the CREATE TABLE parentheses."""
     # Generated schemas use trailing ``--`` comments.  They must not become
     # part of an ALTER TABLE column definition during additive migration.
-    sql_without_line_comments = re.sub(r"--[^\r\n]*", "", create_sql)
-    match = re.search(r'\((.+)\)', sql_without_line_comments, re.DOTALL)
+    sql_without_line_comments = _strip_sql_line_comments(create_sql)
+    match = re.search(r"\((.+)\)", sql_without_line_comments, re.DOTALL)
     if not match:
         return None
     return match.group(1)
@@ -47,7 +86,31 @@ def _split_schema_items(body: str) -> List[str]:
     items: List[str] = []
     current: List[str] = []
     depth = 0
-    for char in body:
+    quote_end: Optional[str] = None
+    index = 0
+    while index < len(body):
+        char = body[index]
+        if quote_end is not None:
+            current.append(char)
+            if char == quote_end:
+                if quote_end != "]" and index + 1 < len(body) and body[index + 1] == quote_end:
+                    current.append(body[index + 1])
+                    index += 2
+                    continue
+                quote_end = None
+            index += 1
+            continue
+
+        if char in {"'", '"', "`"}:
+            quote_end = char
+            current.append(char)
+            index += 1
+            continue
+        if char == "[":
+            quote_end = "]"
+            current.append(char)
+            index += 1
+            continue
         if char == "(":
             depth += 1
         elif char == ")" and depth:
@@ -59,6 +122,7 @@ def _split_schema_items(body: str) -> List[str]:
             current = []
         else:
             current.append(char)
+        index += 1
     tail = "".join(current).strip()
     if tail:
         items.append(tail)
@@ -106,7 +170,7 @@ def _extract_primary_key_columns(create_sql: str) -> Optional[List[str]]:
     inline_pk: List[str] = []
     for item in _split_schema_items(body):
         match = re.match(
-            r'(?:CONSTRAINT\s+\S+\s+)?PRIMARY\s+KEY\s*\(([^)]*)\)',
+            r"(?:CONSTRAINT\s+\S+\s+)?PRIMARY\s+KEY\s*\(([^)]*)\)",
             item,
             re.IGNORECASE,
         )
@@ -116,7 +180,7 @@ def _extract_primary_key_columns(create_sql: str) -> Optional[List[str]]:
         upper = item.upper()
         if upper.startswith(("UNIQUE", "FOREIGN KEY", "CONSTRAINT", "CHECK")):
             continue
-        if re.search(r'\bPRIMARY\s+KEY\b', item, re.IGNORECASE):
+        if re.search(r"\bPRIMARY\s+KEY\b", item, re.IGNORECASE):
             token = item.split()[0].strip('`"[]')
             if token:
                 inline_pk.append(token)
@@ -140,7 +204,7 @@ def _get_existing_columns(db: BaseDatabase, table_name: str) -> Set[str]:
         )
     else:
         existing_info = db.fetch_all(f'PRAGMA table_info("{table_name}")')
-    return {row['name'] for row in existing_info}
+    return {row["name"] for row in existing_info}
 
 
 def _get_existing_primary_key_columns(db: BaseDatabase, table_name: str) -> List[str]:
@@ -177,23 +241,39 @@ def _add_missing_columns(
     table_name: str,
     expected_definitions: Dict[str, str],
     missing_columns: List[str],
+    *,
+    commit: bool,
 ) -> int:
     """Add missing columns without touching existing data."""
+    if missing_columns and not commit:
+        if db.get_db_type() == "sqlite":
+            connection = getattr(db, "_connection", None)
+            if connection is None:
+                raise SchemaMigrationError("SQLite migration requires a connected database")
+            if not connection.in_transaction:
+                db.execute("BEGIN")
+        else:
+            db.begin_transaction()
+
     table_identifier = _table_identifier(db, table_name)
     added = 0
     for column_name in missing_columns:
         definition = expected_definitions[column_name]
-        logger.warning(
-            f"Adding missing column to {table_name}: {definition}"
-        )
+        logger.warning(f"Adding missing column to {table_name}: {definition}")
         db.execute(f"ALTER TABLE {table_identifier} ADD COLUMN {definition}")
         added += 1
-    if added:
+    if added and commit:
         db.commit()
     return added
 
 
-def migrate_table_if_needed(db: BaseDatabase, table_name: str, schema_sql: str) -> bool:
+def migrate_table_if_needed(
+    db: BaseDatabase,
+    table_name: str,
+    schema_sql: str,
+    *,
+    commit: bool = True,
+) -> bool:
     """Check if an existing table's columns match the expected schema.
 
     Only additive migrations are applied. Existing rows are preserved and
@@ -211,7 +291,9 @@ def migrate_table_if_needed(db: BaseDatabase, table_name: str, schema_sql: str) 
     if targets != (db,):
         migrated = False
         for target in targets:
-            migrated = migrate_table_if_needed(target, table_name, schema_sql) or migrated
+            migrated = (
+                migrate_table_if_needed(target, table_name, schema_sql, commit=commit) or migrated
+            )
         return migrated
 
     if not db.table_exists(table_name):
@@ -236,6 +318,11 @@ def migrate_table_if_needed(db: BaseDatabase, table_name: str, schema_sql: str) 
             "Automatic migration refused; operator action is required."
         )
         return False
+    if existing_pk_lower and not expected_pk_lower:
+        logger.warning(
+            f"Existing primary key for {table_name} is not declared by the "
+            f"expected schema: existing={existing_pk}. Constraint is preserved."
+        )
 
     # PostgreSQL lowercases all unquoted identifiers, so compare case-insensitively.
     # Without this, every PG run sees a "mismatch" between schema.py's CamelCase
@@ -247,28 +334,28 @@ def migrate_table_if_needed(db: BaseDatabase, table_name: str, schema_sql: str) 
         return False
 
     missing_columns = [
-        column for column in expected_columns
-        if column.lower() not in existing_lower
+        column for column in expected_columns if column.lower() not in existing_lower
     ]
     extra_columns = sorted(
-        column for column in existing_columns
-        if column.lower() not in expected_lower
+        column for column in existing_columns if column.lower() not in expected_lower
     )
 
     if missing_columns:
-        added = _add_missing_columns(db, table_name, expected_definitions, missing_columns)
+        added = _add_missing_columns(
+            db,
+            table_name,
+            expected_definitions,
+            missing_columns,
+            commit=commit,
+        )
         if extra_columns:
-            logger.warning(
-                f"Schema for {table_name} has extra columns preserved: {extra_columns}"
-            )
+            logger.warning(f"Schema for {table_name} has extra columns preserved: {extra_columns}")
         return added > 0
 
     if not extra_columns:
         return False
 
-    logger.warning(
-        f"Schema for {table_name} has extra columns preserved: {extra_columns}"
-    )
+    logger.warning(f"Schema for {table_name} has extra columns preserved: {extra_columns}")
     return False
 
 
@@ -310,16 +397,12 @@ def verify_table_schema(db: BaseDatabase, table_name: str, schema_sql: str) -> N
     expected_definitions = _extract_column_definitions(schema_sql)
     expected_pk = _extract_primary_key_columns(schema_sql)
     if expected_definitions is None or expected_pk is None:
-        raise SchemaMigrationError(
-            f"Could not parse expected schema for {table_name}"
-        )
+        raise SchemaMigrationError(f"Could not parse expected schema for {table_name}")
 
     existing_columns = _get_existing_columns(db, table_name)
     existing_lower = {column.lower() for column in existing_columns}
     missing_columns = sorted(
-        column
-        for column in expected_definitions
-        if column.lower() not in existing_lower
+        column for column in expected_definitions if column.lower() not in existing_lower
     )
 
     existing_pk = _get_existing_primary_key_columns(db, table_name)
@@ -330,9 +413,7 @@ def verify_table_schema(db: BaseDatabase, table_name: str, schema_sql: str) -> N
     if missing_columns:
         problems.append(f"missing columns={missing_columns}")
     if expected_pk_lower and existing_pk_lower != expected_pk_lower:
-        problems.append(
-            f"primary key existing={existing_pk}, expected={expected_pk}"
-        )
+        problems.append(f"primary key existing={existing_pk}, expected={expected_pk}")
     if problems:
         raise SchemaMigrationError(
             f"Schema verification failed for {table_name}: " + "; ".join(problems)

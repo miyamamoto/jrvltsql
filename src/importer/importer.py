@@ -22,23 +22,47 @@ logger = get_logger(__name__)
 
 # 10で割るべきフィールド名のプレフィックス（高速ルックアップ用）
 # オッズ系、タイム系、重量系
-DIVIDE_BY_10_PREFIXES = frozenset([
-    "TanOdds", "FukuOdds", "WakurenOdds", "OddsLow", "OddsHigh",
-    "TimeDiff", "HaronTime", "Haron", "LapTime",
-    "Futan", "BaTaijyu", "ZogenSa",
-    "DMTime", "DMGosa",
-])
+DIVIDE_BY_10_PREFIXES = frozenset(
+    [
+        "TanOdds",
+        "FukuOdds",
+        "WakurenOdds",
+        "OddsLow",
+        "OddsHigh",
+        "TimeDiff",
+        "HaronTime",
+        "Haron",
+        "LapTime",
+        "Futan",
+        "BaTaijyu",
+        "ZogenSa",
+        "DMTime",
+        "DMGosa",
+    ]
+)
 
 # 完全一致で10で割るべきフィールド名
 DIVIDE_BY_10_EXACT = frozenset(["Odds", "Time"])
 
 # Explicit-unit fields are already canonicalized by the parser contract.
-CANONICAL_SE_FIELDS = frozenset([
-    "FutanKg", "FutanBeforeKg", "BaTaijyuKg", "ZogenSaKg",
-    "RaceTimeSeconds", "OddsMultiplier", "HonsyokinYen", "FukasyokinYen",
-    "HaronTimeL4Seconds", "HaronTimeL3Seconds", "TimeDiffSeconds",
-    "DMTimeSeconds", "DMGosaPSeconds", "DMGosaMSeconds",
-])
+CANONICAL_SE_FIELDS = frozenset(
+    [
+        "FutanKg",
+        "FutanBeforeKg",
+        "BaTaijyuKg",
+        "ZogenSaKg",
+        "RaceTimeSeconds",
+        "OddsMultiplier",
+        "HonsyokinYen",
+        "FukasyokinYen",
+        "HaronTimeL4Seconds",
+        "HaronTimeL3Seconds",
+        "TimeDiffSeconds",
+        "DMTimeSeconds",
+        "DMGosaPSeconds",
+        "DMGosaMSeconds",
+    ]
+)
 
 # キャッシュ（フィールド名 → 10で割るべきか）
 _divide_cache: dict = {}
@@ -102,15 +126,17 @@ def convert_record_types(record: dict, table_name: str) -> dict:
             if col_type in ("INTEGER", "BIGINT"):
                 str_value = str(value).strip()
                 if str_value:
-                    if (str_value.startswith('***') or
-                        '****' in str_value or
-                        all(c in '-*' for c in str_value) or
-                        '--' in str_value or
-                        '*' in str_value):
+                    if (
+                        str_value.startswith("***")
+                        or "****" in str_value
+                        or all(c in "-*" for c in str_value)
+                        or "--" in str_value
+                        or "*" in str_value
+                    ):
                         converted[field_name] = None
                     else:
-                        numeric_part = ''.join(c for c in str_value if c.isdigit() or c == '-')
-                        if numeric_part and numeric_part != '-':
+                        numeric_part = "".join(c for c in str_value if c.isdigit() or c == "-")
+                        if numeric_part and numeric_part != "-":
                             converted[field_name] = int(numeric_part)
                         else:
                             converted[field_name] = None
@@ -120,15 +146,17 @@ def convert_record_types(record: dict, table_name: str) -> dict:
             elif col_type == "REAL":
                 str_value = str(value).strip()
                 if str_value:
-                    if (str_value.startswith('***') or
-                        '****' in str_value or
-                        all(c in '-*' for c in str_value) or
-                        '--' in str_value or
-                        '*' in str_value):
+                    if (
+                        str_value.startswith("***")
+                        or "****" in str_value
+                        or all(c in "-*" for c in str_value)
+                        or "--" in str_value
+                        or "*" in str_value
+                    ):
                         converted[field_name] = None
                     else:
-                        numeric_part = ''.join(c for c in str_value if c.isdigit() or c in '.-')
-                        if numeric_part and numeric_part not in ('-', '.', '-.'):
+                        numeric_part = "".join(c for c in str_value if c.isdigit() or c in ".-")
+                        if numeric_part and numeric_part not in ("-", ".", "-."):
                             float_value = float(numeric_part)
                             if _should_divide_by_10(field_name):
                                 converted[field_name] = float_value / 10.0
@@ -201,6 +229,7 @@ class DataImporter:
         self._records_imported = 0
         self._records_failed = 0
         self._batches_processed = 0
+        self._jravan_tables_ready = not use_jravan_schema
 
         # Map record types to table names
         # Note: Table names match schema.py table definitions (e.g. NL_RA, not NL_RA_RACE)
@@ -273,10 +302,7 @@ class DataImporter:
             use_jravan_schema=use_jravan_schema,
         )
 
-        if self.use_jravan_schema:
-            self._migrate_existing_jravan_tables()
-
-    def _migrate_existing_jravan_tables(self) -> None:
+    def _migrate_existing_jravan_tables(self, *, commit: bool) -> None:
         """Add newly supported columns to existing standard-name tables."""
         from src.database.migration import migrate_table_if_needed, verify_table_schema
         from src.database.schema_jravan import JRAVAN_SCHEMAS
@@ -285,8 +311,18 @@ class DataImporter:
             standard_name = self._get_table_name_for_native(table_name)
             schema_sql = JRAVAN_SCHEMAS.get(standard_name)
             if schema_sql and self.database.table_exists(standard_name):
-                migrate_table_if_needed(self.database, standard_name, schema_sql)
+                migrate_table_if_needed(self.database, standard_name, schema_sql, commit=commit)
                 verify_table_schema(self.database, standard_name, schema_sql)
+
+    def _ensure_jravan_tables_ready(self, *, auto_commit: bool) -> None:
+        """Migrate standard-name tables only after the DB is connected."""
+        if self._jravan_tables_ready:
+            return
+        if not self.database.is_connected():
+            raise ImporterError("JRA-VAN schema import requires a connected database")
+        self._migrate_existing_jravan_tables(commit=auto_commit)
+        if auto_commit:
+            self._jravan_tables_ready = True
 
     @staticmethod
     def _get_table_name_for_native(table_name: str) -> str:
@@ -311,6 +347,7 @@ class DataImporter:
         # Convert to JRA-VAN standard name if requested
         if self.use_jravan_schema:
             from src.database.table_mappings import JLTSQL_TO_JRAVAN
+
             return JLTSQL_TO_JRAVAN.get(table_name, table_name)
 
         return table_name
@@ -326,15 +363,17 @@ class DataImporter:
         """
         # Fields used for routing/metadata that shouldn't be in database tables
         metadata_fields = {
-            'headRecordSpec',
-            'レコード種別ID',
-            '_raw_data',
-            '_parse_errors',
-            'RecordDelimiter',
-            'RecordSeparator',
+            "headRecordSpec",
+            "レコード種別ID",
+            "_raw_data",
+            "_parse_errors",
+            "RecordDelimiter",
+            "RecordSeparator",
         }
 
-        return {k: v for k, v in record.items() if k not in metadata_fields and not k.startswith('_')}
+        return {
+            k: v for k, v in record.items() if k not in metadata_fields and not k.startswith("_")
+        }
 
     def _convert_record(self, record: dict, table_name: str) -> dict:
         """Convert record field types based on table schema.
@@ -349,9 +388,7 @@ class DataImporter:
         """Return True when a converted row has all schema primary-key values."""
         from src.database.table_mappings import JRAVAN_TO_JLTSQL
 
-        primary_keys = get_table_primary_key_columns(
-            JRAVAN_TO_JLTSQL.get(table_name, table_name)
-        )
+        primary_keys = get_table_primary_key_columns(JRAVAN_TO_JLTSQL.get(table_name, table_name))
         if not primary_keys:
             return True
         return all(record.get(key) not in (None, "") for key in primary_keys)
@@ -381,6 +418,10 @@ class DataImporter:
             ...     stats = importer.import_records(records)
             ...     print(f"Imported {stats['records_imported']} records")
         """
+        if not auto_commit:
+            self.database.begin_transaction()
+        self._ensure_jravan_tables_ready(auto_commit=auto_commit)
+
         # Reset statistics
         self._records_imported = 0
         self._records_failed = 0
@@ -394,14 +435,14 @@ class DataImporter:
                 # Get record type and table name
                 # Note: Japanese parsers use 'レコード種別ID', JRA-VAN standard uses 'RecordSpec'
                 record_type = (
-                    record.get("レコード種別ID") or
-                    record.get("RecordSpec") or
-                    record.get("headRecordSpec")
+                    record.get("レコード種別ID")
+                    or record.get("RecordSpec")
+                    or record.get("headRecordSpec")
                 )
                 if not record_type:
                     logger.warning(
                         "Record missing record type field",
-                        record_keys=list(record.keys())[:5] if record else None
+                        record_keys=list(record.keys())[:5] if record else None,
                     )
                     self._records_failed += 1
                     continue
@@ -517,9 +558,9 @@ class DataImporter:
                 db_type = self.database.get_db_type()
             except AttributeError:
                 # Fallback for databases without get_db_type() method
-                db_type = 'unknown'
+                db_type = "unknown"
 
-            if db_type != 'postgresql':
+            if db_type != "postgresql":
                 try:
                     self.database.rollback()
                 except Exception as rollback_error:
@@ -577,11 +618,13 @@ class DataImporter:
         Returns:
             True if successful, False otherwise
         """
+        if not auto_commit:
+            self.database.begin_transaction()
+        self._ensure_jravan_tables_ready(auto_commit=auto_commit)
+
         # Note: Japanese parsers use 'レコード種別ID', JRA-VAN standard uses 'RecordSpec'
         record_type = (
-            record.get("レコード種別ID") or
-            record.get("RecordSpec") or
-            record.get("headRecordSpec")
+            record.get("レコード種別ID") or record.get("RecordSpec") or record.get("headRecordSpec")
         )
         if not record_type:
             logger.warning("Record missing record type field")
