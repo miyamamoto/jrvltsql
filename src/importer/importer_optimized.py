@@ -66,6 +66,22 @@ class OptimizedDataImporter:
             use_jravan_schema=use_jravan_schema,
         )
 
+        if self.use_jravan_schema:
+            self._migrate_existing_jravan_tables()
+
+    def _migrate_existing_jravan_tables(self) -> None:
+        """Add newly supported columns to existing standard-name tables."""
+        from src.database.migration import migrate_table_if_needed, verify_table_schema
+        from src.database.schema_jravan import JRAVAN_SCHEMAS
+        from src.database.table_mappings import JLTSQL_TO_JRAVAN
+
+        for native_name in set(self._table_map.values()):
+            standard_name = JLTSQL_TO_JRAVAN.get(native_name, native_name)
+            schema_sql = JRAVAN_SCHEMAS.get(standard_name)
+            if schema_sql and self.database.table_exists(standard_name):
+                migrate_table_if_needed(self.database, standard_name, schema_sql)
+                verify_table_schema(self.database, standard_name, schema_sql)
+
     def _detect_database_type(self) -> str:
         """Detect database type from handler class."""
         class_name = self.database.__class__.__name__
@@ -87,6 +103,40 @@ class OptimizedDataImporter:
             return JLTSQL_TO_JRAVAN.get(table_name, table_name)
 
         return table_name
+
+    @staticmethod
+    def _clean_record(record: dict) -> dict:
+        metadata_fields = {
+            "headRecordSpec",
+            "レコード種別ID",
+            "_raw_data",
+            "_parse_errors",
+            "RecordDelimiter",
+            "RecordSeparator",
+        }
+        return {
+            key: value
+            for key, value in record.items()
+            if key not in metadata_fields and not key.startswith("_")
+        }
+
+    @staticmethod
+    def _convert_record(record: dict, table_name: str) -> dict:
+        from src.importer.importer import convert_record_types
+
+        return convert_record_types(record, table_name)
+
+    @staticmethod
+    def _has_complete_primary_key(table_name: str, record: dict) -> bool:
+        from src.database.schema_types import get_table_primary_key_columns
+        from src.database.table_mappings import JRAVAN_TO_JLTSQL
+
+        primary_keys = get_table_primary_key_columns(
+            JRAVAN_TO_JLTSQL.get(table_name, table_name)
+        )
+        return not primary_keys or all(
+            record.get(key) not in (None, "") for key in primary_keys
+        )
 
     def import_records(
         self,
@@ -145,7 +195,16 @@ class OptimizedDataImporter:
                 if table_name not in batch_buffers:
                     batch_buffers[table_name] = []
 
-                batch_buffers[table_name].append(record)
+                clean_record = self._clean_record(record)
+                converted_record = self._convert_record(clean_record, table_name)
+                if not self._has_complete_primary_key(table_name, converted_record):
+                    logger.warning(
+                        "Record has incomplete primary key after conversion",
+                        table=table_name,
+                    )
+                    self._records_failed += 1
+                    continue
+                batch_buffers[table_name].append(converted_record)
 
                 # Check if any batch is full
                 if len(batch_buffers[table_name]) >= self.batch_size:
