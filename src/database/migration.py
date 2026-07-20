@@ -199,7 +199,7 @@ def _get_existing_columns(db: BaseDatabase, table_name: str) -> Set[str]:
     if db.get_db_type() == "postgresql":
         existing_info = db.fetch_all(
             "SELECT column_name AS name FROM information_schema.columns "
-            "WHERE table_name = ? AND table_schema = 'public'",
+            "WHERE table_name = ? AND table_schema = current_schema()",
             (table_name.lower(),),
         )
     else:
