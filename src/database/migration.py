@@ -199,7 +199,7 @@ def _get_existing_columns(db: BaseDatabase, table_name: str) -> Set[str]:
     if db.get_db_type() == "postgresql":
         existing_info = db.fetch_all(
             "SELECT a.attname AS name FROM pg_attribute a "
-            "WHERE a.attrelid = ?::regclass AND a.attnum > 0 AND NOT a.attisdropped",
+            "WHERE a.attrelid = to_regclass(?) AND a.attnum > 0 AND NOT a.attisdropped",
             (table_name.lower(),),
         )
     else:
