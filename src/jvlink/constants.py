@@ -1,42 +1,58 @@
 """JV-Link constants and definitions."""
 
 # JV-Link Return Codes
+# 出典: JV-Link インターフェース仕様書「3. コード表」
 JV_RT_SUCCESS = 0  # 正常終了
-JV_RT_ERROR = -1  # エラー
-JV_RT_NO_MORE_DATA = -2  # データなし
-JV_RT_FILE_NOT_FOUND = -3  # ファイルが見つからない
-JV_RT_INVALID_PARAMETER = -4  # 無効なパラメータ
-JV_RT_DOWNLOAD_FAILED = -5  # ダウンロード失敗
+JV_RT_ERROR = -1  # 該当データ無し（JVOpen/JVRTOpen）／ファイル切り替わり（JVRead）
+JV_RT_SETUP_CANCELED = -2  # セットアップダイアログでキャンセルが押された（JVOpen）
 
-# Service Key Related Error Codes
-JV_RT_SERVICE_KEY_NOT_SET = -100  # サービスキー未設定
-JV_RT_SERVICE_KEY_INVALID = -101  # サービスキーが無効
-JV_RT_SERVICE_KEY_EXPIRED = -102  # サービスキー有効期限切れ
-JV_RT_SERVICE_UNAVAILABLE = -103  # サービス利用不可
+# Parameter Errors (JVOpen/JVRTOpen)
+JV_RT_INVALID_DATASPEC = -111  # dataspec パラメータが不正
+JV_RT_INVALID_FROMTIME_START = -112  # fromtime パラメータが不正（読み出し開始時刻）
+JV_RT_INVALID_FROMTIME_END = -113  # fromtime パラメータが不正（読み出し終了時刻）
+JV_RT_INVALID_KEY = -114  # key パラメータが不正
+JV_RT_INVALID_OPTION = -115  # option パラメータが不正
+JV_RT_INVALID_DATASPEC_OPTION = -116  # dataspec と option の組み合わせが不正
 
-# Data Specification Error Codes
-JV_RT_UNSUBSCRIBED_DATA = -111  # 契約外データ種別
-JV_RT_UNSUBSCRIBED_DATA_WARNING = -114  # 契約外データ種別（警告レベル）
-JV_RT_DATA_SPEC_UNUSED = -115  # データ種別未使用
+# Call-order / State Errors
+JV_RT_JVINIT_NOT_CALLED = -201  # JVInit が行なわれていない
+JV_RT_NOT_CLOSED = -202  # 前回の Open が JVClose されていない（オープン中）
+JV_RT_JVOPEN_NOT_CALLED = -203  # JVOpen が行なわれていない（JVStatus/JVRead）
+JV_RT_INVALID_REGISTRY = -211  # レジストリ内容が不正
 
-# System Error Codes
-JV_RT_DATABASE_ERROR = -201  # データベースエラー
-JV_RT_FILE_ERROR = -202  # ファイルエラー
-JV_RT_OTHER_ERROR = -203  # その他エラー
+# Authentication / License Error Codes
+JV_RT_AUTH_ERROR = -301  # 認証エラー（利用キー不正、または複数マシンでの同一キー使用）
+JV_RT_LICENSE_EXPIRED = -302  # 利用キーの有効期限切れ
+JV_RT_LICENSE_NOT_SET = -303  # 利用キーが設定されていない（空値）
+JV_RT_TERMS_NOT_AGREED = -305  # 利用規約に同意していない
 
-# Download Status Codes
-JV_RT_DOWNLOADING = -301  # ダウンロード中
-JV_RT_DOWNLOAD_WAITING = -302  # ダウンロード待ち
-
-# Internal Error Codes
+# Internal / Server Errors
 JV_RT_INTERNAL_ERROR = -401  # 内部エラー
+JV_RT_SERVER_ERROR_404 = -411  # サーバーエラー（HTTP 404 Not Found）
+JV_RT_SERVER_ERROR_403 = -412  # サーバーエラー（HTTP 403 Forbidden）
+JV_RT_SERVER_ERROR_OTHER = -413  # サーバーエラー（HTTP 200/403/404 以外）
+JV_RT_SERVER_ERROR_BAD_RESPONSE = -421  # サーバーエラー（サーバーの応答が不正）
+JV_RT_SERVER_ERROR_APP = -431  # サーバーエラー（サーバーアプリケーション内部エラー）
 
-# Resource Error Codes
-JV_RT_OUT_OF_MEMORY = -501  # メモリ不足
+# Setup
+JV_RT_STARTKIT_INVALID = -501  # セットアップのスタートキット(CD/DVD-ROM)が無効
 
-# JVRead Return Codes
-JV_READ_SUCCESS = 0  # 読み込み成功（データあり）
-JV_READ_NO_MORE_DATA = -1  # これ以上データなし
+# Download / File Errors (JVRead/JVGets, JVStatus)
+JV_RT_DOWNLOADED_FILE_EMPTY = -402  # ダウンロードしたファイルが異常（ファイルサイズ0）
+JV_RT_DOWNLOADED_FILE_INVALID = -403  # ダウンロードしたファイルが異常（データ内容）
+JV_RT_DOWNLOAD_FAILED = -502  # ダウンロード失敗（通信エラー/ディスクエラー等）
+JV_RT_FILE_NOT_FOUND = -503  # 読み出すべきファイルが見つからない
+JV_RT_SERVER_MAINTENANCE = -504  # サーバーメンテナンス中
+
+# JVInit-specific (sid parameter)
+JV_RT_SID_NOT_SET = -101  # sid が設定されていない（JVInit）
+JV_RT_SID_TOO_LONG = -102  # sid が64byte を超えている（JVInit）
+JV_RT_SID_INVALID = -103  # sid が不正（1桁目がスペース）（JVInit）
+
+# JVRead / JVGets Return Codes
+JV_READ_SUCCESS = 0  # 全ファイル読み込み終了（EOF）
+JV_READ_NO_MORE_DATA = -1  # ファイル切り替わり（エラーではない、読み込み続行）
+JV_READ_FILE_DOWNLOADING = -3  # ファイルダウンロード中（少し待って読み込み再開）
 JV_READ_ERROR = -2  # エラー
 
 # Data Specification Codes
@@ -474,34 +490,49 @@ MAX_RECORD_LENGTH = 262144  # Maximum record length
 
 
 # Error Messages Dictionary
+# 出典: JV-Link インターフェース仕様書「3. コード表」
 ERROR_MESSAGES = {
-    # Success and Basic Errors
+    # Basic
     0: "成功",
-    -1: "失敗",
-    -2: "データなし",
-    -3: "ファイルが見つかりません",
-    -4: "無効なパラメータです",
-    -5: "ダウンロードに失敗しました",
-    # Service Key Related Errors
-    -100: "サービスキーが設定されていません",
-    -101: "サービスキーが無効です",
-    -102: "サービスキーの有効期限が切れています",
-    -103: "サービスが利用できません",
-    # Data Specification Errors
-    -111: "契約外のデータ種別です",
-    -114: "契約外のデータ種別です（警告）",
-    -115: "使用されていないデータ種別です",
-    # System Errors
-    -201: "データベースエラーが発生しました",
-    -202: "ファイルエラーが発生しました",
-    -203: "その他のエラーが発生しました",
-    # Download Status
-    -301: "ダウンロード中です",
-    -302: "ダウンロード待ちです",
-    # Internal Errors
+    -1: "該当データ無し（JVOpen/JVRTOpen）／ファイル切り替わり（JVRead）",
+    -2: "セットアップダイアログでキャンセルが押された",
+    -3: "ファイルダウンロード中（少し待って読み込みを再開してください）",
+    # Parameter / Registry (JVSet系, JVOpen/JVRTOpen, JVInit)
+    -100: "パラメータが不正、あるいはレジストリへの保存に失敗",
+    -101: "sid が設定されていない（JVInit）／既に利用キーが登録されている（JVSetServiceKey）",
+    -102: "sid が64byte を超えている（JVInit）",
+    -103: "sid が不正（1桁目がスペース）（JVInit）",
+    -111: "dataspec パラメータが不正",
+    -112: "fromtime パラメータが不正（読み出し開始時刻）",
+    -113: "fromtime パラメータが不正（読み出し終了時刻）",
+    -114: "key パラメータが不正",
+    -115: "option パラメータが不正",
+    -116: "dataspec と option の組み合わせが不正",
+    # Call-order / State
+    -201: "JVInit が行なわれていない",
+    -202: "前回の Open が JVClose されていない（オープン中）",
+    -203: "JVOpen が行なわれていない",
+    -211: "レジストリ内容が不正",
+    # Authentication / License
+    -301: "認証エラー（利用キーが正しくない、または複数マシンで同一利用キーを使用）",
+    -302: "利用キーの有効期限切れ",
+    -303: "利用キーが設定されていない（空値）",
+    -305: "利用規約に同意していない",
+    # Internal / Server
     -401: "内部エラーが発生しました",
-    # Resource Errors
-    -501: "メモリが不足しています",
+    -411: "サーバーエラー（HTTP 404 Not Found）",
+    -412: "サーバーエラー（HTTP 403 Forbidden）",
+    -413: "サーバーエラー（HTTP 200/403/404 以外）",
+    -421: "サーバーエラー（サーバーの応答が不正）",
+    -431: "サーバーエラー（サーバーアプリケーション内部エラー）",
+    # Setup
+    -501: "セットアップのスタートキット(CD/DVD-ROM)が無効",
+    # Download / File (JVRead/JVGets, JVStatus)
+    -402: "ダウンロードしたファイルが異常（ファイルサイズ0）",
+    -403: "ダウンロードしたファイルが異常（データ内容）",
+    -502: "ダウンロード失敗（通信エラーやディスクエラー等）",
+    -503: "読み出すべきファイルが見つからない",
+    -504: "サーバーメンテナンス中",
 }
 
 
