@@ -229,7 +229,7 @@ def get_all_tables(db, schema: str = None) -> List[str]:
             sql = "SELECT tablename FROM pg_tables WHERE schemaname = ?"
             result = db.fetch_all(sql, (schema,))
         else:
-            sql = "SELECT tablename FROM pg_tables WHERE schemaname = 'public'"
+            sql = "SELECT tablename FROM pg_tables WHERE schemaname = current_schema()"
             result = db.fetch_all(sql)
         return extract_column(result, 'tablename')
 
