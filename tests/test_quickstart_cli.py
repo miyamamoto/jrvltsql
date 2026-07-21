@@ -348,3 +348,61 @@ class TestQuickstartUpdateSpecs:
         # MING は蓄積系のため option=1 (option=2 は TOKU/RACE/TCVN/RCVN のみ)
         ming = [row for row in QuickstartRunner.UPDATE_SPECS if row[0] == "MING"]
         assert ming and ming[0][2] == 1
+
+
+class TestAnalyzeErrorJVInitCodes:
+    """_analyze_error must classify JVInit/JVOpen error codes per the official
+    spec ("3. コード表", JV-Link4901.pdf), not the fabricated pre-PR#144
+    meanings. JVInit only ever returns -101/-102/-103 (sid parameter format
+    errors); service-key state (-301/-302/-303) is returned by JVOpen/
+    JVRTOpen, never by JVInit.
+    """
+
+    @pytest.fixture
+    def runner(self, tmp_path):
+        from scripts.quickstart import QuickstartRunner
+
+        return QuickstartRunner(
+            {
+                "db_path": str(tmp_path / "quickstart.db"),
+                "mode": "update",
+            }
+        )
+
+    @pytest.mark.parametrize(
+        "code,expected_fragment",
+        [
+            ("-101", "sid パラメータが設定されていません"),
+            ("-102", "sid パラメータが64byteを超えています"),
+            ("-103", "sid パラメータが不正です"),
+        ],
+    )
+    def test_jvinit_sid_errors_are_labeled_as_internal_not_service_key(
+        self, runner, code, expected_fragment
+    ):
+        error_type, message = runner._analyze_error(
+            f"JVInit failed with code {code}", returncode=1
+        )
+        assert error_type == "auth"
+        assert expected_fragment in message
+        # Must not resurrect the fabricated pre-fix framing of these codes as
+        # a service-key state (that's what -301/-302/-303 mean, not -101/-102/-103).
+        assert "サービスキー" not in message
+
+    @pytest.mark.parametrize(
+        "code,expected_fragment",
+        [
+            ("-301", "認証エラー"),
+            ("-302", "有効期限"),
+            ("-303", "設定されていません"),
+        ],
+    )
+    def test_jvopen_service_key_errors_are_distinct_from_jvinit(
+        self, runner, code, expected_fragment
+    ):
+        error_type, message = runner._analyze_error(
+            f"JVOpen failed with code {code}", returncode=1
+        )
+        assert error_type == "auth"
+        assert "サービスキー" in message
+        assert expected_fragment in message

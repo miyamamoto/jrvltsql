@@ -367,11 +367,22 @@ class HistoricalFetcher(BaseFetcher):
         stall_timeout = 300.0  # 5 minutes before stall abort
 
         # Retryable error codes (temporary errors that may resolve)
-        # -201: Database error (might be busy)
-        # -202: File error (might be busy)
-        # -203: Other error (may indicate incomplete JVDTLab setup or cache issue)
-        # -502: Download failed
-        # -503: Similar download error
+        #
+        # Official meanings (JV-Link "3. コード表", JVStatus section) differ
+        # from the labels below:
+        # -201: JVInit not called (not "database busy")
+        # -202: previous JVOpen/JVRTOpen/JVMVOpen not JVClose'd (not "file busy")
+        # -203: JVOpen not called (not "incomplete setup/cache issue")
+        # -502: download failed (communication/disk error)
+        # -503: (JVStatus doesn't define -503; kept here for the bounded
+        #        max_retries=2 safety net below in case JVRead's -503,
+        #        file not found, surfaces through this status poll)
+        #
+        # -201/-203 indicate a call-order bug (JVInit/JVOpen genuinely not
+        # called), which polling jv_status() again cannot fix -- it will keep
+        # returning the same code. They remain in this retryable set
+        # unchanged (bounded by max_retries=2 below) pending a decision on
+        # whether that's still the right classification.
         retryable_errors = {-201, -202, -203, -502, -503}
 
         while True:
