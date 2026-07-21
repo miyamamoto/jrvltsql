@@ -215,7 +215,7 @@ def _get_existing_primary_key_columns(db: BaseDatabase, table_name: str) -> List
             SELECT a.attname AS name
             FROM pg_index i
             JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
-            WHERE i.indrelid = ?::regclass
+            WHERE i.indrelid = to_regclass(?)
             AND i.indisprimary
             ORDER BY array_position(i.indkey, a.attnum)
             """,

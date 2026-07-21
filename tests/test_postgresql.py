@@ -189,7 +189,7 @@ def test_pg8000_primary_key_lookup_failure_aborts_caller_transaction(monkeypatch
                 SELECT a.attname
                 FROM pg_index i
                 JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
-                WHERE i.indrelid = :param1::regclass
+                WHERE i.indrelid = to_regclass(:param1)
                 AND i.indisprimary
                 ORDER BY array_position(i.indkey, a.attnum)
             """,
@@ -480,6 +480,82 @@ def test_schema_creation():
         import traceback
         traceback.print_exc()
         pytest.skip("PostgreSQL driver not available")
+
+
+def test_table_exists_and_column_lookups_respect_search_path():
+    """search_path が非 public スキーマを指す環境で、table_exists() /
+    migration.py の既存カラム・主キー取得が正しいテーブルを解決すること。
+
+    PR #143 が修正した2つの不具合の回帰テスト:
+    1. table_exists() が pg_tables をスキーマ非限定で参照し、search_path に
+       無いスキーマの同名テーブルにも True を返していた（migration.py 側の
+       to_regclass() ベースの解決と食い違う）。
+    2. 複数スキーマに同名テーブルがある場合、current_schema() だけでは
+       search_path の優先順位どおりに一意特定できなかった。
+    """
+    config = {
+        "host": os.environ.get("PGHOST", "localhost"),
+        "port": int(os.environ.get("PGPORT", 5432)),
+        "database": os.environ.get("PGDATABASE", "keiba_test"),
+        "user": os.environ.get("PGUSER", "postgres"),
+        "password": os.environ.get("PGPASSWORD", "postgres"),
+        "connect_timeout": 5,
+    }
+
+    try:
+        from src.database.postgresql_handler import PostgreSQLDatabase
+        from src.database.migration import (
+            _get_existing_columns,
+            _get_existing_primary_key_columns,
+        )
+
+        db = PostgreSQLDatabase(config)
+        db.connect()
+    except Exception:
+        pytest.skip("PostgreSQL driver not available")
+
+    schema_a = "jltsql_test_search_path_a"
+    schema_b = "jltsql_test_search_path_b"
+    probe_table = "jltsql_search_path_probe"
+
+    try:
+        db.execute(f"DROP SCHEMA IF EXISTS {schema_a} CASCADE")
+        db.execute(f"DROP SCHEMA IF EXISTS {schema_b} CASCADE")
+        db.execute(f"CREATE SCHEMA {schema_a}")
+        db.execute(f"CREATE SCHEMA {schema_b}")
+        # 同名テーブルを両スキーマに作成し、カラム構成をあえて変える。
+        db.execute(f"CREATE TABLE {schema_a}.{probe_table} (col_a INTEGER PRIMARY KEY)")
+        db.execute(f"CREATE TABLE {schema_b}.{probe_table} (col_b TEXT PRIMARY KEY)")
+        db.commit()
+
+        # search_path が schema_a を指す場合、schema_a 側のテーブルが解決される。
+        db.execute(f"SET search_path TO {schema_a}, public")
+        assert db.table_exists(probe_table) is True
+        assert _get_existing_columns(db, probe_table) == {"col_a"}
+        assert _get_existing_primary_key_columns(db, probe_table) == ["col_a"]
+
+        # search_path を schema_b へ切り替えると、同じ呼び出しが schema_b 側へ
+        # 追従する（current_schema() 決め打ちでは一意特定できなかった問題）。
+        db.execute(f"SET search_path TO {schema_b}, public")
+        assert db.table_exists(probe_table) is True
+        assert _get_existing_columns(db, probe_table) == {"col_b"}
+        assert _get_existing_primary_key_columns(db, probe_table) == ["col_b"]
+
+        # schema_b のテーブルを削除すると、schema_a にだけ同名テーブルが残る。
+        # search_path は schema_b のままなので、table_exists() は
+        # False を返さねばならない（旧実装は pg_tables をスキーマ非限定で見て
+        # True を返し、直後の to_regclass() ベースの解決と食い違っていた）。
+        db.execute(f"DROP TABLE {schema_b}.{probe_table}")
+        db.commit()
+        assert db.table_exists(probe_table) is False
+        assert _get_existing_columns(db, probe_table) == set()
+        assert _get_existing_primary_key_columns(db, probe_table) == []
+    finally:
+        db.execute(f"DROP SCHEMA IF EXISTS {schema_a} CASCADE")
+        db.execute(f"DROP SCHEMA IF EXISTS {schema_b} CASCADE")
+        db.execute("SET search_path TO public")
+        db.commit()
+        db.disconnect()
 
 
 if __name__ == "__main__":

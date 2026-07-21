@@ -108,7 +108,7 @@ class PostgreSQLDatabase(BaseDatabase):
                 SELECT a.attname
                 FROM pg_index i
                 JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
-                WHERE i.indrelid = ?::regclass
+                WHERE i.indrelid = to_regclass(?)
                 AND i.indisprimary
                 ORDER BY array_position(i.indkey, a.attnum)
             """
@@ -431,7 +431,17 @@ class PostgreSQLDatabase(BaseDatabase):
             raise
 
     def table_exists(self, table_name: str) -> bool:
-        """Check if table exists.
+        """Check if table exists and is visible in the current search_path.
+
+        Uses to_regclass(), the same search_path resolution PostgreSQL applies
+        to an unqualified table reference, so this agrees with the
+        migration/column-existence checks (_get_existing_columns,
+        _get_primary_key_columns) that also resolve via to_regclass(). A plain
+        `pg_tables WHERE tablename = ?` scan (the prior implementation) is
+        schema-unqualified: it returns True for a same-named table that exists
+        only in a schema outside search_path, which then makes those
+        to_regclass()-based checks resolve to NULL/no rows for a table this
+        method claimed exists.
 
         Args:
             table_name: Name of table to check
@@ -440,13 +450,12 @@ class PostgreSQLDatabase(BaseDatabase):
             True if table exists, False otherwise
         """
         try:
-            sql = """
-                SELECT tablename
-                FROM pg_tables
-                WHERE tablename = ?
-            """
+            sql = "SELECT to_regclass(?) AS oid"
             row = self.fetch_one(sql, (table_name.lower(),))
-            return row is not None
+            if row is None:
+                return False
+            oid = row.get("oid") if isinstance(row, dict) else row[0]
+            return oid is not None
 
         except DatabaseError:
             return False
