@@ -105,17 +105,18 @@ class MockPostgreSQLDatabase(BaseDatabase):
         return rows[0] if rows else None
 
     def fetch_all(self, sql: str, parameters=None) -> List[Dict[str, Any]]:
-        # Respond to information_schema.columns query used in migration.
-        # Real PG stores names lowercased and migration.py passes .lower(),
-        # so compare on lowercase here.
-        if "information_schema.columns" in sql.lower():
-            table_name = parameters[0] if parameters else None
-            cols = self._tables.get((table_name or "").lower(), [])
-            return [{"name": c} for c in cols]
-        if "pg_index" in sql.lower():
-            table_name = parameters[0] if parameters else None
+        # Respond to the pg_attribute/pg_index + to_regclass() queries used by
+        # migration.py. Real PG stores names lowercased and migration.py passes
+        # .lower(), so compare on lowercase here. "pg_index" is checked first
+        # because the primary-key query also joins pg_attribute.
+        sql_lower = sql.lower()
+        table_name = parameters[0] if parameters else None
+        if "pg_index" in sql_lower:
             pk = self._primary_keys.get((table_name or "").lower(), [])
             return [{"name": c} for c in pk]
+        if "pg_attribute" in sql_lower:
+            cols = self._tables.get((table_name or "").lower(), [])
+            return [{"name": c} for c in cols]
         return []
 
     def create_table(self, table_name: str, schema: str):
