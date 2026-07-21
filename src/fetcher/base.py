@@ -229,22 +229,33 @@ class BaseFetcher(ABC):
 
                 elif ret_code in (-201, -202, -203, -402, -403, -502, -503):
                     # Recoverable errors - delete corrupted file and continue
-                    # Based on kmy-keiba's JVLinkReader.cs error handling:
-                    # -201: Database busy (リトライ可能)
-                    # -202: File busy (リトライ可能)
-                    # -203: Setup not complete or file corruption (セットアップ未完了またはファイル破損)
-                    # -402, -403: Database errors (データベースエラー)
-                    # -502, -503: File errors (ファイルエラー)
+                    #
+                    # Official meanings (JV-Link "3. コード表", JVRead/JVGets
+                    # section) differ from the original kmy-keiba-derived
+                    # labels below:
+                    # -201: JVInit not called (not "database busy")
+                    # -202: previous JVOpen/JVRTOpen/JVMVOpen not JVClose'd (not "file busy")
+                    # -203: JVOpen not called (not "setup not complete or file corruption")
+                    # -402, -403: downloaded file abnormal -- size 0 / bad content (file, not database)
+                    # -502: download failed (communication/disk error)
+                    # -503: file not found
+                    #
+                    # -201/-203 in particular indicate a call-order bug (JVInit/
+                    # JVOpen genuinely not called), which deleting a file and
+                    # retrying jv_read() cannot fix -- retrying will just hit
+                    # the same code again. They remain in this recoverable set
+                    # unchanged pending a decision on whether that's still the
+                    # right classification; see the PR description.
 
                     # Error-specific guidance
                     error_messages = {
-                        -201: "データベースビジー状態です。一時的なエラーのため続行します。",
-                        -202: "ファイルビジー状態です。一時的なエラーのため続行します。",
-                        -203: "セットアップ未完了またはファイル破損が検出されました。ファイルを削除して続行します。",
-                        -402: "データベースエラーが発生しました。破損ファイルを削除して続行します。",
-                        -403: "データベースエラーが発生しました。破損ファイルを削除して続行します。",
-                        -502: "ファイルエラーが発生しました。破損ファイルを削除して続行します。",
-                        -503: "ファイルエラーが発生しました。破損ファイルを削除して続行します。",
+                        -201: "JVInitが行なわれていません（内部エラー）。一時的なエラーとして続行します。",
+                        -202: "前回のOpenがJVCloseされていません（オープン中）。一時的なエラーとして続行します。",
+                        -203: "JVOpenが行なわれていません（内部エラー）。ファイルを削除して続行します。",
+                        -402: "ダウンロードしたファイルが異常です（サイズ0）。破損ファイルを削除して続行します。",
+                        -403: "ダウンロードしたファイルが異常です（データ内容）。破損ファイルを削除して続行します。",
+                        -502: "ダウンロードに失敗しました（通信エラーやディスクエラーなど）。破損ファイルを削除して続行します。",
+                        -503: "読み出すべきファイルが見つかりません。ファイルを削除して続行します。",
                     }
 
                     error_msg = error_messages.get(ret_code, "リカバリー可能なエラーが発生しました。")

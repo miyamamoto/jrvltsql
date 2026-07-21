@@ -372,18 +372,24 @@ def _check_jvlink_service_key() -> tuple[bool, str]:
         jvlink = win32com.client.Dispatch("JVDTLab.JVLink")
 
         # JVInitで認証チェック（sidは任意の文字列）
+        #
+        # JVInitの戻り値は公式仕様書「3. コード表」の JVInit セクションで
+        # -101/-102/-103 のみが定義されている（-100 はJVInitの戻り値ではなく
+        # JVSetUIProperties/JVSetServiceKey等の戻り値。src/jvlink/constants.py
+        # のJV_RT_INVALID_PARAMETER参照）。これらはいずれも sid パラメータの
+        # 形式不正を示すコードで、サービスキー(利用キー)自体の状態を示すもの
+        # ではない。サービスキー関連のエラー（未設定・無効・期限切れ等）は
+        # JVOpen/JVRTOpen が -301/-302/-303 として返す。
         result = jvlink.JVInit("JLTSQL")
 
         if result == 0:
             return True, "JV-Link認証OK"
-        elif result == -100:
-            return False, "サービスキー未設定"
         elif result == -101:
-            return False, "サービスキーが無効"
+            return False, "JVInit: sid パラメータが設定されていません（内部エラー）"
         elif result == -102:
-            return False, "サービスキーの有効期限切れ"
+            return False, "JVInit: sid パラメータが64byteを超えています（内部エラー）"
         elif result == -103:
-            return False, "サービス利用不可"
+            return False, "JVInit: sid パラメータが不正です（内部エラー）"
         else:
             return False, f"JV-Link初期化エラー (code: {result})"
     except Exception as e:
@@ -3154,15 +3160,31 @@ class QuickstartRunner:
             output_lower = combined_errors.lower()
 
         # JV-Link接続エラー
-        if 'jvinit' in output_lower or 'jvlink' in output_lower:
-            if '-100' in output or 'サービスキー未設定' in output:
-                return ('auth', 'サービスキーが未設定です')
-            elif '-101' in output or 'サービスキーが無効' in output:
-                return ('auth', 'サービスキーが無効です')
-            elif '-102' in output or '有効期限切れ' in output:
-                return ('auth', 'サービスキーの有効期限が切れています')
-            elif '-103' in output or 'サービス利用不可' in output:
-                return ('auth', 'サービスが利用できません')
+        #
+        # JVInitの戻り値は -101/-102/-103 のみが定義されており（公式仕様書
+        # 「3. コード表」JVInitセクション参照）、いずれも sid パラメータの
+        # 形式不正を示す。サービスキー(利用キー)自体の未設定・無効・期限切れは
+        # JVOpen/JVRTOpen が返す -301/-302/-303 で判定される別のエラーであり、
+        # JVInit失敗の文脈でそれらのラベルを出すのは誤り。
+        #
+        # -301/-302/-303 のチェックを 'jvinit'/'jvlink' ゲートより先に置く:
+        # JVLinkError の文字列表現は例外クラス名（"JVLinkError"）を含み得るため、
+        # 'jvlink' という緩い部分文字列一致では JVOpen 起因のサービスキー
+        # エラーも JVInit 分岐に誤って落ちてしまう。コード番号を先に見れば
+        # この優先順位問題を避けられる。
+        if '-301' in output:
+            return ('auth', 'サービスキーが無効です（認証エラー）')
+        elif '-302' in output:
+            return ('auth', 'サービスキーの有効期限が切れています')
+        elif '-303' in output:
+            return ('auth', 'サービスキーが設定されていません')
+        elif 'jvinit' in output_lower or 'jvlink' in output_lower:
+            if '-101' in output:
+                return ('auth', 'JVInit: sid パラメータが設定されていません（内部エラー）')
+            elif '-102' in output:
+                return ('auth', 'JVInit: sid パラメータが64byteを超えています（内部エラー）')
+            elif '-103' in output:
+                return ('auth', 'JVInit: sid パラメータが不正です（内部エラー）')
             else:
                 return ('connection', 'JV-Link接続エラー - JRA-VAN DataLabソフトウェアを確認してください')
 
