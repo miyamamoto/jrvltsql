@@ -12,6 +12,14 @@ Regression coverage for PR #144 review follow-ups:
   production behavior (commit bf69cb6). The messages must document both
   meanings so a reader doesn't assume the official-spec wording is exhaustive
   (Codex).
+
+Verified directly against the official JV-Link4901.pdf ("3. コード表",
+Ver.4.9.0.1, 2024/8/7, https://jra-van.jp/dlb/sdv/sdk/JV-Link4901.pdf) rather
+than the PR description alone: -100 was correctly valued but grouped under a
+"Parameter Errors (JVOpen/JVRTOpen)" comment alongside -111..-116 by the
+initial follow-up fix, which is wrong -- the spec's JVOpen/JVRTOpen table has
+no -100 entry at all; -100 belongs to JVSetUIProperties/JVSetServiceKey/
+JVSetSaveFlag/JVSetSavePath. Corrected here.
 """
 
 from src.jvlink.constants import (
@@ -30,6 +38,18 @@ def test_invalid_parameter_constant_matches_error_message():
     assert JV_RT_INVALID_PARAMETER == -100
     assert get_error_message(-100) == ERROR_MESSAGES[-100]
     assert "パラメータ" in get_error_message(-100)
+
+
+def test_invalid_parameter_is_not_mislabeled_as_jvopen():
+    # Per the official spec ("3. コード表", JV-Link4901.pdf), -100 is returned
+    # by JVSetUIProperties/JVSetServiceKey/JVSetSaveFlag/JVSetSavePath, never
+    # by JVOpen/JVRTOpen (whose parameter errors start at -111). Guards
+    # against re-introducing the earlier miscategorization, where -100 was
+    # grouped under a "Parameter Errors (JVOpen/JVRTOpen)" comment alongside
+    # -111..-116.
+    message = get_error_message(-100)
+    assert "の戻り値ではない" in message
+    assert "JVSetServiceKey" in message
 
 
 def test_setup_canceled_documents_both_jvopen_and_jvread_meanings():
