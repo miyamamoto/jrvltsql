@@ -264,13 +264,16 @@ class JVLinkWrapper:
                 # Unexpected single value
                 raise ValueError(f"Unexpected JVOpen return type: {type(jv_result)}, expected tuple")
 
-            # Handle result codes for JVOpen:
+            # Handle result codes for JVOpen (per official spec "3. コード表",
+            # JVOpen/JVRTOpen never returns -100/-101/-102/-103 -- those are
+            # JVSetUIProperties/JVSetServiceKey/JVInit codes; JVOpen's actual
+            # errors start at -111):
             # 0 (JV_RT_SUCCESS): Success with data
             # -1: No data available (NOT an error - normal when no new data)
             # -2: No data available (alternative code)
-            # < -100: Actual errors (e.g., -100=setup required, -101=auth error, etc.)
+            # <= -111: Actual errors (e.g., -111=dataspec invalid, -301=auth error, etc.)
             if result < -2:
-                # Real errors are typically -100 or below
+                # Real errors are -111 or below (see comment above)
                 logger.error(
                     "JVOpen failed",
                     data_spec=data_spec,
