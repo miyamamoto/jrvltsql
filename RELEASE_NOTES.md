@@ -1,3 +1,21 @@
+# jrvltsql v1.6.9 Release Notes
+
+## Highlights
+
+- Fixes PostgreSQL table/column/primary-key resolution to consistently use
+  `to_regclass()`, so a same-named table in a schema outside `search_path` no
+  longer causes false-positive "table exists" results or `UndefinedTable`
+  crashes on primary-key lookups.
+- Corrects several JV-Link return-code mislabelings independently duplicated
+  across the codebase after the PR #144 return-code table fix: `-100` was
+  misplaced as a JVOpen/JVRTOpen code (it belongs to JVSetUIProperties/
+  JVSetServiceKey), and `quickstart.py`'s JVInit diagnostics conflated
+  `-101`/`-102`/`-103` (sid parameter format errors) with service-key state
+  (which is actually `-301`/`-302`/`-303` from JVOpen/JVRTOpen).
+- Corrects stale comments in the JVRead/JVStatus retryable-error handling
+  (`-201`/`-202`/`-203`) to match the official spec; the set of codes treated
+  as retryable is unchanged.
+
 # jrvltsql v1.6.8 Release Notes
 
 ## Highlights

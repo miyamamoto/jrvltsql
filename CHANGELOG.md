@@ -9,6 +9,32 @@
 
 現時点で未リリースの変更はありません。
 
+## [1.6.9] - 2026-07-21
+
+### Fixed
+
+- PostgreSQL の `_get_existing_primary_key_columns()` / `_get_primary_key_columns()` /
+  `table_exists()` を `to_regclass()` ベースに統一し、search_path 外のスキーマにある
+  同名テーブルとの誤結合・`UndefinedTable` 例外を修正
+- JV-Link 戻り値 `-100` を JVOpen/JVRTOpen 関連として誤配置していたのを修正
+  （公式仕様書では `-100` は JVSetUIProperties/JVSetServiceKey 等の戻り値で、
+  JVOpen/JVRTOpen の戻り値ではない）
+- `scripts/quickstart.py` が JVInit の戻り値 `-100`〜`-103` を「サービスキー未設定/無効/
+  期限切れ」と誤解釈していたのを修正。JVInit は `-101`〜`-103` のみを返し、いずれも
+  sid パラメータの形式エラーであり、サービスキー状態（`-301`〜`-303`、JVOpen/JVRTOpen
+  の戻り値）とは無関係
+- `src/fetcher/base.py`・`src/fetcher/historical.py` の `-201`/`-202`/`-203` に関する
+  誤ったコメント（「データベースビジー」「ファイルビジー」「セットアップ未完了」）を、
+  公式仕様書に基づく正しい説明に修正（リトライ対象コードの集合自体は変更なし）
+
+### Added
+
+- `tests/test_jvlink_constants.py`（新規）: エラーコード定数とメッセージの網羅テスト
+- `tests/test_postgresql.py`: search_path 切り替え時の `table_exists()`/`_get_existing_columns()`/
+  `_get_existing_primary_key_columns()` 解決を検証する統合テスト
+- `tests/test_quickstart_cli.py::TestAnalyzeErrorJVInitCodes`: JVInit vs JVOpen/JVRTOpen
+  のエラーコード判定の回帰テスト
+
 ## [1.6.8] - 2026-07-18
 
 ### Added
@@ -229,7 +255,8 @@
 - quickstart.py 対話形式セットアップウィザード
 - CLI コマンド（fetch, status, monitor, init）
 
-[Unreleased]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.8...HEAD
+[Unreleased]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.9...HEAD
+[1.6.9]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.8...v1.6.9
 [1.6.8]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.7...v1.6.8
 [1.6.7]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.6...v1.6.7
 [1.6.6]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.5...v1.6.6
