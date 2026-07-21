@@ -4,14 +4,22 @@
 # 出典: JV-Link インターフェース仕様書「3. コード表」
 JV_RT_SUCCESS = 0  # 正常終了
 JV_RT_ERROR = -1  # 該当データ無し（JVOpen/JVRTOpen）／ファイル切り替わり（JVRead）
-JV_RT_SETUP_CANCELED = -2  # セットアップダイアログでキャンセルが押された（JVOpen）
+JV_RT_SETUP_CANCELED = -2  # セットアップダイアログでキャンセルが押された（JVOpen）／エラー（JVRead、JV_READ_ERRORと同値）
 
 # Parameter Errors (JVOpen/JVRTOpen)
-JV_RT_INVALID_DATASPEC = -111  # dataspec パラメータが不正
+#
+# 注意: -111/-114/-115 は公式仕様上はパラメータ不正だが、実運用では
+# 未購読のデータ種別（例: MING）を指定した際にも同じコードが返ることを
+# 確認している（bf69cb6 参照）。呼び出し側の scripts/*.py・
+# src/services/realtime_monitor.py の SUBSCRIPTION_ERROR_CODES は、この
+# 実運用挙動に基づき意図的にこれらのコードを「契約外/未購読につき
+# スキップ」として扱っており、公式仕様の文言だけを見て変更しないこと。
+JV_RT_INVALID_PARAMETER = -100  # パラメータが不正、あるいはレジストリへの保存に失敗
+JV_RT_INVALID_DATASPEC = -111  # dataspec パラメータが不正（実運用では未購読データ種別のエラーとしても観測）
 JV_RT_INVALID_FROMTIME_START = -112  # fromtime パラメータが不正（読み出し開始時刻）
 JV_RT_INVALID_FROMTIME_END = -113  # fromtime パラメータが不正（読み出し終了時刻）
-JV_RT_INVALID_KEY = -114  # key パラメータが不正
-JV_RT_INVALID_OPTION = -115  # option パラメータが不正
+JV_RT_INVALID_KEY = -114  # key パラメータが不正（実運用では未購読データ種別のエラーとしても観測）
+JV_RT_INVALID_OPTION = -115  # option パラメータが不正（実運用では未購読データ種別のエラーとしても観測）
 JV_RT_INVALID_DATASPEC_OPTION = -116  # dataspec と option の組み合わせが不正
 
 # Call-order / State Errors
@@ -495,18 +503,18 @@ ERROR_MESSAGES = {
     # Basic
     0: "成功",
     -1: "該当データ無し（JVOpen/JVRTOpen）／ファイル切り替わり（JVRead）",
-    -2: "セットアップダイアログでキャンセルが押された",
+    -2: "セットアップダイアログでキャンセルが押された（JVOpen）／エラー（JVRead）",
     -3: "ファイルダウンロード中（少し待って読み込みを再開してください）",
     # Parameter / Registry (JVSet系, JVOpen/JVRTOpen, JVInit)
     -100: "パラメータが不正、あるいはレジストリへの保存に失敗",
     -101: "sid が設定されていない（JVInit）／既に利用キーが登録されている（JVSetServiceKey）",
     -102: "sid が64byte を超えている（JVInit）",
     -103: "sid が不正（1桁目がスペース）（JVInit）",
-    -111: "dataspec パラメータが不正",
+    -111: "dataspec パラメータが不正（実運用では未購読データ種別のエラーとしても観測）",
     -112: "fromtime パラメータが不正（読み出し開始時刻）",
     -113: "fromtime パラメータが不正（読み出し終了時刻）",
-    -114: "key パラメータが不正",
-    -115: "option パラメータが不正",
+    -114: "key パラメータが不正（実運用では未購読データ種別のエラーとしても観測）",
+    -115: "option パラメータが不正（実運用では未購読データ種別のエラーとしても観測）",
     -116: "dataspec と option の組み合わせが不正",
     # Call-order / State
     -201: "JVInit が行なわれていない",
