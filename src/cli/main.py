@@ -50,8 +50,12 @@ logger = get_logger(__name__)
 
 FETCH_NOTE_SETUP_MODE = "セットアップモード - 全データ取得（ダイアログが表示されます）"
 FETCH_NOTE_OPTION2_RANGE = (
-    "option=2（今週データ）では --from は JVOpen の取得範囲に効きません。"
-    "取得期間の完全性を保証できないため、NL キャッシュは使用・作成しません。"
+    "option=2（今週データ）でも --from は JVOpen の fromtime に渡され、"
+    "今週データ内の連続性管理に使われます。ただし任意の過去週を選択するものではなく、"
+    "JV-Link が現在の開催サイクルに絞ったデータを返します。"
+    "日曜・月曜は2サイクル分になる場合があります。"
+    "任意の --from/--to 範囲の完全性を保証できないため、"
+    "NL キャッシュは使用・作成しません。"
 )
 FETCH_NOTE_TO_CLIENT_FILTER = (
     "--to は JVOpen の終端ではなく、取得後のクライアント側フィルタです。"
@@ -346,8 +350,10 @@ def update(ctx, force):
     "date_from",
     required=True,
     help=(
-        "Start date (YYYYMMDD). Passed as JVOpen fromtime for options 1/3/4; "
-        "option=2 ignores it server-side and bypasses NL cache."
+        "Start date (YYYYMMDD), passed as JVOpen fromtime for all options. "
+        "With option=2 it manages continuity within the current race-cycle "
+        "data; it does not select an arbitrary historical week, and Sunday "
+        "or Monday may cover two cycles. NL cache is bypassed."
     ),
 )
 @click.option(
@@ -573,8 +579,10 @@ def cache_build(ctx, data_spec, date_from, date_to, jv_option, also_import, db, 
 
     if jv_option == 2:
         raise click.UsageError(
-            "cache build does not support option=2: JVOpen ignores --from, "
-            "so the requested date range cannot be marked complete safely"
+            "cache build does not support option=2: JVOpen uses --from to "
+            "manage continuity within current race-cycle data, not to select "
+            "an arbitrary historical range, so the requested date range "
+            "cannot be marked complete safely"
         )
 
     config = ctx.obj.get("config", {}) if ctx.obj else {}
@@ -671,8 +679,10 @@ def cache_rebuild(ctx, data_spec, date_from, date_to, jv_option, cache_dir):
     """
     if jv_option == 2:
         raise click.UsageError(
-            "cache rebuild does not support option=2: JVOpen ignores --from, "
-            "so the requested date range cannot be marked complete safely"
+            "cache rebuild does not support option=2: JVOpen uses --from to "
+            "manage continuity within current race-cycle data, not to select "
+            "an arbitrary historical range, so the requested date range "
+            "cannot be marked complete safely"
         )
 
     from src.cache import CacheManager

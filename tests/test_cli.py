@@ -278,10 +278,12 @@ class TestFetchCommand(unittest.TestCase):
             )
 
         self.assertEqual(result.exit_code, 0, result.output)
-        self.assertIn('option=2 ignores it server-side', result.output)
-        self.assertIn('ChokyoDate', result.output)
-        self.assertIn('calendar-year chunks', result.output)
-        self.assertIn('adds another chunk', result.output)
+        help_text = ' '.join(result.output.split())
+        self.assertIn('current race-cycle data', help_text)
+        self.assertIn('Sunday or Monday may cover two cycles', help_text)
+        self.assertIn('ChokyoDate', help_text)
+        self.assertIn('calendar-year chunks', help_text)
+        self.assertIn('adds another chunk', help_text)
 
     @patch('src.importer.batch.BatchProcessor')
     def test_fetch_with_all_args(self, mock_batch_processor):

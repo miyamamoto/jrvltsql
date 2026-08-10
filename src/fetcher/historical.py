@@ -219,9 +219,10 @@ class HistoricalFetcher(BaseFetcher):
 
         download_task_id = None
         fetch_task_id = None
-        # option=2 ignores fromtime server-side, so a requested date range can
-        # never be proven complete. Bypass both existing NL cache markers and
-        # write-through caching for that mode.
+        # option=2 uses fromtime only for continuity within current race-cycle
+        # data; it cannot prove an arbitrary requested historical range
+        # complete. Bypass both existing NL cache markers and write-through
+        # caching for that mode.
         active_cache_manager = self.cache_manager if option != 2 else None
         cache_checkpoints: dict[str, Optional[int]] = {}
         cache_write_committed = active_cache_manager is None
