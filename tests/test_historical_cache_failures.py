@@ -56,3 +56,29 @@ def test_cache_replay_counts_each_parsed_list_item():
     assert stats["records_fetched"] == 1
     assert stats["records_parsed"] == 2
     assert stats["records_failed"] == 0
+
+
+def test_option2_bypasses_even_an_existing_complete_cache_marker():
+    cache = MagicMock()
+    fetcher = _fetcher_without_jvlink()
+    fetcher.fetch = MagicMock(return_value=iter([{"RecordSpec": "RA"}]))
+
+    records = list(
+        fetcher.fetch_with_cache(
+            cache,
+            "RACE",
+            "20200101",
+            "20261231",
+            option=2,
+        )
+    )
+
+    assert records == [{"RecordSpec": "RA"}]
+    cache.has_nl_range.assert_not_called()
+    cache.read_nl.assert_not_called()
+    fetcher.fetch.assert_called_once_with(
+        "RACE",
+        "20200101",
+        "20261231",
+        2,
+    )

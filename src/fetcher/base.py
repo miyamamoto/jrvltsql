@@ -397,20 +397,23 @@ class BaseFetcher(ABC):
         Returns:
             True if record date <= to_date, False otherwise
         """
-        # Extract date from record
-        # Most JV-Data records have Year and MonthDay fields
+        # Most JV-Data records have Year and MonthDay fields. HC/WC training
+        # records instead carry their event date in ChokyoDate.
         year = data.get("Year")
         month_day = data.get("MonthDay")
 
-        if not year or not month_day:
+        if year and month_day:
+            record_date = f"{year}{month_day}"
+        else:
+            chokyo_date = data.get("ChokyoDate")
+            record_date = str(chokyo_date) if chokyo_date else None
+
+        if not record_date:
             # If date fields are not present, include the record
             # (don't filter records that don't have date information)
             return True
 
         try:
-            # Construct record date as YYYYMMDD
-            record_date = f"{year}{month_day}"
-
             # Compare as strings (YYYYMMDD format allows string comparison)
             return record_date <= to_date
         except Exception as e:
@@ -418,6 +421,7 @@ class BaseFetcher(ABC):
                 "Failed to extract date from record",
                 year=year,
                 month_day=month_day,
+                chokyo_date=data.get("ChokyoDate"),
                 error=str(e),
             )
             # If we can't determine the date, include the record

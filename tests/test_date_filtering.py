@@ -52,6 +52,16 @@ class TestDateFiltering:
         record3 = {"Year": "2025", "MonthDay": "0101"}
         assert fetcher._is_within_date_range(record3, "20241231") is False
 
+        # HC/WC training records carry the event date in ChokyoDate.
+        assert fetcher._is_within_date_range(
+            {"RecordSpec": "HC", "ChokyoDate": "20240701"},
+            "20240630",
+        ) is False
+        assert fetcher._is_within_date_range(
+            {"RecordSpec": "WC", "ChokyoDate": "20240630"},
+            "20240630",
+        ) is True
+
     def test_is_within_date_range_missing_fields(self, fetcher):
         """Test that records missing date fields are included."""
         # Record with no date fields

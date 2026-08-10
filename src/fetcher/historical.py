@@ -20,6 +20,9 @@ def _extract_record_date(record: dict) -> Optional[str]:
     monthday = record.get("MonthDay") or record.get("headMonthDay") or record.get("KaisaiTsukihi")
     if year and monthday and len(str(year)) == 4 and len(str(monthday)) == 4:
         return str(year) + str(monthday)
+    chokyo_date = record.get("ChokyoDate")
+    if chokyo_date and len(str(chokyo_date)) == 8:
+        return str(chokyo_date)
     return None
 
 
@@ -216,9 +219,13 @@ class HistoricalFetcher(BaseFetcher):
 
         download_task_id = None
         fetch_task_id = None
-        active_cache_manager = self.cache_manager
+        # option=2 ignores fromtime server-side, so a requested date range can
+        # never be proven complete. Bypass both existing NL cache markers and
+        # write-through caching for that mode.
+        active_cache_manager = self.cache_manager if option != 2 else None
         cache_checkpoints: dict[str, Optional[int]] = {}
         cache_write_committed = active_cache_manager is None
+        cache_range_complete = True
 
         try:
             # Info for setup mode (option 3 or 4) - ログのみ、画面表示はしない
@@ -332,6 +339,11 @@ class HistoricalFetcher(BaseFetcher):
                                 rec_date,
                             )
                         active_cache_manager.write_nl_record(data_spec, rec_date, data["_raw"])
+                    else:
+                        # The record is yielded/imported, but cannot be replayed
+                        # from this date-keyed cache. Keep the range incomplete;
+                        # the finally block rolls back any partial appends.
+                        cache_range_complete = False
                 yield data
 
             if self._jvd_replay_records_remaining > 0:
@@ -347,7 +359,7 @@ class HistoricalFetcher(BaseFetcher):
                 )
 
             # Mark cached dates as complete
-            if active_cache_manager:
+            if active_cache_manager and cache_range_complete:
                 from datetime import timedelta
                 d = datetime.strptime(from_date, "%Y%m%d").date()
                 end = datetime.strptime(to_date, "%Y%m%d").date()
@@ -360,6 +372,13 @@ class HistoricalFetcher(BaseFetcher):
                     completed_dates,
                 )
                 cache_write_committed = True
+            elif active_cache_manager:
+                logger.warning(
+                    "NL cache range left incomplete because records lacked a supported event date",
+                    data_spec=data_spec,
+                    from_date=from_date,
+                    to_date=to_date,
+                )
 
             # Log summary
             stats = self.get_statistics()
@@ -473,7 +492,11 @@ class HistoricalFetcher(BaseFetcher):
         Yields:
             Dictionary of parsed record data
         """
-        if cache_manager.has_nl_range(data_spec, from_date, to_date):
+        if option == 2:
+            # Do not trust old false-complete markers created by earlier
+            # versions, and do not attach a manager that could create new ones.
+            yield from self.fetch(data_spec, from_date, to_date, option)
+        elif cache_manager.has_nl_range(data_spec, from_date, to_date):
             # Full cache hit: yield from cache
             self.reset_statistics()
             for raw in cache_manager.read_nl(data_spec, from_date, to_date):

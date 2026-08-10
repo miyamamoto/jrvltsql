@@ -370,6 +370,56 @@ def test_abandoned_fetch_with_cache_clears_attached_manager(tmp_path):
     assert not cache_manager.has_nl("RACE", "20260101")
 
 
+def test_undated_record_rolls_back_partial_cache_and_leaves_range_incomplete(tmp_path):
+    fetcher = _fetcher()
+    fetcher.show_progress = False
+    fetcher._service_key = None
+    fetcher.cache_manager = CacheManager(tmp_path / "cache")
+    fetcher.jvlink.jv_init.return_value = 0
+    fetcher.jvlink.jv_open.return_value = (0, 2, 0, "ts")
+    fetcher.jvlink.jv_read.side_effect = [
+        (1, b"dated", "dated.jvd"),
+        (1, b"master", "master.jvd"),
+        (0, None, None),
+    ]
+    fetcher.parser_factory.parse.side_effect = lambda raw: (
+        {"RecordSpec": "RA", "Year": "2026", "MonthDay": "0101"}
+        if raw == b"dated"
+        else {"RecordSpec": "UM"}
+    )
+
+    records = list(fetcher.fetch("DIFF", "20260101", "20260101"))
+
+    assert [record["RecordSpec"] for record in records] == ["RA", "UM"]
+    assert not fetcher.cache_manager.has_nl("DIFF", "20260101")
+    assert list(fetcher.cache_manager.read_nl("DIFF", "20260101", "20260101")) == []
+
+
+def test_chokyo_date_is_used_for_cache_coverage(tmp_path):
+    fetcher = _fetcher()
+    fetcher.show_progress = False
+    fetcher._service_key = None
+    fetcher.cache_manager = CacheManager(tmp_path / "cache")
+    fetcher.jvlink.jv_init.return_value = 0
+    fetcher.jvlink.jv_open.return_value = (0, 1, 0, "ts")
+    fetcher.jvlink.jv_read.side_effect = [
+        (1, b"training", "training.jvd"),
+        (0, None, None),
+    ]
+    fetcher.parser_factory.parse.return_value = {
+        "RecordSpec": "HC",
+        "ChokyoDate": "20260101",
+    }
+
+    records = list(fetcher.fetch("SLOP", "20260101", "20260101"))
+
+    assert records[0]["ChokyoDate"] == "20260101"
+    assert fetcher.cache_manager.has_nl("SLOP", "20260101")
+    assert list(
+        fetcher.cache_manager.read_nl("SLOP", "20260101", "20260101")
+    ) == [b"training"]
+
+
 def test_replay_skip_still_runs_periodic_com_buffer_gc():
     fetcher = _fetcher()
     fetcher._jvd_replay_records_remaining = 1

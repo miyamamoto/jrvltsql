@@ -44,7 +44,45 @@ __version__ = _read_version()
 
 # Console for rich output (Windows cp932-safe)
 console = Console(legacy_windows=True)
+err_console = Console(stderr=True, legacy_windows=True)
 logger = get_logger(__name__)
+
+
+FETCH_NOTE_SETUP_MODE = "セットアップモード - 全データ取得（ダイアログが表示されます）"
+FETCH_NOTE_OPTION2_RANGE = (
+    "option=2（今週データ）では --from は JVOpen の取得範囲に効きません。"
+    "取得期間の完全性を保証できないため、NL キャッシュは使用・作成しません。"
+)
+FETCH_NOTE_TO_CLIENT_FILTER = (
+    "--to は JVOpen の終端ではなく、取得後のクライアント側フィルタです。"
+)
+FETCH_NOTE_TO_SINGLE_OPEN = (
+    "option=1/2/4 では --to を狭めてもサーバからのダウンロード量は減りません。"
+)
+FETCH_NOTE_TO_SETUP_CHUNKS = (
+    "option=3 の370日超の範囲は年単位の JVOpen に分割されるため、"
+    "--to を広げるほど呼び出し回数とダウンロード量が増えます。"
+)
+FETCH_NOTE_DATE_FIELDS = (
+    "--to は Year+MonthDay または ChokyoDate（HC/WC の調教日）で判定します。"
+    "対応する日付を持たないレコードは JV-Link 取得時に除外されず、"
+    "その取得範囲は完全キャッシュとして記録されません。"
+)
+
+
+def _print_fetch_guardrail_notes(jv_option: int) -> None:
+    """Emit option-dependent date-range caveats after input validation."""
+    if jv_option in (3, 4):
+        err_console.print(f"[yellow]Note:[/yellow] {FETCH_NOTE_SETUP_MODE}")
+    if jv_option == 2:
+        err_console.print(f"[yellow]Note:[/yellow] {FETCH_NOTE_OPTION2_RANGE}")
+
+    err_console.print(f"[yellow]Note:[/yellow] {FETCH_NOTE_TO_CLIENT_FILTER}")
+    if jv_option == 3:
+        err_console.print(f"[yellow]Note:[/yellow] {FETCH_NOTE_TO_SETUP_CHUNKS}")
+    else:
+        err_console.print(f"[yellow]Note:[/yellow] {FETCH_NOTE_TO_SINGLE_OPEN}")
+    err_console.print(f"[yellow]Note:[/yellow] {FETCH_NOTE_DATE_FIELDS}")
 
 
 def _normalize_service_key(value: str | None) -> str | None:
@@ -303,8 +341,26 @@ def update(ctx, force):
 
 
 @cli.command()
-@click.option("--from", "date_from", required=True, help="Start date (YYYYMMDD)")
-@click.option("--to", "date_to", required=True, help="End date (YYYYMMDD) - filters records up to this date")
+@click.option(
+    "--from",
+    "date_from",
+    required=True,
+    help=(
+        "Start date (YYYYMMDD). Passed as JVOpen fromtime for options 1/3/4; "
+        "option=2 ignores it server-side and bypasses NL cache."
+    ),
+)
+@click.option(
+    "--to",
+    "date_to",
+    required=True,
+    help=(
+        "Client-side end date (YYYYMMDD), not a JVOpen end bound. Filters "
+        "Year+MonthDay and HC/WC ChokyoDate; records without either date are "
+        "kept and prevent a complete-cache marker. With option=3, ranges over "
+        "370 days are split yearly, so widening --to increases downloads."
+    ),
+)
 @click.option("--spec", "data_spec", required=True, help="Data specification (RACE, DIFF, etc.)")
 @click.option(
     "--option",
@@ -355,11 +411,6 @@ def fetch(ctx, date_from, date_to, data_spec, jv_option, db, batch_size, progres
     console.print(f"  Option:     {jv_option} ({option_names.get(jv_option, '不明')})")
     console.print(f"  Database:   {db_type}")
 
-    # Warn if setup mode (3 or 4) is used
-    if jv_option in (3, 4):
-        console.print()
-        console.print("[yellow]Note:[/yellow] セットアップモード - 全データ取得（ダイアログが表示されます）")
-
     # Validate data_spec and option combination
     from src.jvlink.constants import is_valid_jvopen_combination, JVOPEN_VALID_COMBINATIONS
     if not is_valid_jvopen_combination(data_spec, jv_option):
@@ -369,6 +420,7 @@ def fetch(ctx, date_from, date_to, data_spec, jv_option, db, batch_size, progres
         console.print(f"       option={jv_option} で取得可能: {', '.join(valid_specs)}")
         sys.exit(1)
 
+    _print_fetch_guardrail_notes(jv_option)
     console.print()
 
     try:
@@ -488,8 +540,16 @@ def cache_info(ctx, cache_dir):
 
 @cache.command("build")
 @click.option("--spec", "data_spec", required=True, help="Data spec (RACE, DIFF, DIFFU, etc.)")
-@click.option("--from", "date_from", required=True, help="Start date YYYYMMDD")
-@click.option("--to", "date_to", required=True, help="End date YYYYMMDD")
+@click.option("--from", "date_from", required=True, help="Start date YYYYMMDD (option=2 is not cacheable)")
+@click.option(
+    "--to",
+    "date_to",
+    required=True,
+    help=(
+        "Client-side end date YYYYMMDD. Records without Year+MonthDay or "
+        "ChokyoDate prevent the range from being marked complete."
+    ),
+)
 @click.option("--option", "jv_option", type=int, default=1, show_default=True,
               help="JVOpen option: 1=通常, 2=今週, 3=setup, 4=split-setup")
 @click.option("--also-import", is_flag=True, default=False,
@@ -509,6 +569,12 @@ def cache_build(ctx, data_spec, date_from, date_to, jv_option, also_import, db, 
     """
     from src.cache import CacheManager
     from src.fetcher.historical import HistoricalFetcher
+
+    if jv_option == 2:
+        raise click.UsageError(
+            "cache build does not support option=2: JVOpen ignores --from, "
+            "so the requested date range cannot be marked complete safely"
+        )
 
     config = ctx.obj.get("config", {}) if ctx.obj else {}
     service_key = config.get("jvlink", {}).get("service_key") or os.environ.get("JVLINK_SERVICE_KEY")
@@ -602,6 +668,12 @@ def cache_rebuild(ctx, data_spec, date_from, date_to, jv_option, cache_dir):
     Example:
       jltsql cache rebuild --spec RACE --from 20260301 --to 20260328
     """
+    if jv_option == 2:
+        raise click.UsageError(
+            "cache rebuild does not support option=2: JVOpen ignores --from, "
+            "so the requested date range cannot be marked complete safely"
+        )
+
     from src.cache import CacheManager
     mgr = CacheManager(Path(cache_dir))
 

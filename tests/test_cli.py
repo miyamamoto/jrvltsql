@@ -262,6 +262,14 @@ class TestFetchCommand(unittest.TestCase):
             result.exception is not None
         )
 
+    def test_fetch_help_explains_option_dependent_date_semantics(self):
+        result = self.runner.invoke(cli, ['fetch', '--help'])
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertIn('option=2 ignores it server-side', result.output)
+        self.assertIn('ChokyoDate', result.output)
+        self.assertIn('split yearly', result.output)
+
     @patch('src.importer.batch.BatchProcessor')
     def test_fetch_with_all_args(self, mock_batch_processor):
         """Test fetch command with all arguments."""
