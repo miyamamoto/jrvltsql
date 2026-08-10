@@ -268,7 +268,8 @@ class TestFetchCommand(unittest.TestCase):
         self.assertEqual(result.exit_code, 0, result.output)
         self.assertIn('option=2 ignores it server-side', result.output)
         self.assertIn('ChokyoDate', result.output)
-        self.assertIn('split yearly', result.output)
+        self.assertIn('calendar-year chunks', result.output)
+        self.assertIn('adds another chunk', result.output)
 
     @patch('src.importer.batch.BatchProcessor')
     def test_fetch_with_all_args(self, mock_batch_processor):

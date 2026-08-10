@@ -60,8 +60,8 @@ FETCH_NOTE_TO_SINGLE_OPEN = (
     "option=1/2/4 では --to を狭めてもサーバからのダウンロード量は減りません。"
 )
 FETCH_NOTE_TO_SETUP_CHUNKS = (
-    "option=3 の370日超の範囲は年単位の JVOpen に分割されるため、"
-    "--to を広げるほど呼び出し回数とダウンロード量が増えます。"
+    "option=3 の370日超の範囲は年単位の JVOpen に分割され、"
+    "--to の延長で年次チャンクが追加される場合に呼び出し回数とダウンロード量が増えます。"
 )
 FETCH_NOTE_DATE_FIELDS = (
     "--to は Year+MonthDay または ChokyoDate（HC/WC の調教日）で判定します。"
@@ -358,7 +358,8 @@ def update(ctx, force):
         "Client-side end date (YYYYMMDD), not a JVOpen end bound. Filters "
         "Year+MonthDay and HC/WC ChokyoDate; records without either date are "
         "kept and prevent a complete-cache marker. With option=3, ranges over "
-        "370 days are split yearly, so widening --to increases downloads."
+        "370 days are split into calendar-year chunks; extending --to increases "
+        "downloads only when it adds another chunk."
     ),
 )
 @click.option("--spec", "data_spec", required=True, help="Data specification (RACE, DIFF, etc.)")
