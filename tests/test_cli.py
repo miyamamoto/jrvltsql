@@ -263,7 +263,19 @@ class TestFetchCommand(unittest.TestCase):
         )
 
     def test_fetch_help_explains_option_dependent_date_semantics(self):
-        result = self.runner.invoke(cli, ['fetch', '--help'])
+        example_config = (
+            Path(__file__).resolve().parents[1] / 'config' / 'config.yaml.example'
+        )
+        with self.runner.isolated_filesystem():
+            config_path = Path('config.yaml')
+            config_path.write_text(
+                example_config.read_text(encoding='utf-8'),
+                encoding='utf-8',
+            )
+            result = self.runner.invoke(
+                cli,
+                ['--config', str(config_path), 'fetch', '--help'],
+            )
 
         self.assertEqual(result.exit_code, 0, result.output)
         self.assertIn('option=2 ignores it server-side', result.output)
