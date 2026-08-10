@@ -120,6 +120,30 @@ class TestNlIndex:
         idx = cm._load_index(cm._index_path("RACE"))
         assert idx["20260401"]["count"] == 3
         assert idx["20260401"]["complete"] is True
+        assert (
+            idx["20260401"]["schema_version"]
+            == CacheManager.NL_CACHE_SCHEMA_VERSION
+        )
+
+    def test_legacy_complete_cache_is_not_reused_or_appended(self, tmp_path):
+        cm = _make_cache(tmp_path)
+        legacy_path = cm._nl_dir("RACE") / "20260401.bin"
+        legacy_path.write_bytes(cm.HEADER.pack(6) + b"legacy")
+        cm._save_index(
+            cm._index_path("RACE"),
+            {"20260401": {"complete": True, "count": 1}},
+        )
+
+        assert cm.has_nl_range("RACE", "20260401", "20260401") is False
+        assert list(cm.read_nl("RACE", "20260401", "20260401")) == []
+
+        cm.write_nl_record("RACE", "20260401", _raw("fresh"))
+        cm.mark_nl_complete("RACE", "20260401")
+
+        assert list(cm.read_nl("RACE", "20260401", "20260401")) == [
+            _raw("fresh")
+        ]
+        assert legacy_path.exists()
 
     def test_mark_nl_complete_empty_date(self, tmp_path):
         cm = _make_cache(tmp_path)

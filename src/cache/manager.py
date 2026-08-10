@@ -19,13 +19,14 @@ class CacheManager:
     Thread-safe for concurrent RT_ writes.
 
     Directory structure:
-        cache_dir/nl/{SPEC}/{YYYYMMDD}.bin  -- 蓄積系
+        cache_dir/nl/{SPEC}/{YYYYMMDD}.v2.bin  -- 蓄積系
         cache_dir/rt/{SPEC_CODE}/{YYYYMMDD}.bin  -- 速報系
 
     Binary format: [uint32-BE length][raw bytes] per record (length-prefixed)
     """
 
     HEADER = struct.Struct(">I")  # 4-byte big-endian uint32
+    NL_CACHE_SCHEMA_VERSION = 2
 
     def __init__(self, cache_dir: Path):
         self.cache_dir = Path(cache_dir)
@@ -45,7 +46,9 @@ class CacheManager:
         return d
 
     def _nl_path(self, spec: str, date_str: str) -> Path:
-        return self._nl_dir(spec) / f"{date_str}.bin"
+        return self._nl_dir(spec) / (
+            f"{date_str}.v{self.NL_CACHE_SCHEMA_VERSION}.bin"
+        )
 
     def _index_path(self, spec: str) -> Path:
         return self._nl_dir(spec) / ".index.json"
@@ -85,7 +88,8 @@ class CacheManager:
     # --- NL_ public API ---
     def has_nl(self, spec: str, date_str: str) -> bool:
         """Return True if complete NL cache exists for this spec+date."""
-        return self._load_index(self._index_path(spec)).get(date_str, {}).get("complete", False)
+        entry = self._load_index(self._index_path(spec)).get(date_str, {})
+        return self._nl_entry_is_complete(entry)
 
     def has_nl_range(self, spec: str, from_date: str, to_date: str) -> bool:
         """Return True if ALL dates in range are fully cached."""
@@ -93,10 +97,19 @@ class CacheManager:
         end = _parse_date(to_date)
         index = self._load_index(self._index_path(spec))
         while d <= end:
-            if not index.get(d.strftime("%Y%m%d"), {}).get("complete", False):
+            if not self._nl_entry_is_complete(
+                index.get(d.strftime("%Y%m%d"), {})
+            ):
                 return False
             d += timedelta(days=1)
         return True
+
+    def _nl_entry_is_complete(self, entry: object) -> bool:
+        return (
+            isinstance(entry, dict)
+            and entry.get("complete") is True
+            and entry.get("schema_version") == self.NL_CACHE_SCHEMA_VERSION
+        )
 
     def write_nl_record(self, spec: str, date_str: str, raw: bytes) -> None:
         """Append one raw record to NL cache (thread-safe)."""
@@ -146,6 +159,7 @@ class CacheManager:
                 count = self._count_records(bin_path) if bin_path.exists() else 0
                 index[date_str] = {
                     "complete": True,
+                    "schema_version": self.NL_CACHE_SCHEMA_VERSION,
                     "count": count,
                     "size": size,
                     "mtime": _now_iso(),
@@ -215,12 +229,16 @@ class CacheManager:
             for spec_dir in sorted(p for p in nl_base.iterdir() if p.is_dir()):
                 spec = spec_dir.name
                 idx = self._load_index(spec_dir / ".index.json")
-                dates = sorted(idx.keys())
+                dates = sorted(
+                    date_str
+                    for date_str, entry in idx.items()
+                    if self._nl_entry_is_complete(entry)
+                )
                 bins = list(spec_dir.glob("*.bin"))
                 sz = sum(b.stat().st_size for b in bins)
                 result["nl"][spec] = {
                     "cached_dates": len(dates),
-                    "complete_dates": sum(1 for v in idx.values() if v.get("complete")),
+                    "complete_dates": len(dates),
                     "date_range": f"{dates[0]}..{dates[-1]}" if dates else "(empty)",
                     "size_bytes": sz,
                 }
@@ -253,10 +271,14 @@ class CacheManager:
             if not d.is_dir():
                 continue
             if date_str:
-                f = d / f"{date_str}.bin"
-                if f.exists():
-                    f.unlink()
-                    deleted += 1
+                cache_files = [
+                    d / f"{date_str}.bin",
+                    d / f"{date_str}.v{self.NL_CACHE_SCHEMA_VERSION}.bin",
+                ]
+                for f in cache_files:
+                    if f.exists():
+                        f.unlink()
+                        deleted += 1
                 idx_path = d / ".index.json"
                 if idx_path.exists():
                     idx = self._load_index(idx_path)
