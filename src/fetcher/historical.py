@@ -323,7 +323,15 @@ class HistoricalFetcher(BaseFetcher):
                 )
                 self._fetch_task_id = fetch_task_id
 
-            # Fetch and parse records (with optional cache write-through)
+            # Fetch and parse records (with optional cache write-through).
+            # The cache stores raw jv_read buffers, so write once per buffer, not
+            # once per parsed record: full-struct parsers (H1/H6) expand one
+            # buffer into thousands of rows that all carry the same `_raw`. Rows
+            # from one buffer share a header, hence the same record date, so the
+            # first surviving row stands in for all of them. Identity is a safe
+            # "same buffer" test because each jv_read() returns a new bytes
+            # object and last_cached_raw keeps it alive.
+            last_cached_raw = None
             for data in self._fetch_and_parse(
                 fetch_task_id,
                 to_date=to_date,
@@ -331,7 +339,9 @@ class HistoricalFetcher(BaseFetcher):
                 consume_replayed_record=self._consume_replayed_record,
                 replay_pending=lambda: self._jvd_replay_records_remaining > 0,
             ):
-                if active_cache_manager and "_raw" in data:
+                raw = data.get("_raw") if active_cache_manager else None
+                if raw is not None and raw is not last_cached_raw:
+                    last_cached_raw = raw
                     rec_date = _extract_record_date(data)
                     if rec_date:
                         if rec_date not in cache_checkpoints:
@@ -339,7 +349,7 @@ class HistoricalFetcher(BaseFetcher):
                                 data_spec,
                                 rec_date,
                             )
-                        active_cache_manager.write_nl_record(data_spec, rec_date, data["_raw"])
+                        active_cache_manager.write_nl_record(data_spec, rec_date, raw)
                     else:
                         # The record is yielded/imported, but cannot be replayed
                         # from this date-keyed cache. Keep the range incomplete;
