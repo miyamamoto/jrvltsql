@@ -9,6 +9,50 @@
 
 現時点で未リリースの変更はありません。
 
+## [1.6.10] - 2026-08-11
+
+### Fixed
+
+- write-through cache への書き込みを parsed record 単位ではなく `jv_read` buffer
+  単位に変更。full-struct parser（H1 は 28,955 byte の buffer から 1,485 行、
+  H6 は 102,890 byte から 4,896 行）は 1 つの buffer を多数の行に展開し、各行が
+  同一の `_raw` を持つため、同じ blob が行数分だけ追記されていた。実測では
+  RACE/option=4 の約 10 分間で 21.8 GB（99.9% が重複、実データは約 80 MB）が
+  生成されていたものが、同一範囲の再実行で 4,230 MB/min → 10.17 MB/min、重複 0%
+  になった。`_raw` の契約と yield される record の形は変更なし
+- `JVRead` の `-402`（0 byte の破損ファイル）を、`JVRead` が返した exact filename
+  だけを `JVFiledelete` で削除し、同一の `JVOpen` context を再オープンして自己修復。
+  再ダウンロード完了・file count・`last_file_timestamp` の一致を確認し、既に caller へ
+  返した prefix を読み飛ばして重複なしで継続する。再試行は最大 2 回で、確認できない
+  条件はすべて fail closed。`-403` は同一ファイルの一部 record を既に返している
+  可能性があるため、best-effort 削除のうえ fail closed とし、危険な位置再開はしない
+- append-only の raw cache を fetch 開始前の byte checkpoint へ rollback するよう変更。
+  generator の途中放棄、replay 不完了、index 更新失敗でも半端な cache を残さない。
+  複数日 range の complete index は一時ファイルからの atomic replace で一括確定する
+- `--from/--to` と cache 完全性の意味を安全側へ統一。option=2 は `JVOpen` が
+  `--from` を取得範囲として扱わないため、既存 NL cache を含めて cache をバイパスし、
+  `cache build/rebuild --option 2` は誤った完全範囲を作る前に fail loud する
+- HC/WC を日付なし master として扱わず、時系列の `ChokyoDate` で `--to` filter と
+  cache 日付を判定。対応する event date を持たない master 行を検出した場合は完全
+  cache marker を付けず、同一取得の部分 cache append も rollback する
+- 旧 cache の完全性 marker を schema v2 で失効させ、legacy raw と active raw を分離
+
+### Changed
+
+- `fetch --option 2` の説明と `--from` の help を公式仕様に合わせて修正。`fromtime`
+  は任意の過去週を選択するものではなく、現在の開催サイクル内の継続性を管理する
+  ものであること、日曜・月曜は 2 つの開催サイクルにまたがりうることを明記
+  （ドキュメントと help のみの変更で、取得と cache の挙動は変更なし）
+- `config/config.yaml.example` の `databases.postgresql` に `connect_timeout` と
+  `sslmode` を built-in 既定と同じ値（10 / prefer）で追記
+
+### Added
+
+- `tests/test_historical_cache_write_through.py`（新規）: buffer 単位の cache 書き込み
+  回帰テスト。5 ケース中 4 ケースは本修正前には失敗する
+- `tests/test_jvd_self_repair.py`（新規）: `JVRead` `-402`/`-403` の自己修復と
+  fail-closed 条件の網羅テスト
+
 ## [1.6.9] - 2026-07-21
 
 ### Fixed
@@ -255,7 +299,8 @@
 - quickstart.py 対話形式セットアップウィザード
 - CLI コマンド（fetch, status, monitor, init）
 
-[Unreleased]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.9...HEAD
+[Unreleased]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.10...HEAD
+[1.6.10]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.9...v1.6.10
 [1.6.9]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.8...v1.6.9
 [1.6.8]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.7...v1.6.8
 [1.6.7]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.6...v1.6.7

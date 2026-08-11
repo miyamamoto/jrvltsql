@@ -1,3 +1,54 @@
+# jrvltsql v1.6.10 Release Notes
+
+Everything merged since v1.6.9: PR #149, #150, #151, #152, and #153.
+
+## Highlights
+
+- Writes the raw write-through cache once per `jv_read` buffer instead of once
+  per parsed record. Full-struct parsers expand a single buffer into thousands
+  of rows (H1: 1,485 rows from 28,955 bytes; H6: 4,896 rows from 102,890
+  bytes), and every one of those rows carries the same `_raw`, so the identical
+  blob was appended once per row. A real RACE/option=4 run produced 21.8 GB of
+  cache in about ten minutes with 99.9% duplicate content where the actual data
+  for the range is roughly 80 MB. Re-running the same range after the fix
+  produced 10.17 MB/min instead of 4,230 MB/min with 0% duplicates. The `_raw`
+  contract and the shape of yielded records are unchanged, so cache replay is
+  unaffected.
+- Self-repairs `JVRead` `-402` (a zero-byte corrupt file) at the official error
+  boundary rather than by guessing physical Wine cache paths. Only the exact
+  filename returned by `JVRead` is deleted through `JVFiledelete`; the same
+  `JVOpen` context is reopened, re-download completion, file count, and
+  `last_file_timestamp` are all required to match, and the already-emitted
+  prefix is drained without re-parsing, re-yielding, or re-caching it. Retries
+  are bounded at two and every unprovable condition fails closed. `-403` may
+  have already emitted part of the same file, so it deletes the file
+  best-effort for the next run and fails closed instead of resuming at an
+  unsafe position.
+- Rolls the append-only raw cache back to a byte checkpoint taken before the
+  fetch. Abandoning the generator mid-stream, an incomplete replay, or a failed
+  index update no longer leaves a partial cache behind, and multi-day
+  completeness markers are committed together by atomic replace from a
+  temporary file.
+- Makes `--from/--to` and cache completeness fail-safe. Option 2 bypasses the
+  cache entirely — including existing NL cache — because `JVOpen` does not
+  treat `--from` as a fetch range under that option, and
+  `cache build/rebuild --option 2` now fails loudly before it can record a
+  bogus complete range.
+- Treats HC/WC as time-series rather than undated master data, using
+  `ChokyoDate` for the `--to` filter and the cache date key. A master row with
+  no corresponding event date suppresses the complete-cache marker and rolls
+  back the partial cache appended by the same fetch.
+- Invalidates legacy cache completeness markers under schema v2, separating
+  legacy raw from active raw.
+- Corrects the `fetch --option 2` note and `--from` help to match the official
+  JV-Link specification: `fromtime` manages continuity within the current race
+  cycle rather than selecting an arbitrary retained week, and Sunday/Monday can
+  span two race cycles. Documentation and help only; fetch and cache behavior
+  are unchanged.
+- Documents `connect_timeout` and `sslmode` in the `databases.postgresql` block
+  of `config/config.yaml.example` at the same values as the built-in defaults
+  (10 / prefer). The handler already read both keys.
+
 # jrvltsql v1.6.9 Release Notes
 
 ## Highlights
