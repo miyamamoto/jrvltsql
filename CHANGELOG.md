@@ -16,10 +16,11 @@
 - write-through cache への書き込みを parsed record 単位ではなく `jv_read` buffer
   単位に変更。full-struct parser（H1 は 28,955 byte の buffer から 1,485 行、
   H6 は 102,890 byte から 4,896 行）は 1 つの buffer を多数の行に展開し、各行が
-  同一の `_raw` を持つため、同じ blob が行数分だけ追記されていた。実測では
-  RACE/option=4 の約 10 分間で 21.8 GB（99.9% が重複、実データは約 80 MB）が
-  生成されていたものが、同一範囲の再実行で 4,230 MB/min → 10.17 MB/min、重複 0%
-  になった。`_raw` の契約と yield される record の形は変更なし
+  同一の `_raw` を持つため、同じ blob が行数分だけ追記されていた。実測（RACE/option=4）
+  では、約 10 分間で 21.8 GB・99.9% が重複（同一範囲の実データは約 80 MB）。
+  書き込みレートは別計測で 4,230 MB/min、修正後に同一範囲を再実行すると
+  10.17 MB/min・重複 0% になった（2 つは別々の計測で、一方から他方は導出できない）。
+  `_raw` の契約と yield される record の形は変更なし
 - `JVRead` の `-402`（0 byte の破損ファイル）を、`JVRead` が返した exact filename
   だけを `JVFiledelete` で削除し、同一の `JVOpen` context を再オープンして自己修復。
   再ダウンロード完了・file count・`last_file_timestamp` の一致を確認し、既に caller へ

@@ -9,11 +9,12 @@ Everything merged since v1.6.9: PR #149, #150, #151, #152, and #153.
   of rows (H1: 1,485 rows from 28,955 bytes; H6: 4,896 rows from 102,890
   bytes), and every one of those rows carries the same `_raw`, so the identical
   blob was appended once per row. A real RACE/option=4 run produced 21.8 GB of
-  cache in about ten minutes with 99.9% duplicate content where the actual data
-  for the range is roughly 80 MB. Re-running the same range after the fix
-  produced 10.17 MB/min instead of 4,230 MB/min with 0% duplicates. The `_raw`
-  contract and the shape of yielded records are unchanged, so cache replay is
-  unaffected.
+  cache in about ten minutes with 99.9% duplicate content, where the actual data
+  for the range is roughly 80 MB. Separately, the observed write rate was
+  4,230 MB/min before the fix and 10.17 MB/min with 0% duplicates when the same
+  range was re-run after it. The volume and the rate are two independent
+  measurements; neither is derived from the other. The `_raw` contract and the
+  shape of yielded records are unchanged, so cache replay is unaffected.
 - Self-repairs `JVRead` `-402` (a zero-byte corrupt file) at the official error
   boundary rather than by guessing physical Wine cache paths. Only the exact
   filename returned by `JVRead` is deleted through `JVFiledelete`; the same
