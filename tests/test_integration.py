@@ -90,7 +90,7 @@ class TestIntegration:
             test_tables = {
                 "NL_RA": 71,   # Race details table (incl. corner sets 2-4)
                 "NL_SE": 103,  # Results plus canonical-v2 and provider-raw audit fields
-                "NL_UM": 61,   # Horse master table
+                "NL_UM": 90,   # Horse master incl. 着回数/脚質傾向/登録レース数 (項番34-62)
                 "NL_KS": 68,   # Jockey master table
                 "NL_HR": 194,  # Expanded payout combinations
                 "NL_O1": 29,   # Odds table

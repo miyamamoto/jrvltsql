@@ -70,15 +70,37 @@ PARSER_MAP = {
     "SK": (SKParser, 78),
     "TK": (TKParser, 727),
     "TM": (TMParser, 39),
-    "UM": (UMParser, 1110),
+    "UM": (UMParser, 1110),  # 検証不能。UNVERIFIABLE_FIXTURES を参照
     "WF": (WFParser, 169),  # Historical fixture uses the obsolete compact layout.
     "YS": (YSParser, 146),
 }
 EXPANDED_RECORD_TYPES = {"O1", "O2", "O3", "O4", "O5", "O6"}
 
+# フィクスチャが JV-Data の生バイト列ではないため、このテストでは検証できない
+# レコード種別。**通っていないのに通っているように見える**のを避けるため、
+# パディングで辻褄を合わせるのではなく明示的に skip する。
+#
+# UM: 公式仕様（JV-Data仕様書 4.5.1.2「フォーマット」シート １３．競走馬マスタ）は
+#     1 レコード 1577 バイトだが、um_records.bin は 1110 バイト単位で、DB から
+#     旧フィールド定義のまま書き戻したもの（scripts/extract_fixtures_from_db.py）。
+#     公式配置と一致するのは先頭 204 バイト（毛色コードまで）だけで、
+#     3代血統情報ブロック（205-820）は全 3 レコードとも空白、賞金累計は
+#     '1233700.0' という float 表記になっている。JV-Data はゼロ埋め 9 桁整数
+#     なのでこの形は出ない。**このフィクスチャでは 3代血統情報以降を一切
+#     検証できない**（実際、そこにあったレイアウト不具合を検出できなかった）。
+#
+#     実データで検証するには JV-Link が返す生バイト列が要るが、JRA-VAN DataLab の
+#     データは契約者向けにライセンスされており、public リポジトリには置けない。
+#     復活させるなら、フィクスチャをリポジトリ外に置いて存在しなければ skip する形にする。
+UNVERIFIABLE_FIXTURES = {
+    "UM": "fixture is a 1110-byte DB round-trip, not the official 1577-byte JV-Data record",
+}
+
 
 def load_fixture_records(record_type, record_length):
     """Load fixture binary file and split into individual records."""
+    if record_type in UNVERIFIABLE_FIXTURES:
+        pytest.skip(f"{record_type}: {UNVERIFIABLE_FIXTURES[record_type]}")
     filepath = os.path.join(FIXTURES_DIR, f"{record_type.lower()}_records.bin")
     if not os.path.exists(filepath):
         pytest.skip(f"Fixture file not found: {filepath}")

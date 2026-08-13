@@ -15,12 +15,12 @@ class UMParser:
     UMレコードパーサー
 
     １３．競走馬マスタ
-    レコード長: 1110 bytes (実際のJV-Data仕様に基づく)
+    レコード長: 1577 bytes (JV-Data仕様書 4.5.1.2「フォーマット」シート)
     VBテーブル名: UMA
     """
 
     RECORD_TYPE = "UM"
-    RECORD_LENGTH = 1110  # 正しいレコード長
+    RECORD_LENGTH = 1577
 
     def __init__(self):
         self.logger = get_logger(__name__)
@@ -105,62 +105,153 @@ class UMParser:
             # 17. 毛色コード (位置:203, 長さ:2)
             result["KeiroCD"] = self.decode_field(data[202:204])
 
-            # 18-31. <3代血統情報> (位置:205, 長さ:644 = 14 * 46)
-            # 各血統情報: 繁殖登録番号(10) + 馬名(36) = 46バイト
+            # 18. <3代血統情報> (位置:205, 繰返:14, 長さ:44 = 合計 616)
+            # 各血統情報: 繁殖登録番号(8) + 馬名(36) = 44バイト
             # 1=父, 2=母, 3=父父, 4=父母, 5=母父, 6=母母, 7-14=曾祖父母
             ketto_pos = 204
             for i in range(1, 15):
-                result[f"Ketto3InfoHansyokuNum{i}"] = self.decode_field(data[ketto_pos:ketto_pos+10])
-                result[f"Ketto3InfoBamei{i}"] = self.decode_field(data[ketto_pos+10:ketto_pos+46])
-                ketto_pos += 46
+                result[f"Ketto3InfoHansyokuNum{i}"] = self.decode_field(data[ketto_pos:ketto_pos+8])
+                result[f"Ketto3InfoBamei{i}"] = self.decode_field(data[ketto_pos+8:ketto_pos+44])
+                ketto_pos += 44
 
-            # 32. 東西所属コード (位置:849, 長さ:1)
-            result["TozaiCD"] = self.decode_field(data[848:849])
+            # 19. 東西所属コード (位置:821, 長さ:1)
+            result["TozaiCD"] = self.decode_field(data[820:821])
 
-            # 33. 調教師コード (位置:850, 長さ:5)
-            result["ChokyosiCode"] = self.decode_field(data[849:854])
+            # 20. 調教師コード (位置:822, 長さ:5)
+            result["ChokyosiCode"] = self.decode_field(data[821:826])
 
-            # 34. 調教師名略称 (位置:855, 長さ:8)
-            result["ChokyosiRyakusyo"] = self.decode_field(data[854:862])
+            # 21. 調教師名略称 (位置:827, 長さ:8)
+            result["ChokyosiRyakusyo"] = self.decode_field(data[826:834])
 
-            # 35. 招待地域名 (位置:863, 長さ:20)
-            result["Syotai"] = self.decode_field(data[862:882])
+            # 22. 招待地域名 (位置:835, 長さ:20)
+            result["Syotai"] = self.decode_field(data[834:854])
 
-            # 36. 生産者コード (位置:883, 長さ:8)
-            result["BreederCode"] = self.decode_field(data[882:890])
+            # 23. 生産者コード (位置:855, 長さ:6)
+            result["BreederCode"] = self.decode_field(data[854:860])
 
-            # 37. 生産者名(法人格無) (位置:891, 長さ:72)
-            result["BreederName"] = self.decode_field(data[890:962])
+            # 24. 生産者名(法人格無) (位置:861, 長さ:70)
+            result["BreederName"] = self.decode_field(data[860:930])
 
-            # 38. 産地名 (位置:963, 長さ:20)
-            result["SanchiName"] = self.decode_field(data[962:982])
+            # 25. 産地名 (位置:931, 長さ:20)
+            result["SanchiName"] = self.decode_field(data[930:950])
 
-            # 39. 馬主コード (位置:983, 長さ:6)
-            result["BanusiCode"] = self.decode_field(data[982:988])
+            # 26. 馬主コード (位置:951, 長さ:6)
+            result["BanusiCode"] = self.decode_field(data[950:956])
 
-            # 40. 馬主名(法人格無) (位置:989, 長さ:64)
-            result["BanusiName"] = self.decode_field(data[988:1052])
+            # 27. 馬主名(法人格無) (位置:957, 長さ:64)
+            result["BanusiName"] = self.decode_field(data[956:1020])
 
-            # 41. 平地本賞金累計 (位置:1053, 長さ:9)
-            result["RuikeiHonsyoHeiti"] = self.decode_field(data[1052:1061])
+            # 28. 平地本賞金累計 (位置:1021, 長さ:9)
+            result["RuikeiHonsyoHeiti"] = self.decode_field(data[1020:1029])
 
-            # 42. 障害本賞金累計 (位置:1062, 長さ:9)
-            result["RuikeiHonsyoSyogai"] = self.decode_field(data[1061:1070])
+            # 29. 障害本賞金累計 (位置:1030, 長さ:9)
+            result["RuikeiHonsyoSyogai"] = self.decode_field(data[1029:1038])
 
-            # 43. 平地付加賞金累計 (位置:1071, 長さ:9)
-            result["RuikeiFukaHeichi"] = self.decode_field(data[1070:1079])
+            # 30. 平地付加賞金累計 (位置:1039, 長さ:9)
+            result["RuikeiFukaHeichi"] = self.decode_field(data[1038:1047])
 
-            # 44. 障害付加賞金累計 (位置:1080, 長さ:9)
-            result["RuikeiFukaSyogai"] = self.decode_field(data[1079:1088])
+            # 31. 障害付加賞金累計 (位置:1048, 長さ:9)
+            result["RuikeiFukaSyogai"] = self.decode_field(data[1047:1056])
 
-            # 45. 平地収得賞金累計 (位置:1089, 長さ:9)
-            result["RuikeiSyutokuHeichi"] = self.decode_field(data[1088:1097])
+            # 32. 平地収得賞金累計 (位置:1057, 長さ:9)
+            result["RuikeiSyutokuHeichi"] = self.decode_field(data[1056:1065])
 
-            # 46. 障害収得賞金累計 (位置:1098, 長さ:9)
-            result["RuikeiSyutokuSyogai"] = self.decode_field(data[1097:1106])
+            # 33. 障害収得賞金累計 (位置:1066, 長さ:9)
+            result["RuikeiSyutokuSyogai"] = self.decode_field(data[1065:1074])
 
-            # 47. レコード区切 (位置:1107, 長さ:2)
-            result["Reserved_1107"] = self.decode_field(data[1106:1108])
+            # 34-60. 着回数（位置:1075-1560）
+            # 各項目は 3 バイト × 繰返 6（1着/2着/3着/4着/5着/着外）＝ 18 バイト。
+            # PC-KEIBA5 の jvd_um と同じく 18 バイトのまま 1 列に保持する
+            # （6 個に割ると突合のたびに連結し直すことになるため）。
+            # 34. 総合着回数 (位置:1075, 長さ:18)
+            result["SogoChaku"] = self.decode_field(data[1074:1092])
+
+            # 35. 中央合計着回数 (位置:1093, 長さ:18)
+            result["ChuoGokeiChaku"] = self.decode_field(data[1092:1110])
+
+            # 36. 芝直・着回数 (位置:1111, 長さ:18)
+            result["SibaChokuChaku"] = self.decode_field(data[1110:1128])
+
+            # 37. 芝右・着回数 (位置:1129, 長さ:18)
+            result["SibaMigiChaku"] = self.decode_field(data[1128:1146])
+
+            # 38. 芝左・着回数 (位置:1147, 長さ:18)
+            result["SibaHidariChaku"] = self.decode_field(data[1146:1164])
+
+            # 39. ダ直・着回数 (位置:1165, 長さ:18)
+            result["DirtChokuChaku"] = self.decode_field(data[1164:1182])
+
+            # 40. ダ右・着回数 (位置:1183, 長さ:18)
+            result["DirtMigiChaku"] = self.decode_field(data[1182:1200])
+
+            # 41. ダ左・着回数 (位置:1201, 長さ:18)
+            result["DirtHidariChaku"] = self.decode_field(data[1200:1218])
+
+            # 42. 障害・着回数 (位置:1219, 長さ:18)
+            result["SyogaiChaku"] = self.decode_field(data[1218:1236])
+
+            # 43. 芝良・着回数 (位置:1237, 長さ:18)
+            result["SibaRyoChaku"] = self.decode_field(data[1236:1254])
+
+            # 44. 芝稍・着回数 (位置:1255, 長さ:18)
+            result["SibaYayaomoChaku"] = self.decode_field(data[1254:1272])
+
+            # 45. 芝重・着回数 (位置:1273, 長さ:18)
+            result["SibaOmoChaku"] = self.decode_field(data[1272:1290])
+
+            # 46. 芝不・着回数 (位置:1291, 長さ:18)
+            result["SibaFuryoChaku"] = self.decode_field(data[1290:1308])
+
+            # 47. ダ良・着回数 (位置:1309, 長さ:18)
+            result["DirtRyoChaku"] = self.decode_field(data[1308:1326])
+
+            # 48. ダ稍・着回数 (位置:1327, 長さ:18)
+            result["DirtYayaomoChaku"] = self.decode_field(data[1326:1344])
+
+            # 49. ダ重・着回数 (位置:1345, 長さ:18)
+            result["DirtOmoChaku"] = self.decode_field(data[1344:1362])
+
+            # 50. ダ不・着回数 (位置:1363, 長さ:18)
+            result["DirtFuryoChaku"] = self.decode_field(data[1362:1380])
+
+            # 51. 障良・着回数 (位置:1381, 長さ:18)
+            result["SyogaiRyoChaku"] = self.decode_field(data[1380:1398])
+
+            # 52. 障稍・着回数 (位置:1399, 長さ:18)
+            result["SyogaiYayaomoChaku"] = self.decode_field(data[1398:1416])
+
+            # 53. 障重・着回数 (位置:1417, 長さ:18)
+            result["SyogaiOmoChaku"] = self.decode_field(data[1416:1434])
+
+            # 54. 障不・着回数 (位置:1435, 長さ:18)
+            result["SyogaiFuryoChaku"] = self.decode_field(data[1434:1452])
+
+            # 55. 芝16下・着回数 (位置:1453, 長さ:18)
+            result["SibaShortChaku"] = self.decode_field(data[1452:1470])
+
+            # 56. 芝22下・着回数 (位置:1471, 長さ:18)
+            result["SibaMiddleChaku"] = self.decode_field(data[1470:1488])
+
+            # 57. 芝22超・着回数 (位置:1489, 長さ:18)
+            result["SibaLongChaku"] = self.decode_field(data[1488:1506])
+
+            # 58. ダ16下・着回数 (位置:1507, 長さ:18)
+            result["DirtShortChaku"] = self.decode_field(data[1506:1524])
+
+            # 59. ダ22下・着回数 (位置:1525, 長さ:18)
+            result["DirtMiddleChaku"] = self.decode_field(data[1524:1542])
+
+            # 60. ダ22超・着回数 (位置:1543, 長さ:18)
+            result["DirtLongChaku"] = self.decode_field(data[1542:1560])
+
+            # 61. 脚質傾向 (位置:1561, 繰返:4, 長さ:3 = 12)
+            result["KyakusituKeiko"] = self.decode_field(data[1560:1572])
+
+            # 62. 登録レース数 (位置:1573, 長さ:3)
+            result["TorokuRaceSu"] = self.decode_field(data[1572:1575])
+
+            # 63. レコード区切 (位置:1576, 長さ:2)
+            result["Reserved_1576"] = self.decode_field(data[1575:1577])
 
             return result
 
