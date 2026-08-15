@@ -130,7 +130,9 @@ OFFICIAL_RA_LAYOUT = _build_official_ra_layout()
 
 
 def _base62(value: int) -> str:
-    alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+    # Text sentinels start with letters so they cannot collide with the
+    # type-valid decimal sentinels used by numeric columns of the same width.
+    alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
     if value < len(alphabet):
         return alphabet[value]
     return _base62(value // len(alphabet) - 1) + alphabet[value % len(alphabet)]
@@ -285,6 +287,8 @@ def test_ra_parses_all_111_official_fields_at_independent_offsets() -> None:
         current_start + current_size == next_start
         for (_, current_start, current_size), (_, next_start, _) in pairwise(OFFICIAL_RA_LAYOUT)
     )
+    sentinels = [(size, expected[name]) for name, _, size in OFFICIAL_RA_LAYOUT if name != "Crlf"]
+    assert len(sentinels) == len(set(sentinels))
 
     row = RAParser().parse(record)
 

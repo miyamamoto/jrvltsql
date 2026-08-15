@@ -200,6 +200,14 @@
   importers with native and standard schemas, confirmed idempotent `RT_RA`
   upsert, and confirmed keyless standard `RACE` fails closed without losing
   its existing row.
+- Final candidate review of
+  `024da61b2525a6bf675eadf9e5084c493df39d3c` found one P2 test-strength gap:
+  four same-width numeric/text field pairs reused a sentinel, so swapping
+  those offsets could evade the all-field comparison. A uniqueness assertion
+  was added first and failed `1 failed` (`110 != 106`); text sentinels were
+  then moved to a letter-first alphabet and the assertion passed with zero
+  duplicate `(size, value)` pairs. The implementation itself had no new
+  P0/P1/P2 storage finding.
 
 ## Next safe commands
 
