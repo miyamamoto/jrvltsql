@@ -397,7 +397,7 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             Kaiji                          SMALLINT            ,  -- 開催回
             Nichiji                        SMALLINT            ,  -- 開催日目
             RaceNum                        SMALLINT            ,  -- レース番号
-            HappyoTime                     TIMESTAMP           ,  -- 発表時刻
+            HappyoTime                     VARCHAR(8)          ,  -- 発表月日時分(MMDDhhmm)
             AtoKyori                       VARCHAR(4)          ,  -- 文字列(4)
             AtoTruckCD                     VARCHAR(2)          ,  -- 文字列(2)
             MaeKyori                       VARCHAR(4)          ,  -- 文字列(4)
@@ -658,7 +658,7 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             Kaiji                          SMALLINT            ,  -- 開催回
             Nichiji                        SMALLINT            ,  -- 開催日目
             RaceNum                        SMALLINT            ,  -- レース番号
-            HappyoTime                     TIMESTAMP           ,  -- 発表時刻
+            HappyoTime                     VARCHAR(8)          ,  -- 発表月日時分(MMDDhhmm)
             AtoJi                          VARCHAR(2)          ,  -- 文字列(2)
             AtoFun                         VARCHAR(2)          ,  -- 文字列(2)
             MaeJi                          VARCHAR(2)          ,  -- 文字列(2)
@@ -1010,7 +1010,7 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             Kaiji                          SMALLINT            ,  -- 開催回
             Nichiji                        SMALLINT            ,  -- 開催日目
             RaceNum                        SMALLINT            ,  -- レース番号
-            HappyoTime                     TIMESTAMP           ,  -- 発表時刻
+            HappyoTime                     VARCHAR(8)          ,  -- 発表月日時分(MMDDhhmm)
             Umaban                         SMALLINT            ,  -- 馬番
             Bamei                          VARCHAR(36)         ,  -- 文字列(36)
             AtoFutan                       VARCHAR(3)          ,  -- 文字列(3)
@@ -1328,7 +1328,7 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             Kaiji                          SMALLINT            ,  -- 開催回
             Nichiji                        SMALLINT            ,  -- 開催日目
             RaceNum                        SMALLINT            ,  -- レース番号
-            HappyoTime                     TIMESTAMP           ,  -- 発表時刻
+            HappyoTime                     VARCHAR(8)          ,  -- 発表月日時分(MMDDhhmm)
             TorokuTosu                     SMALLINT            ,  -- 登録頭数
             SyussoTosu                     SMALLINT            ,  -- 出走頭数
             SanrentanFlag                  VARCHAR(1)          ,  -- 文字列(1)
@@ -1346,7 +1346,7 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             Kaiji                          SMALLINT            ,  -- 開催回
             Nichiji                        SMALLINT            ,  -- 開催日目
             RaceNum                        SMALLINT            ,  -- レース番号
-            HappyoTime                     TIMESTAMP           ,  -- 発表時刻
+            HappyoTime                     VARCHAR(8)          ,  -- 発表月日時分(MMDDhhmm)
             TorokuTosu                     SMALLINT            ,  -- 登録頭数
             SyussoTosu                     SMALLINT            ,  -- 出走頭数
             SanrenFlag                     VARCHAR(1)          ,  -- 文字列(1)
@@ -1381,7 +1381,7 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             Kaiji                          SMALLINT            ,  -- 開催回
             Nichiji                        SMALLINT            ,  -- 開催日目
             RaceNum                        SMALLINT            ,  -- レース番号
-            HappyoTime                     TIMESTAMP           ,  -- 発表時刻
+            HappyoTime                     VARCHAR(8)          ,  -- 発表月日時分(MMDDhhmm)
             TorokuTosu                     SMALLINT            ,  -- 登録頭数
             SyussoTosu                     SMALLINT            ,  -- 出走頭数
             TansyoFlag                     VARCHAR(1)          ,  -- 文字列(1)
@@ -1418,7 +1418,7 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             Kaiji                          SMALLINT            ,  -- 開催回
             Nichiji                        SMALLINT            ,  -- 開催日目
             RaceNum                        SMALLINT            ,  -- レース番号
-            HappyoTime                     TIMESTAMP           ,  -- 発表時刻
+            HappyoTime                     VARCHAR(8)          ,  -- 発表月日時分(MMDDhhmm)
             TorokuTosu                     SMALLINT            ,  -- 登録頭数
             SyussoTosu                     SMALLINT            ,  -- 出走頭数
             UmarenFlag                     VARCHAR(1)          ,  -- 文字列(1)
@@ -1450,7 +1450,7 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             Kaiji                          SMALLINT            ,  -- 開催回
             Nichiji                        SMALLINT            ,  -- 開催日目
             RaceNum                        SMALLINT            ,  -- レース番号
-            HappyoTime                     TIMESTAMP           ,  -- 発表時刻
+            HappyoTime                     VARCHAR(8)          ,  -- 発表月日時分(MMDDhhmm)
             TorokuTosu                     SMALLINT            ,  -- 登録頭数
             SyussoTosu                     SMALLINT            ,  -- 出走頭数
             UmatanFlag                     VARCHAR(1)          ,  -- 文字列(1)
@@ -1497,7 +1497,7 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             Kaiji                          SMALLINT            ,  -- 開催回
             Nichiji                        SMALLINT            ,  -- 開催日目
             RaceNum                        SMALLINT            ,  -- レース番号
-            HappyoTime                     TIMESTAMP           ,  -- 発表時刻
+            HappyoTime                     VARCHAR(8)          ,  -- 発表月日時分(MMDDhhmm)
             TorokuTosu                     SMALLINT            ,  -- 登録頭数
             SyussoTosu                     SMALLINT            ,  -- 出走頭数
             WideFlag                       VARCHAR(1)          ,  -- 文字列(1)
@@ -1853,7 +1853,7 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             JyoCD                          CHAR(2)             ,  -- 競馬場コード
             Kaiji                          SMALLINT            ,  -- 開催回
             Nichiji                        SMALLINT            ,  -- 開催日目
-            HappyoTime                     TIMESTAMP           ,  -- 発表時刻
+            HappyoTime                     VARCHAR(8)          ,  -- 発表月日時分(MMDDhhmm)
             HenkoID                        VARCHAR(1)          ,  -- 文字列(1)
             AtoTenkoCD                     VARCHAR(1)          ,  -- 文字列(1)
             AtoSibaBabaCD                  VARCHAR(1)          ,  -- 文字列(1)
@@ -1935,7 +1935,7 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             Kaiji                          SMALLINT            ,  -- 開催回
             Nichiji                        SMALLINT            ,  -- 開催日目
             RaceNum                        SMALLINT            ,  -- レース番号
-            HappyoTime                     TIMESTAMP           ,  -- 発表時刻
+            HappyoTime                     VARCHAR(8)          ,  -- 発表月日時分(MMDDhhmm)
             Umaban                         SMALLINT            ,  -- 馬番
             Bamei                          VARCHAR(36)         ,  -- 文字列(36)
             JiyuKubun                      VARCHAR(3)            -- 文字列(3)

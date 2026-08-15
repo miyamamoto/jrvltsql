@@ -70,6 +70,13 @@ JRAVAN_TO_JLTSQL: Dict[str, str] = {
     "MEANING": "NL_HY",       # 馬名の意味由来 (Horse Name Meaning)
     "WEIGHT_CHANGE": "NL_JG", # 重量変更 (Weight Change)
     "WOOD": "NL_WC",          # ウッドチップ調教 (Woodchip Training)
+    # Official JRA-VAN change-notification table names. Keep the historical
+    # aliases above for standard-name -> native compatibility, but place the
+    # official names last so the reverse mapping selects them.
+    "TORIKESI_JYOGAI": "NL_AV",  # 出走取消・競走除外
+    "TENKO_BABA": "NL_WE",  # 天候馬場状態
+    "KISYU_CHANGE": "NL_JC",  # 騎手変更
+    "HASSOU_JIKOKU_CHANGE": "NL_TC",  # 発走時刻変更
 }
 
 # レコード種別コード → テーブル名 (Record Type Code -> Table Name)

@@ -15,6 +15,30 @@ from src.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
+_STANDARD_FIELD_ALIASES = {
+    "TENKO_BABA": {
+        "TenkoState": "AtoTenkoCD",
+        "SibaBabaState": "AtoSibaBabaCD",
+        "DirtBabaState": "AtoDirtBabaCD",
+        "TenkoState2": "MaeTenkoCD",
+        "SibaBabaState2": "MaeSibaBabaCD",
+        "DirtBabaState2": "MaeDirtBabaCD",
+    }
+}
+
+
+def translate_standard_field_names(record: dict, table_name: str) -> dict:
+    """Translate legacy native parser names for a standard-name table."""
+    aliases = _STANDARD_FIELD_ALIASES.get(table_name)
+    if not aliases:
+        return record
+    translated = dict(record)
+    for source, target in aliases.items():
+        if source in translated and target not in translated:
+            translated[target] = translated.pop(source)
+    return translated
+
+
 def _expanded_record_fingerprint(record: dict, table_name: str) -> Optional[tuple]:
     """Identify duplicate expanded rows that share one official wide record."""
     if table_name != "BATAIJYU":
@@ -391,7 +415,7 @@ class DataImporter:
             wide_record = record.get("_wide_record")
             if isinstance(wide_record, dict):
                 return self._clean_record(wide_record)
-        return self._clean_record(record)
+        return translate_standard_field_names(self._clean_record(record), table_name)
 
     def _convert_record(self, record: dict, table_name: str) -> dict:
         """Convert record field types based on table schema.

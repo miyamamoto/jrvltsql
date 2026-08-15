@@ -33,7 +33,7 @@ class TCParser(BaseParser):
             FieldDef("Kaiji", 21, 2, convert_type="SMALLINT"),
             FieldDef("Nichiji", 23, 2, convert_type="SMALLINT"),
             FieldDef("RaceNum", 25, 2, convert_type="SMALLINT"),
-            FieldDef("HappyoTime", 27, 8, convert_type="TIME"),
+            FieldDef("HappyoTime", 27, 8, description="発表月日時分(MMDDhhmm)"),
             FieldDef("AtoJi", 35, 2),
             FieldDef("AtoFun", 37, 2),
             FieldDef("MaeJi", 39, 2),

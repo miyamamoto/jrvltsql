@@ -33,7 +33,7 @@ class CCParser(BaseParser):
             FieldDef("Kaiji", 21, 2, convert_type="SMALLINT"),
             FieldDef("Nichiji", 23, 2, convert_type="SMALLINT"),
             FieldDef("RaceNum", 25, 2, convert_type="SMALLINT"),
-            FieldDef("HappyoTime", 27, 8, convert_type="TIME"),
+            FieldDef("HappyoTime", 27, 8, description="発表月日時分(MMDDhhmm)"),
             FieldDef("AtoKyori", 35, 4),
             FieldDef("AtoTruckCD", 39, 2),
             FieldDef("MaeKyori", 41, 4),

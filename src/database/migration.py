@@ -207,6 +207,37 @@ def _get_existing_columns(db: BaseDatabase, table_name: str) -> Set[str]:
     return {row["name"] for row in existing_info}
 
 
+def _is_lossless_text_type(declared_type: str) -> bool:
+    """Return whether a declared SQL type preserves an eight-digit string."""
+    normalized = re.sub(r"\s+", " ", declared_type.strip().upper())
+    return any(marker in normalized for marker in ("CHAR", "CLOB", "TEXT"))
+
+
+def _definition_type(column_definition: str) -> str:
+    """Extract the declared type token(s) from a parsed column definition."""
+    tokens = column_definition.split()
+    if len(tokens) < 2:
+        return ""
+    if len(tokens) >= 3 and tokens[1].upper() in {"CHARACTER", "DOUBLE"}:
+        return f"{tokens[1]} {tokens[2]}"
+    return tokens[1]
+
+
+def _get_existing_column_types(db: BaseDatabase, table_name: str) -> Dict[str, str]:
+    """Return actual declared types keyed by lower-cased column name."""
+    if db.get_db_type() == "postgresql":
+        rows = db.fetch_all(
+            "SELECT a.attname AS name, "
+            "format_type(a.atttypid, a.atttypmod) AS type "
+            "FROM pg_attribute a "
+            "WHERE a.attrelid = to_regclass(?) AND a.attnum > 0 AND NOT a.attisdropped",
+            (table_name.lower(),),
+        )
+    else:
+        rows = db.fetch_all(f'PRAGMA table_info("{table_name}")')
+    return {str(row["name"]).lower(): str(row.get("type") or "") for row in rows}
+
+
 def _get_existing_primary_key_columns(db: BaseDatabase, table_name: str) -> List[str]:
     """Get existing primary key columns in key order."""
     if db.get_db_type() == "postgresql":
@@ -382,8 +413,9 @@ def verify_table_schema(db: BaseDatabase, table_name: str, schema_sql: str) -> N
     """Verify required columns and primary key after migration/creation.
 
     Extra legacy columns are allowed because the default migration policy is
-    additive. Missing required columns or a primary-key mismatch are unsafe:
-    imports must stop instead of writing records against an obsolete layout.
+    additive. Missing required columns, a primary-key mismatch, or a temporal
+    or numeric column where lossless text is required are unsafe: imports must
+    stop instead of writing records against an obsolete layout.
     """
     targets = _migration_targets(db)
     if targets != (db,):
@@ -409,11 +441,34 @@ def verify_table_schema(db: BaseDatabase, table_name: str, schema_sql: str) -> N
     existing_pk_lower = [column.lower() for column in existing_pk]
     expected_pk_lower = [column.lower() for column in expected_pk]
 
+    expected_text_types = {
+        column.lower(): _definition_type(definition)
+        for column, definition in expected_definitions.items()
+        if _is_lossless_text_type(_definition_type(definition))
+    }
+    existing_types = _get_existing_column_types(db, table_name)
+    unknown_text_types = sorted(
+        column
+        for column in expected_text_types
+        if column in existing_lower and not existing_types.get(column)
+    )
+    incompatible_text_types = sorted(
+        f"{column} existing={existing_types[column]} expected={expected_text_types[column]}"
+        for column in expected_text_types
+        if column in existing_lower
+        and existing_types.get(column)
+        and not _is_lossless_text_type(existing_types[column])
+    )
+
     problems = []
     if missing_columns:
         problems.append(f"missing columns={missing_columns}")
     if expected_pk_lower and existing_pk_lower != expected_pk_lower:
         problems.append(f"primary key existing={existing_pk}, expected={expected_pk}")
+    if unknown_text_types:
+        problems.append(f"unknown column types={unknown_text_types}")
+    if incompatible_text_types:
+        problems.append(f"incompatible column types={incompatible_text_types}")
     if problems:
         raise SchemaMigrationError(
             f"Schema verification failed for {table_name}: " + "; ".join(problems)

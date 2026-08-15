@@ -116,7 +116,7 @@ class MockPostgreSQLDatabase(BaseDatabase):
             return [{"name": c} for c in pk]
         if "pg_attribute" in sql_lower:
             cols = self._tables.get((table_name or "").lower(), [])
-            return [{"name": c} for c in cols]
+            return [{"name": c, "type": "text"} for c in cols]
         return []
 
     def create_table(self, table_name: str, schema: str):

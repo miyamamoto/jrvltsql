@@ -168,7 +168,9 @@ class OptimizedDataImporter:
             wide_record = record.get("_wide_record")
             if isinstance(wide_record, dict):
                 return cls._clean_record(wide_record)
-        return cls._clean_record(record)
+        from src.importer.importer import translate_standard_field_names
+
+        return translate_standard_field_names(cls._clean_record(record), table_name)
 
     @staticmethod
     def _convert_record(record: dict, table_name: str) -> dict:
