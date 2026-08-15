@@ -205,6 +205,40 @@
   three pre-existing `PytestReturnNotNoneWarning` warnings. Authenticated
   runtime evidence must still be repeated after this repair is committed;
   results bound only to `5267950...` cannot gate the new candidate.
+- Review-repair commit `df7f9a3a64b5cd8ef4bd34da1c6e0934867d8f1e`
+  repeated the 94 focused tests and the isolated 1827-test suite successfully.
+  The repository-wide mypy command still reports the pre-existing 76 errors in
+  20 files and is advisory in the current workflow; targeted mypy on the
+  changed bridge remains clean, and fatal flake8/compile/diff checks passed.
+
+## Exact repair-candidate authenticated smoke
+
+- A first staging attempt added the disposable source directory only through
+  `PYTHONPATH` while leaving the container working directory at `/app`. Python
+  correctly prioritized the current directory and imported the older deployed
+  client. That excluded run reproduced the old client's 120-second `JVOpen`
+  timeout. A diagnostic retry found one exact-title update dialog whose X11 PID
+  matched the bridge PID; a production-equivalent `Escape` action immediately
+  released `JVOpen`. The old deployed method then rejected a keyword supported
+  by the candidate, which further proved the import was not the candidate.
+  This was a test-harness binding failure and is not candidate evidence.
+- The harness was corrected by setting the container working directory to the
+  disposable exact-source root and by hashing the file resolved through
+  `src.jvlink.bridge.__file__` before any authenticated call. The imported
+  bridge SHA-256 was
+  `d57d1cb89f8fd329191d9596199cce9dbffb7c747384915b978b10a3f7507610`,
+  matching repair commit `df7f9a3a64b5cd8ef4bd34da1c6e0934867d8f1e`.
+- Under UID/GID `1001:1001` and the development collector's non-blocking
+  service lock, the corrected exact-source smoke completed in about 0.92
+  seconds: `JVInit=0`; `JVOpen=0`, read count 30, download count 0;
+  download/status-ready true; first `JVRead=80` with an 80-byte payload; and
+  `JVClose=0`. The zero download count is expected from the populated local
+  cache and does not replace the earlier same-implementation positive-count
+  `JVStatus=29` evidence.
+- The disposable staged source was deleted. No bridge/agent process remained,
+  the service lock was available, and the development collector stayed
+  healthy. No service key, environment value, record payload, race key,
+  filename, or registry content was emitted.
 
 ## Safety and evidence rules
 
