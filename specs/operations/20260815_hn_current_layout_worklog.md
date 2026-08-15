@@ -126,11 +126,23 @@
   An obsolete standard `HANSYOKU` table also requires operator rebuild because
   adding a primary key is intentionally not an automatic migration.
 
+## Candidate validation
+
+- Code candidate full SHA:
+  `55071495af6646ead9326ae8341d198ce268ce30`.
+- Exact-SHA focused parser/importer/schema/migration run: 406 passed, 1
+  skipped, exit 0.
+- Exact-SHA local GitHub Actions test-job equivalent: 862 passed, 2 skipped,
+  3 subtests passed, exit 0.
+- Critical Flake8 (`E9,F63,F7,F82`) and `git diff --check` passed before the
+  candidate commit; the repository-wide full suite on the identical candidate
+  content passed 1912 tests with 47 skipped.
+
 ## Current state and next safe commands
 
-1. Commit the bounded candidate and rerun focused plus workflow tests against
-   its full SHA.
-2. Run one aggregated Codex review of that exact SHA and batch any actionable
-   corrections before publishing.
+1. Commit this validation record, then run the required focused checks against
+   that final documentation-only descendant SHA.
+2. Run one aggregated Codex review of the final full SHA and batch any
+   actionable corrections before publishing.
 3. Push, create the PR, request the one native Copilot review, resolve all
    actionable threads, and merge only after the final-SHA gates are green.
