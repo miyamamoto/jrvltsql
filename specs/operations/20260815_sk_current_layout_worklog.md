@@ -144,13 +144,32 @@
   importer, schema, migration, mapping, and batch suite completed at
   `845 passed, 1 skipped`.
 
-## Current state and next safe commands
+## Completed validation and candidate state
 
-1. Run the affected focused suite, full suite, formatting, critical lint, and
-   diff checks over the completed review repair.
-2. Commit the batched repair once, record the new full candidate SHA, and rerun
-   required tests against that exact SHA.
-3. Re-review the repaired areas once, then push and complete PR gates.
+- Final code candidate full SHA before this documentation-only review repair:
+  `b1561f237d918c77206b9c9e87cfa3bee44de3e7`. The final PR-head SHA after the
+  documentation repair is recorded in PR #175 metadata/comments rather than
+  creating a self-referential worklog commit loop.
+- Exact-SHA full suite: `1959 passed, 47 skipped, 5 subtests passed`.
+- Workflow-equivalent selected suite:
+  `862 passed, 2 skipped, 3 subtests passed`.
+- Post-repair affected parser, fixture, importer, schema, migration, mapping,
+  and batch suite: `845 passed, 1 skipped`.
+- Black, Ruff, critical Flake8 (`E9,F63,F7,F82`), and
+  `git diff --check origin/master...HEAD` passed.
+- Two independent final Codex reviews were GREEN: layout/fixture review ran
+  162 tests, and storage/import review ran 90 tests covering legacy-only,
+  canonical-only, coexistence, native, and both auto-commit modes. Neither
+  review reported a P0/P1/P2 finding.
+- GitHub Actions `test` and `lint` passed on the code candidate. Copilot
+  reviewed all 12 changed files at that SHA with no inline finding. CodeRabbit
+  found only two documentation-state inconsistencies: stale WH audit text and
+  this section's pending checklist. Both are corrected in this batched
+  documentation repair; final check and thread-resolution state are recorded
+  by PR #175.
+- After the documentation repair, the WH official-contract suite passed at
+  `25 passed, 1 skipped`, the SK-focused suite passed at `775 passed`, and
+  `git diff --check` passed.
 
 ## Queued follow-up outside this iteration
 
