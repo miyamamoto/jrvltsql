@@ -140,9 +140,20 @@
 
 ## Current state and next safe commands
 
-1. Commit this validation record, then run the required focused checks against
-   that final documentation-only descendant SHA.
-2. Run one aggregated Codex review of the final full SHA and batch any
-   actionable corrections before publishing.
-3. Push, create the PR, request the one native Copilot review, resolve all
-   actionable threads, and merge only after the final-SHA gates are green.
+- Validation-record descendant SHA:
+  `df1de6867924f20549d40ae5d421c7b927a89cbf`. The focused suite passed 406
+  tests with 1 skipped, critical Flake8 and `git diff --check` passed, and the
+  worktree was clean.
+- Aggregated Codex review covered the complete branch from the base through
+  that SHA, independently checked SDK 5.0.0 offsets and importer/migration
+  paths, reran the full suite (1912 passed, 47 skipped), and reported no
+  actionable findings.
+- Pushed the branch and opened PR #172 at that exact SHA:
+  `https://github.com/miyamamoto/jrvltsql/pull/172`. Opening the ready PR is the
+  single trigger for its GitHub-native Copilot review; do not request another
+  review on each push.
+- This PR-state entry is documentation-only. Validate its descendant with the
+  focused suite and diff checks, then review only this added worklog delta.
+- Next safe command: inspect PR #172 checks, reviews, comments, and unresolved
+  GraphQL threads together. Stop before merge on any failing executed CI step,
+  actionable finding, unresolved thread, head-SHA drift, or dirty worktree.
