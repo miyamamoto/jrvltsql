@@ -82,9 +82,7 @@ class BaseDatabase(ABC):
         pass
 
     @abstractmethod
-    def execute(
-        self, sql: str, parameters: Optional[tuple] = None
-    ) -> int:
+    def execute(self, sql: str, parameters: Optional[tuple] = None) -> int:
         """Execute SQL statement.
 
         Args:
@@ -100,9 +98,7 @@ class BaseDatabase(ABC):
         pass
 
     @abstractmethod
-    def executemany(
-        self, sql: str, parameters_list: List[tuple]
-    ) -> int:
+    def executemany(self, sql: str, parameters_list: List[tuple]) -> int:
         """Execute SQL statement with multiple parameter sets.
 
         Args:
@@ -219,7 +215,9 @@ class BaseDatabase(ABC):
 
         return self.execute(sql, tuple(values))
 
-    def insert_many(self, table_name: str, data_list: List[Dict[str, Any]], use_replace: bool = True) -> int:
+    def insert_many(
+        self, table_name: str, data_list: List[Dict[str, Any]], use_replace: bool = True
+    ) -> int:
         """Insert multiple rows into table.
 
         Note: By default uses INSERT OR REPLACE to handle duplicate records.
@@ -267,9 +265,7 @@ class BaseDatabase(ABC):
         sql = f"{insert_clause} {table_name} ({', '.join(quoted_columns)}) VALUES ({placeholders})"
 
         # Extract values in correct order for each row
-        parameters_list = [
-            tuple(row.get(col) for col in columns) for row in data_list
-        ]
+        parameters_list = [tuple(row.get(col) for col in columns) for row in data_list]
 
         return self.executemany(sql, parameters_list)
 

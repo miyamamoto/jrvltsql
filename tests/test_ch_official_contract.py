@@ -372,9 +372,7 @@ def test_ch_batch_metadata_retry_never_commits_header_without_results(
 
 
 @pytest.mark.parametrize("importer_class", [DataImporter, OptimizedDataImporter])
-def test_ch_rollback_failure_never_enters_parent_only_fallback(
-    tmp_path, importer_class
-) -> None:
+def test_ch_rollback_failure_never_enters_parent_only_fallback(tmp_path, importer_class) -> None:
     """A failed rollback must neither fall back nor break context teardown."""
     database = SQLiteDatabase({"path": str(tmp_path / "rollback-failure.db")})
     parsed = CHParser().parse(build_record()[0])
@@ -411,9 +409,7 @@ def test_ch_rollback_failure_never_enters_parent_only_fallback(
     assert database.is_connected() is False
     with database:
         main_count = database.fetch_one("SELECT COUNT(*) AS count FROM NL_CH")["count"]
-        result_count = database.fetch_one("SELECT COUNT(*) AS count FROM NL_CH_SEISEKI")[
-            "count"
-        ]
+        result_count = database.fetch_one("SELECT COUNT(*) AS count FROM NL_CH_SEISEKI")["count"]
 
     assert child_failed is True
     assert rollback_failed is True
