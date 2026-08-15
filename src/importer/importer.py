@@ -218,6 +218,22 @@ def _is_mining_snapshot_follower(record: dict, table_name: str) -> bool:
     )
 
 
+def verify_mining_native_schema(
+    database: BaseDatabase,
+    record: dict,
+    table_name: str,
+) -> bool:
+    """Fail closed on a legacy native TM score type before any mutation."""
+    if record.get("RecordSpec") != "TM" or table_name not in {"NL_TM", "RT_TM"}:
+        return False
+
+    from src.database.migration import verify_table_schema
+    from src.database.schema import SCHEMAS
+
+    verify_table_schema(database, table_name, SCHEMAS[table_name])
+    return True
+
+
 def replace_mining_native_snapshot(
     database: BaseDatabase,
     record: dict,
@@ -717,6 +733,7 @@ class DataImporter:
         self._records_failed = 0
         self._batches_processed = 0
         self._jravan_tables_ready = not use_jravan_schema
+        self._verified_mining_native_tables: set[str] = set()
 
         # Map record types to table names
         # Note: Table names match schema.py table definitions (e.g. NL_RA, not NL_RA_RACE)
@@ -962,6 +979,10 @@ class DataImporter:
                     )
                     self._records_failed += 1
                     continue
+
+                if table_name not in self._verified_mining_native_tables:
+                    if verify_mining_native_schema(self.database, record, table_name):
+                        self._verified_mining_native_tables.add(table_name)
 
                 if _is_mining_race_delete(record, table_name):
                     pending = batch_buffers.setdefault(table_name, [])
@@ -1234,6 +1255,9 @@ class DataImporter:
             return False
 
         try:
+            if table_name not in self._verified_mining_native_tables:
+                if verify_mining_native_schema(self.database, record, table_name):
+                    self._verified_mining_native_tables.add(table_name)
             if _is_mining_race_delete(record, table_name):
                 _delete_mining_race_rows(self.database, record, table_name)
                 self._records_imported += 1

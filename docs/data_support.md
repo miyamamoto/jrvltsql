@@ -191,7 +191,8 @@ jrvltsql は現在、以下 38 種類の JRA レコード種別に対してパ�
 馬ごとの行として保存し、JRA-VAN標準名モードでは`TAISENGATA_MINING`へ
 1レース1行のwide形式で保存します。`TMScore`は公式SDKと同じ4桁文字列を保持し、
 右端1桁が小数第一位です。旧39バイト復元データ、旧標準名`TIME_MASTER`、主キーのない
-`TAISENGATA_MINING`は安全に自動変換できないため、取り込みを停止して再構築を求めます。
+`TAISENGATA_MINING`、`TMScore`が整数型の旧nativeテーブルは安全に自動変換できないため、
+取り込みを停止して再構築を求めます。
 
 ## 対象外
 

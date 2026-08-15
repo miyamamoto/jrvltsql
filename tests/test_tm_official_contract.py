@@ -372,6 +372,58 @@ def test_tm_standard_import_refuses_legacy_time_master_without_row_loss(
 
 
 @pytest.mark.parametrize("importer_class", [DataImporter, OptimizedDataImporter])
+def test_tm_native_import_refuses_integer_score_schema_without_row_loss(
+    tmp_path, importer_class
+) -> None:
+    legacy = SCHEMAS["NL_TM"].replace("TMScore TEXT", "TMScore INTEGER")
+    assert legacy != SCHEMAS["NL_TM"]
+    database = SQLiteDatabase({"path": str(tmp_path / "legacy-native-tm.db")})
+    with database:
+        database.execute(legacy)
+        database.execute(
+            "INSERT INTO NL_TM (RecordSpec, DataKubun, MakeDate, Year, MonthDay, JyoCD, "
+            "Kaiji, Nichiji, RaceNum, MakeHM, Umaban, TMScore) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ("TM", "7", "20000101", 2000, 101, "05", 1, 1, 1, "0000", 1, 123),
+        )
+        database.commit()
+
+        parsed = TMParser().parse(_tm_record())
+        assert parsed is not None
+        with pytest.raises(SchemaMigrationError, match="incompatible column types"):
+            importer_class(database).import_records(iter(parsed))
+        preserved = database.fetch_all("SELECT Year, RaceNum, Umaban, TMScore FROM NL_TM")
+
+    assert preserved == [{"Year": 2000, "RaceNum": 1, "Umaban": 1, "TMScore": 123}]
+
+
+def test_tm_realtime_refuses_integer_score_schema_without_row_loss(tmp_path, monkeypatch) -> None:
+    # Isolate the storage contract from optional rich/structlog renderer version
+    # combinations in the compatibility test environment.
+    monkeypatch.setattr("src.realtime.updater.logger.error", lambda *args, **kwargs: None)
+    legacy = SCHEMAS["RT_TM"].replace("TMScore TEXT", "TMScore INTEGER")
+    assert legacy != SCHEMAS["RT_TM"]
+    database = SQLiteDatabase({"path": str(tmp_path / "legacy-realtime-tm.db")})
+    with database:
+        database.execute(legacy)
+        database.execute(
+            "INSERT INTO RT_TM (RecordSpec, DataKubun, MakeDate, Year, MonthDay, JyoCD, "
+            "Kaiji, Nichiji, RaceNum, MakeHM, Umaban, TMScore) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ("TM", "7", "20000101", 2000, 101, "05", 1, 1, 1, "0000", 1, 123),
+        )
+        database.commit()
+
+        results = RealtimeUpdater(database).process_record(_tm_record())
+        preserved = database.fetch_all("SELECT Year, RaceNum, Umaban, TMScore FROM RT_TM")
+
+    assert isinstance(results, list) and len(results) == 18
+    assert all(result["success"] is False for result in results)
+    assert all("incompatible column types" in result["error"] for result in results)
+    assert preserved == [{"Year": 2000, "RaceNum": 1, "Umaban": 1, "TMScore": 123}]
+
+
+@pytest.mark.parametrize("importer_class", [DataImporter, OptimizedDataImporter])
 def test_tm_postgresql_native_and_standard_revision_delete(postgresql_db, importer_class) -> None:
     postgresql_db.execute(SCHEMAS["NL_TM"])
     postgresql_db.execute(JRAVAN_SCHEMAS["TAISENGATA_MINING"])

@@ -176,6 +176,7 @@ class RealtimeUpdater:
         self.database = database
         self.parser_factory = ParserFactory()
         self.cache_manager = cache_manager
+        self._verified_mining_native_tables: set[str] = set()
 
         logger.info("RealtimeUpdater initialized")
 
@@ -279,6 +280,11 @@ class RealtimeUpdater:
         record_type = record.get("RecordSpec")
 
         try:
+            from src.importer.importer import verify_mining_native_schema
+
+            if table_name not in self._verified_mining_native_tables:
+                if verify_mining_native_schema(self.database, record, table_name):
+                    self._verified_mining_native_tables.add(table_name)
             inserted = replace_mining_native_snapshot(self.database, record, table_name)
             if inserted != len(snapshot_rows):
                 raise RuntimeError(
@@ -454,6 +460,12 @@ class RealtimeUpdater:
             if not table_name:
                 logger.warning(f"Unknown record type: {record_type}")
                 return None
+
+            from src.importer.importer import verify_mining_native_schema
+
+            if table_name not in self._verified_mining_native_tables:
+                if verify_mining_native_schema(self.database, parsed_data, table_name):
+                    self._verified_mining_native_tables.add(table_name)
 
             # headDataKubun is an explicit mutation instruction. RA/SE/WF use
             # record-level DataKubun for domain state (including finalized 7

@@ -22,6 +22,7 @@ from src.importer.importer import (
     prepare_ch_coupled_rows,
     replace_mining_native_snapshot,
     resolve_standard_table_name,
+    verify_mining_native_schema,
     verify_ch_coupled_table,
 )
 from src.utils.logger import get_logger
@@ -57,6 +58,7 @@ class OptimizedDataImporter:
         self._records_failed = 0
         self._batches_processed = 0
         self._jravan_tables_ready = not use_jravan_schema
+        self._verified_mining_native_tables: set[str] = set()
 
         # Detect database type for optimization
         self.db_type = self._detect_database_type()
@@ -265,6 +267,10 @@ class OptimizedDataImporter:
                     )
                     self._records_failed += 1
                     continue
+
+                if table_name not in self._verified_mining_native_tables:
+                    if verify_mining_native_schema(self.database, record, table_name):
+                        self._verified_mining_native_tables.add(table_name)
 
                 if _is_mining_race_delete(record, table_name):
                     pending = batch_buffers.setdefault(table_name, [])

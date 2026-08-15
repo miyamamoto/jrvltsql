@@ -102,6 +102,13 @@
   lossy native score typing, and keyless/legacy standard tables not failing
   closed. This is the required proof that the new checks can reject the old
   unsafe behavior; the paired green run remains pending.
+- The aggregated review of source candidate
+  `46926792663fa4d51428db275b32c966583ed96e` found one additional migration
+  gap: direct native import bypassed table initialization and allowed an old
+  integer `TMScore` column to coerce `0201` to `201`. Before adding the native
+  verification gate, the paired importer regression failed with
+  `2 failed in 0.26s`; neither importer raised and both replaced the existing
+  row. This is the red proof for the fail-closed native type check.
 
 ## Implementation and validation state
 
@@ -119,19 +126,32 @@
   table without modifying existing rows.
 - Native schemas preserve the SDK's four-byte score as lossless text rather
   than silently exposing the implied-decimal digits as an unscaled integer.
-  Corrected metadata and public data-support/audit text within this surface.
-- Paired green run for the new contract: `30 passed, 2 skipped in 0.59s`.
-- Expanded SQLite/parser/importer/realtime/schema regression run after adding
-  explicit PostgreSQL realtime coverage: `923 passed, 7 skipped, 3 subtests
-  passed in 3.09s`.
-- Disposable PostgreSQL 16 ran the complete TM contract with integration
-  enabled: `33 passed in 0.96s`. Both accumulated importer classes stored and
+  Each importer/updater verifies the native TM schema once per table before
+  mutation, so legacy integer tables fail closed without per-record metadata
+  query overhead. Corrected metadata and public data-support/audit text within
+  this surface.
+- Paired green run for the initial new contract: `30 passed, 2 skipped in
+  0.59s`. After the native-type review fix, the complete TM module passes with
+  `33 passed, 3 skipped`; related TM/DM/realtime/importer coverage passes with
+  `141 passed, 6 skipped, 3 subtests passed in 1.60s`.
+- Expanded SQLite/parser/importer/realtime/schema regression run after the
+  migration-gate correction: `926 passed, 7 skipped, 3 subtests passed in
+  3.12s`.
+- Disposable PostgreSQL 16 ran the final corrected TM contract with integration
+  enabled: `36 passed in 0.95s`. Both accumulated importer classes stored and
   revised native 18-to-17 rows, standard mode revised one wide row, realtime
   replaced 18-to-17 rows, and every path deleted the race. The disposable
   container was stopped and removed.
-- `git diff --check`, compileall, and blocking flake8 checks pass. A focused
-  mypy run reports only the repository's existing imported-module findings;
-  exact-base comparison remains part of final candidate validation.
+- Source candidate `46926792663fa4d51428db275b32c966583ed96e` passed the full
+  Python 3.12 suite with `2183 passed, 57 skipped, 3 warnings, 6 subtests`, and
+  a sequential Python 3.10 compatibility run with the same totals. The exact
+  workflow selection passed with `864 passed, 2 skipped, 3 warnings, 3
+  subtests` and 56% coverage. Candidate and exact base both reported the same
+  77 mypy errors in 20 files. These runs established the source baseline but
+  are superseded as final-candidate evidence by the native-type review fix.
+- `git diff --check`, compileall, blocking flake8, and focused Black checks
+  pass. The replacement candidate still requires immutable-SHA full/workflow
+  reruns before publication.
 
 ## Next safe command and STOP conditions
 
