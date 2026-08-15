@@ -11,24 +11,32 @@ def _create_ch_database(
     include_results: bool,
     complete_results: bool = False,
     orphan_result: bool = False,
+    include_parent: bool = True,
+    parent_row: bool = True,
+    extra_null_result: bool = False,
+    result_count: int | None = None,
 ) -> None:
     database = SQLiteDatabase({"path": str(path)})
     with database:
-        database.create_table("NL_CH", SCHEMAS["NL_CH"])
-        database.execute(
-            "INSERT INTO NL_CH (RecordSpec, DataKubun, MakeDate, ChokyosiCode, "
-            "ChokyosiName) VALUES (?, ?, ?, ?, ?)",
-            ("CH", "1", "20260815", "C1", "Trainer"),
-        )
+        if include_parent:
+            database.create_table("NL_CH", SCHEMAS["NL_CH"])
+            if parent_row:
+                database.execute(
+                    "INSERT INTO NL_CH (RecordSpec, DataKubun, MakeDate, ChokyosiCode, "
+                    "ChokyosiName) VALUES (?, ?, ?, ?, ?)",
+                    ("CH", "1", "20260815", "C1", "Trainer"),
+                )
         if include_results:
             database.create_table("NL_CH_SEISEKI", SCHEMAS["NL_CH_SEISEKI"])
-            result_count = 3 if complete_results else 2
+            stored_result_count = (
+                result_count if result_count is not None else (3 if complete_results else 2)
+            )
             database.executemany(
                 "INSERT INTO NL_CH_SEISEKI (MakeDate, ChokyosiCode, Num, SetYear) "
                 "VALUES (?, ?, ?, ?)",
                 [
                     ("20260815", "C1", number, 2026 - number)
-                    for number in range(1, result_count + 1)
+                    for number in range(1, stored_result_count + 1)
                 ],
             )
             if orphan_result:
@@ -36,6 +44,12 @@ def _create_ch_database(
                     "INSERT INTO NL_CH_SEISEKI "
                     "(MakeDate, ChokyosiCode, Num, SetYear) VALUES (?, ?, ?, ?)",
                     ("20260815", "ORPHAN", 1, 2026),
+                )
+            if extra_null_result:
+                database.execute(
+                    "INSERT INTO NL_CH_SEISEKI "
+                    "(MakeDate, ChokyosiCode, Num, SetYear) VALUES (?, ?, ?, ?)",
+                    ("20260815", "C1", None, 2026),
                 )
         database.commit()
 
@@ -72,6 +86,34 @@ def test_data_quality_rejects_missing_or_incomplete_ch_results_and_accepts_compl
     )
     orphan = _ch_issues(DataQualityChecker(str(orphan_path)).check_all())
 
+    absent_path = tmp_path / "absent-parent.db"
+    _create_ch_database(
+        absent_path,
+        include_parent=False,
+        include_results=True,
+        complete_results=True,
+    )
+    absent = _ch_issues(DataQualityChecker(str(absent_path)).check_all())
+
+    empty_path = tmp_path / "empty-parent.db"
+    _create_ch_database(
+        empty_path,
+        include_parent=True,
+        parent_row=False,
+        include_results=True,
+        result_count=0,
+    )
+    empty = _ch_issues(DataQualityChecker(str(empty_path)).check_all())
+
+    extra_path = tmp_path / "extra-null.db"
+    _create_ch_database(
+        extra_path,
+        include_results=True,
+        complete_results=True,
+        extra_null_result=True,
+    )
+    extra = _ch_issues(DataQualityChecker(str(extra_path)).check_all())
+
     assert _issue_signatures(missing) == [
         (
             "NL_CH_SEISEKI",
@@ -91,6 +133,24 @@ def test_data_quality_rejects_missing_or_incomplete_ch_results_and_accepts_compl
         (
             "NL_CH_SEISEKI",
             "1 normalized trainer result row(s) have no parent",
+            "CRITICAL",
+        )
+    ]
+    assert _issue_signatures(absent) == [
+        ("NL_CH", "normalized trainer parent table is missing", "CRITICAL"),
+        (
+            "NL_CH_SEISEKI",
+            "3 normalized trainer result row(s) have no parent",
+            "CRITICAL",
+        ),
+    ]
+    assert _issue_signatures(empty) == [
+        ("NL_CH", "normalized trainer parent table is empty", "CRITICAL"),
+    ]
+    assert _issue_signatures(extra) == [
+        (
+            "NL_CH_SEISEKI",
+            "1 trainer(s) do not have exactly result rows Num=1,2,3",
             "CRITICAL",
         )
     ]

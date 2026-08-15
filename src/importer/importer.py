@@ -130,12 +130,19 @@ def verify_ch_coupled_table(
     from src.database.schema import SCHEMAS
     from src.database.schema_jravan import JRAVAN_SCHEMAS
 
-    schema_sql = SCHEMAS.get(result_table) or JRAVAN_SCHEMAS.get(result_table)
-    if not schema_sql or not database.table_exists_strict(result_table):
+    main_schema_sql = SCHEMAS.get(main_table_name) or JRAVAN_SCHEMAS.get(main_table_name)
+    if not main_schema_sql or not database.table_exists_strict(main_table_name):
+        raise SchemaMigrationError(
+            f"CH import requires header table {main_table_name} before mutation"
+        )
+    verify_table_schema(database, main_table_name, main_schema_sql)
+
+    result_schema_sql = SCHEMAS.get(result_table) or JRAVAN_SCHEMAS.get(result_table)
+    if not result_schema_sql or not database.table_exists_strict(result_table):
         raise SchemaMigrationError(
             f"CH import requires normalized result table {result_table} before mutation"
         )
-    verify_table_schema(database, result_table, schema_sql)
+    verify_table_schema(database, result_table, result_schema_sql)
     return result_table
 
 
@@ -242,6 +249,9 @@ def insert_ch_coupled_batch(
         return len(prepared), 0
     except DatabaseError:
         if not commit_batch:
+            # The caller owns the commit boundary, but a coupled CH write must
+            # never leave a header-only mutation available for that commit.
+            rollback_or_invalidate()
             raise
         rollback_or_invalidate()
 

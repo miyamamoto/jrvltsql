@@ -631,7 +631,10 @@ def check_master_data(con, issues):
         issues.append("NL_KS (jockey master) empty -- run setup fetch")
 
     if not ch_exists:
+        issues.append("NL_CH missing -- run create-tables and full DIFN reimport")
         return
+    if ch == 0:
+        issues.append("NL_CH empty -- run full DIFN reimport")
     if not table_exists(con, "NL_CH_SEISEKI"):
         print("  [FAIL] NL_CH_SEISEKI missing")
         issues.append(
@@ -648,7 +651,7 @@ def check_master_data(con, issues):
             LEFT JOIN NL_CH_SEISEKI result
               ON result.ChokyosiCode = ch.ChokyosiCode
             GROUP BY ch.ChokyosiCode
-            HAVING COUNT(result.Num) != 3
+            HAVING COUNT(result.ChokyosiCode) != 3
                OR COUNT(DISTINCT CASE WHEN result.Num IN (1, 2, 3)
                                       THEN result.Num END) != 3
         ) incomplete
@@ -671,7 +674,7 @@ def check_master_data(con, issues):
         return
 
     print(
-        f"  {'[OK] ' if incomplete == 0 and orphan == 0 else '[FAIL]'} "
+        f"  {'[OK] ' if ch > 0 and incomplete == 0 and orphan == 0 else '[FAIL]'} "
         f"NL_CH_SEISEKI incomplete_trainers={incomplete:,} orphan_rows={orphan:,}"
     )
     if incomplete:

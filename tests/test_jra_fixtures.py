@@ -119,9 +119,9 @@ def load_fixture_records(record_type, record_length):
                 chunk = chunk[:423].ljust(BRParser.RECORD_LENGTH - 2, b" ") + b"\r\n"
             if record_type == "CH" and len(chunk) == 592:
                 # This fixture was reconstructed through the obsolete parser,
-                # which placed CRLF inside the first official result block.
-                # Preserve only the position-compatible 590-byte prefix.
-                chunk = chunk[:590].ljust(CHParser.RECORD_LENGTH - 2, b" ") + b"\r\n"
+                # whose result bytes start where current recent-win block 2
+                # begins. Preserve only the position-compatible 378-byte prefix.
+                chunk = chunk[:378].ljust(CHParser.RECORD_LENGTH - 2, b" ") + b"\r\n"
             if record_type == "SK" and len(chunk) == 78:
                 # This fixture was reconstructed from stored columns through
                 # the obsolete one-pedigree parser. Preserve its core values
@@ -139,6 +139,23 @@ def load_fixture_records(record_type, record_length):
                 chunk = chunk[:11].ljust(WFParser.RECORD_LENGTH - 2, b" ") + b"\r\n"
             records.append(chunk)
     return records
+
+
+def test_ch_legacy_fixture_preserves_only_the_position_compatible_prefix():
+    record = load_fixture_records("CH", CHParser.RECORD_LENGTH)[0]
+    parsed = CHParser().parse(record)
+
+    assert parsed is not None
+    assert parsed["SaikinJyusyo1_id"]
+    assert parsed["SaikinJyusyo2_id"] == ""
+    assert parsed["SaikinJyusyo3_Bamei"] == ""
+    for row in parsed["_ch_seiseki_rows"]:
+        payload = {
+            key: value
+            for key, value in row.items()
+            if key not in {"MakeDate", "ChokyosiCode", "Num"}
+        }
+        assert set(payload.values()) == {""}
 
 
 @pytest.mark.parametrize("record_type", list(PARSER_MAP.keys()))

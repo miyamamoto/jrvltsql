@@ -372,6 +372,75 @@ def test_ch_batch_metadata_retry_never_commits_header_without_results(
 
 
 @pytest.mark.parametrize("importer_class", [DataImporter, OptimizedDataImporter])
+def test_ch_transient_standard_header_catalog_failure_cannot_bypass_primary_key_check(
+    tmp_path, importer_class
+) -> None:
+    database = SQLiteDatabase({"path": str(tmp_path / "transient-keyless-header.db")})
+    keyless_header = JRAVAN_SCHEMAS["CHOKYO"].replace(
+        ",\n            PRIMARY KEY (ChokyosiCode)", ""
+    )
+    parsed = CHParser().parse(build_record()[0])
+    assert parsed is not None
+
+    with database:
+        database.create_table("CHOKYO", keyless_header)
+        database.create_table("CHOKYO_SEISEKI", JRAVAN_SCHEMAS["CHOKYO_SEISEKI"])
+        database.commit()
+        original_fetch_one = database.fetch_one
+        failed_once = False
+
+        def transient_fetch_one(sql: str, parameters=None):
+            nonlocal failed_once
+            if "sqlite_master" in sql and parameters == ("CHOKYO",) and not failed_once:
+                failed_once = True
+                raise DatabaseError("transient parent catalog failure")
+            return original_fetch_one(sql, parameters)
+
+        database.fetch_one = transient_fetch_one
+        with pytest.raises(SchemaMigrationError, match="primary key"):
+            importer_class(database, use_jravan_schema=True).import_records(iter([parsed]))
+        main_count = original_fetch_one("SELECT COUNT(*) AS count FROM CHOKYO")["count"]
+        result_count = original_fetch_one("SELECT COUNT(*) AS count FROM CHOKYO_SEISEKI")[
+            "count"
+        ]
+
+    assert failed_once is True
+    assert main_count == 0
+    assert result_count == 0
+
+
+def test_ch_single_record_caller_transaction_rolls_back_parent_when_child_fails(
+    tmp_path,
+) -> None:
+    database = SQLiteDatabase({"path": str(tmp_path / "single-caller-transaction.db")})
+    parsed = CHParser().parse(build_record()[0])
+    assert parsed is not None
+
+    with database:
+        database.create_table("NL_CH", SCHEMAS["NL_CH"])
+        database.create_table("NL_CH_SEISEKI", SCHEMAS["NL_CH_SEISEKI"])
+        database.commit()
+        original_insert_many = database.insert_many
+
+        def fail_child_before_sql(table_name: str, rows, use_replace: bool = True):
+            if table_name == "NL_CH_SEISEKI":
+                raise DatabaseError("client-side child failure")
+            return original_insert_many(table_name, rows, use_replace)
+
+        database.insert_many = fail_child_before_sql
+        inserted = DataImporter(database).import_single_record(parsed, auto_commit=False)
+        database.commit()
+        main_count = database.fetch_one("SELECT COUNT(*) AS count FROM NL_CH")["count"]
+        result_count = database.fetch_one("SELECT COUNT(*) AS count FROM NL_CH_SEISEKI")[
+            "count"
+        ]
+
+    assert inserted is False
+    assert main_count == 0
+    assert result_count == 0
+
+
+@pytest.mark.parametrize("importer_class", [DataImporter, OptimizedDataImporter])
 def test_ch_rollback_failure_never_enters_parent_only_fallback(tmp_path, importer_class) -> None:
     """A failed rollback must neither fall back nor break context teardown."""
     database = SQLiteDatabase({"path": str(tmp_path / "rollback-failure.db")})

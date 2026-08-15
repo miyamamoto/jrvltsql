@@ -317,3 +317,35 @@
   primary-key metadata tests pass `2 passed`; MCP export reports 42 parent
   columns with key `ChokyosiCode` and 176 child columns with key
   `ChokyosiCode, Num`.
+
+## Final cumulative Codex-only review repair
+
+- Codex CLI `0.147` (`gpt-5.6-sol`, `xhigh`, ephemeral read-only session
+  `01a0071a-de8a-7a20-953b-40f958dc1de9`) reviewed the exact candidate
+  `0c01d575fd9b99777d246893bb15dc27cb7b28c2` from base
+  `e54991eb02f5fbee8c4e561bf1f54adb9be255ac`. External reviewers,
+  subagents, network access, and write access were disabled for this review.
+  The official 3862-byte offsets and 42/176 storage cardinalities were found
+  consistent, but five remaining P1/P2 defects were independently reproduced.
+- The red-first focused run failed six cases: both importers could bypass a
+  keyless standard `CHOKYO` header after one transient catalog read error;
+  `import_single_record(auto_commit=False)` left a header-only row available
+  for a later caller commit after a pre-SQL child failure; both operational
+  checks accepted `Num=1,2,3,NULL`; missing/empty CH parents produced no
+  failure; and the reconstructed obsolete fixture leaked old result bytes into
+  current recent-win block 2. The exact red result was `6 failed`.
+- Coupled preflight now strictly verifies both the header and result schemas.
+  A failed coupled write rolls back or invalidates the session even when the
+  caller owns the commit boundary. Operational cardinality counts matched
+  child rows through their parent key, missing/empty parents are explicit
+  failures, and the obsolete fixture preserves only its position-compatible
+  378-byte prefix. The same six regressions pass, and the broader CH contract,
+  data-quality, race-day, and fixture group passes `161 passed, 4 skipped`.
+- A final direct audit of PostgreSQL metadata SQL found that the newly accurate
+  CamelCase CH names were still emitted as quoted mixed-case identifiers even
+  though the unquoted table DDL stores them lowercase. The SQL-generation
+  regression was red first (`1 failed`: `NL_CH` was emitted instead of
+  `nl_ch`, followed by `"ChokyosiCode"`). Metadata application now uses the
+  backend identifier normalization for both table and column names. The paired
+  CH metadata tests pass `2 passed`, and the expanded CH/quality/race-day/
+  fixture/metadata/database/migration group passes `224 passed, 8 skipped`.

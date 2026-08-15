@@ -2900,17 +2900,21 @@ class SchemaManager:
 
             elif db_type == "postgresql":
                 # PostgreSQL: Use COMMENT ON
+                table_identifier = self.db._quote_identifier(table_name)
                 # Table comment
                 table_desc = metadata.get("description", "").replace("'", "''")
-                self.db.execute(f"COMMENT ON TABLE {table_name} IS '{table_desc}'")
+                self.db.execute(f"COMMENT ON TABLE {table_identifier} IS '{table_desc}'")
 
                 # Column comments
                 for col in metadata.get("columns", []):
                     col_name = col.get("name", "")
                     col_desc = col.get("description", "").replace("'", "''")
                     if col_name:
-                        # Use double quotes for column names with Japanese characters
-                        self.db.execute(f'COMMENT ON COLUMN {table_name}."{col_name}" IS \'{col_desc}\'')
+                        column_identifier = self.db._quote_identifier(col_name)
+                        self.db.execute(
+                            f"COMMENT ON COLUMN {table_identifier}.{column_identifier} "
+                            f"IS '{col_desc}'"
+                        )
 
             logger.info(f"Applied metadata to table {table_name}")
             return True

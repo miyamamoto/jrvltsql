@@ -7,37 +7,52 @@ from scripts import raceday_verify
 
 
 def _master_connection(
-    *, include_results: bool, complete_results: bool = False, orphan_result: bool = False
+    *,
+    include_results: bool,
+    complete_results: bool = False,
+    orphan_result: bool = False,
+    include_parent: bool = True,
+    parent_row: bool = True,
+    extra_null_result: bool = False,
+    result_count: int | None = None,
 ):
     connection = sqlite3.connect(":memory:")
     connection.executescript(
         """
         CREATE TABLE NL_UM (KettoNum TEXT PRIMARY KEY);
         CREATE TABLE NL_KS (KisyuCode TEXT PRIMARY KEY);
-        CREATE TABLE NL_CH (
-            MakeDate TEXT,
-            ChokyosiCode TEXT PRIMARY KEY
-        );
         INSERT INTO NL_UM VALUES ('H1');
         INSERT INTO NL_KS VALUES ('J1');
-        INSERT INTO NL_CH VALUES ('20260815', 'C1');
         """
     )
+    if include_parent:
+        connection.execute(
+            "CREATE TABLE NL_CH (MakeDate TEXT, ChokyosiCode TEXT PRIMARY KEY)"
+        )
+        if parent_row:
+            connection.execute("INSERT INTO NL_CH VALUES ('20260815', 'C1')")
     if include_results:
         connection.execute(
             "CREATE TABLE NL_CH_SEISEKI ("
             "MakeDate TEXT, ChokyosiCode TEXT, Num INTEGER, "
             "PRIMARY KEY (ChokyosiCode, Num))"
         )
-        result_count = 3 if complete_results else 2
+        stored_result_count = (
+            result_count if result_count is not None else (3 if complete_results else 2)
+        )
         connection.executemany(
             "INSERT INTO NL_CH_SEISEKI VALUES (?, ?, ?)",
-            [("20260815", "C1", number) for number in range(1, result_count + 1)],
+            [("20260815", "C1", number) for number in range(1, stored_result_count + 1)],
         )
         if orphan_result:
             connection.execute(
                 "INSERT INTO NL_CH_SEISEKI VALUES (?, ?, ?)",
                 ("20260815", "ORPHAN", 1),
+            )
+        if extra_null_result:
+            connection.execute(
+                "INSERT INTO NL_CH_SEISEKI VALUES (?, ?, ?)",
+                ("20260815", "C1", None),
             )
     return connection
 
@@ -98,12 +113,45 @@ def test_master_check_rejects_missing_or_incomplete_ch_results_and_accepts_compl
     raceday_verify.check_master_data(orphan, orphan_issues)
     orphan.close()
 
+    absent = _master_connection(
+        include_parent=False,
+        include_results=True,
+        complete_results=True,
+    )
+    absent_issues = []
+    raceday_verify.check_master_data(absent, absent_issues)
+    absent.close()
+
+    empty = _master_connection(
+        include_parent=True,
+        parent_row=False,
+        include_results=True,
+        result_count=0,
+    )
+    empty_issues = []
+    raceday_verify.check_master_data(empty, empty_issues)
+    empty.close()
+
+    extra = _master_connection(
+        include_results=True,
+        complete_results=True,
+        extra_null_result=True,
+    )
+    extra_issues = []
+    raceday_verify.check_master_data(extra, extra_issues)
+    extra.close()
+
     assert missing_issues == ["NL_CH_SEISEKI missing -- run create-tables and full DIFN reimport"]
     assert incomplete_issues == [
         "NL_CH_SEISEKI incomplete for 1 trainer(s) -- run full DIFN reimport"
     ]
     assert complete_issues == []
     assert orphan_issues == ["NL_CH_SEISEKI has 1 orphan row(s) -- run full DIFN reimport"]
+    assert absent_issues == ["NL_CH missing -- run create-tables and full DIFN reimport"]
+    assert empty_issues == ["NL_CH empty -- run full DIFN reimport"]
+    assert extra_issues == [
+        "NL_CH_SEISEKI incomplete for 1 trainer(s) -- run full DIFN reimport"
+    ]
 
 
 def test_master_check_reports_unreadable_ch_result_schema_instead_of_crashing():

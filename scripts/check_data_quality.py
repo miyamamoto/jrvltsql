@@ -525,6 +525,33 @@ class DataQualityChecker:
     def _check_ch_normalized_results(self):
         """Require one complete Num=1,2,3 result group per trainer."""
         if not self.db.table_exists('NL_CH'):
+            self._add_issue(
+                'NL_CH',
+                'normalized trainer parent table is missing',
+                'CRITICAL',
+            )
+            if self.db.table_exists('NL_CH_SEISEKI'):
+                try:
+                    orphan_result = self.db.fetch_one(
+                        'SELECT COUNT(*) AS orphan_count FROM NL_CH_SEISEKI'
+                    )
+                    if not orphan_result:
+                        raise ValueError('normalized CH orphan query returned no result')
+                    orphan_count = int(orphan_result['orphan_count'])
+                except Exception as error:
+                    logger.error("Normalized CH orphan check failed", error=str(error))
+                    self._add_issue(
+                        'NL_CH_SEISEKI',
+                        'normalized trainer results could not be verified',
+                        'CRITICAL',
+                    )
+                    return
+                if orphan_count:
+                    self._add_issue(
+                        'NL_CH_SEISEKI',
+                        f'{orphan_count} normalized trainer result row(s) have no parent',
+                        'CRITICAL',
+                    )
             return
         if not self.db.table_exists('NL_CH_SEISEKI'):
             self._add_issue(
@@ -535,6 +562,12 @@ class DataQualityChecker:
             return
 
         try:
+            parent_result = self.db.fetch_one(
+                'SELECT COUNT(*) AS parent_count FROM NL_CH'
+            )
+            if not parent_result:
+                raise ValueError("normalized CH parent count query returned no result")
+            parent_count = int(parent_result['parent_count'])
             incomplete_result = self.db.fetch_one("""
                 SELECT COUNT(*) AS incomplete_count FROM (
                     SELECT ch.ChokyosiCode
@@ -542,7 +575,7 @@ class DataQualityChecker:
                     LEFT JOIN NL_CH_SEISEKI result
                       ON result.ChokyosiCode = ch.ChokyosiCode
                     GROUP BY ch.ChokyosiCode
-                    HAVING COUNT(result.Num) != 3
+                    HAVING COUNT(result.ChokyosiCode) != 3
                        OR COUNT(DISTINCT CASE WHEN result.Num IN (1, 2, 3)
                                               THEN result.Num END) != 3
                 ) incomplete
@@ -567,6 +600,12 @@ class DataQualityChecker:
             )
             return
 
+        if parent_count == 0:
+            self._add_issue(
+                'NL_CH',
+                'normalized trainer parent table is empty',
+                'CRITICAL',
+            )
         if incomplete_count:
             self._add_issue(
                 'NL_CH_SEISEKI',

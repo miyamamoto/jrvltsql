@@ -51,6 +51,23 @@ def test_ch_metadata_matches_normalized_native_schema():
         assert metadata["primary_key"] == get_table_primary_key_columns(table_name)
 
 
+def test_ch_postgresql_metadata_targets_the_actual_lowercase_identifiers():
+    """Unquoted DDL identifiers are stored lowercase by PostgreSQL."""
+
+    database = PostgreSQLDatabase({})
+    statements = []
+    database.table_exists = lambda _table_name: True
+    database.execute = lambda sql, parameters=None: statements.append(sql) or 0
+
+    assert SchemaManager(database).apply_metadata_to_table("NL_CH") is True
+    assert "COMMENT ON TABLE nl_ch " in statements[0]
+    assert any(
+        statement.startswith("COMMENT ON COLUMN nl_ch.chokyosicode ")
+        for statement in statements
+    )
+    assert not any('"ChokyosiCode"' in statement for statement in statements)
+
+
 def test_av_metadata_matches_scratch_exclusion_schema():
     """AV metadata should describe the official race/horse scratch schema."""
 
