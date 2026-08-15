@@ -853,6 +853,7 @@ def run_phase_pre(con, args, year, monthday, issues, nl_checks, rt_checks):
 def run_phase_rt_check(con, args, year, monthday, issues, nl_checks, rt_checks):
     rt_checks.update(check_rt_today(con, year, monthday, issues, "RT_ 速報系 (during races)") or {})
     nl_checks.update(check_nl_today(con, year, monthday, [], "NL_ 蓄積系") or {})
+    check_master_data(con, issues)
     check_rt_process_running(issues, race_date_str=args.date)
     check_rt_data_freshness(con, year, monthday, issues)
     check_odds_coverage(con, year, monthday, issues)
@@ -871,6 +872,7 @@ def run_phase_nl_mid(con, args, year, monthday, issues, nl_checks, rt_checks):
     check_schema(con, issues)
     nl_checks.update(check_nl_today(con, year, monthday, issues, "NL_ 蓄積系 (mid-race)") or {})
     rt_checks.update(check_rt_today(con, year, monthday, issues, "RT_ 速報系 (mid-race)") or {})
+    check_master_data(con, issues)
     check_rt_process_running(issues, race_date_str=args.date)
     check_rt_data_freshness(con, year, monthday, issues)
     check_odds_coverage(con, year, monthday, issues)

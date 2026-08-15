@@ -1,5 +1,8 @@
 """Normalized CH completeness contracts for the data-quality checker."""
 
+import pytest
+
+from scripts import check_data_quality
 from src.database.schema import SCHEMAS
 from src.database.sqlite_handler import SQLiteDatabase
 from scripts.check_data_quality import DataQualityChecker
@@ -197,3 +200,34 @@ def test_data_quality_reports_unreadable_ch_result_schema_instead_of_crashing(
             "CRITICAL",
         )
     ]
+
+
+def test_data_quality_cli_rejects_critical_ch_issues_and_accepts_complete(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    stale_path = tmp_path / "cli-stale.db"
+    _create_ch_database(
+        stale_path,
+        include_results=True,
+        complete_results=True,
+        stale_result_revision=True,
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        ["check_data_quality.py", "--db-path", str(stale_path)],
+    )
+    with pytest.raises(SystemExit) as stale_exit:
+        check_data_quality.main()
+
+    complete_path = tmp_path / "cli-complete.db"
+    _create_ch_database(complete_path, include_results=True, complete_results=True)
+    monkeypatch.setattr(
+        "sys.argv",
+        ["check_data_quality.py", "--db-path", str(complete_path)],
+    )
+    with pytest.raises(SystemExit) as complete_exit:
+        check_data_quality.main()
+
+    assert stale_exit.value.code == 1
+    assert complete_exit.value.code == 0

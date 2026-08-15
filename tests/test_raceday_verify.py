@@ -3,6 +3,8 @@
 import sqlite3
 from types import SimpleNamespace
 
+import pytest
+
 from scripts import raceday_verify
 
 
@@ -184,6 +186,55 @@ def test_master_check_reports_unreadable_ch_result_schema_instead_of_crashing():
     connection.close()
 
     assert issues == ["NL_CH_SEISEKI completeness could not be verified -- inspect schema"]
+
+
+@pytest.mark.parametrize(
+    "phase_runner",
+    [raceday_verify.run_phase_rt_check, raceday_verify.run_phase_nl_mid],
+)
+def test_daytime_phases_reject_stale_ch_revision_and_accept_complete(
+    monkeypatch,
+    phase_runner,
+):
+    for name in (
+        "check_schema",
+        "check_rt_process_running",
+        "check_rt_data_freshness",
+        "check_odds_coverage",
+        "check_ts_odds",
+        "check_race_count_by_venue",
+        "check_se_results",
+        "check_nl_rt_consistency",
+        "check_duplicate_race_ids",
+    ):
+        monkeypatch.setattr(raceday_verify, name, lambda *args, **kwargs: None)
+    monkeypatch.setattr(raceday_verify, "check_nl_today", lambda *args, **kwargs: {})
+    monkeypatch.setattr(
+        raceday_verify,
+        "check_rt_today",
+        lambda *args, **kwargs: {"RT_RA  (race 速報)   ": 1},
+    )
+    args = SimpleNamespace(date="20260815", fetch=False, db="unused")
+
+    stale = _master_connection(
+        include_results=True,
+        complete_results=True,
+        stale_result_revision=True,
+    )
+    stale_issues = []
+    phase_runner(stale, args, "2026", "0815", stale_issues, {}, {})
+    stale.close()
+
+    complete = _master_connection(include_results=True, complete_results=True)
+    complete_issues = []
+    phase_runner(complete, args, "2026", "0815", complete_issues, {}, {})
+    complete.close()
+
+    assert stale_issues == [
+        "NL_CH_SEISEKI has 3 row(s) from a different parent MakeDate -- "
+        "run full DIFN reimport"
+    ]
+    assert complete_issues == []
 
 
 def test_post_phase_uses_race_once_to_recover_missing_payouts(monkeypatch):

@@ -709,6 +709,12 @@ Examples:
                 json.dump(report, f, ensure_ascii=False, indent=2)
             print(f"\nDetailed report saved to: {output_path}")
 
+        has_critical_issue = any(
+            issue.get('severity') == 'CRITICAL'
+            for issue in report.get('issues', [])
+        )
+        sys.exit(1 if has_critical_issue else 0)
+
     except Exception as e:
         logger.error(f"Quality check failed: {e}")
         sys.exit(1)

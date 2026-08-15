@@ -50,7 +50,7 @@ jrvltsql は JRA / 中央競馬専用です。NAR / 地方競馬はこのリポ�
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `TOKU` | - | 特別登録馬 | `TK` | `NL_TK` | はい | はい | はい | standard / full quickstart に含めています。 |
 | `RACE` | - | レース、出走馬、払戻、確定オッズ、票数、WIN5、除外情報 | `RA`, `SE`, `HR`, `H1`, `H6`, `O1`〜`O6`, `WF`, `JG` | `NL_RA`, `NL_SE`, `NL_HR`, `NL_H1`, `NL_H6`, `NL_O1`〜`NL_O6`, `NL_WF`, `NL_JG` | はい | はい | はい | 中核データです。`NL_O*` は確定オッズで、投資判断時点のオッズではありません。 |
-| `DIFN` | `DIFF` | 蓄積系マスタ差分 | `UM`, `KS`, `CH`, `BR`, `BN`, `RC` | `NL_UM`, `NL_KS`, `NL_CH`, `NL_BR`, `NL_BN`, `NL_RC` | はい | いいえ | はい | 旧名 `DIFF` は受け付けません（下記参照）。 |
+| `DIFN` | `DIFF` | 蓄積系マスタ差分 | `UM`, `KS`, `CH`, `BR`, `BN`, `RC` | `NL_UM`, `NL_KS`, `NL_CH`, `NL_CH_SEISEKI`, `NL_BR`, `NL_BN`, `NL_RC` | はい | いいえ | はい | 旧名 `DIFF` は受け付けません（下記参照）。 |
 | `BLDN` | `BLOD` | 血統情報 | `HN`, `SK`, `BT` | `NL_HN`, `NL_SK`, `NL_BT` | はい | いいえ | はい | 旧名 `BLOD` は受け付けません（下記参照）。 |
 | `MING` | - | データマイニング予想 | `DM`, `TM` | `NL_DM`, `NL_TM` | はい | いいえ | はい | full quickstart に含めています。 |
 | `SLOP` | - | 坂路調教関連 | `HC` | `NL_HC` | はい | いいえ | はい | standard / full quickstart に含めています。 |

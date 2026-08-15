@@ -369,3 +369,29 @@
   data-quality, race-day, schema, metadata, fixture, database, and migration
   group passes `227 passed, 9 skipped`. Full exact-SHA and final read-only
   review evidence will be recorded after committing this repair.
+
+## Final fail-open repair
+
+- Codex CLI `0.147` (`gpt-5.6-sol`, `xhigh`, ephemeral read-only session
+  `01a00737-e4ac-7980-b9a8-45a8797446eb`) reviewed exact candidate
+  `01308ccab70cf038674cc4bbd3d9704daddf69ef`. It verified the exact SHA and
+  clean worktree, inspected the cumulative diff, and independently passed an
+  affected read-only suite of `846 passed, 8 skipped`. No network, Claude,
+  external reviewer, subagent, or write access was used.
+- The review reproduced two P1 fail-open paths. Automatic `rt-check` and
+  `nl-mid` phases did not call the CH master check, so the 10:05–17:00 path
+  could pass a stale child revision. Separately, `check_data_quality.py`
+  printed the new mismatch as `CRITICAL` but returned process status 0.
+- The phase-entry and CLI regressions were added before implementation and
+  failed as `3 failed`: both daytime phases returned no stale-revision issue,
+  and the critical CLI invocation did not raise `SystemExit`. The paired
+  complete states remained part of the same tests. Both daytime phases now
+  call `check_master_data`; the data-quality command exits 1 for any critical
+  report and 0 when no critical issue exists. The same regressions pass
+  `3 passed`, and the affected CH/CLI/schema/metadata/fixture/database/
+  migration/dual group passes `260 passed, 9 skipped`.
+- The DIFN support matrix was also corrected to list `NL_CH_SEISEKI`; the
+  detailed CH section already documented both tables, so leaving the matrix
+  parent-only would have exposed two contradictory public storage contracts.
+  Full exact-SHA, PostgreSQL, static, final Codex review, GitHub checks, and
+  thread-resolution evidence remain required before merge.
