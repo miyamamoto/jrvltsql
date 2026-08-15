@@ -125,6 +125,20 @@
   the current record, and refused keyless `SEISAN` without row loss. The
   temporary schemas and container were removed after validation.
 
+## PR and aggregated review
+
+- PR #178 was opened from candidate
+  `3714fec833da6c7ace8379378b103ca9b484e46f`. GitHub Actions `test` and
+  `lint` passed for that full SHA. CodeRabbit could not run because its
+  service-side review limit was reached; it is auxiliary and produced no code
+  finding.
+- The one requested GitHub Copilot review covered all 11 changed files and
+  raised one actionable documentation finding: the shared parser test called
+  every sample-generation length official even though legacy permissive
+  parsers still use shortened samples. The comment now distinguishes sample
+  lengths from the supported current physical length required by strict
+  parsers. Product behavior and the BR contract are unchanged.
+
 ## Stop conditions
 
 - Stop before merge if the official offsets, old/current boundary, key or

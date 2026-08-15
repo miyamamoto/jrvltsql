@@ -77,7 +77,9 @@ class TestIndividualParsers:
         # RecordSpec(2) + DataKubun(1) + MakeDate(8) + その他のフィールドを0で埋める
         samples = {}
 
-        # レコード長の定義（公式仕様書より）
+        # サンプル生成に使うレコード長。一部のlegacy parserは短い入力を許容するため、
+        # 全値が公式の現行物理長を表すわけではない。厳密長を検査するparserだけは、
+        # そのparserが対応する現行物理長と一致させる。
         record_lengths = {
             'AV': 78, 'BN': 477, 'BR': 545, 'BT': 415, 'CC': 71,
             'CH': 96, 'CK': 232, 'CS': 208, 'DM': 233,
