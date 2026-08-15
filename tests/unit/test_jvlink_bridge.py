@@ -3,6 +3,7 @@
 import base64
 import subprocess
 import tempfile
+import threading
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -48,6 +49,10 @@ class TestJVLinkBridgeInit:
         b = JVLinkBridge(bridge_path=exe)
         assert b._bridge_path == exe
 
+    def test_explicit_bridge_path_rejects_directory(self, tmp_path):
+        with pytest.raises(JVLinkBridgeError, match="JVLinkBridge.exe"):
+            JVLinkBridge(bridge_path=tmp_path)
+
     def test_find_bridge_executable_honors_environment_override(
         self, tmp_path, monkeypatch
     ):
@@ -58,24 +63,38 @@ class TestJVLinkBridgeInit:
 
         assert find_bridge_executable() == exe
 
-    def test_linux_bridge_builds_a_wine_command(self, tmp_path):
+    @pytest.mark.parametrize("kind", ["missing", "directory"])
+    def test_explicit_bridge_override_fails_closed(
+        self, tmp_path, monkeypatch, kind
+    ):
+        override = tmp_path / "JVLinkBridge.exe"
+        if kind == "directory":
+            override.mkdir()
+        monkeypatch.setenv("JVLINK_BRIDGE_EXE", str(override))
+
+        with pytest.raises(JVLinkBridgeError, match="JVLINK_BRIDGE_EXE"):
+            find_bridge_executable()
+
+    def test_non_windows_bridge_builds_a_wine_command(self, tmp_path):
         exe = tmp_path / "JVLinkBridge.exe"
         exe.touch()
         bridge = JVLinkBridge(bridge_path=exe)
+        bridge._use_wine = True
 
         with patch("src.jvlink.bridge.shutil.which", return_value="/usr/bin/wine"):
             assert bridge._build_command() == ["wine", str(exe)]
 
-    def test_linux_bridge_fails_closed_when_wine_is_missing(self, tmp_path):
+    def test_non_windows_bridge_fails_closed_when_wine_is_missing(self, tmp_path):
         exe = tmp_path / "JVLinkBridge.exe"
         exe.touch()
         bridge = JVLinkBridge(bridge_path=exe)
+        bridge._use_wine = True
 
-        with (
-            patch("src.jvlink.bridge.shutil.which", return_value=None),
-            pytest.raises(JVLinkBridgeError, match="Wine"),
-        ):
-            bridge._build_command()
+        with patch("src.jvlink.bridge.shutil.which", return_value=None):
+            with pytest.raises(JVLinkBridgeError, match="Wine") as exc_info:
+                bridge._build_command()
+
+        assert "非Windows" in str(exc_info.value)
 
     def test_known_update_dialog_is_rejected_instead_of_accepted(
         self, tmp_path, monkeypatch
@@ -83,6 +102,7 @@ class TestJVLinkBridgeInit:
         exe = tmp_path / "JVLinkBridge.exe"
         exe.touch()
         bridge = JVLinkBridge(bridge_path=exe)
+        bridge._use_wine = True
         bridge._process = MagicMock(pid=777)
         bridge._process.poll.return_value = None
         monkeypatch.setenv("DISPLAY", ":1")
@@ -127,6 +147,7 @@ class TestJVLinkBridgeInit:
         exe = tmp_path / "JVLinkBridge.exe"
         exe.touch()
         bridge = JVLinkBridge(bridge_path=exe)
+        bridge._use_wine = True
         monkeypatch.setenv("DISPLAY", ":1")
         monkeypatch.setenv("JVLINK_AUTO_CLOSE_DIALOGS", "0")
 
@@ -144,7 +165,7 @@ class TestJVLinkBridgeInit:
         ):
             assert bridge._dialog_watch_interval() == 0.5
 
-    def test_bridge_response_ignores_wine_preamble_and_utf8_bom(self, bridge):
+    def test_bridge_response_consumes_buffered_json_after_wine_preamble(self, bridge):
         bridge._process.stdout.readline.side_effect = [
             "wine runtime preamble\n",
             '\ufeff{"status":"ready","version":"test"}\n',
@@ -153,7 +174,7 @@ class TestJVLinkBridgeInit:
             "select.select",
             side_effect=[
                 ([bridge._process.stdout], [], []),
-                ([bridge._process.stdout], [], []),
+                ([], [], []),
             ],
         ):
             assert bridge._read_response(timeout=1.0) == {
@@ -165,11 +186,15 @@ class TestJVLinkBridgeInit:
         process = bridge._process
         bridge._stderr_file = tempfile.TemporaryFile(mode="w+t")
         stderr_file = bridge._stderr_file
-        with (
-            patch("select.select", return_value=([], [], [])),
-            pytest.raises(JVLinkBridgeError, match="timeout"),
-        ):
-            bridge._read_response(timeout=0.01)
+        release_reader = threading.Event()
+        process.stdout.readline.side_effect = lambda: (
+            release_reader.wait(timeout=1.0) or ""
+        )
+        try:
+            with pytest.raises(JVLinkBridgeError, match="timeout"):
+                bridge._read_response(timeout=0.01)
+        finally:
+            release_reader.set()
 
         process.terminate.assert_called_once()
         assert bridge._process is None

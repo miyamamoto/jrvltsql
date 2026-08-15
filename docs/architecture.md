@@ -37,9 +37,10 @@ headless 実行を停止させる場合があります。X display と `xdotool`
 環境では、クライアントは既知のダイアログだけを `Escape` で拒否します。
 更新を承諾する `Return` は送りません。この監視を無効にする場合は
 `JVLINK_AUTO_CLOSE_DIALOGS=0`、監視間隔を変える場合は
-`JVLINK_DIALOG_WATCH_INTERVAL_SECONDS` を指定します。未知のダイアログ、応答
-timeout、読めない bridge 応答は成功扱いせず、timeout 時は状態不明の bridge
-process を終了します。
+`JVLINK_DIALOG_WATCH_INTERVAL_SECONDS` を指定します。監視間隔の既定値は0.5秒、
+最小値は0.1秒で、非数・無限値・解釈不能値は安全側の既定値0.5秒に戻します。
+未知のダイアログ、応答timeout、読めない bridge 応答は成功扱いせず、timeout
+時は状態不明の bridge process を終了します。
 
 ## 主要コンポーネント
 

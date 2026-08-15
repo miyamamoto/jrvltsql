@@ -171,6 +171,41 @@
   GitHub checks, Copilot review, and unresolved-thread count on the exact
   committed full SHA.
 
+## PR #165 review repair batch
+
+- The first published candidate was
+  `5267950419c22c7d4e90b81c59f3ddad4f81a4d5`. Its exact-SHA GitHub `test`
+  and `lint` jobs passed, but it is no longer an acceptable merge candidate
+  because the post-publication reviews found concrete boundary defects.
+- Codex/CodeRabbit independently found that using `select.select()` on a
+  `TextIOWrapper` could report a false timeout when `readline()` had already
+  buffered the JSON line behind a non-JSON Wine preamble. Copilot/CodeRabbit
+  also found that an explicitly configured missing bridge silently fell back,
+  directories were accepted as executables, and the Wine error incorrectly
+  named only Linux even though the branch is all non-Windows platforms.
+  Duplicate findings were clustered into one repair batch; none was dismissed
+  because the reviewer or automation source was optional.
+- Before production repair, the focused selection
+  `pytest -q tests/unit/test_jvlink_bridge.py -k 'explicit_bridge_override or
+  consumes_buffered_json or fails_closed_when_wine_is_missing' --no-cov`
+  failed **4 tests**: both missing/directory environment overrides fell
+  through, the second buffered line timed out, and the message lacked the
+  non-Windows contract. A separate direct-constructor directory test was then
+  added and failed **1 test** because `Path.exists()` accepted the directory.
+- The repair makes every explicit bridge path fail closed unless it is a
+  regular file, uses `Path.is_file()` for all discovery candidates, keeps one
+  deadline while performing bounded threaded `readline()` calls on every
+  platform, and documents the dialog-watcher default (0.5 seconds), floor
+  (0.1 seconds), and invalid/non-finite fallback (0.5 seconds).
+- The repaired boundary selection passed **6 tests**. The combined bridge and
+  official transport-contract suite passed **94 tests**; targeted mypy,
+  flake8 syntax/undefined-name checks, compileall, and `git diff --check` also
+  passed. The isolated local suite passed **1827 tests**, skipped 38
+  environment-specific tests, passed 5 subtests, and emitted only the same
+  three pre-existing `PytestReturnNotNoneWarning` warnings. Authenticated
+  runtime evidence must still be repeated after this repair is committed;
+  results bound only to `5267950...` cannot gate the new candidate.
+
 ## Safety and evidence rules
 
 - Never expose service keys, database URLs, registry contents, machine
@@ -188,10 +223,10 @@
 
 ## Next safe command
 
-Commit the reviewed diff, run focused and full tests plus the authenticated
-smoke on that exact full SHA without changing tracked files, publish the PR,
-record SHA-bound evidence in PR metadata, resolve every actionable review
-thread, and merge only after the final gate is green.
+Commit the batched review repair, run focused and full tests plus the
+authenticated smoke on that new exact full SHA without changing tracked files,
+update PR evidence, reply to and resolve every actionable review thread, and
+merge only after the final gate is green.
 
 ## STOP conditions
 

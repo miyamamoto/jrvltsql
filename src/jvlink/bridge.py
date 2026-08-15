@@ -8,7 +8,7 @@ This replaces the Python win32com-based JVLinkWrapper, eliminating:
 
 Platform support:
 - Windows: runs JVLinkBridge.exe directly
-- Linux: runs the native Win32 bridge through Wine
+- Non-Windows: runs the native Win32 bridge through Wine
 """
 
 import base64
@@ -35,6 +35,16 @@ from src.jvlink.constants import (
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+class JVLinkBridgeError(Exception):
+    """JV-Link Bridge related error."""
+
+    def __init__(self, message: str, error_code: Optional[int] = None):
+        self.error_code = error_code
+        if error_code is not None:
+            message = f"{message} (code: {error_code})"
+        super().__init__(message)
 
 
 def _require_response_code(response: dict, command: str) -> int:
@@ -128,8 +138,12 @@ def find_bridge_executable() -> Optional[Path]:
     env_path = os.environ.get("JVLINK_BRIDGE_EXE")
     if env_path:
         candidate = Path(env_path).expanduser()
-        if candidate.exists():
-            return candidate
+        if not candidate.is_file():
+            raise JVLinkBridgeError(
+                "JVLINK_BRIDGE_EXE must point to a JVLinkBridge.exe file: "
+                f"{candidate}"
+            )
+        return candidate
 
     search_paths = (
         _BRIDGE_SEARCH_PATHS_LINUX
@@ -138,24 +152,14 @@ def find_bridge_executable() -> Optional[Path]:
     )
     for p in search_paths:
         p = p.expanduser()
-        if p.is_absolute() and p.exists():
+        if p.is_absolute() and p.is_file():
             return p
         if not p.is_absolute():
             for base in (Path.cwd(), _repo_root()):
                 candidate = base / p
-                if candidate.exists():
+                if candidate.is_file():
                     return candidate
     return None
-
-
-class JVLinkBridgeError(Exception):
-    """JV-Link Bridge related error."""
-
-    def __init__(self, message: str, error_code: Optional[int] = None):
-        self.error_code = error_code
-        if error_code is not None:
-            message = f"{message} (code: {error_code})"
-        super().__init__(message)
 
 
 class JVLinkBridge:
@@ -199,12 +203,12 @@ class JVLinkBridge:
         self._dialog_watcher_stop: Optional[threading.Event] = None
         self._dialog_watcher_thread: Optional[threading.Thread] = None
 
-        if bridge_path:
+        if bridge_path is not None:
             self._bridge_path = Path(bridge_path)
         else:
             self._bridge_path = find_bridge_executable()
 
-        if self._bridge_path is None or not self._bridge_path.exists():
+        if self._bridge_path is None or not self._bridge_path.is_file():
             raise JVLinkBridgeError(
                 "JVLinkBridge.exe が見つかりません。"
                 "tools/jvlink-bridge/ にビルド済みバイナリを配置してください。"
@@ -227,7 +231,7 @@ class JVLinkBridge:
             return [str(self._bridge_path)]
         if not _is_wine_available(self._wine):
             raise JVLinkBridgeError(
-                "Linux環境ではWineが必要です。wine32/wine をインストールし、"
+                "非Windows環境ではWineが必要です。wine32/wine をインストールし、"
                 "必要なら JVLINK_WINE に実行ファイルを指定してください。"
             )
         return [self._wine, str(self._bridge_path)]
@@ -495,37 +499,29 @@ class JVLinkBridge:
             if process is None or process.stdout is None:
                 raise JVLinkBridgeError("Bridge stdout is not available")
 
-            if sys.platform == "win32":
-                result = [None]
-                error = [None]
+            result = [None]
+            error = [None]
 
-                def _read(
-                    process=process,
-                    result=result,
-                    error=error,
-                ):
-                    try:
-                        result[0] = process.stdout.readline()
-                    except Exception as exc:
-                        error[0] = exc
+            def _read(
+                process=process,
+                result=result,
+                error=error,
+            ):
+                try:
+                    result[0] = process.stdout.readline()
+                except Exception as exc:
+                    error[0] = exc
 
-                thread = threading.Thread(target=_read, daemon=True)
-                thread.start()
-                thread.join(timeout=remaining)
+            thread = threading.Thread(target=_read, daemon=True)
+            thread.start()
+            thread.join(timeout=remaining)
 
-                if thread.is_alive():
-                    raise self._response_timeout(timeout)
-                if error[0]:
-                    self._abort_process()
-                    raise JVLinkBridgeError(f"Bridge read error: {error[0]}")
-                line = result[0]
-            else:
-                import select
-
-                ready, _, _ = select.select([process.stdout], [], [], remaining)
-                if not ready:
-                    raise self._response_timeout(timeout)
-                line = process.stdout.readline()
+            if thread.is_alive():
+                raise self._response_timeout(timeout)
+            if error[0]:
+                self._abort_process()
+                raise JVLinkBridgeError(f"Bridge read error: {error[0]}")
+            line = result[0]
 
             if not line:
                 stderr_output = self._stderr_tail()
