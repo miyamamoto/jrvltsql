@@ -101,6 +101,13 @@ class TestIndividualParsers:
                 data = data[:-2] + b"\r\n"
             if record_type == "WH":
                 mutable = bytearray(data)
+                mutable[11:15] = b"2024"
+                mutable[15:19] = b"0601"
+                mutable[19:21] = b"05"
+                mutable[21:23] = b"03"
+                mutable[23:25] = b"08"
+                mutable[25:27] = b"11"
+                mutable[27:35] = b"06010930"
                 mutable[35:37] = b"01"
                 mutable[37:73] = "テスト馬".encode("cp932").ljust(36, b" ")
                 mutable[73:76] = b"480"

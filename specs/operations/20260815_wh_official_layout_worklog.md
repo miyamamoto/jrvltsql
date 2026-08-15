@@ -139,10 +139,15 @@
 
 ## Next safe command
 
-Stage and inspect the complete diff including new files, commit it, then run
-the expanded focused suite, workflow-equivalent suite, full local suite,
-static checks, and isolated PostgreSQL integration against the candidate full
-SHA. Record that SHA and evidence on the PR, then perform final Codex review.
+The first committed candidate `392663c3a58b8ee85d786ca5245f9789ac55e9d1`
+failed its exact-SHA expanded focused suite: **3 WH cases failed** because the
+shared synthetic parser fixture left required Year/MonthDay/Kaiji/Nichiji/
+RaceNum/HappyoTime fields blank. The new parser correctly rejected that
+non-official record; production code and the WH contract fixture were not
+relaxed. Update only the shared fixture with an official numeric header,
+commit a new candidate SHA, then rerun focused, workflow-equivalent, full,
+static, and isolated PostgreSQL gates from the beginning. Do not use results
+from `392663c3a58b8ee85d786ca5245f9789ac55e9d1` as final evidence.
 
 ## STOP conditions
 
