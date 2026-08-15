@@ -97,7 +97,7 @@ class TestIndividualParsers:
             remaining = length - len(data)
             data += b' ' * remaining
             # 固定長＋終端CRLFを強制するパーサーは末尾を CRLF にする
-            if record_type in ("SE", "UM", "WH"):
+            if record_type in ("HN", "SE", "UM", "WH"):
                 data = data[:-2] + b"\r\n"
             if record_type == "WH":
                 mutable = bytearray(data)

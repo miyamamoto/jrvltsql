@@ -16,6 +16,11 @@ logger = get_logger(__name__)
 
 
 _STANDARD_FIELD_ALIASES = {
+    "HANSYOKU": {
+        "MochiKubun": "HansyokuMochiKubun",
+        "FHansyokuNum": "HansyokuFNum",
+        "MHansyokuNum": "HansyokuMNum",
+    },
     "TENKO_BABA": {
         "TenkoState": "AtoTenkoCD",
         "SibaBabaState": "AtoSibaBabaCD",
@@ -23,7 +28,7 @@ _STANDARD_FIELD_ALIASES = {
         "TenkoState2": "MaeTenkoCD",
         "SibaBabaState2": "MaeSibaBabaCD",
         "DirtBabaState2": "MaeDirtBabaCD",
-    }
+    },
 }
 
 
@@ -287,7 +292,7 @@ class DataImporter:
             "CH": "NL_CH",  # 調教師マスター
             "BR": "NL_BR",  # 繁殖馬マスター
             "BN": "NL_BN",  # 生産者マスター
-            "HN": "NL_HN",  # 馬主マスター
+            "HN": "NL_HN",  # 繁殖馬マスター
             "SK": "NL_SK",  # 競走馬見積もり
             "RC": "NL_RC",  # レースコメント
             "CC": "NL_CC",  # コース変更

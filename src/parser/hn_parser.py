@@ -18,11 +18,12 @@ class HNParser:
 
     １８．繁殖馬マスタ
     レコード長: 251 bytes
-    VBテーブル名: HANRO
+    VBテーブル名: HANSYOKU
     """
 
     RECORD_TYPE = "HN"
     RECORD_LENGTH = 251
+    RECORD_DELIMITER_START = 249
 
     def __init__(self):
         self.logger = get_logger(__name__)
@@ -47,12 +48,24 @@ class HNParser:
             フィールド名をキーとした辞書、エラー時はNone
         """
         try:
-            # レコード長チェック
-            if len(data) < self.RECORD_LENGTH:
+            # 現行DIFN/BLDNセットアップの251バイト物理形式だけを受理する。
+            # 旧245バイト形式を現行offsetで部分抽出すると、主キーを含む全後続
+            # フィールドが壊れるため、警告後の継続や長いrecordの黙認はしない。
+            if len(data) != self.RECORD_LENGTH:
                 self.logger.warning(
-                    f"HNレコード長不足: expected={self.RECORD_LENGTH}, actual={len(data)}"
+                    f"HNレコード長不正: expected={self.RECORD_LENGTH}, "
+                    f"actual={len(data)}. 仕様世代の異なるレコードの可能性があるため破棄"
                 )
-                # return None  # 短いレコードも許容する場合はコメントアウト
+                return None
+
+            delimiter = data[self.RECORD_DELIMITER_START:self.RECORD_LENGTH]
+            if delimiter != b"\r\n":
+                self.logger.warning(
+                    "HNレコードのレコード区切が CRLF ではない: "
+                    f"pos={self.RECORD_DELIMITER_START} actual={delimiter!r}. "
+                    "仕様世代の異なるレコードの可能性があるため破棄"
+                )
+                return None
 
             # フィールド抽出
             result = {}
@@ -66,58 +79,55 @@ class HNParser:
             # 3. データ作成年月日 (位置:4, 長さ:8)
             result["MakeDate"] = self.decode_field(data[3:11])
 
-            # 4. 繁殖登録番号 (位置:12, 長さ:8)
-            result["HansyokuNum"] = self.decode_field(data[11:19])
+            # 4. 繁殖登録番号 (位置:12, 長さ:10)
+            result["HansyokuNum"] = self.decode_field(data[11:21])
 
-            # 5. 予備 (位置:20, 長さ:1)
-            result["reserved"] = self.decode_field(data[19:20])
+            # 5. 予備 (位置:22, 長さ:8)
+            result["reserved"] = self.decode_field(data[21:29])
 
-            # 6. 血統登録番号 (位置:21, 長さ:10)
-            result["KettoNum"] = self.decode_field(data[20:30])
+            # 6. 血統登録番号 (位置:30, 長さ:10)
+            result["KettoNum"] = self.decode_field(data[29:39])
 
-            # 7. 削除区分 (位置:31, 長さ:1)
-            result["DelKubun"] = self.decode_field(data[30:31])
+            # 7. 繁殖馬抹消区分（現在は予備） (位置:40, 長さ:1)
+            result["DelKubun"] = self.decode_field(data[39:40])
 
-            # 8. 馬名 (位置:32, 長さ:36)
-            result["Bamei"] = self.decode_field(data[31:67])
+            # 8. 馬名 (位置:41, 長さ:36)
+            result["Bamei"] = self.decode_field(data[40:76])
 
-            # 9. 馬名半角ｶﾅ (位置:68, 長さ:40)
-            result["BameiKana"] = self.decode_field(data[67:107])
+            # 9. 馬名半角ｶﾅ (位置:77, 長さ:40)
+            result["BameiKana"] = self.decode_field(data[76:116])
 
-            # 10. 馬名欧字 (位置:108, 長さ:40)
-            result["BameiEng"] = self.decode_field(data[107:147])
+            # 10. 馬名欧字 (位置:117, 長さ:80)
+            result["BameiEng"] = self.decode_field(data[116:196])
 
-            # 11. 生年 (位置:148, 長さ:4)
-            result["BirthYear"] = self.decode_field(data[147:151])
+            # 11. 生年 (位置:197, 長さ:4)
+            result["BirthYear"] = self.decode_field(data[196:200])
 
-            # 12. 性別コード (位置:152, 長さ:1)
-            result["SexCD"] = self.decode_field(data[151:152])
+            # 12. 性別コード (位置:201, 長さ:1)
+            result["SexCD"] = self.decode_field(data[200:201])
 
-            # 13. 品種コード (位置:153, 長さ:1)
-            result["HinsyuCD"] = self.decode_field(data[152:153])
+            # 13. 品種コード (位置:202, 長さ:1)
+            result["HinsyuCD"] = self.decode_field(data[201:202])
 
-            # 14. 毛色コード (位置:154, 長さ:2)
-            result["KeiroCD"] = self.decode_field(data[153:155])
+            # 14. 毛色コード (位置:203, 長さ:2)
+            result["KeiroCD"] = self.decode_field(data[202:204])
 
-            # 15. 繁殖馬持込区分 (位置:156, 長さ:1)
-            result["MochiKubun"] = self.decode_field(data[155:156])
+            # 15. 繁殖馬持込区分 (位置:205, 長さ:1)
+            result["MochiKubun"] = self.decode_field(data[204:205])
 
-            # 16. 輸入年 (位置:157, 長さ:4)
-            result["ImportYear"] = self.decode_field(data[156:160])
+            # 16. 輸入年 (位置:206, 長さ:4)
+            result["ImportYear"] = self.decode_field(data[205:209])
 
-            # 17. 産地名 (位置:161, 長さ:20)
-            result["SanchiName"] = self.decode_field(data[160:180])
+            # 17. 産地名 (位置:210, 長さ:20)
+            result["SanchiName"] = self.decode_field(data[209:229])
 
-            # 18. 父馬繁殖登録番号 (位置:181, 長さ:8)
-            result["FHansyokuNum"] = self.decode_field(data[180:188])
+            # 18. 父馬繁殖登録番号 (位置:230, 長さ:10)
+            result["FHansyokuNum"] = self.decode_field(data[229:239])
 
-            # 19. 母馬繁殖登録番号 (位置:189, 長さ:8)
-            result["MHansyokuNum"] = self.decode_field(data[188:196])
+            # 19. 母馬繁殖登録番号 (位置:240, 長さ:10)
+            result["MHansyokuNum"] = self.decode_field(data[239:249])
 
-            # 20. 予備 (位置:197, 長さ:53)
-            result["Reserved_197"] = self.decode_field(data[196:249])
-
-            # 21. レコード区切 (位置:250, 長さ:2)
+            # 20. レコード区切 (位置:250, 長さ:2)
             result["RecordDelimiter"] = self.decode_field(data[249:251])
 
             return result

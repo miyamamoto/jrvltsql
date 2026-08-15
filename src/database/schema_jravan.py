@@ -428,20 +428,23 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             RecordSpec                     CHAR(2)             ,  -- レコード種別ID
             DataKubun                      CHAR(1)             ,  -- データ区分
             MakeDate                       DATE                ,  -- YYYYMMDD形式の日付
-            reserved                       VARCHAR(255)        ,  -- テキスト
-            KettoNum                       VARCHAR(255)        ,  -- テキスト
-            DelKubun                       VARCHAR(255)        ,  -- テキスト
-            Bamei                          VARCHAR(255)        ,  -- テキスト
-            BameiKana                      VARCHAR(255)        ,  -- テキスト
-            BameiEng                       VARCHAR(255)        ,  -- テキスト
-            BirthYear                      VARCHAR(255)        ,  -- テキスト
-            SexCD                          VARCHAR(255)        ,  -- テキスト
-            HinsyuCD                       VARCHAR(255)        ,  -- テキスト
-            KeiroCD                        VARCHAR(255)        ,  -- テキスト
-            HansyokuMochiKubun             VARCHAR(255)        ,  -- テキスト
-            ImportYear                     VARCHAR(255)        ,  -- テキスト
-            SanchiName                     VARCHAR(255)        ,  -- テキスト
-            HansyokuFNum                   VARCHAR(255)          -- テキスト
+            HansyokuNum                    VARCHAR(10)         ,  -- 繁殖登録番号
+            reserved                       VARCHAR(8)          ,  -- 予備
+            KettoNum                       VARCHAR(10)         ,  -- 血統登録番号
+            DelKubun                       VARCHAR(1)          ,  -- 現在は予備として使用
+            Bamei                          VARCHAR(36)         ,  -- 馬名
+            BameiKana                      VARCHAR(40)         ,  -- 馬名半角カナ
+            BameiEng                       VARCHAR(80)         ,  -- 馬名欧字
+            BirthYear                      SMALLINT            ,  -- 生年
+            SexCD                          VARCHAR(1)          ,  -- 性別コード
+            HinsyuCD                       VARCHAR(1)          ,  -- 品種コード
+            KeiroCD                        VARCHAR(2)          ,  -- 毛色コード
+            HansyokuMochiKubun             VARCHAR(1)          ,  -- 繁殖馬持込区分
+            ImportYear                     SMALLINT            ,  -- 輸入年
+            SanchiName                     VARCHAR(20)         ,  -- 産地名
+            HansyokuFNum                   VARCHAR(10)         ,  -- 父馬繁殖登録番号
+            HansyokuMNum                   VARCHAR(10)         ,  -- 母馬繁殖登録番号
+            PRIMARY KEY (HansyokuNum)
         )
     """,
     "HARAI": """
