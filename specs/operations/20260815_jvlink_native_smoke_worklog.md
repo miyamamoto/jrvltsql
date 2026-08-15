@@ -4,8 +4,8 @@
 
 - Started: 2026-08-15 JST
 - Objective: execute a real authenticated JV-Link transport smoke for the code
-  merged by PR #163, covering `JVInit -> JVOpen -> JVStatus -> JVRead ->
-  JVClose` with real JV-Data rather than mocks.
+  merged by PR #163, covering the real-data call chain from `JVInit` through
+  `JVOpen`, `JVStatus`, `JVRead`, and `JVClose` rather than mocks.
 - Minimum scope: discover an existing authorized Windows/Wine JV-Link runtime,
   prove the exact code SHA under test, run a bounded read-only/small-date smoke,
   record sanitized exit status and counts, and publish the evidence in a
@@ -146,6 +146,10 @@
 - CodeRabbit was automatically invoked when the PR left draft, but reported
   `Review rate limited` and produced no review. It is not counted as review
   evidence or as a required gate.
+- Candidate `ca8539434c48e2fd9d4e6b5b0e2f7d75ab382c4c` received one Copilot
+  documentation comment: two inline code spans crossed Markdown source-line
+  boundaries. The finding was accepted, both occurrences were changed to
+  short per-token code spans in one revision, and no runtime claim changed.
 - This tracked PR-state update necessarily creates a later final candidate.
   Its full SHA, checks, and final thread count are recorded in PR metadata to
   avoid a self-referential commit loop; the initial candidate's checks are not
@@ -172,11 +176,11 @@
 Push this final worklog update to PR #164, record the new candidate full SHA in
 the PR, and verify its focused checks, Codex review, unresolved thread count
 zero, and clean worktree before merging the documentation-only iteration. A
-later follow-up may retry the remaining successful-data `JVOpen -> JVStatus ->
-JVRead -> JVClose` gate on an authorized native Windows/JV-Link host, or first
-diagnose the reproducible deployed-client `JVOpen(RACE)` timeout without
-changing the machine identity. Do not reuse the real-time pass as proof of the
-unverified historical-download path.
+later follow-up may retry the remaining successful-data historical gate
+(`JVOpen`, `JVStatus`, `JVRead`, and `JVClose`) on an authorized native
+Windows/JV-Link host, or first diagnose the reproducible deployed-client
+`JVOpen(RACE)` timeout without changing the machine identity. Do not reuse the
+real-time pass as proof of the unverified historical-download path.
 
 ## STOP conditions
 
