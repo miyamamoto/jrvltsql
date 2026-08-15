@@ -1031,17 +1031,24 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
         "table_name": "NL_WH",
         "record_type": "WH",
         "description": "馬体重情報",
-        "purpose": "レース直前の馬体重と増減情報を格納",
+        "purpose": "速報馬体重の18頭配列を馬ごとの最新行として格納",
         "columns": [
             {"name": "レコード種別ID", "type": "TEXT", "description": "レコード種別識別子（'WH'）", "example": "WH", "nullable": False},
-            {"name": "開催年月日", "type": "TEXT", "description": "レース開催日", "example": "20240601", "nullable": False},
+            {"name": "開催年", "type": "INTEGER", "description": "レース開催年", "example": "2024", "nullable": False},
+            {"name": "開催月日", "type": "INTEGER", "description": "レース開催月日（MMDD）", "example": "601", "nullable": False},
             {"name": "競馬場コード", "type": "TEXT", "description": "競馬場コード", "example": "05", "nullable": False},
-            {"name": "レース番号", "type": "TEXT", "description": "レース番号", "example": "11", "nullable": False},
-            {"name": "馬体重情報", "type": "TEXT", "description": "各馬の体重と増減（ネスト構造、馬番:体重:増減符号:増減kg）", "example": "01:480:+:05", "nullable": True},
-            {"name": "発表月日時分", "type": "TEXT", "description": "体重発表日時", "example": "06011000", "nullable": True}
+            {"name": "開催回", "type": "INTEGER", "description": "第N回開催", "example": "3", "nullable": False},
+            {"name": "開催日目", "type": "INTEGER", "description": "第N日目", "example": "8", "nullable": False},
+            {"name": "レース番号", "type": "INTEGER", "description": "レース番号", "example": "11", "nullable": False},
+            {"name": "発表月日時分", "type": "TEXT", "description": "体重発表日時（MMDDhhmm）", "example": "06011000", "nullable": True},
+            {"name": "馬番", "type": "INTEGER", "description": "馬番（01〜18）", "example": "1", "nullable": False},
+            {"name": "馬名", "type": "TEXT", "description": "馬名", "example": "テストホース", "nullable": True},
+            {"name": "馬体重", "type": "INTEGER", "description": "馬体重kg（000=出走取消、999=計量不能）", "example": "480", "nullable": True},
+            {"name": "増減符号", "type": "TEXT", "description": "増加+、減少-、その他は空白", "example": "+", "nullable": True},
+            {"name": "増減差", "type": "INTEGER", "description": "増減kg（000=前差なし、999=計量不能）", "example": "5", "nullable": True}
         ],
-        "primary_key": ["開催年月日", "競馬場コード", "レース番号"],
-        "indexes": ["開催年月日"]
+        "primary_key": ["開催年", "開催月日", "競馬場コード", "開催回", "開催日目", "レース番号", "馬番"],
+        "indexes": ["開催年", "開催月日", "競馬場コード", "レース番号", "発表月日時分"]
     },
 
     # 払戻・配当情報テーブル (Payoff Tables)
@@ -1636,16 +1643,24 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
         "table_name": "RT_WH",
         "record_type": "WH",
         "description": "馬体重情報（速報）",
-        "purpose": "リアルタイムでの馬体重情報を格納（NL_WHと同構造）",
+        "purpose": "リアルタイムの18頭馬体重配列を馬ごとの最新行として格納（NL_WHと同構造）",
         "columns": [
             {"name": "レコード種別ID", "type": "TEXT", "description": "レコード種別識別子（'WH'）", "example": "WH", "nullable": False},
-            {"name": "開催年月日", "type": "TEXT", "description": "レース開催日", "example": "20240601", "nullable": False},
+            {"name": "開催年", "type": "INTEGER", "description": "レース開催年", "example": "2024", "nullable": False},
+            {"name": "開催月日", "type": "INTEGER", "description": "レース開催月日（MMDD）", "example": "601", "nullable": False},
             {"name": "競馬場コード", "type": "TEXT", "description": "競馬場コード", "example": "05", "nullable": False},
-            {"name": "レース番号", "type": "TEXT", "description": "レース番号", "example": "11", "nullable": False},
-            {"name": "馬体重情報", "type": "TEXT", "description": "各馬の体重と増減", "example": "01:480:+:05", "nullable": True}
+            {"name": "開催回", "type": "INTEGER", "description": "第N回開催", "example": "3", "nullable": False},
+            {"name": "開催日目", "type": "INTEGER", "description": "第N日目", "example": "8", "nullable": False},
+            {"name": "レース番号", "type": "INTEGER", "description": "レース番号", "example": "11", "nullable": False},
+            {"name": "発表月日時分", "type": "TEXT", "description": "体重発表日時（MMDDhhmm）", "example": "06011000", "nullable": True},
+            {"name": "馬番", "type": "INTEGER", "description": "馬番（01〜18）", "example": "1", "nullable": False},
+            {"name": "馬名", "type": "TEXT", "description": "馬名", "example": "テストホース", "nullable": True},
+            {"name": "馬体重", "type": "INTEGER", "description": "馬体重kg（000=出走取消、999=計量不能）", "example": "480", "nullable": True},
+            {"name": "増減符号", "type": "TEXT", "description": "増加+、減少-、その他は空白", "example": "+", "nullable": True},
+            {"name": "増減差", "type": "INTEGER", "description": "増減kg（000=前差なし、999=計量不能）", "example": "5", "nullable": True}
         ],
-        "primary_key": ["開催年月日", "競馬場コード", "レース番号"],
-        "indexes": ["開催年月日"]
+        "primary_key": ["開催年", "開催月日", "競馬場コード", "開催回", "開催日目", "レース番号", "馬番"],
+        "indexes": ["開催年", "開催月日", "競馬場コード", "レース番号", "発表月日時分"]
     },
     "RT_RC": {
         "table_name": "RT_RC",

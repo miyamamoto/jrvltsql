@@ -50,7 +50,7 @@ JRAVAN_TO_JLTSQL: Dict[str, str] = {
     "TOKUBETSU": "NL_TK",     # 特別登録馬 (Special Registration)
     "COURSE": "NL_CS",        # コース情報 (Course Information)
     "WEATHER": "NL_WE",       # 天候情報 (Weather Information)
-    "BABA": "NL_WH",          # 馬場状態 (Track Condition)
+    "BATAIJYU": "NL_WH",      # 速報馬体重 (Horse Weight)
 
     # 追加データ (Additional Data)
     "HANSYOKU_UMA": "NL_SK",  # 産駒マスタ (Progeny Master)
@@ -97,7 +97,7 @@ RECORD_TYPE_TO_TABLE: Dict[str, str] = {
     "TK": "NL_TK",  # 特別登録馬 (Special Registration)
     "CS": "NL_CS",  # コース情報 (Course Information)
     "WE": "NL_WE",  # 天候情報 (Weather Information)
-    "WH": "NL_WH",  # 馬場状態 (Track Condition)
+    "WH": "NL_WH",  # 速報馬体重 (Horse Weight)
     "RC": "NL_RC",  # レコード (Record)
     "HS": "NL_HS",  # 競走馬市場取引価格 (Sale)
     "AV": "NL_AV",  # 出走取消・競走除外 (Scratched/Excluded Horse)

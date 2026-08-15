@@ -16,7 +16,7 @@ import pytest
 from src.parser.factory import ParserFactory, ALL_RECORD_TYPES
 
 
-EXPANDED_RECORD_TYPES = {"H1", "H6", "O1", "O2", "O3", "O4", "O5", "O6"}
+EXPANDED_RECORD_TYPES = {"H1", "H6", "O1", "O2", "O3", "O4", "O5", "O6", "WH"}
 
 
 def _first_record_or_none(result):
@@ -84,7 +84,7 @@ class TestIndividualParsers:
             'JC': 252, 'JG': 251, 'KS': 282,
             'O1': 962, 'O2': 2042, 'O3': 2654, 'O4': 4031, 'O5': 12293, 'O6': 83285,
             'RA': 856, 'RC': 1926, 'SE': 555, 'SK': 263, 'TC': 71, 'TK': 240, 'TM': 216,
-            'UM': 1609, 'WC': 72, 'WE': 195, 'WF': 7215, 'WH': 1356, 'YS': 424,
+            'UM': 1609, 'WC': 72, 'WE': 195, 'WF': 7215, 'WH': 847, 'YS': 424,
         }
 
         for record_type in ALL_RECORD_TYPES:
@@ -97,8 +97,16 @@ class TestIndividualParsers:
             remaining = length - len(data)
             data += b' ' * remaining
             # 固定長＋終端CRLFを強制するパーサーは末尾を CRLF にする
-            if record_type in ("SE", "UM"):
+            if record_type in ("SE", "UM", "WH"):
                 data = data[:-2] + b"\r\n"
+            if record_type == "WH":
+                mutable = bytearray(data)
+                mutable[35:37] = b"01"
+                mutable[37:73] = "テスト馬".encode("cp932").ljust(36, b" ")
+                mutable[73:76] = b"480"
+                mutable[76:77] = b"+"
+                mutable[77:80] = b"005"
+                data = bytes(mutable)
             samples[record_type] = data
 
         return samples

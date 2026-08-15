@@ -190,10 +190,10 @@ INDEXES = {
     ],
 
     "NL_WH": [
-        # 天候馬場状態変更 (Weather/Track Condition Change)
-        # 実際のスキーマにはRaceNumが存在しない
+        # 速報馬体重 (Horse Weight)
         "CREATE INDEX IF NOT EXISTS idx_nl_wh_date ON NL_WH(Year, MonthDay)",
         "CREATE INDEX IF NOT EXISTS idx_nl_wh_venue ON NL_WH(JyoCD)",
+        "CREATE INDEX IF NOT EXISTS idx_nl_wh_race ON NL_WH(RaceNum)",
         "CREATE INDEX IF NOT EXISTS idx_nl_wh_time ON NL_WH(HappyoTime)",
     ],
 
@@ -303,9 +303,9 @@ INDEXES = {
 
     "RT_WH": [
         # リアルタイム: 馬体重
-        # Note: RT_WH has no RaceNum column, only HappyoTime and HenkoID
         "CREATE INDEX IF NOT EXISTS idx_rt_wh_date ON RT_WH(Year, MonthDay)",
         "CREATE INDEX IF NOT EXISTS idx_rt_wh_venue ON RT_WH(JyoCD)",
+        "CREATE INDEX IF NOT EXISTS idx_rt_wh_race ON RT_WH(RaceNum)",
         "CREATE INDEX IF NOT EXISTS idx_rt_wh_time ON RT_WH(HappyoTime)",
     ],
 

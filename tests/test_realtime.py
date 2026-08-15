@@ -1086,10 +1086,10 @@ class TestRealtimeUpdater(unittest.TestCase):
             ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "SanrentanKumi"],
         )
 
-        # Test tables with primary keys (weather/track)
+        # Test tables with primary keys (horse weight/weather)
         self.assertEqual(
             self.updater._get_primary_keys("RT_WH"),
-            ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "HappyoTime", "HenkoID"],
+            ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "Umaban"],
         )
         self.assertEqual(
             self.updater._get_primary_keys("RT_WE"),

@@ -50,14 +50,14 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
         CREATE TABLE IF NOT EXISTS BATAIJYU (
             RecordSpec                     CHAR(2)             ,  -- レコード種別ID
             DataKubun                      CHAR(1)             ,  -- データ区分
-            MakeDate                       DATE                ,  -- YYYYMMDD形式の日付
+            MakeDate                       VARCHAR(8)          ,  -- YYYYMMDD形式の日付
             Year                           SMALLINT            ,  -- 年(4桁)
             MonthDay                       SMALLINT            ,  -- 月日(MMDD)
             JyoCD                          CHAR(2)             ,  -- 競馬場コード
             Kaiji                          SMALLINT            ,  -- 開催回
             Nichiji                        SMALLINT            ,  -- 開催日目
             RaceNum                        SMALLINT            ,  -- レース番号
-            HappyoTime                     TIMESTAMP           ,  -- 発表時刻
+            HappyoTime                     VARCHAR(8)          ,  -- 発表月日時分(MMDDhhmm)
             Umaban1                        SMALLINT            ,  -- 馬番
             Bamei1                         VARCHAR(255)        ,  -- テキスト
             BaTaijyu1                      SMALLINT            ,  -- 馬体重(kg)
@@ -147,7 +147,8 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             Bamei18                        VARCHAR(255)        ,  -- テキスト
             BaTaijyu18                     SMALLINT            ,  -- 馬体重(kg)
             ZogenFugo18                    VARCHAR(255)        ,  -- テキスト
-            ZogenSa18                      SMALLINT              -- 増減(kg)
+            ZogenSa18                      SMALLINT            ,  -- 増減(kg)
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
         )
     """,
     "CHOKYO": """

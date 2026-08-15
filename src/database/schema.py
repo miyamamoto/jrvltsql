@@ -65,9 +65,9 @@ Change Information Tables:
     NL_JG: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, KettoNum)
     RT_RC: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
 
-Weather/Track Condition Tables:
+Weather and Horse-Weight Tables:
     NL_WE, RT_WE: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, HenkoID)
-    NL_WH, RT_WH: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, HappyoTime, HenkoID)
+    NL_WH, RT_WH: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
 
 Pace/Data Mining Tables:
     NL_DM, RT_DM: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
@@ -1503,15 +1503,14 @@ SCHEMAS = {
             JyoCD TEXT,
             Kaiji INTEGER,
             Nichiji INTEGER,
+            RaceNum INTEGER,
             HappyoTime TEXT,
-            HenkoID TEXT,
-            AtoTenkoCD TEXT,
-            AtoSibaBabaCD TEXT,
-            AtoDirtBabaCD TEXT,
-            MaeTenkoCD TEXT,
-            MaeSibaBabaCD TEXT,
-            MaeDirtBabaCD TEXT,
-            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, HappyoTime, HenkoID)
+            Umaban INTEGER,
+            Bamei TEXT,
+            BaTaijyu INTEGER,
+            ZogenFugo TEXT,
+            ZogenSa INTEGER,
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
         )
     """,
     "NL_WF": """
@@ -2345,15 +2344,14 @@ SCHEMAS = {
             JyoCD TEXT,
             Kaiji INTEGER,
             Nichiji INTEGER,
+            RaceNum INTEGER,
             HappyoTime TEXT,
-            HenkoID TEXT,
-            AtoTenkoCD TEXT,
-            AtoSibaBabaCD TEXT,
-            AtoDirtBabaCD TEXT,
-            MaeTenkoCD TEXT,
-            MaeSibaBabaCD TEXT,
-            MaeDirtBabaCD TEXT,
-            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, HappyoTime, HenkoID)
+            Umaban INTEGER,
+            Bamei TEXT,
+            BaTaijyu INTEGER,
+            ZogenFugo TEXT,
+            ZogenSa INTEGER,
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
         )
     """,
     "RT_WF": """
