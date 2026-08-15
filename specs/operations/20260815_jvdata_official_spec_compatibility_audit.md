@@ -96,15 +96,15 @@ race identityと`Umaban`を複合主キーに持ち、馬名、馬体重、増�
 
 ### B-04 現行38種のうち複数が公式配列を途中で切る
 
-明らかに短い公開契約は、WH、SK、RA、BN、BR、CHの修正後、次の6種である。
+明らかに短い公開契約は、WH、SK、RA、BN、BR、CH、DM、TMの修正後、次の4種である。
 
 ```text
-DM 48/303     KS 772/4173   RC 241/501
-TK 727/21657  TM 39/141     YS 146/382
+KS 772/4173   RC 241/501
+TK 727/21657  YS 146/382
 ```
 
-左が実装上の公開長または終端、右が公式現行長。CH/KS の成績配列、DM/TM の
-18頭配列、TK の300頭配列、RC の3頭分記録、YS の3競走案内などを
+左が実装上の公開長または終端、右が公式現行長。KS の成績配列、
+TK の300頭配列、RC の3頭分記録、YS の3競走案内などを
 1件または一部だけ取り、公式レコード内部に `RecordDelimiter` を置くものがある。
 これは「不要列を捨てる」だけではなく、繰返し要素のデータ損失と key collision を
 固定する schema になっている。
@@ -296,7 +296,7 @@ skip の扱いに関する実運用上の質問が繰り返されている:
 | BT | 6889 | current-shape / weak gate | byte-first修正済み、旧長の明示拒否なし |
 | CS | 6829 | current-shape / delimiter caveat | 説明が実質末尾、BaseParserでCRLF検査不能 |
 | DM | 303 | current-shape / expanded | 18頭をnative 18行、standard `MINING` 1行へ保存。厳密長/type/CRLF、訂正upsert、0削除を検査 |
-| TM | 141 | partial | 18頭中1頭、公開長39 |
+| TM | 141 | current-shape / expanded | 18頭をnative 18行、standard `TAISENGATA_MINING` 1行へ保存。厳密長/type/CRLF、訂正upsert、0削除を検査 |
 | WF | 7215 | current-shape | full配列を展開 |
 | JG | 80 | current-shape / weak gate | 現行末尾まで |
 | WC | 105 | current-shape / delimiter caveat | numeric中心、現行末尾まで |
@@ -442,7 +442,7 @@ credential/Windows/JV-Link runtimeが必要であり、実行不能ならrelease
 後戻りを抑えるため、次の順で別PRにする。
 
 1. **残る現行 layout/schema の再生成**
-   残る8 partial recordを公式 Excel から再実装する。偽 delimiter とDB再構築 fixture
+   残る4 partial recordを公式 Excel から再実装する。偽 delimiter とDB再構築 fixture
    を公式raw扱いしない。
 2. **2023 generation boundary**
    staff 推奨の new-only rebuild 方針を維持し、連結 token、cache、raw import の全入口で旧物理

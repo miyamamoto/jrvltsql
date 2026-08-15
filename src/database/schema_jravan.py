@@ -1634,7 +1634,8 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             Umaban17                       SMALLINT            ,  -- 馬番
             TMScore17                      VARCHAR(4)          ,  -- 文字列(4)
             Umaban18                       SMALLINT            ,  -- 馬番
-            TMScore18                      VARCHAR(4)            -- 文字列(4)
+            TMScore18                      VARCHAR(4)          ,  -- 文字列(4)
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
         )
     """,
     "TENKO_BABA": """

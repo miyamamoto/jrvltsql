@@ -105,11 +105,38 @@
 
 ## Implementation and validation state
 
-- No production changes yet.
+- Replaced the 39-byte parser with an exact 141-byte byte-sliced parser. It
+  validates record type, CR/LF, the TM `DataKubun` domain, numeric headers,
+  horse number uniqueness/range, blank-slot consistency, and the documented
+  000.0–100.0 score range; populated slots expand into native rows with one
+  shared official wide record.
+- Generalized the already-tested DM snapshot helpers to cover both mining
+  formats. Native `NL_TM`/`RT_TM` revisions validate the whole replacement,
+  delete the six-key race snapshot, and insert every current horse inside the
+  caller transaction. `DataKubun=0` deletes the whole race, including realtime.
+- Standard mode now canonically maps TM to keyed `TAISENGATA_MINING`, inserts
+  one wide row, and refuses legacy-only `TIME_MASTER` or a keyless canonical
+  table without modifying existing rows.
+- Native schemas preserve the SDK's four-byte score as lossless text rather
+  than silently exposing the implied-decimal digits as an unscaled integer.
+  Corrected metadata and public data-support/audit text within this surface.
+- Paired green run for the new contract: `30 passed, 2 skipped in 0.59s`.
+- Expanded SQLite/parser/importer/realtime/schema regression run after adding
+  explicit PostgreSQL realtime coverage: `923 passed, 7 skipped, 3 subtests
+  passed in 3.09s`.
+- Disposable PostgreSQL 16 ran the complete TM contract with integration
+  enabled: `33 passed in 0.96s`. Both accumulated importer classes stored and
+  revised native 18-to-17 rows, standard mode revised one wide row, realtime
+  replaced 18-to-17 rows, and every path deleted the race. The disposable
+  container was stopped and removed.
+- `git diff --check`, compileall, and blocking flake8 checks pass. A focused
+  mypy run reports only the repository's existing imported-module findings;
+  exact-base comparison remains part of final candidate validation.
 
 ## Next safe command and STOP conditions
 
-- Next: finish the standard/native importer contract inspection, add the
-  minimal official-layout/storage tests, and run them against this base.
+- Next: aggregate-review the complete diff, record any actionable correction,
+  then commit an immutable candidate and run both full supported-Python suites,
+  workflow-equivalent checks, and exact-base static comparison.
 - STOP if official sources disagree, a safe migration cannot preserve existing
   rows, any executable check fails on the candidate, or the branch/base drifts.

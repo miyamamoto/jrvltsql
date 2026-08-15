@@ -1362,7 +1362,7 @@ SCHEMAS = {
             RaceNum INTEGER,
             MakeHM TEXT,
             Umaban INTEGER,
-            TMScore INTEGER,
+            TMScore TEXT,
             RecordDelimiter TEXT,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
         )
@@ -2387,7 +2387,7 @@ SCHEMAS = {
             RaceNum INTEGER,
             MakeHM TEXT,
             Umaban INTEGER,
-            TMScore INTEGER,
+            TMScore TEXT,
             RecordDelimiter TEXT,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
         )

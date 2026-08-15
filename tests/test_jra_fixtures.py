@@ -68,11 +68,11 @@ PARSER_MAP = {
     "SE": (SEParser, 463),
     "SK": (SKParser, SKParser.RECORD_LENGTH),
     "TK": (TKParser, 727),
-    "TM": (TMParser, 39),
+    "TM": (TMParser, TMParser.RECORD_LENGTH),
     "WF": (WFParser, 169),  # Historical fixture uses the obsolete compact layout.
     "YS": (YSParser, 146),
 }
-EXPANDED_RECORD_TYPES = {"DM", "O1", "O2", "O3", "O4", "O5", "O6"}
+EXPANDED_RECORD_TYPES = {"DM", "TM", "O1", "O2", "O3", "O4", "O5", "O6"}
 LEGACY_RECONSTRUCTED_LENGTHS = {
     "BN": 387,
     "BR": 455,
@@ -80,6 +80,7 @@ LEGACY_RECONSTRUCTED_LENGTHS = {
     "DM": 48,
     "RA": 856,
     "SK": 78,
+    "TM": 39,
 }
 
 
@@ -148,6 +149,11 @@ def load_fixture_records(record_type, record_length):
                 # in a synthetic current record; the full arrays are covered
                 # by test_ra_official_contract.py.
                 chunk = chunk[:713].ljust(RAParser.RECORD_LENGTH - 2, b" ") + b"\r\n"
+            if record_type == "TM" and len(chunk) == 39:
+                # The historical fixture contains a correct header and first
+                # six-byte horse block reconstructed through the obsolete
+                # one-entry parser. Fill the other official slots with spaces.
+                chunk = chunk[:37].ljust(TMParser.RECORD_LENGTH - 2, b" ") + b"\r\n"
             if record_type == "WF" and len(chunk) == 169:
                 chunk = chunk[:11].ljust(WFParser.RECORD_LENGTH - 2, b" ") + b"\r\n"
             records.append(chunk)

@@ -18,7 +18,7 @@ from tests.fixtures.record_factory import make_ra_record
 
 
 EXPANDED_RECORD_TYPES = {
-    "DM", "H1", "H6", "O1", "O2", "O3", "O4", "O5", "O6", "WH"
+    "DM", "H1", "H6", "O1", "O2", "O3", "O4", "O5", "O6", "TM", "WH"
 }
 
 
@@ -88,7 +88,7 @@ class TestIndividualParsers:
             'H1': 28955, 'H6': 102890, 'HC': 60, 'HN': 251, 'HR': 719, 'HS': 200, 'HY': 123,
             'JC': 252, 'JG': 251, 'KS': 282,
             'O1': 962, 'O2': 2042, 'O3': 2654, 'O4': 4031, 'O5': 12293, 'O6': 83285,
-            'RA': 1272, 'RC': 1926, 'SE': 555, 'SK': 208, 'TC': 71, 'TK': 240, 'TM': 216,
+            'RA': 1272, 'RC': 1926, 'SE': 555, 'SK': 208, 'TC': 71, 'TK': 240, 'TM': 141,
             'UM': 1609, 'WC': 72, 'WE': 195, 'WF': 7215, 'WH': 847, 'YS': 424,
         }
 
@@ -103,7 +103,7 @@ class TestIndividualParsers:
             data += b' ' * remaining
             # 固定長＋終端CRLFを強制するパーサーは末尾を CRLF にする
             if record_type in (
-                "BN", "BR", "CH", "DM", "HN", "RA", "SE", "SK", "UM", "WH"
+                "BN", "BR", "CH", "DM", "HN", "RA", "SE", "SK", "TM", "UM", "WH"
             ):
                 data = data[:-2] + b"\r\n"
             if record_type == "DM":
@@ -119,6 +119,18 @@ class TestIndividualParsers:
                 mutable[33:38] = b"10001"
                 mutable[38:42] = b"0101"
                 mutable[42:46] = b"0201"
+                data = bytes(mutable)
+            if record_type == "TM":
+                mutable = bytearray(data)
+                mutable[11:15] = b"2024"
+                mutable[15:19] = b"0601"
+                mutable[19:21] = b"05"
+                mutable[21:23] = b"03"
+                mutable[23:25] = b"08"
+                mutable[25:27] = b"11"
+                mutable[27:31] = b"0930"
+                mutable[31:33] = b"01"
+                mutable[33:37] = b"0101"
                 data = bytes(mutable)
             if record_type == "WH":
                 mutable = bytearray(data)

@@ -64,10 +64,7 @@ def _entry(umaban: str = "", score: str = "") -> bytes:
 
 
 def _official_entries(*, score_offset: int = 0) -> list[bytes]:
-    return [
-        _entry(f"{index:02d}", f"{100 + score_offset + index:04d}")
-        for index in range(1, 19)
-    ]
+    return [_entry(f"{index:02d}", f"{100 + score_offset + index:04d}") for index in range(1, 19)]
 
 
 def _tm_record(
@@ -237,9 +234,7 @@ def test_tm_importers_preserve_every_entry_and_replace_one_race_revision(
                 "TMScore18": "0218",
             }
         else:
-            stored = database.fetch_all(
-                "SELECT Umaban, MakeHM, TMScore FROM NL_TM ORDER BY Umaban"
-            )
+            stored = database.fetch_all("SELECT Umaban, MakeHM, TMScore FROM NL_TM ORDER BY Umaban")
             assert stored[0] == {"Umaban": 1, "MakeHM": "0945", "TMScore": "0201"}
             assert stored[-1] == {"Umaban": 18, "MakeHM": "0945", "TMScore": "0218"}
             assert all(row["Umaban"] != 2 for row in stored)
@@ -342,9 +337,7 @@ def test_tm_standard_import_refuses_keyless_table_without_row_loss(
             importer_class(database, use_jravan_schema=True).import_records(
                 iter(TMParser().parse(_tm_record()))
             )
-        preserved = database.fetch_all(
-            "SELECT Year, RaceNum, MakeHM FROM TAISENGATA_MINING"
-        )
+        preserved = database.fetch_all("SELECT Year, RaceNum, MakeHM FROM TAISENGATA_MINING")
 
     assert preserved == [{"Year": 2000, "RaceNum": 1, "MakeHM": "0000"}]
 
@@ -426,7 +419,45 @@ def test_tm_postgresql_native_and_standard_revision_delete(postgresql_db, import
         iter(TMParser().parse(_tm_record(data_kubun="0", entries=[_entry() for _ in range(18)])))
     )
     assert postgresql_db.fetch_one("SELECT COUNT(*) AS count FROM NL_TM")["count"] == 0
-    assert (
-        postgresql_db.fetch_one("SELECT COUNT(*) AS count FROM TAISENGATA_MINING")["count"]
-        == 0
+    assert postgresql_db.fetch_one("SELECT COUNT(*) AS count FROM TAISENGATA_MINING")["count"] == 0
+
+
+def test_tm_postgresql_realtime_snapshot_revision_delete(postgresql_db) -> None:
+    postgresql_db.execute(SCHEMAS["RT_TM"])
+    postgresql_db.commit()
+    updater = RealtimeUpdater(postgresql_db)
+    corrected_entries = _official_entries(score_offset=100)
+    corrected_entries[1] = _entry()
+
+    postgresql_db.begin_transaction()
+    first = updater.process_record(_tm_record())
+    postgresql_db.commit()
+    postgresql_db.begin_transaction()
+    corrected = updater.process_record(_tm_record(make_hm="0945", entries=corrected_entries))
+    realtime_rows = postgresql_db.fetch_all(
+        'SELECT Umaban AS "Umaban", MakeHM AS "MakeHM", TMScore AS "TMScore" '
+        "FROM RT_TM ORDER BY Umaban"
     )
+    postgresql_db.commit()
+
+    assert isinstance(first, list) and len(first) == 18
+    assert isinstance(corrected, list) and len(corrected) == 17
+    assert all(result["success"] for result in first + corrected)
+    assert len(realtime_rows) == 17
+    assert all(row["Umaban"] != 2 for row in realtime_rows)
+    assert dict(realtime_rows[0]) == {
+        "Umaban": 1,
+        "MakeHM": "0945",
+        "TMScore": "0201",
+    }
+
+    postgresql_db.begin_transaction()
+    deleted = updater.process_record(
+        _tm_record(data_kubun="0", entries=[_entry() for _ in range(18)])
+    )
+    remaining = postgresql_db.fetch_one("SELECT COUNT(*) AS count FROM RT_TM")["count"]
+    postgresql_db.commit()
+
+    assert isinstance(deleted, list) and len(deleted) == 1
+    assert deleted[0]["success"] is True
+    assert remaining == 0

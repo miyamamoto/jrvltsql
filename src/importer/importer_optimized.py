@@ -13,14 +13,14 @@ from src.database.base import BaseDatabase, DatabaseError
 from src.database.migration import SchemaMigrationError
 from src.importer.importer import (
     _PREPARED_CH_SEISEKI_ROWS_KEY,
-    _delete_dm_race_rows,
-    _dm_native_snapshot_rows,
+    _delete_mining_race_rows,
     _expanded_record_fingerprint,
-    _is_dm_snapshot_follower,
-    _is_dm_race_delete,
+    _is_mining_race_delete,
+    _is_mining_snapshot_follower,
+    _mining_native_snapshot_rows,
     insert_ch_coupled_batch,
     prepare_ch_coupled_rows,
-    replace_dm_native_snapshot,
+    replace_mining_native_snapshot,
     resolve_standard_table_name,
     verify_ch_coupled_table,
 )
@@ -184,7 +184,7 @@ class OptimizedDataImporter:
     @classmethod
     def _record_for_table(cls, record: dict, table_name: str) -> dict:
         """Return the parser representation required by the target schema."""
-        if table_name in {"BATAIJYU", "MINING"}:
+        if table_name in {"BATAIJYU", "MINING", "TAISENGATA_MINING"}:
             wide_record = record.get("_wide_record")
             if isinstance(wide_record, dict):
                 return cls._clean_record(wide_record)
@@ -266,7 +266,7 @@ class OptimizedDataImporter:
                     self._records_failed += 1
                     continue
 
-                if _is_dm_race_delete(record, table_name):
+                if _is_mining_race_delete(record, table_name):
                     pending = batch_buffers.setdefault(table_name, [])
                     if pending:
                         self._flush_batch_optimized(
@@ -275,7 +275,7 @@ class OptimizedDataImporter:
                             commit_batch=auto_commit,
                         )
                         batch_buffers[table_name] = []
-                    _delete_dm_race_rows(self.database, record, table_name)
+                    _delete_mining_race_rows(self.database, record, table_name)
                     self._records_imported += 1
                     self._batches_processed += 1
                     if auto_commit:
@@ -283,11 +283,11 @@ class OptimizedDataImporter:
                     last_expanded_record_fingerprint = None
                     continue
 
-                if _is_dm_snapshot_follower(record, table_name):
+                if _is_mining_snapshot_follower(record, table_name):
                     continue
 
-                dm_snapshot_rows = _dm_native_snapshot_rows(record, table_name)
-                if dm_snapshot_rows is not None:
+                mining_snapshot_rows = _mining_native_snapshot_rows(record, table_name)
+                if mining_snapshot_rows is not None:
                     pending = batch_buffers.setdefault(table_name, [])
                     if pending:
                         self._flush_batch_optimized(
@@ -299,7 +299,9 @@ class OptimizedDataImporter:
                     if auto_commit:
                         self.database.begin_transaction()
                     try:
-                        rows = replace_dm_native_snapshot(self.database, record, table_name)
+                        rows = replace_mining_native_snapshot(
+                            self.database, record, table_name
+                        )
                         if auto_commit:
                             self.database.commit()
                     except Exception:
