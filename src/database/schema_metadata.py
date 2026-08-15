@@ -565,79 +565,20 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
         "indexes": ["馬名", "父馬血統登録番号", "母馬血統登録番号"]
     },
 
-    "NL_KS": {
-        "table_name": "NL_KS",
-        "record_type": "KS",
-        "description": "騎手マスタ情報",
-        "purpose": "騎手の基本情報（騎手コード、騎手名、所属、初免許年など）を格納",
-        "columns": [
-            {
-                "name": "レコード種別ID",
-                "type": "TEXT",
-                "description": "レコード種別識別子（常に'KS'）",
-                "example": "KS",
-                "nullable": False
-            },
-            {
-                "name": "騎手コード",
-                "type": "TEXT",
-                "description": "騎手コード（5桁）",
-                "example": "01234",
-                "nullable": False
-            },
-            {
-                "name": "騎手名漢字",
-                "type": "TEXT",
-                "description": "騎手名（漢字）",
-                "example": "武豊",
-                "nullable": True
-            },
-            {
-                "name": "騎手名カナ",
-                "type": "TEXT",
-                "description": "騎手名（カタカナ）",
-                "example": "タケユタカ",
-                "nullable": True
-            },
-            {
-                "name": "騎手名欧字",
-                "type": "TEXT",
-                "description": "騎手名（ローマ字）",
-                "example": "Y.TAKE",
-                "nullable": True
-            },
-            {
-                "name": "所属コード",
-                "type": "TEXT",
-                "description": "所属（1=栗東、2=美浦、3=地方、4=海外）",
-                "example": "1",
-                "nullable": True
-            },
-            {
-                "name": "初免許年",
-                "type": "TEXT",
-                "description": "騎手免許取得年（西暦4桁）",
-                "example": "1987",
-                "nullable": True
-            },
-            {
-                "name": "見習い区分",
-                "type": "TEXT",
-                "description": "見習い区分（0=通常、1=見習い）",
-                "example": "0",
-                "nullable": True
-            },
-            {
-                "name": "削除フラグ",
-                "type": "TEXT",
-                "description": "削除フラグ（0=有効、1=削除）",
-                "example": "0",
-                "nullable": True
-            }
-        ],
-        "primary_key": ["騎手コード"],
-        "indexes": ["騎手名漢字", "所属コード"]
-    },
+    "NL_KS": _schema_backed_metadata(
+        "NL_KS",
+        record_type="KS",
+        description="騎手マスタ基本情報",
+        purpose="騎手の基本情報、初騎乗・初勝利、最近の重賞勝利3件を格納",
+        indexes=["KisyuName", "TozaiCD"],
+    ),
+    "NL_KS_SEISEKI": _schema_backed_metadata(
+        "NL_KS_SEISEKI",
+        record_type="KS",
+        description="騎手マスタ成績情報",
+        purpose="騎手ごとの本年・前年・累計成績をNum=1,2,3の3行で格納",
+        indexes=["KisyuCode", "SetYear"],
+    ),
 
     "NL_YS": {
         "table_name": "NL_YS",

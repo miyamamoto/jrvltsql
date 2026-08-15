@@ -132,7 +132,7 @@ def check_schema(con, issues):
         "NL_RA", "NL_SE", "NL_HR", "NL_H1", "NL_H6",
         "NL_O1", "NL_O2", "NL_O3", "NL_O4", "NL_O5", "NL_O6",
         "NL_WE", "NL_WH", "NL_TK",
-        "NL_UM", "NL_KS", "NL_CH", "NL_CH_SEISEKI", "NL_BR", "NL_BN", "NL_RC",
+        "NL_UM", "NL_KS", "NL_KS_SEISEKI", "NL_CH", "NL_CH_SEISEKI", "NL_BR", "NL_BN", "NL_RC",
         "NL_JC", "NL_TC",
     ]
     rt_required = [
@@ -629,6 +629,83 @@ def check_master_data(con, issues):
         issues.append("NL_UM (horse master) empty -- run setup fetch")
     if ks == 0:
         issues.append("NL_KS (jockey master) empty -- run setup fetch")
+
+    if not table_exists(con, "NL_KS_SEISEKI"):
+        print("  [FAIL] NL_KS_SEISEKI missing")
+        issues.append(
+            "NL_KS_SEISEKI missing -- run create-tables and full DIFN reimport"
+        )
+    else:
+        ks_incomplete = q(
+            con,
+            """
+            SELECT COUNT(*) FROM (
+                SELECT ks.KisyuCode
+                FROM NL_KS ks
+                LEFT JOIN NL_KS_SEISEKI result
+                  ON result.KisyuCode = ks.KisyuCode
+                GROUP BY ks.KisyuCode
+                HAVING COUNT(result.KisyuCode) != 3
+                   OR COUNT(DISTINCT CASE WHEN result.Num IN (1, 2, 3)
+                                          THEN result.Num END) != 3
+            ) incomplete
+            """,
+        )
+        ks_orphan = q(
+            con,
+            """
+            SELECT COUNT(*)
+            FROM NL_KS_SEISEKI result
+            LEFT JOIN NL_KS ks ON ks.KisyuCode = result.KisyuCode
+            WHERE ks.KisyuCode IS NULL
+            """,
+        )
+        ks_revision_mismatch = q(
+            con,
+            """
+            SELECT COUNT(*)
+            FROM NL_KS_SEISEKI result
+            JOIN NL_KS ks ON ks.KisyuCode = result.KisyuCode
+            WHERE result.MakeDate IS NOT ks.MakeDate
+            """,
+        )
+        if (
+            ks_incomplete is None
+            or ks_orphan is None
+            or ks_revision_mismatch is None
+        ):
+            print("  [FAIL] NL_KS_SEISEKI completeness could not be verified")
+            issues.append(
+                "NL_KS_SEISEKI completeness could not be verified -- inspect schema"
+            )
+        else:
+            ks_results_ok = (
+                ks > 0
+                and ks_incomplete == 0
+                and ks_orphan == 0
+                and ks_revision_mismatch == 0
+            )
+            print(
+                f"  {'[OK] ' if ks_results_ok else '[FAIL]'} "
+                f"NL_KS_SEISEKI incomplete_jockeys={ks_incomplete:,} "
+                f"orphan_rows={ks_orphan:,} "
+                f"revision_mismatch_rows={ks_revision_mismatch:,}"
+            )
+            if ks_incomplete:
+                issues.append(
+                    f"NL_KS_SEISEKI incomplete for {ks_incomplete} jockey(s) -- "
+                    "run full DIFN reimport"
+                )
+            if ks_orphan:
+                issues.append(
+                    f"NL_KS_SEISEKI has {ks_orphan} orphan row(s) -- "
+                    "run full DIFN reimport"
+                )
+            if ks_revision_mismatch:
+                issues.append(
+                    f"NL_KS_SEISEKI has {ks_revision_mismatch} row(s) from a "
+                    "different parent MakeDate -- run full DIFN reimport"
+                )
 
     if not ch_exists:
         issues.append("NL_CH missing -- run create-tables and full DIFN reimport")

@@ -22,6 +22,7 @@ JRAVAN_TO_JLTSQL: Dict[str, str] = {
     # マスタデータ (Master Data)
     "UMA": "NL_UM",           # 競走馬マスタ (Horse Master)
     "KISYU": "NL_KS",         # 騎手マスタ (Jockey Master)
+    "KISYU_SEISEKI": "NL_KS_SEISEKI",  # 騎手マスタ成績
     "CHOKYO": "NL_CH",        # 調教師マスタ (Trainer Master)
     "CHOKYO_SEISEKI": "NL_CH_SEISEKI",  # 調教師マスタ成績
     "BANUSI": "NL_BN",        # 馬主マスタ (Owner Master)

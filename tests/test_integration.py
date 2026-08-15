@@ -91,7 +91,7 @@ class TestIntegration:
                 "NL_RA": 122,  # Official 1,272-byte race layout plus compatibility aliases
                 "NL_SE": 103,  # Results plus canonical-v2 and provider-raw audit fields
                 "NL_UM": 90,   # Horse master (incl. 項番34-62 着回数/脚質傾向/登録レース数)
-                "NL_KS": 68,   # Jockey master table
+                "NL_KS": 67,   # Official jockey-master header; results are normalized
                 "NL_HR": 194,  # Expanded payout combinations
                 "NL_O1": 29,   # Odds table
             }

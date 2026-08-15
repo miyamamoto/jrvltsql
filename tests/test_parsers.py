@@ -86,7 +86,7 @@ class TestIndividualParsers:
             'AV': 78, 'BN': 477, 'BR': 545, 'BT': 415, 'CC': 71,
             'CH': 3862, 'CK': 232, 'CS': 208, 'DM': 303,
             'H1': 28955, 'H6': 102890, 'HC': 60, 'HN': 251, 'HR': 719, 'HS': 200, 'HY': 123,
-            'JC': 252, 'JG': 251, 'KS': 282,
+            'JC': 252, 'JG': 251, 'KS': 4173,
             'O1': 962, 'O2': 2042, 'O3': 2654, 'O4': 4031, 'O5': 12293, 'O6': 83285,
             'RA': 1272, 'RC': 1926, 'SE': 555, 'SK': 208, 'TC': 71, 'TK': 240, 'TM': 141,
             'UM': 1609, 'WC': 72, 'WE': 195, 'WF': 7215, 'WH': 847, 'YS': 424,
@@ -103,7 +103,7 @@ class TestIndividualParsers:
             data += b' ' * remaining
             # 固定長＋終端CRLFを強制するパーサーは末尾を CRLF にする
             if record_type in (
-                "BN", "BR", "CH", "DM", "HN", "RA", "SE", "SK", "TM", "UM", "WH"
+                "BN", "BR", "CH", "DM", "HN", "KS", "RA", "SE", "SK", "TM", "UM", "WH"
             ):
                 data = data[:-2] + b"\r\n"
             if record_type == "DM":
@@ -119,6 +119,22 @@ class TestIndividualParsers:
                 mutable[33:38] = b"10001"
                 mutable[38:42] = b"0101"
                 mutable[42:46] = b"0201"
+                data = bytes(mutable)
+            if record_type == "KS":
+                mutable = bytearray(data)
+                for start, size in (
+                    (11, 5), (16, 1), (17, 8), (25, 8), (33, 8),
+                    (227, 1), (228, 1), (229, 1), (230, 1), (251, 5),
+                    (264, 16), (280, 2), (282, 10), (328, 2), (330, 1),
+                    (331, 16), (347, 2), (349, 10), (395, 2), (397, 1),
+                    (398, 16), (414, 2), (416, 10),
+                    (462, 16), (478, 2), (480, 10),
+                    (526, 16), (641, 2), (643, 10),
+                    (689, 16), (804, 2), (806, 10),
+                    (852, 16), (967, 2), (969, 10),
+                ):
+                    mutable[start : start + size] = b"0" * size
+                mutable[1015:4171] = b"0" * 3156
                 data = bytes(mutable)
             if record_type == "TM":
                 mutable = bytearray(data)

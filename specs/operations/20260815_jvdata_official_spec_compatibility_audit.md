@@ -96,15 +96,15 @@ race identityと`Umaban`を複合主キーに持ち、馬名、馬体重、増�
 
 ### B-04 現行38種のうち複数が公式配列を途中で切る
 
-明らかに短い公開契約は、WH、SK、RA、BN、BR、CH、DM、TMの修正後、次の4種である。
+明らかに短い公開契約は、WH、SK、RA、BN、BR、CH、DM、TM、KSの修正後、次の3種である。
 
 ```text
-KS 772/4173   RC 241/501
+RC 241/501
 TK 727/21657  YS 146/382
 ```
 
-左が実装上の公開長または終端、右が公式現行長。KS の成績配列、
-TK の300頭配列、RC の3頭分記録、YS の3競走案内などを
+左が実装上の公開長または終端、右が公式現行長。TK の300頭配列、
+RC の3頭分記録、YS の3競走案内などを
 1件または一部だけ取り、公式レコード内部に `RecordDelimiter` を置くものがある。
 これは「不要列を捨てる」だけではなく、繰返し要素のデータ損失と key collision を
 固定する schema になっている。
@@ -139,6 +139,13 @@ headerは`ChokyosiCode`、成績は`(ChokyosiCode, Num)`を主キーとし、1�
 repository regressionとして合成し、provider rawとは扱わない。既存native `NL_CH`の
 旧inline成績列はadditive migrationで保持するが、新しいheader/成績表を埋めるには
 現行setupから全件再取込が必要である。
+
+KSは4.8.0.2、4.9.0.1、SDK 5.0.0に共通する4173バイトへ統一した。
+初騎乗2件、初勝利2件、最近重賞3件をheaderへ、本年・前年・累計の
+1052バイト成績block 3件を`NL_KS_SEISEKI` / `KISYU_SEISEKI`へ正規化して
+原子的に保存する。長さ/type/strict CP932/CRLFと全数値領域を厳密検査し、
+DataKubun 0の親子削除と同一batch内の削除→置換順序を保持する。公式履歴に
+物理長変更はなく、旧repository由来772バイトはprovider rawとして拒否する。
 
 ### B-05 2023年変更対象7種は新旧両対応ではない
 
@@ -281,7 +288,7 @@ skip の扱いに関する実運用上の質問が繰り返されている:
 | O5 | 12293 | current-shape / weak gate | 同上 |
 | O6 | 83285 | current-shape / weak gate | 同上 |
 | UM | 1609 | current-shape | currentのみ、厳密長/CRLF |
-| KS | 4173 | partial | 成績配列を途中で終了、公開長772 |
+| KS | 4173 | current-shape / normalized | 初騎乗2件＋初勝利2件＋最近重賞3件＋成績3件をheader 1行/成績3行へ原子的に保存、厳密長/type/CRLF |
 | CH | 3862 | current-shape / normalized | 最近重賞3件＋成績3件をheader 1行/成績3行へ原子的に保存、厳密長/type/CRLF |
 | BR | 545 | current-shape | 全位置・全成績配列・厳密長/type/CRLF |
 | BN | 477 | current-shape | 本年・累計成績を全展開、現行長/type/CRLFを厳密検査、413/387byteを拒否 |

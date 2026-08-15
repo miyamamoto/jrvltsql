@@ -18,16 +18,34 @@ def _master_connection(
     extra_null_result: bool = False,
     stale_result_revision: bool = False,
     result_count: int | None = None,
+    include_ks_results: bool = True,
+    complete_ks_results: bool = True,
+    ks_result_count: int | None = None,
 ):
     connection = sqlite3.connect(":memory:")
     connection.executescript(
         """
         CREATE TABLE NL_UM (KettoNum TEXT PRIMARY KEY);
-        CREATE TABLE NL_KS (KisyuCode TEXT PRIMARY KEY);
+        CREATE TABLE NL_KS (MakeDate TEXT, KisyuCode TEXT PRIMARY KEY);
         INSERT INTO NL_UM VALUES ('H1');
-        INSERT INTO NL_KS VALUES ('J1');
+        INSERT INTO NL_KS VALUES ('20260815', 'J1');
         """
     )
+    if include_ks_results:
+        connection.execute(
+            "CREATE TABLE NL_KS_SEISEKI ("
+            "MakeDate TEXT, KisyuCode TEXT, Num INTEGER, "
+            "PRIMARY KEY (KisyuCode, Num))"
+        )
+        stored_ks_count = (
+            ks_result_count
+            if ks_result_count is not None
+            else (3 if complete_ks_results else 2)
+        )
+        connection.executemany(
+            "INSERT INTO NL_KS_SEISEKI VALUES (?, ?, ?)",
+            [("20260815", "J1", number) for number in range(1, stored_ks_count + 1)],
+        )
     if include_parent:
         connection.execute(
             "CREATE TABLE NL_CH (MakeDate TEXT, ChokyosiCode TEXT PRIMARY KEY)"
@@ -100,6 +118,57 @@ def test_schema_check_requires_normalized_ch_results(monkeypatch):
     raceday_verify.check_schema(None, issues)
 
     assert issues == ["Missing NL_ tables: ['NL_CH_SEISEKI']"]
+
+
+def test_schema_check_requires_normalized_ks_results(monkeypatch):
+    monkeypatch.setattr(
+        raceday_verify,
+        "table_exists",
+        lambda _connection, table_name: table_name != "NL_KS_SEISEKI",
+    )
+    issues = []
+
+    raceday_verify.check_schema(None, issues)
+
+    assert issues == ["Missing NL_ tables: ['NL_KS_SEISEKI']"]
+
+
+def test_master_check_rejects_missing_or_incomplete_ks_results_and_accepts_complete():
+    missing = _master_connection(
+        include_results=True,
+        complete_results=True,
+        include_ks_results=False,
+    )
+    missing_issues = []
+    raceday_verify.check_master_data(missing, missing_issues)
+    missing.close()
+
+    incomplete = _master_connection(
+        include_results=True,
+        complete_results=True,
+        include_ks_results=True,
+        complete_ks_results=False,
+    )
+    incomplete_issues = []
+    raceday_verify.check_master_data(incomplete, incomplete_issues)
+    incomplete.close()
+
+    complete = _master_connection(
+        include_results=True,
+        complete_results=True,
+        include_ks_results=True,
+    )
+    complete_issues = []
+    raceday_verify.check_master_data(complete, complete_issues)
+    complete.close()
+
+    assert missing_issues == [
+        "NL_KS_SEISEKI missing -- run create-tables and full DIFN reimport"
+    ]
+    assert incomplete_issues == [
+        "NL_KS_SEISEKI incomplete for 1 jockey(s) -- run full DIFN reimport"
+    ]
+    assert complete_issues == []
 
 
 def test_master_check_rejects_missing_or_incomplete_ch_results_and_accepts_complete():

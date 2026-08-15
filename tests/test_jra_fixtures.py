@@ -56,7 +56,7 @@ PARSER_MAP = {
     "HS": (HSParser, 200),
     "HY": (HYParser, 123),
     "JG": (JGParser, 80),
-    "KS": (KSParser, 772),
+    "KS": (KSParser, KSParser.RECORD_LENGTH),
     "O1": (O1Parser, 107),    # Fixture files use legacy compact format (107 bytes)
     "O2": (O2Parser, 66),     # Fixture files use legacy compact format (66 bytes)
     "O3": (O3Parser, 70),     # Fixture files use legacy compact format (70 bytes)
@@ -78,6 +78,7 @@ LEGACY_RECONSTRUCTED_LENGTHS = {
     "BR": 455,
     "CH": 592,
     "DM": 48,
+    "KS": 772,
     "RA": 856,
     "SK": 78,
     "TM": 39,
@@ -136,6 +137,25 @@ def load_fixture_records(record_type, record_length):
                 # 48-byte parser length. Fill the remaining 17 official slots
                 # with their documented space initial value.
                 chunk = chunk[:46].ljust(DMParser.RECORD_LENGTH - 2, b" ") + b"\r\n"
+            if record_type == "KS" and len(chunk) == 772:
+                # The historical fixture used the repository's non-official
+                # 772-byte reconstruction. Bytes 1-331 cover the compatible
+                # header and first flat-ride block; synthesize documented
+                # initial values for every remaining numeric field.
+                current = bytearray(b" " * KSParser.RECORD_LENGTH)
+                current[:331] = chunk[:331]
+                for start, size in (
+                    (331, 16), (347, 2), (349, 10), (395, 2), (397, 1),
+                    (398, 16), (414, 2), (416, 10),
+                    (462, 16), (478, 2), (480, 10),
+                    (526, 16), (641, 2), (643, 10),
+                    (689, 16), (804, 2), (806, 10),
+                    (852, 16), (967, 2), (969, 10),
+                ):
+                    current[start : start + size] = b"0" * size
+                current[1015:4171] = b"0" * 3156
+                current[4171:4173] = b"\r\n"
+                chunk = bytes(current)
             if record_type == "SK" and len(chunk) == 78:
                 # This fixture was reconstructed from stored columns through
                 # the obsolete one-pedigree parser. Preserve its core values

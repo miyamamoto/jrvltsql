@@ -50,7 +50,7 @@ jrvltsql は JRA / 中央競馬専用です。NAR / 地方競馬はこのリポ�
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `TOKU` | - | 特別登録馬 | `TK` | `NL_TK` | はい | はい | はい | standard / full quickstart に含めています。 |
 | `RACE` | - | レース、出走馬、払戻、確定オッズ、票数、WIN5、除外情報 | `RA`, `SE`, `HR`, `H1`, `H6`, `O1`〜`O6`, `WF`, `JG` | `NL_RA`, `NL_SE`, `NL_HR`, `NL_H1`, `NL_H6`, `NL_O1`〜`NL_O6`, `NL_WF`, `NL_JG` | はい | はい | はい | 中核データです。`NL_O*` は確定オッズで、投資判断時点のオッズではありません。 |
-| `DIFN` | `DIFF` | 蓄積系マスタ差分 | `UM`, `KS`, `CH`, `BR`, `BN`, `RC` | `NL_UM`, `NL_KS`, `NL_CH`, `NL_CH_SEISEKI`, `NL_BR`, `NL_BN`, `NL_RC` | はい | いいえ | はい | 旧名 `DIFF` は受け付けません（下記参照）。 |
+| `DIFN` | `DIFF` | 蓄積系マスタ差分 | `UM`, `KS`, `CH`, `BR`, `BN`, `RC` | `NL_UM`, `NL_KS`, `NL_KS_SEISEKI`, `NL_CH`, `NL_CH_SEISEKI`, `NL_BR`, `NL_BN`, `NL_RC` | はい | いいえ | はい | 旧名 `DIFF` は受け付けません（下記参照）。 |
 | `BLDN` | `BLOD` | 血統情報 | `HN`, `SK`, `BT` | `NL_HN`, `NL_SK`, `NL_BT` | はい | いいえ | はい | 旧名 `BLOD` は受け付けません（下記参照）。 |
 | `MING` | - | データマイニング予想 | `DM`, `TM` | `NL_DM`, `NL_TM` | はい | いいえ | はい | full quickstart に含めています。 |
 | `SLOP` | - | 坂路調教関連 | `HC` | `NL_HC` | はい | いいえ | はい | standard / full quickstart に含めています。 |
@@ -160,7 +160,8 @@ jrvltsql は現在、以下 38 種類の JRA レコード種別に対してパ�
 | レコード種別 | 保存先テーブル |
 | --- | --- |
 | `RA`, `SE`, `HR` | `NL_RA`, `NL_SE`, `NL_HR` |
-| `UM`, `KS`, `BR`, `BN` | `NL_UM`, `NL_KS`, `NL_BR`, `NL_BN` |
+| `UM`, `BR`, `BN` | `NL_UM`, `NL_BR`, `NL_BN` |
+| `KS` | `NL_KS`（基本情報・初騎乗/初勝利・最近重賞3件）、`NL_KS_SEISEKI`（本年・前年・累計の3行） |
 | `CH` | `NL_CH`（header・最近重賞3件）、`NL_CH_SEISEKI`（本年・前年・累計の3行） |
 | `HN`, `SK`, `BT`, `RC` | `NL_HN`, `NL_SK`, `NL_BT`, `NL_RC` |
 | `O1`, `O2`, `O3`, `O4`, `O5`, `O6` | `NL_O1`, `NL_O2`, `NL_O3`, `NL_O4`, `NL_O5`, `NL_O6` |
@@ -173,6 +174,12 @@ jrvltsql は現在、以下 38 種類の JRA レコード種別に対してパ�
 対応済みの速報系レコードは `RT_*` にも保存できます。公式時系列オッズは
 `TS_O1` / `TS_O2`、開催週速報オッズは `TS_SOKUHO_O1`〜`TS_SOKUHO_O6`
 に保存します。
+
+`KS`は公式4173バイトを1物理レコードとして扱い、nativeでは`NL_KS`と
+`NL_KS_SEISEKI`、JRA-VAN標準名モードでは`KISYU`と`KISYU_SEISEKI`へ
+原子的に保存します。旧772バイトの復元データは取得元レコードとして受け付けません。
+既存の標準名テーブルが主キー契約を満たさない場合は行を変更せず停止します。
+現行schemaで再作成した後、`DIFN`のoption 3/4で全件を再取得してください。
 
 `CH`は公式3862バイトを1物理レコードとして扱い、nativeでは`NL_CH`と
 `NL_CH_SEISEKI`、JRA-VAN標準名モードでは`CHOKYO`と`CHOKYO_SEISEKI`へ

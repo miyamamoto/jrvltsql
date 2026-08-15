@@ -13,6 +13,7 @@ from src.database.base import BaseDatabase, DatabaseError
 from src.database.migration import SchemaMigrationError
 from src.importer.importer import (
     _PREPARED_CH_SEISEKI_ROWS_KEY,
+    _PREPARED_KS_SEISEKI_ROWS_KEY,
     _delete_mining_race_rows,
     _expanded_record_fingerprint,
     _is_mining_race_delete,
@@ -20,11 +21,14 @@ from src.importer.importer import (
     _mining_native_snapshot_rows,
     _record_type_from_record,
     insert_ch_coupled_batch,
+    insert_ks_coupled_batch,
     prepare_ch_coupled_rows,
+    prepare_ks_coupled_rows,
     replace_mining_native_snapshot,
     resolve_standard_table_name,
-    verify_mining_native_schema,
     verify_ch_coupled_table,
+    verify_ks_coupled_table,
+    verify_mining_native_schema,
 )
 from src.utils.logger import get_logger
 
@@ -125,15 +129,16 @@ class OptimizedDataImporter:
             if schema_sql and self.database.table_exists(standard_name):
                 migrate_table_if_needed(self.database, standard_name, schema_sql, commit=commit)
                 verify_table_schema(self.database, standard_name, schema_sql)
-        child_schema = JRAVAN_SCHEMAS.get("CHOKYO_SEISEKI")
-        if child_schema and self.database.table_exists("CHOKYO_SEISEKI"):
-            migrate_table_if_needed(
-                self.database,
-                "CHOKYO_SEISEKI",
-                child_schema,
-                commit=commit,
-            )
-            verify_table_schema(self.database, "CHOKYO_SEISEKI", child_schema)
+        for child_table in ("CHOKYO_SEISEKI", "KISYU_SEISEKI"):
+            child_schema = JRAVAN_SCHEMAS.get(child_table)
+            if child_schema and self.database.table_exists(child_table):
+                migrate_table_if_needed(
+                    self.database,
+                    child_table,
+                    child_schema,
+                    commit=commit,
+                )
+                verify_table_schema(self.database, child_table, child_schema)
 
     def _ensure_jravan_tables_ready(self, *, auto_commit: bool) -> None:
         """Migrate standard-name tables only after the DB is connected."""
@@ -242,6 +247,7 @@ class OptimizedDataImporter:
         # Group records by type for batch insertion
         batch_buffers: Dict[str, List[dict]] = {}
         verified_ch_result_tables: Dict[str, str] = {}
+        verified_ks_result_tables: Dict[str, str] = {}
         last_expanded_record_fingerprint = None
 
         try:
@@ -354,6 +360,24 @@ class OptimizedDataImporter:
                             f"CH import could not resolve normalized table for {table_name}"
                         )
                     verified_ch_result_tables[table_name] = result_table
+                if table_name in ("NL_KS", "KISYU") and table_name not in verified_ks_result_tables:
+                    try:
+                        result_table = verify_ks_coupled_table(self.database, table_name)
+                    except DatabaseError as error:
+                        if not auto_commit:
+                            raise
+                        logger.warning(
+                            "KS result schema verification failed, retrying coupled import",
+                            table=table_name,
+                            error=str(error),
+                        )
+                        self.database.rollback()
+                        result_table = verify_ks_coupled_table(self.database, table_name)
+                    if result_table is None:
+                        raise SchemaMigrationError(
+                            f"KS import could not resolve normalized table for {table_name}"
+                        )
+                    verified_ks_result_tables[table_name] = result_table
                 coupled = prepare_ch_coupled_rows(
                     self.database,
                     record,
@@ -362,6 +386,14 @@ class OptimizedDataImporter:
                 )
                 if coupled is not None:
                     converted_record[_PREPARED_CH_SEISEKI_ROWS_KEY] = coupled
+                ks_coupled = prepare_ks_coupled_rows(
+                    self.database,
+                    record,
+                    table_name,
+                    verified_result_table=verified_ks_result_tables.get(table_name),
+                )
+                if ks_coupled is not None:
+                    converted_record[_PREPARED_KS_SEISEKI_ROWS_KEY] = ks_coupled
                 batch_buffers[table_name].append(converted_record)
 
                 # Check if any batch is full
@@ -420,6 +452,32 @@ class OptimizedDataImporter:
                 self.database,
                 table_name,
                 prepared_ch,
+                commit_batch=commit_batch,
+                optimized=True,
+            )
+            self._records_imported += succeeded
+            self._records_failed += failed
+            if succeeded:
+                self._batches_processed += 1
+            return
+
+        prepared_ks = []
+        for record in batch:
+            coupled = record.get(_PREPARED_KS_SEISEKI_ROWS_KEY)
+            if coupled is None:
+                continue
+            result_table, result_rows = coupled
+            main_row = {
+                key: value for key, value in record.items() if key != _PREPARED_KS_SEISEKI_ROWS_KEY
+            }
+            prepared_ks.append((main_row, result_table, result_rows))
+        if prepared_ks:
+            if len(prepared_ks) != len(batch):
+                raise SchemaMigrationError("KS batch lost its coupled result rows")
+            succeeded, failed = insert_ks_coupled_batch(
+                self.database,
+                table_name,
+                prepared_ks,
                 commit_batch=commit_batch,
                 optimized=True,
             )

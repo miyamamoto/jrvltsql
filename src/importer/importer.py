@@ -501,6 +501,179 @@ def insert_ch_coupled_batch(
     return succeeded, failed
 
 
+_KS_SEISEKI_ROWS_KEY = "_ks_seiseki_rows"
+_PREPARED_KS_SEISEKI_ROWS_KEY = "_prepared_ks_seiseki_rows"
+
+
+def _ks_result_table_name(main_table_name: str) -> str | None:
+    return {
+        "NL_KS": "NL_KS_SEISEKI",
+        "KISYU": "KISYU_SEISEKI",
+    }.get(main_table_name)
+
+
+def verify_ks_coupled_table(
+    database: BaseDatabase,
+    main_table_name: str,
+) -> str | None:
+    """Verify both keyed KS tables before any parent or child mutation."""
+    result_table = _ks_result_table_name(main_table_name)
+    if result_table is None:
+        return None
+
+    from src.database.migration import verify_table_schema
+    from src.database.schema import SCHEMAS
+    from src.database.schema_jravan import JRAVAN_SCHEMAS
+
+    main_schema_sql = SCHEMAS.get(main_table_name) or JRAVAN_SCHEMAS.get(main_table_name)
+    if not main_schema_sql or not database.table_exists_strict(main_table_name):
+        raise SchemaMigrationError(
+            f"KS import requires header table {main_table_name} before mutation"
+        )
+    verify_table_schema(database, main_table_name, main_schema_sql)
+
+    result_schema_sql = SCHEMAS.get(result_table) or JRAVAN_SCHEMAS.get(result_table)
+    if not result_schema_sql or not database.table_exists_strict(result_table):
+        raise SchemaMigrationError(
+            f"KS import requires normalized result table {result_table} before mutation"
+        )
+    verify_table_schema(database, result_table, result_schema_sql)
+    return result_table
+
+
+def prepare_ks_coupled_rows(
+    database: BaseDatabase,
+    record: dict,
+    main_table_name: str,
+    *,
+    verified_result_table: str | None = None,
+) -> tuple[str, list[dict]] | None:
+    """Validate and convert all three normalized KS result rows before writes."""
+    expected_result_table = _ks_result_table_name(main_table_name)
+    if expected_result_table is None:
+        return None
+    result_table = verified_result_table or verify_ks_coupled_table(database, main_table_name)
+    if result_table != expected_result_table:
+        raise SchemaMigrationError(
+            f"KS import expected normalized result table {expected_result_table}"
+        )
+
+    # A delete consumes only the official parent key. Child payload is ignored,
+    # but both schemas were verified above so the coupled delete cannot degrade
+    # into a parent-only mutation.
+    if record.get("DataKubun") == "0":
+        return result_table, []
+
+    rows = record.get(_KS_SEISEKI_ROWS_KEY)
+    if not isinstance(rows, list) or len(rows) != 3:
+        raise SchemaMigrationError("KS import requires exactly three normalized result rows")
+
+    expected_fields = set(get_table_column_types(result_table))
+    expected_make_date = record.get("MakeDate")
+    expected_code = record.get("KisyuCode")
+    converted_rows = []
+    for expected_number, row in enumerate(rows, start=1):
+        if not isinstance(row, dict) or set(row) != expected_fields:
+            raise SchemaMigrationError(
+                f"KS result row {expected_number} does not match {result_table} fields"
+            )
+        if (
+            row.get("MakeDate") != expected_make_date
+            or row.get("KisyuCode") != expected_code
+            or str(row.get("Num")) != str(expected_number)
+        ):
+            raise SchemaMigrationError(
+                f"KS result row {expected_number} has inconsistent parent key or sequence"
+            )
+        converted = convert_record_types(row, result_table)
+        if not DataImporter._has_complete_primary_key(result_table, converted):
+            raise SchemaMigrationError(
+                f"KS result row {expected_number} has an incomplete normalized key"
+            )
+        converted_rows.append(converted)
+    return result_table, converted_rows
+
+
+def insert_ks_coupled_batch(
+    database: BaseDatabase,
+    main_table_name: str,
+    prepared: list[tuple[dict, str, list[dict]]],
+    *,
+    commit_batch: bool,
+    optimized: bool,
+) -> tuple[int, int]:
+    """Atomically apply ordered KS upserts/deletes and their result rows."""
+    if not prepared:
+        return 0, 0
+    result_tables = {result_table for _, result_table, _ in prepared}
+    if len(result_tables) != 1:
+        raise SchemaMigrationError("KS batch contains inconsistent normalized result tables")
+
+    def begin_if_owned() -> None:
+        if commit_batch:
+            begin = getattr(database, "begin_transaction", None)
+            if begin is not None:
+                begin()
+
+    def insert_many(table_name: str, rows: list[dict]) -> int:
+        if optimized and hasattr(database, "insert_many_optimized"):
+            return database.insert_many_optimized(table_name, rows)
+        return database.insert_many(table_name, rows)
+
+    def rollback_or_invalidate() -> None:
+        try:
+            database.rollback()
+        except DatabaseError:
+            try:
+                database.invalidate_connection()
+            except Exception as disconnect_error:
+                logger.error(
+                    "Failed to invalidate database after KS rollback failure",
+                    table=main_table_name,
+                    error=str(disconnect_error),
+                )
+            raise
+
+    def write_one(main_row: dict, result_table: str, result_rows: list[dict]) -> None:
+        jockey_code = main_row.get("KisyuCode")
+        if main_row.get("DataKubun") == "0":
+            database.execute(f"DELETE FROM {result_table} WHERE KisyuCode = ?", (jockey_code,))
+            database.execute(f"DELETE FROM {main_table_name} WHERE KisyuCode = ?", (jockey_code,))
+            return
+        insert_many(main_table_name, [main_row])
+        insert_many(result_table, result_rows)
+
+    try:
+        begin_if_owned()
+        for main_row, result_table, result_rows in prepared:
+            write_one(main_row, result_table, result_rows)
+        if commit_batch:
+            database.commit()
+        return len(prepared), 0
+    except DatabaseError:
+        rollback_or_invalidate()
+        if not commit_batch:
+            raise
+
+    succeeded = 0
+    failed = 0
+    for main_row, result_table, result_rows in prepared:
+        try:
+            begin_if_owned()
+            write_one(main_row, result_table, result_rows)
+            database.commit()
+            succeeded += 1
+        except DatabaseError as error:
+            failed += 1
+            rollback_or_invalidate()
+            logger.error(
+                "Failed to insert coupled KS record",
+                table=main_table_name,
+                error=str(error),
+            )
+    return succeeded, failed
+
+
 # ============================================================================
 # REAL型フィールドの変換ルール定義
 # JV-Dataでは一部の数値フィールドが10倍された状態で格納されている
@@ -820,15 +993,16 @@ class DataImporter:
             if schema_sql and self.database.table_exists(standard_name):
                 migrate_table_if_needed(self.database, standard_name, schema_sql, commit=commit)
                 verify_table_schema(self.database, standard_name, schema_sql)
-        child_schema = JRAVAN_SCHEMAS.get("CHOKYO_SEISEKI")
-        if child_schema and self.database.table_exists("CHOKYO_SEISEKI"):
-            migrate_table_if_needed(
-                self.database,
-                "CHOKYO_SEISEKI",
-                child_schema,
-                commit=commit,
-            )
-            verify_table_schema(self.database, "CHOKYO_SEISEKI", child_schema)
+        for child_table in ("CHOKYO_SEISEKI", "KISYU_SEISEKI"):
+            child_schema = JRAVAN_SCHEMAS.get(child_table)
+            if child_schema and self.database.table_exists(child_table):
+                migrate_table_if_needed(
+                    self.database,
+                    child_table,
+                    child_schema,
+                    commit=commit,
+                )
+                verify_table_schema(self.database, child_table, child_schema)
 
     def _ensure_jravan_tables_ready(self, *, auto_commit: bool) -> None:
         """Migrate standard-name tables only after the DB is connected."""
@@ -1091,12 +1265,28 @@ class DataImporter:
                 # has happened yet, and a second failure aborts the import.
                 verified_ch_result_table = verify_ch_coupled_table(self.database, table_name)
 
+        verified_ks_result_table = None
+        if _ks_result_table_name(table_name) is not None:
+            try:
+                verified_ks_result_table = verify_ks_coupled_table(self.database, table_name)
+            except DatabaseError as error:
+                if not auto_commit:
+                    raise
+                logger.warning(
+                    "KS result schema verification failed, retrying coupled batch",
+                    table=table_name,
+                    error=str(error),
+                )
+                self.database.rollback()
+                verified_ks_result_table = verify_ks_coupled_table(self.database, table_name)
+
         try:
             # Clean records to remove metadata fields before insertion
             clean_batch = [self._record_for_table(record, table_name) for record in batch]
             # Convert types based on schema definition
             converted_batch = []
             prepared_ch: list[tuple[dict, str, list[dict]]] = []
+            prepared_ks: list[tuple[dict, str, list[dict]]] = []
             for original_record, record in zip(batch, clean_batch, strict=True):
                 converted_record = self._convert_record(record, table_name)
                 if self._has_complete_primary_key(table_name, converted_record):
@@ -1110,6 +1300,15 @@ class DataImporter:
                     if coupled is not None:
                         result_table, result_rows = coupled
                         prepared_ch.append((converted_record, result_table, result_rows))
+                    ks_coupled = prepare_ks_coupled_rows(
+                        self.database,
+                        original_record,
+                        table_name,
+                        verified_result_table=verified_ks_result_table,
+                    )
+                    if ks_coupled is not None:
+                        result_table, result_rows = ks_coupled
+                        prepared_ks.append((converted_record, result_table, result_rows))
                 else:
                     self._records_failed += 1
                     logger.warning(
@@ -1119,6 +1318,22 @@ class DataImporter:
                     )
 
             if not converted_batch:
+                return
+
+            if prepared_ks:
+                if len(prepared_ks) != len(converted_batch):
+                    raise SchemaMigrationError("KS batch lost its coupled result rows")
+                succeeded, failed = insert_ks_coupled_batch(
+                    self.database,
+                    table_name,
+                    prepared_ks,
+                    commit_batch=auto_commit,
+                    optimized=False,
+                )
+                self._records_imported += succeeded
+                self._records_failed += failed
+                if succeeded:
+                    self._batches_processed += 1
                 return
 
             if prepared_ch:
@@ -1159,8 +1374,11 @@ class DataImporter:
                 # transaction. Individual retries here would create a partial
                 # import and invalidate BatchProcessor's atomicity guarantee.
                 raise
-            if _ch_result_table_name(table_name) is not None:
-                # Coupled CH writes must never enter the parent-only fallback.
+            if (
+                _ch_result_table_name(table_name) is not None
+                or _ks_result_table_name(table_name) is not None
+            ):
+                # Coupled master writes must never enter the parent-only fallback.
                 raise
 
             # Rollback failed batch transaction
@@ -1289,6 +1507,19 @@ class DataImporter:
             if coupled is not None:
                 result_table, result_rows = coupled
                 succeeded, failed = insert_ch_coupled_batch(
+                    self.database,
+                    table_name,
+                    [(converted_record, result_table, result_rows)],
+                    commit_batch=auto_commit,
+                    optimized=False,
+                )
+                self._records_imported += succeeded
+                self._records_failed += failed
+                return succeeded == 1
+            ks_coupled = prepare_ks_coupled_rows(self.database, record, table_name)
+            if ks_coupled is not None:
+                result_table, result_rows = ks_coupled
+                succeeded, failed = insert_ks_coupled_batch(
                     self.database,
                     table_name,
                     [(converted_record, result_table, result_rows)],
