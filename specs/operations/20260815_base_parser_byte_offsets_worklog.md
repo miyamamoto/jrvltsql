@@ -106,11 +106,22 @@
   incomplete layouts, including `WH`, remain separate iterations rather than
   being mixed into this shared contract PR.
 
+## PR publication
+
+- Code candidate `247b2e289c19d78ee8726de269687c0881f4b695` was
+  pushed and opened as ready-for-review PR #166 against `master`:
+  <https://github.com/miyamamoto/jrvltsql/pull/166>.
+- The PR contains only the BaseParser byte-order repair, its paired regression,
+  and this worklog. Final candidate SHA, repeated exact-SHA checks, review
+  verdict, unresolved-thread count, and merge metadata belong in PR metadata
+  after this tracked publication update to avoid a self-referential commit
+  loop.
+
 ## Next safe command
 
-Commit the reviewed three-file iteration, rerun focused/full tests on that exact
-full SHA, publish a small PR, and merge only after exact-SHA CI, final Codex
-review, and unresolved-thread count are green.
+Commit and push this publication update, rerun focused/full tests on the new
+exact full SHA, and merge only after exact-SHA CI, final Codex review, and
+unresolved-thread count are green.
 
 ## STOP conditions
 
