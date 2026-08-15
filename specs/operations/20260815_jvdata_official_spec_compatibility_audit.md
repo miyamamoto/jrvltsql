@@ -116,16 +116,16 @@ JC は馬名・騎手名より後ろの負担重量・コード類が同じ理�
 
 ### B-04 現行38種のうち複数が公式配列を途中で切る
 
-明らかに短い公開契約は次の12種である。
+明らかに短い公開契約は、WHとSKの修正後、次の10種である。
 
 ```text
 BN 387/477    BR 455/545    CH 592/3862   DM 48/303
-KS 772/4173   RA 856/1272   RC 241/501    SK 78/208
-TK 727/21657  TM 39/141     WH 40/847     YS 146/382
+KS 772/4173   RA 856/1272   RC 241/501
+TK 727/21657  TM 39/141     YS 146/382
 ```
 
 左が実装上の公開長または終端、右が公式現行長。BN/BR/CH/KS の成績配列、DM/TM の
-18頭配列、TK の300頭配列、RC の3頭分記録、SK の14頭血統、YS の3競走案内などを
+18頭配列、TK の300頭配列、RC の3頭分記録、YS の3競走案内などを
 1件または一部だけ取り、公式レコード内部に `RecordDelimiter` を置くものがある。
 これは「不要列を捨てる」だけではなく、繰返し要素のデータ損失と key collision を
 固定する schema になっている。
@@ -143,7 +143,7 @@ RA には1272バイト分岐が追加されているが、公開定数と fixtur
 | UM | 1577 | 1609 | 現行位置・厳密長/CRLF | 拒否 | 現行のみ可 |
 | BR | 537 | 545 | 新幅だが455まで | version dispatchなし | 両方不可 |
 | HN | 245 | 251 | 現行全位置・厳密長/CRLF | 拒否 | 現行のみ可 |
-| SK | 178 | 208 | 78byte、血統14件中1件 | version dispatchなし | 両方不可 |
+| SK | 178 | 208 | 現行全位置・血統14件・厳密長/CRLF | 拒否 | 現行のみ可 |
 | CK | 6864 | 6870 | 現行offsetだが B-02 で破壊 | version dispatchなし | 両方不可 |
 | HS | 196 | 200 | 現行10byte番号に対応 | version dispatchなし | 現行のみ可 |
 | BT | 6887 | 6889 | 現行offsetだが B-02 で破壊 | version dispatchなし | 両方不可 |
@@ -281,7 +281,7 @@ skip の扱いに関する実運用上の質問が繰り返されている:
 | BR | 545 | partial | 新幅の基本部のみ、公開長455 |
 | BN | 477 | partial | 成績配列の一部のみ、公開長387 |
 | HN | 251 | current-shape | currentのみ、全フィールドの現行位置と長さ/CRLFを厳密検査 |
-| SK | 208 | partial | 14件血統の1件のみ、公開長78 |
+| SK | 208 | current-shape | currentのみ、14件血統と長さ/CRLFを厳密検査 |
 | CK | 6870 | byte-bug | current offsetだが馬名後の全項目がずれる |
 | RC | 501 | partial | 3頭ブロックを途中で終了、公開長241 |
 | HC | 60 | current-shape / weak gate | 現行末尾まで |
@@ -295,7 +295,7 @@ skip の扱いに関する実運用上の質問が繰り返されている:
 | WF | 7215 | current-shape | full配列を展開 |
 | JG | 80 | current-shape / weak gate | 現行末尾まで |
 | WC | 105 | current-shape / delimiter caveat | numeric中心、現行末尾まで |
-| WH | 847 | wrong | 40byteの天候・馬場変更構造 |
+| WH | 847 | current-shape | 18頭を全展開し、現行長/CRLFを厳密検査 |
 | WE | 42 | current-shape / delimiter caveat | 現行末尾まで |
 | AV | 78 | current-shape | byte slice override |
 | JC | 161 | byte-bug | 馬名/騎手名後の項目がずれる |
@@ -442,7 +442,7 @@ findings はこの出力だけではなく個別に再現したものに限定�
    847byteと18頭配列を実装し、NL/RT schema を展開する。40byte record が受理される現状を
    red-first で固定し、WE と WH を別契約にする。
 4. **全38種の現行 layout/schema 再生成**
-   12 partial record、HN、RA 配列を公式 Excel から再実装する。偽 delimiter とDB再構築 fixture
+   残る10 partial recordを公式 Excel から再実装する。偽 delimiter とDB再構築 fixture
    を公式raw扱いしない。
 5. **2023 generation boundary**
    staff 推奨の new-only rebuild 方針を維持し、連結 token、cache、raw import の全入口で旧物理

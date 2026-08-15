@@ -77,6 +77,7 @@ JRAVAN_TO_JLTSQL: Dict[str, str] = {
     "TENKO_BABA": "NL_WE",  # 天候馬場状態
     "KISYU_CHANGE": "NL_JC",  # 騎手変更
     "HASSOU_JIKOKU_CHANGE": "NL_TC",  # 発走時刻変更
+    "SANKU": "NL_SK",  # 産駒マスタ
 }
 
 # レコード種別コード → テーブル名 (Record Type Code -> Table Name)

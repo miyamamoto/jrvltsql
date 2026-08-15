@@ -66,7 +66,7 @@ PARSER_MAP = {
     "RA": (RAParser, 856),
     "RC": (RCParser, 241),
     "SE": (SEParser, 463),
-    "SK": (SKParser, 78),
+    "SK": (SKParser, 78),  # Reconstructed fixture contains only the old 78-byte projection.
     "TK": (TKParser, 727),
     "TM": (TMParser, 39),
     "WF": (WFParser, 169),  # Historical fixture uses the obsolete compact layout.
@@ -91,6 +91,12 @@ def load_fixture_records(record_type, record_length):
             # checks while the tail is covered by a dedicated 555-byte test.
             if record_type == "SE" and len(chunk) == 463:
                 chunk = chunk.ljust(SEParser.RECORD_LENGTH - 2, b" ") + b"\r\n"
+            if record_type == "SK" and len(chunk) == 78:
+                # This fixture was reconstructed from stored columns through
+                # the obsolete one-pedigree parser. Preserve its core values
+                # as a synthetic current-shape record; the exact 208-byte
+                # contract is covered by test_sk_parser_layout.py.
+                chunk = chunk[:76].ljust(SKParser.RECORD_LENGTH - 2, b" ") + b"\r\n"
             if record_type == "WF" and len(chunk) == 169:
                 chunk = chunk[:11].ljust(WFParser.RECORD_LENGTH - 2, b" ") + b"\r\n"
             records.append(chunk)
@@ -296,4 +302,3 @@ def test_se_storage_schemas_keep_all_three_opponent_slots():
         ):
             assert f"{column} TEXT" in schema
         assert "Reserved_462" not in schema
-

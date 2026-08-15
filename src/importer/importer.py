@@ -293,7 +293,7 @@ class DataImporter:
             "BR": "NL_BR",  # 繁殖馬マスター
             "BN": "NL_BN",  # 生産者マスター
             "HN": "NL_HN",  # 繁殖馬マスター
-            "SK": "NL_SK",  # 競走馬見積もり
+            "SK": "NL_SK",  # 産駒マスター
             "RC": "NL_RC",  # レースコメント
             "CC": "NL_CC",  # コース変更
             "TC": "NL_TC",  # タイムコメント

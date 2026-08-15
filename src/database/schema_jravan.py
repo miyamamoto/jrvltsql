@@ -1695,6 +1695,7 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             RecordSpec                     CHAR(2)             ,  -- レコード種別ID
             DataKubun                      CHAR(1)             ,  -- データ区分
             MakeDate                       DATE                ,  -- YYYYMMDD形式の日付
+            KettoNum                       VARCHAR(10)         ,  -- 血統登録番号
             BirthDate                      DATE                ,  -- 生年月日
             SexCD                          VARCHAR(1)          ,  -- 文字列(1)
             HinsyuCD                       VARCHAR(1)          ,  -- 文字列(1)
@@ -1715,7 +1716,9 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             FMMNum                         VARCHAR(10)         ,  -- 文字列(10)
             MFFNum                         VARCHAR(10)         ,  -- 文字列(10)
             MFMNum                         VARCHAR(10)         ,  -- 文字列(10)
-            MMFNum                         VARCHAR(10)           -- 文字列(10)
+            MMFNum                         VARCHAR(10)         ,  -- 文字列(10)
+            MMMNum                         VARCHAR(10)         ,  -- 文字列(10)
+            PRIMARY KEY (KettoNum)
         )
     """,
     "SCHEDULE": """

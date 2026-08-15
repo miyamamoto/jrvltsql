@@ -17,12 +17,28 @@ class SKParser:
     SKレコードパーサー
 
     １９．産駒マスタ
-    レコード長: 78 bytes
+    レコード長: 208 bytes
     VBテーブル名: SANKU
     """
 
     RECORD_TYPE = "SK"
-    RECORD_LENGTH = 78
+    RECORD_LENGTH = 208
+    PEDIGREE_FIELDS = (
+        "FNum",
+        "MNum",
+        "FFNum",
+        "FMNum",
+        "MFNum",
+        "MMNum",
+        "FFFNum",
+        "FFMNum",
+        "FMFNum",
+        "FMMNum",
+        "MFFNum",
+        "MFMNum",
+        "MMFNum",
+        "MMMNum",
+    )
 
     def __init__(self):
         self.logger = get_logger(__name__)
@@ -47,12 +63,14 @@ class SKParser:
             フィールド名をキーとした辞書、エラー時はNone
         """
         try:
-            # レコード長チェック
-            if len(data) < self.RECORD_LENGTH:
-                self.logger.warning(
-                    f"SKレコード長不足: expected={self.RECORD_LENGTH}, actual={len(data)}"
-                )
-                # return None  # 短いレコードも許容する場合はコメントアウト
+            # 現行仕様の物理レコードだけを受理する。旧178バイト形を
+            # 現行offsetで誤読せず、末尾区切りも厳密に検査する。
+            if len(data) != self.RECORD_LENGTH:
+                self.logger.warning(f"SKレコード長不正: expected={self.RECORD_LENGTH}, actual={len(data)}")
+                return None
+            if data[206:208] != b"\r\n":
+                self.logger.warning("SKレコード区切り不正")
+                return None
 
             # フィールド抽出
             result = {}
@@ -93,11 +111,13 @@ class SKParser:
             # 12. 産地名 (位置:47, 長さ:20)
             result["SanchiName"] = self.decode_field(data[46:66])
 
-            # 13. 父繁殖登録番号 (位置:67, 長さ:10)
-            result["FNum"] = self.decode_field(data[66:76])
+            # 13. 3代血統 繁殖登録番号 (位置:67, 14回, 長さ:10)
+            for index, field_name in enumerate(self.PEDIGREE_FIELDS):
+                start = 66 + 10 * index
+                result[field_name] = self.decode_field(data[start : start + 10])
 
-            # 14. レコード区切 (位置:77, 長さ:2)
-            result["RecordDelimiter"] = self.decode_field(data[76:78])
+            # 14. レコード区切 (位置:207, 長さ:2)
+            result["RecordDelimiter"] = self.decode_field(data[206:208])
 
             return result
 
