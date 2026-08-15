@@ -13,7 +13,9 @@ from src.database.base import BaseDatabase, DatabaseError
 from src.database.migration import SchemaMigrationError
 from src.importer.importer import (
     _PREPARED_CH_SEISEKI_ROWS_KEY,
+    _delete_dm_race_rows,
     _expanded_record_fingerprint,
+    _is_dm_race_delete,
     insert_ch_coupled_batch,
     prepare_ch_coupled_rows,
     resolve_standard_table_name,
@@ -179,7 +181,7 @@ class OptimizedDataImporter:
     @classmethod
     def _record_for_table(cls, record: dict, table_name: str) -> dict:
         """Return the parser representation required by the target schema."""
-        if table_name == "BATAIJYU":
+        if table_name in {"BATAIJYU", "MINING"}:
             wide_record = record.get("_wide_record")
             if isinstance(wide_record, dict):
                 return cls._clean_record(wide_record)
@@ -259,6 +261,23 @@ class OptimizedDataImporter:
                         record_type=record_type,
                     )
                     self._records_failed += 1
+                    continue
+
+                if _is_dm_race_delete(record, table_name):
+                    pending = batch_buffers.setdefault(table_name, [])
+                    if pending:
+                        self._flush_batch_optimized(
+                            table_name,
+                            pending,
+                            commit_batch=auto_commit,
+                        )
+                        batch_buffers[table_name] = []
+                    _delete_dm_race_rows(self.database, record, table_name)
+                    self._records_imported += 1
+                    self._batches_processed += 1
+                    if auto_commit:
+                        self.database.commit()
+                    last_expanded_record_fingerprint = None
                     continue
 
                 fingerprint = _expanded_record_fingerprint(record, table_name)

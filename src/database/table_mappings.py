@@ -62,7 +62,7 @@ JRAVAN_TO_JLTSQL: Dict[str, str] = {
     "COMMENT": "NL_TC",       # コメント (Training Comment)
     "CHOKYO_DETAIL": "NL_CK", # 調教詳細 (Training Details)
     "TIME_MASTER": "NL_TM",   # タイムマスタ (Time Master)
-    "DATA_MASTER": "NL_DM",   # データマスタ (Data Master)
+    "DATA_MASTER": "NL_DM",   # タイム型マイニング予想 (legacy alias)
     "WIN5": "NL_WF",          # WIN5
     "COURSE_CHANGE": "NL_CC", # コース変更 (Course Change)
     "HAICHI": "NL_HC",        # 坂路調教 (legacy alias)
@@ -80,6 +80,7 @@ JRAVAN_TO_JLTSQL: Dict[str, str] = {
     "HASSOU_JIKOKU_CHANGE": "NL_TC",  # 発走時刻変更
     "SANKU": "NL_SK",  # 産駒マスタ
     "SEISAN": "NL_BR",  # 生産者マスタ
+    "MINING": "NL_DM",  # タイム型データマイニング予想
 }
 
 # レコード種別コード → テーブル名 (Record Type Code -> Table Name)
@@ -115,7 +116,7 @@ RECORD_TYPE_TO_TABLE: Dict[str, str] = {
     "TC": "NL_TC",  # コメント (Training Comment)
     "CK": "NL_CK",  # 調教詳細 (Training Details)
     "TM": "NL_TM",  # タイムマスタ (Time Master)
-    "DM": "NL_DM",  # データマスタ (Data Master)
+    "DM": "NL_DM",  # タイム型データマイニング予想
     "WF": "NL_WF",  # WIN5
     "CC": "NL_CC",  # コース変更 (Course Change)
     "HC": "NL_HC",  # 坂路調教 (Hill Training)

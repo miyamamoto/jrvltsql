@@ -48,7 +48,7 @@ PARSER_MAP = {
     "BN": (BNParser, BNParser.RECORD_LENGTH),
     "BR": (BRParser, BRParser.RECORD_LENGTH),
     "CH": (CHParser, CHParser.RECORD_LENGTH),
-    "DM": (DMParser, 48),
+    "DM": (DMParser, DMParser.RECORD_LENGTH),
     "H1": (H1Parser, 317),   # Fixture files use flat format (317 bytes)
     "H6": (H6Parser, 78),    # Fixture files use flat format (78 bytes)
     "HC": (HCParser, 60),
@@ -72,8 +72,15 @@ PARSER_MAP = {
     "WF": (WFParser, 169),  # Historical fixture uses the obsolete compact layout.
     "YS": (YSParser, 146),
 }
-EXPANDED_RECORD_TYPES = {"O1", "O2", "O3", "O4", "O5", "O6"}
-LEGACY_RECONSTRUCTED_LENGTHS = {"BN": 387, "BR": 455, "CH": 592, "RA": 856, "SK": 78}
+EXPANDED_RECORD_TYPES = {"DM", "O1", "O2", "O3", "O4", "O5", "O6"}
+LEGACY_RECONSTRUCTED_LENGTHS = {
+    "BN": 387,
+    "BR": 455,
+    "CH": 592,
+    "DM": 48,
+    "RA": 856,
+    "SK": 78,
+}
 
 
 def _has_complete_fixture_records(data, record_type, record_length):
@@ -122,6 +129,12 @@ def load_fixture_records(record_type, record_length):
                 # whose result bytes start where current recent-win block 2
                 # begins. Preserve only the position-compatible 378-byte prefix.
                 chunk = chunk[:378].ljust(CHParser.RECORD_LENGTH - 2, b" ") + b"\r\n"
+            if record_type == "DM" and len(chunk) == 48:
+                # The historical fixture contains the correct header and first
+                # 15-byte horse block, but was reconstructed to the obsolete
+                # 48-byte parser length. Fill the remaining 17 official slots
+                # with their documented space initial value.
+                chunk = chunk[:46].ljust(DMParser.RECORD_LENGTH - 2, b" ") + b"\r\n"
             if record_type == "SK" and len(chunk) == 78:
                 # This fixture was reconstructed from stored columns through
                 # the obsolete one-pedigree parser. Preserve its core values

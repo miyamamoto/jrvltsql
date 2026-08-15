@@ -651,7 +651,7 @@ class RealtimeUpdater:
         expanded_tables = {
             "RT_H1", "RT_H6",
             "RT_O1", "RT_O2", "RT_O3", "RT_O4", "RT_O5", "RT_O6",
-            "RT_WH",
+            "RT_WH", "RT_DM",
         }
         ts_tables = {
             "TS_O1", "TS_O2", "TS_O3", "TS_O4", "TS_O5", "TS_O6",

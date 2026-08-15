@@ -295,7 +295,7 @@ skip の扱いに関する実運用上の質問が繰り返されている:
 | YS | 382 | partial | 競走案内3件の一部、公開長146 |
 | BT | 6889 | current-shape / weak gate | byte-first修正済み、旧長の明示拒否なし |
 | CS | 6829 | current-shape / delimiter caveat | 説明が実質末尾、BaseParserでCRLF検査不能 |
-| DM | 303 | partial | 18頭中1頭、公開長48 |
+| DM | 303 | current-shape / expanded | 18頭をnative 18行、standard `MINING` 1行へ保存。厳密長/type/CRLF、訂正upsert、0削除を検査 |
 | TM | 141 | partial | 18頭中1頭、公開長39 |
 | WF | 7215 | current-shape | full配列を展開 |
 | JG | 80 | current-shape / weak gate | 現行末尾まで |

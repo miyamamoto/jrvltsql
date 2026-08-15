@@ -1002,77 +1002,78 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             RaceNum                        SMALLINT            ,  -- レース番号
             MakeHM                         VARCHAR(4)          ,  -- 文字列(4)
             Umaban1                        SMALLINT            ,  -- 馬番
-            DMTime1                        DECIMAL(6,1)        ,  -- DMタイム
+            DMTime1                        VARCHAR(5)          ,  -- DMタイム(9分99秒99)
             DMGosaP1                       VARCHAR(4)          ,  -- 文字列(4)
             DMGosaM1                       VARCHAR(4)          ,  -- 文字列(4)
             Umaban2                        SMALLINT            ,  -- 馬番
-            DMTime2                        DECIMAL(6,1)        ,  -- DMタイム
+            DMTime2                        VARCHAR(5)          ,  -- DMタイム(9分99秒99)
             DMGosaP2                       VARCHAR(4)          ,  -- 文字列(4)
             DMGosaM2                       VARCHAR(4)          ,  -- 文字列(4)
             Umaban3                        SMALLINT            ,  -- 馬番
-            DMTime3                        DECIMAL(6,1)        ,  -- DMタイム
+            DMTime3                        VARCHAR(5)          ,  -- DMタイム(9分99秒99)
             DMGosaP3                       VARCHAR(4)          ,  -- 文字列(4)
             DMGosaM3                       VARCHAR(4)          ,  -- 文字列(4)
             Umaban4                        SMALLINT            ,  -- 馬番
-            DMTime4                        DECIMAL(6,1)        ,  -- DMタイム
+            DMTime4                        VARCHAR(5)          ,  -- DMタイム(9分99秒99)
             DMGosaP4                       VARCHAR(4)          ,  -- 文字列(4)
             DMGosaM4                       VARCHAR(4)          ,  -- 文字列(4)
             Umaban5                        SMALLINT            ,  -- 馬番
-            DMTime5                        DECIMAL(6,1)        ,  -- DMタイム
+            DMTime5                        VARCHAR(5)          ,  -- DMタイム(9分99秒99)
             DMGosaP5                       VARCHAR(4)          ,  -- 文字列(4)
             DMGosaM5                       VARCHAR(4)          ,  -- 文字列(4)
             Umaban6                        SMALLINT            ,  -- 馬番
-            DMTime6                        DECIMAL(6,1)        ,  -- DMタイム
+            DMTime6                        VARCHAR(5)          ,  -- DMタイム(9分99秒99)
             DMGosaP6                       VARCHAR(4)          ,  -- 文字列(4)
             DMGosaM6                       VARCHAR(4)          ,  -- 文字列(4)
             Umaban7                        SMALLINT            ,  -- 馬番
-            DMTime7                        DECIMAL(6,1)        ,  -- DMタイム
+            DMTime7                        VARCHAR(5)          ,  -- DMタイム(9分99秒99)
             DMGosaP7                       VARCHAR(4)          ,  -- 文字列(4)
             DMGosaM7                       VARCHAR(4)          ,  -- 文字列(4)
             Umaban8                        SMALLINT            ,  -- 馬番
-            DMTime8                        DECIMAL(6,1)        ,  -- DMタイム
+            DMTime8                        VARCHAR(5)          ,  -- DMタイム(9分99秒99)
             DMGosaP8                       VARCHAR(4)          ,  -- 文字列(4)
             DMGosaM8                       VARCHAR(4)          ,  -- 文字列(4)
             Umaban9                        SMALLINT            ,  -- 馬番
-            DMTime9                        DECIMAL(6,1)        ,  -- DMタイム
+            DMTime9                        VARCHAR(5)          ,  -- DMタイム(9分99秒99)
             DMGosaP9                       VARCHAR(4)          ,  -- 文字列(4)
             DMGosaM9                       VARCHAR(4)          ,  -- 文字列(4)
             Umaban10                       SMALLINT            ,  -- 馬番
-            DMTime10                       DECIMAL(6,1)        ,  -- DMタイム
+            DMTime10                       VARCHAR(5)          ,  -- DMタイム(9分99秒99)
             DMGosaP10                      VARCHAR(4)          ,  -- 文字列(4)
             DMGosaM10                      VARCHAR(4)          ,  -- 文字列(4)
             Umaban11                       SMALLINT            ,  -- 馬番
-            DMTime11                       DECIMAL(6,1)        ,  -- DMタイム
+            DMTime11                       VARCHAR(5)          ,  -- DMタイム(9分99秒99)
             DMGosaP11                      VARCHAR(4)          ,  -- 文字列(4)
             DMGosaM11                      VARCHAR(4)          ,  -- 文字列(4)
             Umaban12                       SMALLINT            ,  -- 馬番
-            DMTime12                       DECIMAL(6,1)        ,  -- DMタイム
+            DMTime12                       VARCHAR(5)          ,  -- DMタイム(9分99秒99)
             DMGosaP12                      VARCHAR(4)          ,  -- 文字列(4)
             DMGosaM12                      VARCHAR(4)          ,  -- 文字列(4)
             Umaban13                       SMALLINT            ,  -- 馬番
-            DMTime13                       DECIMAL(6,1)        ,  -- DMタイム
+            DMTime13                       VARCHAR(5)          ,  -- DMタイム(9分99秒99)
             DMGosaP13                      VARCHAR(4)          ,  -- 文字列(4)
             DMGosaM13                      VARCHAR(4)          ,  -- 文字列(4)
             Umaban14                       SMALLINT            ,  -- 馬番
-            DMTime14                       DECIMAL(6,1)        ,  -- DMタイム
+            DMTime14                       VARCHAR(5)          ,  -- DMタイム(9分99秒99)
             DMGosaP14                      VARCHAR(4)          ,  -- 文字列(4)
             DMGosaM14                      VARCHAR(4)          ,  -- 文字列(4)
             Umaban15                       SMALLINT            ,  -- 馬番
-            DMTime15                       DECIMAL(6,1)        ,  -- DMタイム
+            DMTime15                       VARCHAR(5)          ,  -- DMタイム(9分99秒99)
             DMGosaP15                      VARCHAR(4)          ,  -- 文字列(4)
             DMGosaM15                      VARCHAR(4)          ,  -- 文字列(4)
             Umaban16                       SMALLINT            ,  -- 馬番
-            DMTime16                       DECIMAL(6,1)        ,  -- DMタイム
+            DMTime16                       VARCHAR(5)          ,  -- DMタイム(9分99秒99)
             DMGosaP16                      VARCHAR(4)          ,  -- 文字列(4)
             DMGosaM16                      VARCHAR(4)          ,  -- 文字列(4)
             Umaban17                       SMALLINT            ,  -- 馬番
-            DMTime17                       DECIMAL(6,1)        ,  -- DMタイム
+            DMTime17                       VARCHAR(5)          ,  -- DMタイム(9分99秒99)
             DMGosaP17                      VARCHAR(4)          ,  -- 文字列(4)
             DMGosaM17                      VARCHAR(4)          ,  -- 文字列(4)
             Umaban18                       SMALLINT            ,  -- 馬番
-            DMTime18                       DECIMAL(6,1)        ,  -- DMタイム
+            DMTime18                       VARCHAR(5)          ,  -- DMタイム(9分99秒99)
             DMGosaP18                      VARCHAR(4)          ,  -- 文字列(4)
-            DMGosaM18                      VARCHAR(4)            -- 文字列(4)
+            DMGosaM18                      VARCHAR(4)          ,  -- 文字列(4)
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
         )
     """,
     "ODDS_SANREN": """

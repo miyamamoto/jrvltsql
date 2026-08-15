@@ -970,19 +970,22 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
     "NL_DM": {
         "table_name": "NL_DM",
         "record_type": "DM",
-        "description": "騎手変更情報",
-        "purpose": "騎手の変更・乗り替わり情報を格納",
+        "description": "タイム型データマイニング予想",
+        "purpose": "公式DM予想を1レース・1馬ごとの行へ展開して格納",
         "columns": [
             {"name": "レコード種別ID", "type": "TEXT", "description": "レコード種別識別子（'DM'）", "example": "DM", "nullable": False},
+            {"name": "データ区分", "type": "TEXT", "description": "1=前日、2=当日、3=直前、7=成績、0=削除", "example": "3", "nullable": False},
             {"name": "開催年月日", "type": "TEXT", "description": "レース開催日", "example": "20240601", "nullable": False},
             {"name": "競馬場コード", "type": "TEXT", "description": "競馬場コード", "example": "05", "nullable": False},
+            {"name": "開催回", "type": "INTEGER", "description": "第N回開催", "example": "3", "nullable": False},
+            {"name": "開催日目", "type": "INTEGER", "description": "N日目", "example": "8", "nullable": False},
             {"name": "レース番号", "type": "TEXT", "description": "レース番号", "example": "11", "nullable": False},
             {"name": "馬番", "type": "TEXT", "description": "馬番", "example": "05", "nullable": False},
-            {"name": "変更後騎手コード", "type": "TEXT", "description": "変更後の騎手コード", "example": "01234", "nullable": True},
-            {"name": "変更前騎手コード", "type": "TEXT", "description": "変更前の騎手コード", "example": "05678", "nullable": True},
-            {"name": "マイニング予想", "type": "TEXT", "description": "AI予想データ（ネスト構造）", "example": "...", "nullable": True}
+            {"name": "予想走破タイム", "type": "TEXT", "description": "公式5桁表現（9分99秒99）", "example": "10501", "nullable": False},
+            {"name": "予想誤差＋", "type": "TEXT", "description": "早くなる方向の百分秒4桁", "example": "0101", "nullable": False},
+            {"name": "予想誤差－", "type": "TEXT", "description": "遅くなる方向の百分秒4桁", "example": "0201", "nullable": False}
         ],
-        "primary_key": ["開催年月日", "競馬場コード", "レース番号", "馬番"],
+        "primary_key": ["開催年月日", "競馬場コード", "開催回", "開催日目", "レース番号", "馬番"],
         "indexes": ["開催年月日"]
     },
 
@@ -1384,17 +1387,22 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
     "RT_DM": {
         "table_name": "RT_DM",
         "record_type": "DM",
-        "description": "騎手変更情報（速報）",
-        "purpose": "リアルタイムでの騎手変更情報を格納（NL_DMと同構造）",
+        "description": "タイム型データマイニング予想（速報）",
+        "purpose": "0B13の公式DM予想を1レース・1馬ごとの行へ展開して格納",
         "columns": [
             {"name": "レコード種別ID", "type": "TEXT", "description": "レコード種別識別子（'DM'）", "example": "DM", "nullable": False},
+            {"name": "データ区分", "type": "TEXT", "description": "1=前日、2=当日、3=直前、0=削除", "example": "3", "nullable": False},
             {"name": "開催年月日", "type": "TEXT", "description": "レース開催日", "example": "20240601", "nullable": False},
             {"name": "競馬場コード", "type": "TEXT", "description": "競馬場コード", "example": "05", "nullable": False},
+            {"name": "開催回", "type": "INTEGER", "description": "第N回開催", "example": "3", "nullable": False},
+            {"name": "開催日目", "type": "INTEGER", "description": "N日目", "example": "8", "nullable": False},
             {"name": "レース番号", "type": "TEXT", "description": "レース番号", "example": "11", "nullable": False},
             {"name": "馬番", "type": "TEXT", "description": "馬番", "example": "05", "nullable": False},
-            {"name": "変更後騎手コード", "type": "TEXT", "description": "変更後の騎手コード", "example": "01234", "nullable": True}
+            {"name": "予想走破タイム", "type": "TEXT", "description": "公式5桁表現（9分99秒99）", "example": "10501", "nullable": False},
+            {"name": "予想誤差＋", "type": "TEXT", "description": "早くなる方向の百分秒4桁", "example": "0101", "nullable": False},
+            {"name": "予想誤差－", "type": "TEXT", "description": "遅くなる方向の百分秒4桁", "example": "0201", "nullable": False}
         ],
-        "primary_key": ["開催年月日", "競馬場コード", "レース番号", "馬番"],
+        "primary_key": ["開催年月日", "競馬場コード", "開催回", "開催日目", "レース番号", "馬番"],
         "indexes": ["開催年月日"]
     },
 

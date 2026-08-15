@@ -228,7 +228,7 @@ class TestAllParsersBasic:
     """Basic tests for all 41 parsers."""
 
     RECORD_LENGTHS = {
-        'BN': 477, 'BR': 545, 'CH': 3862, 'DM': 48,
+        'BN': 477, 'BR': 545, 'CH': 3862, 'DM': 303,
         'H1': 28955, 'H6': 102890, 'HC': 60, 'HN': 251, 'HR': 719,
         'HS': 200, 'HY': 123,
         'JG': 80, 'KS': 772,

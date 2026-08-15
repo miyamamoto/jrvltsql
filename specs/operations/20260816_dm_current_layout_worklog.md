@@ -118,16 +118,91 @@
 - Do not merge on a failed executable check, unresolved actionable finding,
   unresolved review thread, base/head drift, or dirty worktree.
 
+## Red-first regression evidence
+
+- Before changing production code, added `tests/test_dm_official_contract.py`
+  against base implementation commit
+  `be480c28f8ee394ea604ebefe50a52af982838c4` (the worklog-start commit).
+- Command:
+  `pytest -q -p no:cov -o addopts='' --basetemp=/tmp/jltsql-dm-red tests/test_dm_official_contract.py`
+- Result: exit 1, `27 failed in 0.61s`; there were no passing cases. The first
+  failure was the explicit physical-length contract
+  `assert DMParser.RECORD_LENGTH == 303` with actual value 48. Subsequent
+  failures demonstrated acceptance of truncated/corrupt records, one-entry
+  parsing, absent expanded revision/delete semantics, `MINING` not being the
+  canonical standard mapping, and the missing `MINING` primary key.
+- This is the required proof that the new parser/storage/migration checks can
+  reject the old unsafe behavior. The paired green run remains required after
+  implementation.
+- A second focused red run covered two contract details discovered while
+  closing the initial failures. Official format 28 says a delete record's
+  repeated fields use their `sp` initial value, and SDK 5.0.0 exposes each
+  five-byte `DMTime` as a string. Before the corresponding implementation,
+  the three focused cases failed: a populated `DataKubun=0` record was
+  accepted, `MINING.DMTime1` resolved as `REAL`, and the stored value `10501`
+  was changed to `1050.1`. Command:
+  `pytest -q -p no:cov -o addopts='' --basetemp=/tmp/jltsql-dm-red2`
+  with the three named DM tests; result exit 1, `3 failed in 0.25s`.
+- After implementation, the complete new contract module passed with
+  `28 passed in 0.58s` using
+  `pytest -q -p no:cov -o addopts='' --basetemp=/tmp/jltsql-dm-green2
+  tests/test_dm_official_contract.py`.
+- Before adding the legacy-name migration gate, a paired standard-mode test
+  against a database containing only `DATA_MASTER` failed for both importers:
+  neither raised, and each fell through to a missing-`MINING` insert/fallback.
+  Command targeted
+  `test_dm_standard_import_refuses_legacy_data_master_without_row_loss`;
+  result exit 1, `2 failed in 0.27s`. This proves the new fail-closed gate is
+  not a vacuous check.
+
+## Implementation and validation state
+
+- Changed the parser to require exactly 303 bytes and CR/LF, validate the
+  DM-specific `DataKubun` domain `0/1/2/3/7`, validate fixed-width numeric
+  header/prediction fields, reject duplicate/out-of-range horses and malformed
+  blank slots, and expand all populated slots with one shared `_wide_record`.
+- Native `NL_DM`/`RT_DM` now receive one row per populated horse. Standard mode
+  canonically maps `DM` to one keyed `MINING` wide row. The standard DM time
+  columns now preserve SDK 5.0.0's five-byte string instead of applying the
+  previous divide-by-ten numeric conversion.
+- Both accumulated importers flush pending same-table rows before a
+  `DataKubun=0` race delete, preserve caller-owned transaction control, and
+  reset expanded-record deduplication state after the delete. Realtime deletes
+  use the same six race keys before requiring `Umaban`.
+- Standard-mode migration refuses a keyless `MINING`, numeric DM time columns,
+  and legacy-only `DATA_MASTER`; tests verify pre-existing rows survive all
+  three refusals.
+- Updated the current official compatibility audit, public data-support text,
+  DM schema metadata, current parser fixtures, and parser compatibility lengths.
+- Focused SQLite/parser/realtime run:
+  `823 passed, 3 subtests passed in 1.50s`. The later expanded focused run,
+  including metadata and all migration refusals, passed with
+  `851 passed, 6 skipped, 3 subtests passed in 2.09s`.
+- A disposable PostgreSQL 16 container ran the complete DM contract module
+  with integration enabled: `34 passed in 0.86s`. Both importer classes stored
+  18 native rows and one standard row, replaced a revision, preserved raw
+  five-byte times, and deleted the complete race. The container was stopped
+  and removed after the run.
+- `python3 -m compileall -q src tests`, `git diff --check`, Black checks for the
+  new parser/test, and the workflow's blocking flake8 selection
+  `E9,F63,F7,F82` all passed.
+- `scripts/validate_schema_parser.py --all` remains exit 1 with its tracked
+  static-introspection limitations: it cannot infer dict-literal/list-expanded
+  output for DM, WH, odds, or votes, and still reports the pre-existing broad
+  HR/SE/WF mismatches. It is not treated as green evidence; the executable DM
+  parser/storage contracts above replace its DM false negative for this scope.
+- Current worktree is intentionally dirty with the implementation and tests;
+  no candidate commit has yet been created.
+
 ## Next safe commands
 
-1. Extract the `DM` definition from official 4.8.0.2, 4.9.0.1, and SDK 5.0.0
-   sources and compare the complete byte layout.
-2. Inspect native and standard schemas, both importers, realtime updater, and
-   existing fixtures to decide whether one 303-byte physical record should be
-   expanded into up to 18 logical rows on all paths.
-3. Recheck official/community notices for any documented DM layout transition.
-4. Add the smallest official-contract tests, run them on this base SHA, and
-   stop unless the intended regression is demonstrably red.
+1. Review the complete dirty diff and create the first candidate commit.
+2. Run focused and full suites against that immutable full SHA on Python 3.10
+   and 3.12, plus PostgreSQL and workflow-equivalent lint/static checks.
+3. Perform one aggregated Codex review of the exact candidate, repair all
+   actionable findings in one batch, and rerun only impacted evidence.
+4. Push, open the DM PR, record exact-SHA evidence, clear all review threads,
+   and merge only after the final gate is green.
 
 ## STOP conditions
 
