@@ -1,6 +1,7 @@
 """Official 1,272-byte RA parser and storage contract tests."""
 
 import re
+from itertools import pairwise
 
 import pytest
 
@@ -16,13 +17,172 @@ from src.importer.importer import DataImporter
 from src.importer.importer_optimized import OptimizedDataImporter
 from src.parser.ra_parser import RAParser
 
+RA_OFFICIAL_LENGTH = 1272
 RACE_KEY = ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum"]
+NATIVE_ALIAS_FIELDS = {
+    "LapTime",
+    "Haron3F",
+    "Haron4F",
+    "Haron3L",
+    "Haron4L",
+    "Corner",
+    "Syukaisu",
+    "TsukaJyuni",
+    "TsukaJyuni2",
+    "TsukaJyuni3",
+    "TsukaJyuni4",
+}
+
+
+def _build_official_ra_layout() -> tuple[tuple[str, int, int], ...]:
+    """Expand the official field order into independent zero-based ranges."""
+    fields: list[tuple[str, int, int]] = []
+    cursor = 0
+
+    def add(name: str, size: int) -> None:
+        nonlocal cursor
+        fields.append((name, cursor, size))
+        cursor += size
+
+    for name, size in (
+        ("RecordSpec", 2),
+        ("DataKubun", 1),
+        ("MakeDate", 8),
+        ("Year", 4),
+        ("MonthDay", 4),
+        ("JyoCD", 2),
+        ("Kaiji", 2),
+        ("Nichiji", 2),
+        ("RaceNum", 2),
+        ("YoubiCD", 1),
+        ("TokuNum", 4),
+        ("Hondai", 60),
+        ("Fukudai", 60),
+        ("Kakko", 60),
+        ("HondaiEng", 120),
+        ("FukudaiEng", 120),
+        ("KakkoEng", 120),
+        ("Ryakusyo10", 20),
+        ("Ryakusyo6", 12),
+        ("Ryakusyo3", 6),
+        ("Kubun", 1),
+        ("Nkai", 3),
+        ("GradeCD", 1),
+        ("GradeCDBefore", 1),
+        ("SyubetuCD", 2),
+        ("KigoCD", 3),
+        ("JyuryoCD", 1),
+    ):
+        add(name, size)
+    for index in range(1, 6):
+        add(f"JyokenCD{index}", 3)
+    for name, size in (
+        ("JyokenName", 60),
+        ("Kyori", 4),
+        ("KyoriBefore", 4),
+        ("TrackCD", 2),
+        ("TrackCDBefore", 2),
+        ("CourseKubunCD", 2),
+        ("CourseKubunCDBefore", 2),
+    ):
+        add(name, size)
+    for index in range(1, 8):
+        add(f"Honsyokin{index}", 8)
+    for index in range(1, 6):
+        add(f"HonsyokinBefore{index}", 8)
+    for index in range(1, 6):
+        add(f"Fukasyokin{index}", 8)
+    for index in range(1, 4):
+        add(f"FukasyokinBefore{index}", 8)
+    for name, size in (
+        ("HassoTime", 4),
+        ("HassoTimeBefore", 4),
+        ("TorokuTosu", 2),
+        ("SyussoTosu", 2),
+        ("NyusenTosu", 2),
+        ("TenkoCD", 1),
+        ("SibaBabaCD", 1),
+        ("DirtBabaCD", 1),
+    ):
+        add(name, size)
+    for index in range(1, 26):
+        add(f"LapTime{index}", 3)
+    for name, size in (
+        ("SyogaiMileTime", 4),
+        ("HaronTimeS3", 3),
+        ("HaronTimeS4", 3),
+        ("HaronTimeL3", 3),
+        ("HaronTimeL4", 3),
+    ):
+        add(name, size)
+    for index in range(1, 5):
+        add(f"Corner{index}", 1)
+        add(f"Syukaisu{index}", 1)
+        add(f"Jyuni{index}", 70)
+    add("RecordUpKubun", 1)
+    add("Crlf", 2)
+
+    assert cursor == RA_OFFICIAL_LENGTH
+    return tuple(fields)
+
+
+OFFICIAL_RA_LAYOUT = _build_official_ra_layout()
+
+
+def _base62(value: int) -> str:
+    alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+    if value < len(alphabet):
+        return alphabet[value]
+    return _base62(value // len(alphabet) - 1) + alphabet[value % len(alphabet)]
 
 
 def _put(record: bytearray, position: int, size: int, value: str) -> None:
     encoded = value.encode("cp932")
     assert len(encoded) <= size
     record[position - 1 : position - 1 + size] = encoded.ljust(size, b" ")
+
+
+def build_all_field_ra_record() -> tuple[bytes, dict[str, str]]:
+    """Fill every official field with a type-valid, offset-distinguishing value."""
+    record = bytearray(b" " * RA_OFFICIAL_LENGTH)
+    expected: dict[str, str] = {}
+    counters: dict[tuple[str, int], int] = {}
+    numeric_fields = {
+        name
+        for table_name in ("NL_RA", "RACE")
+        for name, column_type in get_table_column_types(table_name).items()
+        if column_type in {"INTEGER", "BIGINT", "REAL"}
+    }
+
+    for field_index, (name, start, size) in enumerate(OFFICIAL_RA_LAYOUT):
+        if name == "RecordSpec":
+            value = "RA"
+        elif name == "Crlf":
+            record[start : start + size] = b"\r\n"
+            expected[name] = ""
+            continue
+        elif name == "MakeDate":
+            value = "20260815"
+        elif name.startswith("Jyuni"):
+            value = f"   {field_index:02d}"
+        elif name == "HassoTime":
+            value = "1234"
+        elif name == "HassoTimeBefore":
+            value = "1235"
+        elif name in numeric_fields:
+            key = ("numeric", size)
+            counters[key] = counters.get(key, 0) + 1
+            value = str(counters[key]).zfill(size)
+        else:
+            key = ("text", size)
+            counters[key] = counters.get(key, 0) + 1
+            value = _base62(counters[key])
+            assert len(value) <= size
+
+        _put(record, start + 1, size, value)
+        expected[name] = value
+
+    return bytes(record), expected
 
 
 def build_ra_record() -> bytes:
@@ -72,13 +232,13 @@ def build_ra_record() -> bytes:
         base = 982 + 72 * index
         _put(record, base, 1, str(index + 1))
         _put(record, base + 1, 1, "1")
-        _put(record, base + 2, 70, f"0{index + 1},0{index + 2},0{index + 3}")
+        order = f"0{index + 1},0{index + 2},0{index + 3}"
+        if index == 0:
+            order = f"   {order}"
+        _put(record, base + 2, 70, order)
 
     record[1270:1272] = b"\r\n"
     return bytes(record)
-
-
-RA_OFFICIAL_LENGTH = 1272
 
 
 def _invalid_cp932_record() -> bytes:
@@ -107,12 +267,32 @@ def test_ra_parses_every_official_repeated_field() -> None:
     assert row["HaronTimeL4"] == "464"
     assert [row[f"Corner{i}"] for i in range(1, 5)] == ["1", "2", "3", "4"]
     assert [row[f"Jyuni{i}"] for i in range(1, 5)] == [
-        "01,02,03",
+        "   01,02,03",
         "02,03,04",
         "03,04,05",
         "04,05,06",
     ]
     assert row["RecordUpKubun"] == "2"
+
+
+def test_ra_parses_all_111_official_fields_at_independent_offsets() -> None:
+    record, expected = build_all_field_ra_record()
+
+    assert len(OFFICIAL_RA_LAYOUT) == 111
+    assert OFFICIAL_RA_LAYOUT[0] == ("RecordSpec", 0, 2)
+    assert OFFICIAL_RA_LAYOUT[-1] == ("Crlf", 1270, 2)
+    assert all(
+        current_start + current_size == next_start
+        for (_, current_start, current_size), (_, next_start, _) in pairwise(OFFICIAL_RA_LAYOUT)
+    )
+
+    row = RAParser().parse(record)
+
+    assert row is not None
+    assert set(row) == set(expected) | NATIVE_ALIAS_FIELDS
+    assert {name: row[name] for name in expected} == expected
+    assert row["TsukaJyuni"] == expected["Jyuni1"]
+    assert row["TsukaJyuni4"] == expected["Jyuni4"]
 
 
 @pytest.mark.parametrize(
@@ -193,6 +373,40 @@ def test_existing_keyless_standard_race_table_fails_closed_without_data_loss(tmp
     ("table_name", "use_jravan_schema"),
     (("NL_RA", False), ("RACE", True)),
 )
+def test_ra_all_business_fields_round_trip_without_null_or_text_loss(
+    tmp_path,
+    importer_class,
+    table_name,
+    use_jravan_schema,
+) -> None:
+    database = SQLiteDatabase({"path": str(tmp_path / f"all-{table_name}.db")})
+    schema = JRAVAN_SCHEMAS[table_name] if use_jravan_schema else SCHEMAS[table_name]
+    with database:
+        database.create_table(table_name, schema)
+        parsed = RAParser().parse(build_all_field_ra_record()[0])
+        assert parsed is not None
+        stats = importer_class(
+            database,
+            use_jravan_schema=use_jravan_schema,
+        ).import_records(iter([parsed]))
+        row = database.fetch_one(f"SELECT * FROM {table_name}")
+
+    assert stats["records_imported"] == 1
+    assert stats["records_failed"] == 0
+    assert row is not None
+    column_types = get_table_column_types(table_name)
+    expected_nulls = {"Crlf"} if table_name == "NL_RA" else set()
+    assert {name for name, value in row.items() if value is None} == expected_nulls
+    for name, column_type in column_types.items():
+        if column_type == "TEXT" and name not in expected_nulls:
+            assert str(row[name]) == parsed[name], name
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+@pytest.mark.parametrize(
+    ("table_name", "use_jravan_schema"),
+    (("NL_RA", False), ("RACE", True)),
+)
 def test_ra_full_record_round_trips_without_array_loss(
     tmp_path,
     importer_class,
@@ -233,11 +447,11 @@ def test_ra_full_record_round_trips_without_array_loss(
         assert row["SyogaiMileTime"] == 157.2
         assert row["HaronTimeL4"] == 46.4
         assert row["Corner1"] == "1"
-        assert row["Jyuni1"] == "01,02,03"
+        assert row["Jyuni1"] == "   01,02,03"
         assert row["Jyuni4"] == "04,05,06"
     else:
         assert row["SyogaiMileTime"] == "1572"
         assert row["Haron4L"] == 46.4
         assert row["Corner"] == "1"
-        assert row["TsukaJyuni"] == "01,02,03"
+        assert row["TsukaJyuni"] == "   01,02,03"
         assert row["TsukaJyuni4"] == "04,05,06"

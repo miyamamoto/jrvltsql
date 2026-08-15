@@ -111,7 +111,7 @@ TK 727/21657  TM 39/141     YS 146/382
 固定する schema になっている。
 
 RAはこのイテレーションで4.8.0.2、4.9.0.1、SDK 5.0.0に共通する1272バイトへ統一した。
-賞金4配列、25ラップ、4コーナー、更新区分、CRLFを全展開し、native/standard schemaと
+賞金4配列、25ラップ、4コーナー、更新区分を全展開し、CRLFを厳密検証して、native/standard schemaと
 両importerのround-tripを固定した。旧856バイトfixtureは公式rawとは扱わず、位置互換な
 先頭713バイトだけをcurrent shapeへ合成するrepository regressionに限定した。
 

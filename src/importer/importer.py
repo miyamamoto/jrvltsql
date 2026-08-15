@@ -123,6 +123,22 @@ CANONICAL_SE_FIELDS = frozenset(
     ]
 )
 
+# RA corner-order fields use three leading spaces as a provider-defined marker
+# for horses that did not pass the corner. Only right-side record padding may
+# be removed from these fields.
+LEADING_SPACE_SIGNIFICANT_FIELDS = frozenset(
+    [
+        "Jyuni1",
+        "Jyuni2",
+        "Jyuni3",
+        "Jyuni4",
+        "TsukaJyuni",
+        "TsukaJyuni2",
+        "TsukaJyuni3",
+        "TsukaJyuni4",
+    ]
+)
+
 # キャッシュ（フィールド名 → 10で割るべきか）
 _divide_cache: dict = {}
 
@@ -228,7 +244,11 @@ def convert_record_types(record: dict, table_name: str) -> dict:
 
             else:
                 if isinstance(value, str):
-                    converted[field_name] = value.strip() if value.strip() else None
+                    if field_name in LEADING_SPACE_SIGNIFICANT_FIELDS:
+                        normalized = value.rstrip(" ")
+                    else:
+                        normalized = value.strip()
+                    converted[field_name] = normalized if normalized else None
                 else:
                     converted[field_name] = str(value) if value is not None else None
 

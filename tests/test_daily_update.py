@@ -133,7 +133,7 @@ def _build_rt_ra_record() -> bytes:
     data[25:27] = b"11"
     data[873:877] = b"1545"  # extended-layout HassoTime
     corner_sets = [
-        (b"1", b"1", b"02,04,06"),
+        (b"1", b"1", b"   02,04,06"),
         (b"2", b"1", b"04,02,06"),
         (b"3", b"1", b"06,02,04"),
         (b"4", b"1", b"01,02,03"),
@@ -184,7 +184,8 @@ def test_sync_realtime_spec_imports_speed_report_records(rt_database):
     rows = rt_database.fetch_all("SELECT * FROM RT_RA")
     assert len(rows) == 1
     row = rows[0]
-    assert row["TsukaJyuni"] == "02,04,06"
+    assert row["Jyuni1"] == "   02,04,06"
+    assert row["TsukaJyuni"] == "   02,04,06"
     assert row["Corner4"] == "4"
     assert row["TsukaJyuni4"] == "01,02,03"
     assert row["HassoTime"] == "1545"

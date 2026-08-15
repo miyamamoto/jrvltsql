@@ -19,6 +19,11 @@ class RAParser:
         """Strictly decode one byte-sliced CP932 field and trim padding."""
         return data.decode(ENCODING_JVDATA).strip()
 
+    @staticmethod
+    def decode_corner_order(data: bytes) -> str:
+        """Decode corner order while preserving the official leading marker."""
+        return data.decode(ENCODING_JVDATA).rstrip(" ")
+
     def parse(self, data: bytes) -> dict[str, str] | None:
         """Return a complete RA field dictionary, or ``None`` when invalid."""
         try:
@@ -139,16 +144,16 @@ class RAParser:
 
             result["Corner1"] = self.decode_field(data[981:982])
             result["Syukaisu1"] = self.decode_field(data[982:983])
-            result["Jyuni1"] = self.decode_field(data[983:1053])
+            result["Jyuni1"] = self.decode_corner_order(data[983:1053])
             result["Corner2"] = self.decode_field(data[1053:1054])
             result["Syukaisu2"] = self.decode_field(data[1054:1055])
-            result["Jyuni2"] = self.decode_field(data[1055:1125])
+            result["Jyuni2"] = self.decode_corner_order(data[1055:1125])
             result["Corner3"] = self.decode_field(data[1125:1126])
             result["Syukaisu3"] = self.decode_field(data[1126:1127])
-            result["Jyuni3"] = self.decode_field(data[1127:1197])
+            result["Jyuni3"] = self.decode_corner_order(data[1127:1197])
             result["Corner4"] = self.decode_field(data[1197:1198])
             result["Syukaisu4"] = self.decode_field(data[1198:1199])
-            result["Jyuni4"] = self.decode_field(data[1199:1269])
+            result["Jyuni4"] = self.decode_corner_order(data[1199:1269])
             result["RecordUpKubun"] = self.decode_field(data[1269:1270])
             result["Crlf"] = self.decode_field(data[1270:1272])
 

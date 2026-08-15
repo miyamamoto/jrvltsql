@@ -5,7 +5,8 @@
 - Started: 2026-08-15 JST
 - Objective: replace the non-official 856-byte RA compatibility contract with
   the complete official 1,272-byte race-detail layout without dropping prize,
-  lap-time, corner, update, or delimiter fields.
+  lap-time, corner, or update fields, while strictly validating its framing
+  delimiter.
 - Minimum scope: `RA` parser, directly coupled native/standard schemas,
   fixtures and generators, importer/storage behavior, exact-length and CRLF
   rejection, compatibility audit reconciliation, focused/full tests, Codex
@@ -55,6 +56,8 @@
 - Accept exactly 1,272 bytes with `RA` at bytes 1-2 and CRLF at bytes
   1,271-1,272. Reject 856-byte, truncated, overlong, wrong-type, and bad-CRLF
   inputs; unknown or unreadable input is not a successful parse.
+- Preserve the official three-leading-space marker in each corner-order field;
+  it identifies horses that did not pass the corner and is not record padding.
 - Preserve documented legacy output aliases only where existing callers need
   them, while emitting every official array field so both native and standard
   storage retain all values.
@@ -135,7 +138,7 @@
   is nine. Those older authenticated calls remain insufficient for the
   user-mandated final release-candidate fresh acquisition gate.
 
-## Current validation
+## Pre-review candidate validation
 
 - The expanded red-first contract is now green: `13 passed`, including the
   existing keyless-standard-table no-data-loss failure contract.
@@ -160,9 +163,48 @@
 - Worktree remains dirty only with the intended iteration changes. No release
   or external data operation has been performed in this iteration.
 
+## Independent review and repair batch
+
+- Two independent Codex reviewers inspected immutable candidate
+  `6c83b429639609787b07b13171fa76977b7075d4`. Both returned `NEEDS_CHANGES`:
+  the shared field decoder and TEXT conversion removed the official three-space
+  non-passage marker from `Jyuni1..4` and `TsukaJyuni*`, and the tests did not
+  independently populate all 111 official fields.
+- Red-first additions were run before the product repair. The focused command
+  failed `7 failed, 12 passed`: parser, both importers, native/standard storage,
+  and realtime storage all returned ordinary order text instead of the
+  expected three-space marker.
+- The repair uses right-trim-only decoding/conversion for the eight affected
+  official/compatibility names. Both optimized and ordinary importers and the
+  realtime updater share that conversion path.
+- The new independent layout contract expands all 111 official fields, proves
+  byte ranges are contiguous through byte 1,272, gives every field a nonblank
+  type-valid sentinel, verifies exact parser values, and checks every business
+  column remains non-NULL through both importers and native/standard schemas.
+- CRLF is classified as a framing delimiter: exact validation is mandatory,
+  but storing control bytes as a database business value is not required.
+- The stale public `docs/crawler_audit_02_ra_extended_layout.md` remains a
+  release-only blocker and is already scheduled for deletion in the separate
+  user-requested public documentation cleanup iteration.
+
+## Review-repair validation
+
+- After the repair, the parser/importer/realtime focused contract passed
+  `19 passed`; the affected RA bundle passed `844 passed, 3 subtests`.
+- The isolated full repository suite passed `1972 passed, 41 skipped,
+  6 subtests`, and the exact `.github/workflows/test.yml` list passed
+  `862 passed, 2 skipped, 3 subtests`.
+- Critical flake8, targeted Black/Ruff, compileall, and `git diff --check`
+  remained green.
+- An independent PostgreSQL 16 check exercised both ordinary and optimized
+  importers with native and standard schemas, confirmed idempotent `RT_RA`
+  upsert, and confirmed keyless standard `RACE` fails closed without losing
+  its existing row.
+
 ## Next safe commands
 
-1. Commit one immutable candidate and record its full SHA in PR/review evidence.
+1. Commit the review-repaired immutable candidate and record its full SHA in
+   PR/review evidence.
 2. Run exact-SHA focused/full/workflow/style validation and two complementary
    independent Codex reviews; batch actionable findings once.
 3. Open a PR and merge only after checks are green, review threads are zero,
