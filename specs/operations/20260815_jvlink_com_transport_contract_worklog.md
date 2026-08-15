@@ -162,6 +162,16 @@
   envelope (while still rejecting explicit nonzero codes and error envelopes);
   native COM continues to require exact zero. The close group produced
   `9 passed`, and the combined transport/bridge group produced `76 passed`.
+- Post-commit public-call-site review of candidate
+  `86a62c4d41b475ed5afbb0e17c8b256edf344901` found that making
+  `download_count` the first required `wait_for_download` argument broke the
+  released `wait_for_download(timeout, poll_interval)` API. Two tests first
+  produced `2 failed` with a missing-argument `TypeError`. The bridge now
+  stores the validated JVOpen count, keeps the historical positional order,
+  permits an explicit keyword override, and fails closed when neither source
+  supplies an expected count. The focused rerun produced `2 passed`; the
+  combined transport/bridge group produced `78 passed`. The cited candidate
+  SHA is superseded and must not be used as final evidence.
 - Positive counterparts cover JVOpen success/no-data/cancel state, JVRTOpen
   success/no-data, exact JVStatus equality, valid byte/memoryview recovery,
   valid bridge base64, and successful exact-zero close.
@@ -187,6 +197,9 @@
   - validates base64, byte length, declared size, explicit close results, and
     exact download-count completion, while retaining the current companion
     runtime's code-less successful close acknowledgment;
+  - preserves the released positional wait signature by retaining the latest
+    validated JVOpen download count and refuses to infer completion when no
+    expected count is available;
   - preserves pending-close state across malformed envelopes and failed close.
 - `src/fetcher/base.py` and `src/fetcher/historical.py`
   - bound `-3` wait/retry with monotonic elapsed time;
@@ -201,7 +214,7 @@
 ## Verification on the current uncommitted candidate
 
 - `pytest -q --no-cov tests/test_jvlink_transport_contract.py
-  tests/unit/test_jvlink_bridge.py --tb=short`: `76 passed`.
+  tests/unit/test_jvlink_bridge.py --tb=short`: `78 passed`.
 - `pytest -q --no-cov tests/test_jvd_self_repair.py
   tests/test_retired_data_specs.py --tb=short`: `170 passed`.
 - `pytest -q --no-cov tests/test_realtime.py --tb=short`:
@@ -219,6 +232,12 @@
   3 subtests passed`; it predates the final strict-state corrections and is
   chronological evidence only, not the final candidate gate. The full workflow
   command must be rerun after committing the final candidate SHA.
+- The first committed candidate
+  `86a62c4d41b475ed5afbb0e17c8b256edf344901` passed the updated
+  workflow-equivalent command with `842 passed, 2 skipped, 3 warnings, 3
+  subtests passed`, but public API review subsequently superseded it with the
+  wait-signature correction above. Those results are chronological evidence,
+  not the final candidate gate.
 - A parallel pytest attempt caused only a shared `.coverage.*` SQLite collision
   after the realtime tests themselves reported `63 passed, 3 subtests passed`.
   It is not counted as a product pass; all affected suites above were rerun

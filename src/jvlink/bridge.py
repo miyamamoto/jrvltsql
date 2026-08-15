@@ -135,6 +135,7 @@ class JVLinkBridge:
         self._process: Optional[subprocess.Popen] = None
         self._is_open = False
         self._needs_close = False
+        self._download_count: Optional[int] = None
 
         if bridge_path:
             self._bridge_path = Path(bridge_path)
@@ -298,6 +299,7 @@ class JVLinkBridge:
                 f"{download_count} > {read_count}"
             )
 
+        self._download_count = download_count
         logger.info("JVOpen via bridge", data_spec=data_spec, read_count=read_count, download_count=download_count)
         return code, read_count, download_count, last_ts
 
@@ -331,6 +333,7 @@ class JVLinkBridge:
                 f"got {read_count}"
             )
 
+        self._download_count = 0
         return code, read_count
 
     def jv_read(self) -> Tuple[int, Optional[bytes], Optional[str]]:
@@ -407,6 +410,7 @@ class JVLinkBridge:
             code = 0
         self._is_open = False
         self._needs_close = False
+        self._download_count = None
         logger.info("JV-Link stream closed via bridge")
         return code
 
@@ -432,11 +436,22 @@ class JVLinkBridge:
 
     def wait_for_download(
         self,
-        download_count: int,
         timeout: float = 300.0,
         poll_interval: float = 0.5,
+        download_count: Optional[int] = None,
     ) -> bool:
-        """Wait until JVStatus exactly matches JVOpen's download count."""
+        """Wait until JVStatus exactly matches JVOpen's download count.
+
+        ``timeout`` and ``poll_interval`` retain their historical positional
+        order. Callers may supply ``download_count`` explicitly as a keyword;
+        otherwise the validated value from the latest JVOpen is used.
+        """
+        if download_count is None:
+            download_count = getattr(self, "_download_count", None)
+        if download_count is None:
+            raise ValueError(
+                "download_count is unavailable; call JVOpen first or pass it explicitly"
+            )
         if download_count < 0:
             raise ValueError("download_count must not be negative")
         if download_count == 0:
@@ -470,11 +485,15 @@ class JVLinkBridge:
 
     def jv_wait_for_download(
         self,
-        download_count: int,
         timeout: float = 300.0,
         poll_interval: float = 0.5,
+        download_count: Optional[int] = None,
     ) -> bool:
-        return self.wait_for_download(download_count, timeout, poll_interval)
+        return self.wait_for_download(
+            timeout=timeout,
+            poll_interval=poll_interval,
+            download_count=download_count,
+        )
 
     def is_open(self) -> bool:
         return self._is_open
@@ -496,6 +515,7 @@ class JVLinkBridge:
         self._process = None
         self._is_open = False
         self._needs_close = False
+        self._download_count = None
 
     def __enter__(self):
         self.jv_init()

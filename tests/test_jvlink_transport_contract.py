@@ -534,6 +534,38 @@ def test_bridge_wait_for_download_completes_at_exact_open_count():
     assert bridge.jv_status.call_count == 3
 
 
+def test_bridge_wait_for_download_preserves_legacy_signature_with_open_count():
+    bridge = JVLinkBridge.__new__(JVLinkBridge)
+    bridge._is_open = False
+    bridge._needs_close = False
+    bridge._download_count = None
+    bridge._send_command = MagicMock(
+        return_value={
+            "status": "ok",
+            "code": 0,
+            "readcount": 4,
+            "downloadcount": 2,
+            "lastfiletimestamp": "20260815000000",
+        }
+    )
+    bridge.jv_open("RACE", "20260815000000", 1)
+    bridge.jv_status = MagicMock(side_effect=[1, 2])
+
+    with patch("src.jvlink.bridge.time.sleep"):
+        assert bridge.wait_for_download(timeout=1.0, poll_interval=0.01) is True
+
+
+def test_bridge_wait_for_download_without_expected_count_fails_closed():
+    bridge = JVLinkBridge.__new__(JVLinkBridge)
+    bridge._download_count = None
+    bridge.jv_status = MagicMock(return_value=0)
+
+    with pytest.raises(ValueError, match="download|count|JVOpen"):
+        bridge.wait_for_download(timeout=1.0, poll_interval=0.01)
+
+    bridge.jv_status.assert_not_called()
+
+
 def test_bridge_wait_for_download_rejects_count_overshoot():
     bridge = JVLinkBridge.__new__(JVLinkBridge)
     bridge.jv_status = MagicMock(return_value=3)
