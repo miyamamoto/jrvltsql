@@ -111,9 +111,16 @@
 
 ## Current state and next safe commands
 
-1. Amend this audit-only worklog, run the focused proof on the resulting full
-   SHA, and publish a small PR so the read-only resolution has a tracked source.
-2. After merge, start a separate worktree from the new `origin/master` for the
+1. Published candidate `b9e42cfec5dba90ce1304dc4421752d381ee1a43`
+   on branch `agent/um-bloodline-contract-20260815` and opened ready PR #170:
+   `https://github.com/miyamamoto/jrvltsql/pull/170`. Requested the GitHub
+   native Copilot reviewer once at PR creation. The exact candidate proof was
+   308 passed plus critical flake8 and `git diff --check`, all exit 0.
+2. Commit this publication record, push the resulting final candidate, and
+   verify its focused tests, Actions, accumulated reviews, unresolved-thread
+   count, and clean worktree once as the final gate. Record the final full SHA
+   and gate evidence on PR #170 because a commit cannot self-record its SHA.
+3. After merge, start a separate worktree from the new `origin/master` for the
    next genuine compatibility gap. The audit matrix identifies `HN` current
    10-byte registration-number offsets as the smallest remaining byte-level
    corruption item; re-verify it against SDK 5.0.0 before implementation.
