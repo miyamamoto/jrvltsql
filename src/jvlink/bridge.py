@@ -5,21 +5,30 @@ This replaces the Python win32com-based JVLinkWrapper, eliminating:
 - 32-bit Python requirement
 - COM threading/marshaling issues
 - win32com dependency
+
+Platform support:
+- Windows: runs JVLinkBridge.exe directly
+- Linux: runs the native Win32 bridge through Wine
 """
 
 import base64
 import binascii
 import json
+import math
+import os
+import shutil
 import subprocess
 import sys
+import tempfile
+import threading
 import time
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, TextIO, Tuple
 
 from src.jvlink.constants import (
+    BUFFER_SIZE_JVREAD,
     JV_READ_NO_MORE_DATA,
     JV_READ_SUCCESS,
-    BUFFER_SIZE_JVREAD,
     is_retired_data_spec,
     retired_data_spec_message,
 )
@@ -63,15 +72,51 @@ def _require_string(response: dict, field: str, command: str) -> str:
 
 # Default bridge executable locations (searched in order)
 _BRIDGE_SEARCH_PATHS = [
+    # Native Win32 bridge (preferred for Wine; no .NET runtime dependency)
+    Path("tools/jvlink-bridge/bin/native/JVLinkBridge.exe"),
     # Relative to jrvltsql repo root (build output)
     Path("tools/jvlink-bridge/bin/x86/Release/net8.0-windows/JVLinkBridge.exe"),
     Path("tools/jvlink-bridge/bin/Release/net8.0-windows/JVLinkBridge.exe"),
+    Path("tools/jvlink-bridge/bin/x86/Release/net48/JVLinkBridge.exe"),
+    Path("tools/jvlink-bridge/bin/Release/net48/JVLinkBridge.exe"),
     # Relative to jrvltsql repo root (flat copy)
     Path("tools/jvlink-bridge/JVLinkBridge.exe"),
     # Generic Windows locations
     Path(r"C:\Program Files\JVLinkBridge\JVLinkBridge.exe"),
     Path(r"C:\Program Files (x86)\JVLinkBridge\JVLinkBridge.exe"),
 ]
+
+_BRIDGE_SEARCH_PATHS_LINUX = [
+    Path("/opt/jvlink-bridge/JVLinkBridge.exe"),
+    Path.home() / "jvlink-bridge" / "JVLinkBridge.exe",
+    Path("tools/jvlink-bridge/bin/native/JVLinkBridge.exe"),
+    Path("tools/jvlink-bridge/bin/x86/Release/net48/JVLinkBridge.exe"),
+    Path("tools/jvlink-bridge/bin/x86/Release/net8.0-windows/JVLinkBridge.exe"),
+    Path("tools/jvlink-bridge/JVLinkBridge.exe"),
+]
+
+# These are exact X11 title regular expressions for JV-Link dialogs proven to
+# block a headless JVOpen/JVRTOpen call.  Escape selects the non-affirmative
+# path; Return is deliberately not used because the DataLab update prompt
+# focuses its "yes" button by default.
+_DISMISSIBLE_DIALOG_TITLE_PATTERNS = (
+    r"^JRA-VAN DataLab\.$",
+    r"^JRA-VANからのお知らせ$",
+)
+_ENABLED_VALUES = {"1", "true", "yes", "on"}
+_DISABLED_VALUES = {"0", "false", "no", "off"}
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+def _wine_executable() -> str:
+    return os.environ.get("JVLINK_WINE", "wine")
+
+
+def _is_wine_available(wine: Optional[str] = None) -> bool:
+    return shutil.which(wine or _wine_executable()) is not None
 
 
 def find_bridge_executable() -> Optional[Path]:
@@ -80,14 +125,26 @@ def find_bridge_executable() -> Optional[Path]:
     Returns:
         Path to JVLinkBridge.exe, or None if not found.
     """
-    for p in _BRIDGE_SEARCH_PATHS:
+    env_path = os.environ.get("JVLINK_BRIDGE_EXE")
+    if env_path:
+        candidate = Path(env_path).expanduser()
+        if candidate.exists():
+            return candidate
+
+    search_paths = (
+        _BRIDGE_SEARCH_PATHS_LINUX
+        if sys.platform != "win32"
+        else _BRIDGE_SEARCH_PATHS
+    )
+    for p in search_paths:
+        p = p.expanduser()
         if p.is_absolute() and p.exists():
             return p
-        # Try relative to current working directory
         if not p.is_absolute():
-            abs_p = Path.cwd() / p
-            if abs_p.exists():
-                return abs_p
+            for base in (Path.cwd(), _repo_root()):
+                candidate = base / p
+                if candidate.exists():
+                    return candidate
     return None
 
 
@@ -136,6 +193,11 @@ class JVLinkBridge:
         self._is_open = False
         self._needs_close = False
         self._download_count: Optional[int] = None
+        self._use_wine = sys.platform != "win32"
+        self._wine = _wine_executable()
+        self._stderr_file: Optional[TextIO] = None
+        self._dialog_watcher_stop: Optional[threading.Event] = None
+        self._dialog_watcher_thread: Optional[threading.Thread] = None
 
         if bridge_path:
             self._bridge_path = Path(bridge_path)
@@ -148,41 +210,274 @@ class JVLinkBridge:
                 "tools/jvlink-bridge/ にビルド済みバイナリを配置してください。"
             )
 
-        logger.info("JVLinkBridge initialized", bridge_path=str(self._bridge_path), sid=sid)
+        logger.info(
+            "JVLinkBridge initialized",
+            bridge_path=str(self._bridge_path),
+            sid=sid,
+            use_wine=self._use_wine,
+            wine=self._wine if self._use_wine else None,
+        )
+
+    @property
+    def uses_wine(self) -> bool:
+        return self._use_wine
+
+    def _build_command(self) -> list[str]:
+        if not self._use_wine:
+            return [str(self._bridge_path)]
+        if not _is_wine_available(self._wine):
+            raise JVLinkBridgeError(
+                "Linux環境ではWineが必要です。wine32/wine をインストールし、"
+                "必要なら JVLINK_WINE に実行ファイルを指定してください。"
+            )
+        return [self._wine, str(self._bridge_path)]
+
+    def _build_env(self) -> dict[str, str]:
+        env = os.environ.copy()
+        if self._use_wine:
+            env.setdefault("WINEDEBUG", "-all")
+        wineprefix = env.get("JVLINK_WINEPREFIX")
+        if wineprefix:
+            env["WINEPREFIX"] = wineprefix
+        winearch = env.get("JVLINK_WINEARCH")
+        if winearch:
+            env["WINEARCH"] = winearch
+        return env
+
+    def _dialog_watcher_enabled(self) -> bool:
+        if not self._use_wine:
+            return False
+        value = os.environ.get("JVLINK_AUTO_CLOSE_DIALOGS", "1").lower()
+        if value in _DISABLED_VALUES:
+            return False
+        if value not in _ENABLED_VALUES and value != "":
+            logger.warning(
+                "Ignoring invalid JVLINK_AUTO_CLOSE_DIALOGS value",
+                value=value,
+            )
+            return False
+        return bool(os.environ.get("DISPLAY")) and shutil.which("xdotool") is not None
+
+    def _dismiss_known_dialogs_once(self) -> int:
+        """Reject only known blocking JV-Link dialogs visible on this X display."""
+        if not self._use_wine or not os.environ.get("DISPLAY"):
+            return 0
+        if shutil.which("xdotool") is None:
+            return 0
+        process = self._process
+        if process is None or process.poll() is not None:
+            return 0
+
+        dismissed = 0
+        env = self._build_env()
+        for pattern in _DISMISSIBLE_DIALOG_TITLE_PATTERNS:
+            try:
+                result = subprocess.run(
+                    [
+                        "xdotool",
+                        "search",
+                        "--onlyvisible",
+                        "--pid",
+                        str(process.pid),
+                        "--name",
+                        pattern,
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=1.0,
+                    check=False,
+                    env=env,
+                )
+            except (OSError, subprocess.SubprocessError):
+                continue
+            if result.returncode != 0:
+                continue
+            for window_id in result.stdout.split():
+                try:
+                    action = subprocess.run(
+                        [
+                            "xdotool",
+                            "windowactivate",
+                            window_id,
+                            "key",
+                            "Escape",
+                        ],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        timeout=1.0,
+                        check=False,
+                        env=env,
+                    )
+                except (OSError, subprocess.SubprocessError):
+                    continue
+                if action.returncode == 0:
+                    dismissed += 1
+                    logger.info(
+                        "Rejected blocking JV-Link dialog",
+                        title_pattern=pattern,
+                    )
+        return dismissed
+
+    def _dialog_watch_interval(self) -> float:
+        raw_value = os.environ.get(
+            "JVLINK_DIALOG_WATCH_INTERVAL_SECONDS", "0.5"
+        )
+        try:
+            interval = float(raw_value)
+        except ValueError:
+            interval = math.nan
+        if not math.isfinite(interval):
+            logger.warning(
+                "Invalid JVLINK_DIALOG_WATCH_INTERVAL_SECONDS; using 0.5"
+            )
+            return 0.5
+        return max(interval, 0.1)
+
+    def _ensure_dialog_watcher(self) -> None:
+        if not self._dialog_watcher_enabled():
+            return
+        if (
+            self._dialog_watcher_thread is not None
+            and self._dialog_watcher_thread.is_alive()
+        ):
+            return
+
+        interval = self._dialog_watch_interval()
+        stop = threading.Event()
+
+        def _watch() -> None:
+            while not stop.wait(interval):
+                self._dismiss_known_dialogs_once()
+
+        self._dialog_watcher_stop = stop
+        self._dialog_watcher_thread = threading.Thread(
+            target=_watch,
+            name="jvlink-dialog-watcher",
+            daemon=True,
+        )
+        self._dialog_watcher_thread.start()
+
+    def _stop_dialog_watcher(self) -> None:
+        if self._dialog_watcher_stop is not None:
+            self._dialog_watcher_stop.set()
+        if (
+            self._dialog_watcher_thread is not None
+            and self._dialog_watcher_thread.is_alive()
+        ):
+            self._dialog_watcher_thread.join(timeout=2.0)
+        self._dialog_watcher_stop = None
+        self._dialog_watcher_thread = None
+
+    def _open_stderr_file(self) -> TextIO:
+        if self._stderr_file is not None:
+            try:
+                self._stderr_file.close()
+            except OSError:
+                pass
+        self._stderr_file = tempfile.TemporaryFile(
+            mode="w+t", encoding="utf-8", errors="replace"
+        )
+        return self._stderr_file
+
+    def _stderr_tail(self, limit: int = 4000) -> str:
+        if self._stderr_file is None:
+            return ""
+        try:
+            self._stderr_file.flush()
+            self._stderr_file.seek(0)
+            return self._stderr_file.read()[-limit:]
+        except (OSError, ValueError):
+            return ""
+
+    def _close_stderr_file(self) -> None:
+        if self._stderr_file is not None:
+            try:
+                self._stderr_file.close()
+            except OSError:
+                pass
+            self._stderr_file = None
+
+    def _abort_process(self) -> None:
+        """Terminate a bridge whose protocol state can no longer be trusted."""
+        process = self._process
+        self._process = None
+        if process is not None and process.poll() is None:
+            try:
+                process.terminate()
+                process.wait(timeout=5.0)
+            except Exception:
+                try:
+                    process.kill()
+                    process.wait(timeout=5.0)
+                except Exception:
+                    pass
+        self._is_open = False
+        self._needs_close = False
+        self._download_count = None
+        self._stop_dialog_watcher()
+        self._close_stderr_file()
+
+    def _response_timeout(self, timeout: float) -> JVLinkBridgeError:
+        stderr_tail = self._stderr_tail()
+        self._abort_process()
+        suffix = f". stderr: {stderr_tail}" if stderr_tail else ""
+        return JVLinkBridgeError(f"Bridge response timeout ({timeout}s){suffix}")
 
     def _start_process(self):
         if self._process is not None and self._process.poll() is None:
             return
 
-        logger.info("Starting JVLinkBridge subprocess", path=str(self._bridge_path))
-
-        self._process = subprocess.Popen(
-            [str(self._bridge_path)],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            encoding="utf-8",
-            bufsize=1,
+        logger.info(
+            "Starting JVLinkBridge subprocess",
+            path=str(self._bridge_path),
+            wine=self._use_wine,
         )
 
-        response = self._read_response(timeout=10.0)
-        if response.get("status") != "ready":
-            raise JVLinkBridgeError(f"Bridge failed to start: {response.get('error', 'unknown')}")
-        logger.info("JVLinkBridge subprocess ready", version=response.get("version"))
+        command = self._build_command()
+        stderr_file = self._open_stderr_file()
+        try:
+            self._process = subprocess.Popen(
+                command,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=stderr_file,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                bufsize=1,
+                env=self._build_env(),
+            )
+
+            response = self._read_response(timeout=10.0)
+            if response.get("status") != "ready":
+                raise JVLinkBridgeError(
+                    "Bridge failed to start: "
+                    f"{response.get('error', 'unknown')}. stderr: {self._stderr_tail()}"
+                )
+            logger.info(
+                "JVLinkBridge subprocess ready", version=response.get("version")
+            )
+        except Exception:
+            self._abort_process()
+            raise
 
     def _send_command(self, cmd: dict, timeout: Optional[float] = None) -> dict:
         if self._process is None or self._process.poll() is not None:
             raise JVLinkBridgeError("Bridge process is not running")
 
-        timeout = timeout or self._timeout
+        if self._process.stdin is None:
+            raise JVLinkBridgeError("Bridge stdin is not available")
+
+        timeout = self._timeout if timeout is None else timeout
         cmd_json = json.dumps(cmd, ensure_ascii=False)
+        self._ensure_dialog_watcher()
 
         try:
             self._process.stdin.write(cmd_json + "\n")
             self._process.stdin.flush()
-        except (BrokenPipeError, OSError) as e:
-            raise JVLinkBridgeError(f"Failed to send command: {e}")
+        except (BrokenPipeError, OSError) as exc:
+            self._abort_process()
+            raise JVLinkBridgeError(f"Failed to send command: {exc}") from exc
 
         return self._read_response(timeout=timeout)
 
@@ -190,46 +485,77 @@ class JVLinkBridge:
         if self._process is None:
             raise JVLinkBridgeError("Bridge process is not running")
 
-        if sys.platform == "win32":
-            import threading
-            result = [None]
-            error = [None]
+        deadline = time.monotonic() + timeout
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise self._response_timeout(timeout)
 
-            def _read():
-                try:
-                    result[0] = self._process.stdout.readline()
-                except Exception as e:
-                    error[0] = e
+            process = self._process
+            if process is None or process.stdout is None:
+                raise JVLinkBridgeError("Bridge stdout is not available")
 
-            thread = threading.Thread(target=_read, daemon=True)
-            thread.start()
-            thread.join(timeout=timeout)
+            if sys.platform == "win32":
+                result = [None]
+                error = [None]
 
-            if thread.is_alive():
-                raise JVLinkBridgeError(f"Bridge response timeout ({timeout}s)")
-            if error[0]:
-                raise JVLinkBridgeError(f"Bridge read error: {error[0]}")
-            line = result[0]
-        else:
-            import select
-            ready, _, _ = select.select([self._process.stdout], [], [], timeout)
-            if not ready:
-                raise JVLinkBridgeError(f"Bridge response timeout ({timeout}s)")
-            line = self._process.stdout.readline()
+                def _read(
+                    process=process,
+                    result=result,
+                    error=error,
+                ):
+                    try:
+                        result[0] = process.stdout.readline()
+                    except Exception as exc:
+                        error[0] = exc
 
-        if not line:
-            stderr_output = ""
-            if self._process.stderr:
-                try:
-                    stderr_output = self._process.stderr.read()
-                except Exception:
-                    pass
-            raise JVLinkBridgeError(f"Bridge terminated unexpectedly. stderr: {stderr_output}")
+                thread = threading.Thread(target=_read, daemon=True)
+                thread.start()
+                thread.join(timeout=remaining)
 
-        try:
-            return json.loads(line.strip())
-        except json.JSONDecodeError as e:
-            raise JVLinkBridgeError(f"Invalid JSON from bridge: {line.strip()!r}: {e}")
+                if thread.is_alive():
+                    raise self._response_timeout(timeout)
+                if error[0]:
+                    self._abort_process()
+                    raise JVLinkBridgeError(f"Bridge read error: {error[0]}")
+                line = result[0]
+            else:
+                import select
+
+                ready, _, _ = select.select([process.stdout], [], [], remaining)
+                if not ready:
+                    raise self._response_timeout(timeout)
+                line = process.stdout.readline()
+
+            if not line:
+                stderr_output = self._stderr_tail()
+                self._abort_process()
+                raise JVLinkBridgeError(
+                    f"Bridge terminated unexpectedly. stderr: {stderr_output}"
+                )
+
+            raw = line.strip().lstrip("\ufeff")
+            if not raw:
+                continue
+
+            try:
+                response = json.loads(raw)
+            except json.JSONDecodeError as exc:
+                if not raw.startswith("{"):
+                    logger.warning("Ignoring non-JSON bridge output", line=raw[:200])
+                    continue
+                stderr_output = self._stderr_tail()
+                self._abort_process()
+                raise JVLinkBridgeError(
+                    f"Invalid JSON from bridge: {raw!r}: {exc}. "
+                    f"stderr: {stderr_output}"
+                ) from exc
+            if not isinstance(response, dict):
+                self._abort_process()
+                raise JVLinkBridgeError(
+                    "Invalid JSON from bridge: response is not an object"
+                )
+            return response
 
     # =========================================================================
     # JV-Link API Methods
@@ -239,12 +565,14 @@ class JVLinkBridge:
         self._start_process()
         response = self._send_command({"cmd": "init", "type": "jra", "key": self.sid})
 
-        if response.get("status") == "error":
-            code = response.get("code", -1)
-            raise JVLinkBridgeError(response.get("error", "JVInit failed"), error_code=code)
+        code = _require_response_code(response, "JVInit")
+        if code != 0:
+            raise JVLinkBridgeError(
+                response.get("error", "JVInit failed"), error_code=code
+            )
 
-        logger.info("JV-Link initialized via bridge", hwnd=response.get("hwnd"))
-        return 0
+        logger.info("JV-Link initialized via bridge", code=code)
+        return code
 
     def jv_set_service_key(self, service_key: str) -> int:
         """Set service key. Note: Bridge doesn't directly support this yet.
@@ -516,6 +844,8 @@ class JVLinkBridge:
         self._is_open = False
         self._needs_close = False
         self._download_count = None
+        self._close_stderr_file()
+        self._stop_dialog_watcher()
 
     def __enter__(self):
         self.jv_init()

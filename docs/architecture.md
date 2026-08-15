@@ -24,6 +24,23 @@ Windows 実行・検証・収集用の配備先として扱い、a6 上で直接
 `--db postgresql` で、収集した通常データは PostgreSQL に直接保存します。
 SQLite は単体検証や PostgreSQL がない環境のフォールバックです。
 
+### Wine bridge を使う配備
+
+公開 CLI の利用要件は Windows 10 / 11 ですが、`JVLinkBridge` クライアントは
+コンテナ化した collector から native Win32 bridge を Wine で起動する経路も
+持ちます。この経路では `JVLINK_BRIDGE_EXE` で bridge の Unix 側パス、
+必要に応じて `JVLINK_WINE`、`JVLINK_WINEPREFIX`、`JVLINK_WINEARCH` を指定します。
+Wine、JV-Link、X display の導入とサービスキー登録は配備環境の責務です。
+
+JV-Link は `JVOpen` / `JVRTOpen` 中にお知らせや DataLab 更新確認を表示し、
+headless 実行を停止させる場合があります。X display と `xdotool` がある Wine
+環境では、クライアントは既知のダイアログだけを `Escape` で拒否します。
+更新を承諾する `Return` は送りません。この監視を無効にする場合は
+`JVLINK_AUTO_CLOSE_DIALOGS=0`、監視間隔を変える場合は
+`JVLINK_DIALOG_WATCH_INTERVAL_SECONDS` を指定します。未知のダイアログ、応答
+timeout、読めない bridge 応答は成功扱いせず、timeout 時は状態不明の bridge
+process を終了します。
+
 ## 主要コンポーネント
 
 | コンポーネント | 役割 |
