@@ -1296,12 +1296,14 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
             {"name": "レコード種別ID", "type": "TEXT", "description": "レコード種別識別子（'TM'）", "example": "TM", "nullable": False},
             {"name": "開催年月日", "type": "TEXT", "description": "レース開催日", "example": "20240601", "nullable": False},
             {"name": "競馬場コード", "type": "TEXT", "description": "競馬場コード", "example": "05", "nullable": False},
+            {"name": "開催回", "type": "INTEGER", "description": "その競馬場での開催回", "example": "3", "nullable": False},
+            {"name": "開催日目", "type": "INTEGER", "description": "開催回内の日次", "example": "8", "nullable": False},
             {"name": "レース番号", "type": "TEXT", "description": "レース番号", "example": "11", "nullable": False},
             {"name": "データ作成時分", "type": "TEXT", "description": "データ作成時分", "example": "0900", "nullable": True},
             {"name": "馬番", "type": "INTEGER", "description": "該当馬番", "example": "01", "nullable": False},
             {"name": "予測スコア", "type": "TEXT", "description": "小数点を省略した4桁の対戦型予測スコア", "example": "0753", "nullable": False}
         ],
-        "primary_key": ["開催年月日", "競馬場コード", "レース番号", "馬番"],
+        "primary_key": ["開催年月日", "競馬場コード", "開催回", "開催日目", "レース番号", "馬番"],
         "indexes": ["開催年月日"]
     },
 
@@ -1656,11 +1658,13 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
             {"name": "レコード種別ID", "type": "TEXT", "description": "レコード種別識別子（'TM'）", "example": "TM", "nullable": False},
             {"name": "開催年月日", "type": "TEXT", "description": "レース開催日", "example": "20240601", "nullable": False},
             {"name": "競馬場コード", "type": "TEXT", "description": "競馬場コード", "example": "05", "nullable": False},
+            {"name": "開催回", "type": "INTEGER", "description": "その競馬場での開催回", "example": "3", "nullable": False},
+            {"name": "開催日目", "type": "INTEGER", "description": "開催回内の日次", "example": "8", "nullable": False},
             {"name": "レース番号", "type": "TEXT", "description": "レース番号", "example": "11", "nullable": False},
             {"name": "馬番", "type": "INTEGER", "description": "該当馬番", "example": "01", "nullable": False},
             {"name": "予測スコア", "type": "TEXT", "description": "小数点を省略した4桁の対戦型予測スコア", "example": "0753", "nullable": False}
         ],
-        "primary_key": ["開催年月日", "競馬場コード", "レース番号", "馬番"],
+        "primary_key": ["開催年月日", "競馬場コード", "開催回", "開催日目", "レース番号", "馬番"],
         "indexes": ["開催年月日"]
     },
 

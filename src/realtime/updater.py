@@ -278,10 +278,16 @@ class RealtimeUpdater:
         from src.importer.importer import replace_mining_native_snapshot
 
         record_type = record.get("RecordSpec")
+        transaction_active = getattr(self.database, "is_transaction_active", None)
+        owns_transaction = not bool(transaction_active()) if callable(transaction_active) else False
+        owned_transaction_started = False
 
         try:
             from src.importer.importer import verify_mining_native_schema
 
+            if owns_transaction:
+                self.database.begin_transaction()
+                owned_transaction_started = True
             if table_name not in self._verified_mining_native_tables:
                 if verify_mining_native_schema(self.database, record, table_name):
                     self._verified_mining_native_tables.add(table_name)
@@ -290,6 +296,9 @@ class RealtimeUpdater:
                 raise RuntimeError(
                     f"{table_name} snapshot inserted {inserted} of {len(snapshot_rows)} rows"
                 )
+            if owns_transaction:
+                self.database.commit()
+                owned_transaction_started = False
             return [
                 {
                     "operation": "insert",
@@ -300,14 +309,30 @@ class RealtimeUpdater:
                 for _ in snapshot_rows
             ]
         except Exception as exc:
+            recovery_error = None
+            if owned_transaction_started:
+                try:
+                    self.database.rollback()
+                except Exception as rollback_error:
+                    recovery_error = rollback_error
+                    try:
+                        self.database.invalidate_connection()
+                    except Exception as invalidation_error:
+                        recovery_error = RuntimeError(
+                            f"rollback failed: {rollback_error}; "
+                            f"connection invalidation failed: {invalidation_error}"
+                        )
             logger.error(f"Failed to replace {table_name} snapshot: {exc}", exc_info=True)
+            error = str(exc)
+            if recovery_error is not None:
+                error = f"{error}; transactional recovery failed: {recovery_error}"
             return [
                 {
                     "operation": "insert",
                     "table": table_name,
                     "record_type": record_type,
                     "success": False,
-                    "error": str(exc),
+                    "error": error,
                 }
                 for _ in snapshot_rows
             ]

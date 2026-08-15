@@ -9,6 +9,7 @@ import pytest
 from src.database.migration import SchemaMigrationError
 from src.database.schema import SCHEMAS
 from src.database.schema_jravan import JRAVAN_SCHEMAS
+from src.database.schema_metadata import TABLE_METADATA
 from src.database.schema_types import get_table_column_types, get_table_primary_key_columns
 from src.database.sqlite_handler import SQLiteDatabase
 from src.database.table_mappings import JLTSQL_TO_JRAVAN, JRAVAN_TO_JLTSQL
@@ -189,6 +190,23 @@ def test_tm_native_and_standard_schema_contracts_are_keyed_and_lossless() -> Non
     assert len(re.findall(r"\bTMScore\d+\b", JRAVAN_SCHEMAS["TAISENGATA_MINING"])) == 18
 
 
+def test_tm_metadata_describes_the_complete_native_race_key() -> None:
+    expected_key = [
+        "開催年月日",
+        "競馬場コード",
+        "開催回",
+        "開催日目",
+        "レース番号",
+        "馬番",
+    ]
+
+    for table_name in ("NL_TM", "RT_TM"):
+        metadata = TABLE_METADATA[table_name]
+        assert metadata["primary_key"] == expected_key
+        column_names = {column["name"] for column in metadata["columns"]}
+        assert set(expected_key) <= column_names
+
+
 @pytest.mark.parametrize(
     "importer_class,table_name,use_standard,expected_count",
     [
@@ -214,6 +232,9 @@ def test_tm_importers_preserve_every_entry_and_replace_one_race_revision(
         corrected_entries[1] = _entry()
         corrected = TMParser().parse(_tm_record(make_hm="0945", entries=corrected_entries))
         assert first is not None and corrected is not None
+        alias_key = "headRecordSpec" if importer_class is DataImporter else "レコード種別ID"
+        for row in corrected:
+            row[alias_key] = row.pop("RecordSpec")
 
         first_stats = importer.import_records(iter(first))
         corrected_stats = importer.import_records(iter(corrected))
@@ -310,6 +331,37 @@ def test_tm_realtime_expansion_revision_and_race_delete(tmp_path) -> None:
     assert remaining == 0
 
 
+def test_tm_realtime_snapshot_failure_rolls_back_an_owned_transaction(
+    tmp_path, monkeypatch
+) -> None:
+    # Keep this storage failure test independent of optional development
+    # traceback renderers in compatibility environments.
+    monkeypatch.setattr("src.realtime.updater.logger.error", lambda *args, **kwargs: None)
+    database = SQLiteDatabase({"path": str(tmp_path / "tm-realtime-rollback.db")})
+    with database:
+        database.execute(SCHEMAS["RT_TM"])
+        database.commit()
+        updater = RealtimeUpdater(database)
+        first = updater.process_record(_tm_record())
+        assert isinstance(first, list) and all(result["success"] for result in first)
+        database.commit()
+
+        def fail_after_race_delete(*_args, **_kwargs):
+            raise RuntimeError("injected snapshot insert failure")
+
+        monkeypatch.setattr(database, "insert_many", fail_after_race_delete)
+        failed = updater.process_record(
+            _tm_record(make_hm="0945", entries=_official_entries(score_offset=100))
+        )
+        stored = database.fetch_all("SELECT Umaban, MakeHM, TMScore FROM RT_TM ORDER BY Umaban")
+
+    assert isinstance(failed, list) and len(failed) == 18
+    assert all(result["success"] is False for result in failed)
+    assert len(stored) == 18
+    assert stored[0] == {"Umaban": 1, "MakeHM": "0930", "TMScore": "0101"}
+    assert stored[-1] == {"Umaban": 18, "MakeHM": "0930", "TMScore": "0118"}
+
+
 @pytest.mark.parametrize("importer_class", [DataImporter, OptimizedDataImporter])
 def test_tm_standard_import_refuses_keyless_table_without_row_loss(
     tmp_path, importer_class
@@ -333,10 +385,10 @@ def test_tm_standard_import_refuses_keyless_table_without_row_loss(
         )
         database.commit()
 
+        parsed = TMParser().parse(_tm_record())
+        assert parsed is not None
         with pytest.raises(SchemaMigrationError, match="primary key"):
-            importer_class(database, use_jravan_schema=True).import_records(
-                iter(TMParser().parse(_tm_record()))
-            )
+            importer_class(database, use_jravan_schema=True).import_records(iter(parsed))
         preserved = database.fetch_all("SELECT Year, RaceNum, MakeHM FROM TAISENGATA_MINING")
 
     assert preserved == [{"Year": 2000, "RaceNum": 1, "MakeHM": "0000"}]
@@ -362,10 +414,10 @@ def test_tm_standard_import_refuses_legacy_time_master_without_row_loss(
         )
         database.commit()
 
-        with pytest.raises(SchemaMigrationError, match="TIME_MASTER.*TAISENGATA_MINING"):
-            importer_class(database, use_jravan_schema=True).import_records(
-                iter(TMParser().parse(_tm_record()))
-            )
+        parsed = TMParser().parse(_tm_record())
+        assert parsed is not None
+        with pytest.raises(SchemaMigrationError, match=r"TIME_MASTER.*TAISENGATA_MINING"):
+            importer_class(database, use_jravan_schema=True).import_records(iter(parsed))
         preserved = database.fetch_one("SELECT TMScore1 FROM TIME_MASTER")
 
     assert preserved == {"TMScore1": "0123"}
@@ -390,6 +442,9 @@ def test_tm_native_import_refuses_integer_score_schema_without_row_loss(
 
         parsed = TMParser().parse(_tm_record())
         assert parsed is not None
+        alias_key = "headRecordSpec" if importer_class is DataImporter else "レコード種別ID"
+        for row in parsed:
+            row[alias_key] = row.pop("RecordSpec")
         with pytest.raises(SchemaMigrationError, match="incompatible column types"):
             importer_class(database).import_records(iter(parsed))
         preserved = database.fetch_all("SELECT Year, RaceNum, Umaban, TMScore FROM NL_TM")

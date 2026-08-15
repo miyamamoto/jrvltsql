@@ -77,6 +77,7 @@ class SQLiteDatabase(BaseDatabase):
             # Use Row factory for dict-like access
             self._connection.row_factory = sqlite3.Row
             self._cursor = self._connection.cursor()
+            self._transaction_active = False
 
             logger.info(f"Connected to SQLite database: {self.db_path}")
 
@@ -92,6 +93,7 @@ class SQLiteDatabase(BaseDatabase):
         if self._connection:
             self._connection.close()
             self._connection = None
+        self._transaction_active = False
 
         logger.info("Disconnected from SQLite database")
 
@@ -122,7 +124,7 @@ class SQLiteDatabase(BaseDatabase):
         except sqlite3.Error as e:
             logger.error(f"SQL execution failed: {sql[:100]}", error=str(e))
             if self._connection:
-                self._connection.rollback()
+                self.rollback()
             raise DatabaseError(f"SQL execution failed: {e}")
 
     def executemany(self, sql: str, parameters_list: List[tuple]) -> int:
@@ -148,7 +150,7 @@ class SQLiteDatabase(BaseDatabase):
         except sqlite3.Error as e:
             logger.error(f"SQL executemany failed: {sql[:100]}", error=str(e))
             if self._connection:
-                self._connection.rollback()
+                self.rollback()
             raise DatabaseError(f"SQL executemany failed: {e}")
 
     def fetch_one(self, sql: str, parameters: Optional[tuple] = None) -> Optional[Dict[str, Any]]:
@@ -181,7 +183,7 @@ class SQLiteDatabase(BaseDatabase):
         except sqlite3.Error as e:
             logger.error(f"SQL query failed: {sql[:100]}", error=str(e))
             if self._connection:
-                self._connection.rollback()
+                self.rollback()
             raise DatabaseError(f"SQL query failed: {e}")
 
     def fetch_all(self, sql: str, parameters: Optional[tuple] = None) -> List[Dict[str, Any]]:
@@ -212,7 +214,7 @@ class SQLiteDatabase(BaseDatabase):
         except sqlite3.Error as e:
             logger.error(f"SQL query failed: {sql[:100]}", error=str(e))
             if self._connection:
-                self._connection.rollback()
+                self.rollback()
             raise DatabaseError(f"SQL query failed: {e}")
 
     def create_table(self, table_name: str, schema: str) -> None:

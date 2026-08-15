@@ -50,6 +50,7 @@ class BaseDatabase(ABC):
         self.config = config
         self._connection = None
         self._cursor = None
+        self._transaction_active = False
         self._context_exit_invalidated = False
         logger.info(f"{self.__class__.__name__} initialized")
 
@@ -278,6 +279,7 @@ class BaseDatabase(ABC):
         if self._connection:
             try:
                 self._connection.commit()
+                self._transaction_active = False
                 logger.debug("Transaction committed")
             except Exception as e:
                 raise DatabaseError(f"Failed to commit transaction: {e}")
@@ -288,9 +290,15 @@ class BaseDatabase(ABC):
         """Begin an explicit transaction when the backend requires one.
 
         SQLite starts a transaction on the first write, so the base
-        implementation is intentionally a no-op. PostgreSQL overrides this
-        method because pg8000 otherwise executes every statement separately.
+        implementation records caller ownership without issuing SQL.
+        PostgreSQL overrides this method because pg8000 otherwise executes
+        every statement separately.
         """
+        self._transaction_active = True
+
+    def is_transaction_active(self) -> bool:
+        """Return whether a caller-owned explicit transaction is active."""
+        return self._transaction_active
 
     def rollback(self) -> None:
         """Rollback current transaction.
@@ -301,6 +309,7 @@ class BaseDatabase(ABC):
         if self._connection:
             try:
                 self._connection.rollback()
+                self._transaction_active = False
                 logger.debug("Transaction rolled back")
             except Exception as e:
                 raise DatabaseError(f"Failed to rollback transaction: {e}")

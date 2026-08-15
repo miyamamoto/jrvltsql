@@ -159,8 +159,41 @@
 
 ## Next safe command and STOP conditions
 
-- Next: commit this evidence-only worklog update, run focused/static checks on
-  that exact final SHA, fetch and confirm no base drift, then publish the PR for
-  its single native review and exact-head CI gate.
+- PR #181 was opened at final pre-review head
+  `ffbac21628d58fa84646bdce4b787fee181ca243`. Exact-head Actions test/lint
+  passed; performance was intentionally skipped by the workflow. The single
+  native Copilot review covered all 15 changed files.
+- Aggregated review produced three actionable findings. Copilot found that both
+  TM metadata entries omitted meeting number/day from the documented native
+  key. Codex found that importer-supported `headRecordSpec` and Japanese
+  record-type aliases bypassed mining snapshot/delete and TM schema guards.
+  CodeRabbit found that a standalone realtime snapshot could delete the old
+  race and return failure without rolling back when insertion failed.
+- Red evidence before these review fixes:
+  - metadata contract: `1 failed`; the documented key differed at index 2 and
+    referenced neither meeting number nor meeting day;
+  - combined alias/rollback selection: `5 failed, 2 passed`; both native
+    importers retained stale horse 2 after a 17-horse alias-key revision, and
+    both accepted the legacy integer score schema instead of raising;
+  - isolated realtime failure after neutralizing an optional traceback-renderer
+    incompatibility: `1 failed`; stored rows were 0 instead of the prior 18.
+- The fix centralizes all three accepted record-type aliases, applies them to
+  DM/TM storage and TM verification, records explicit transaction ownership in
+  the database abstraction, and makes realtime mining replacement open and
+  close a transaction only when no caller transaction is active. Owned
+  rollback failure invalidates the connection; monitor-owned cycle boundaries
+  remain owned by the monitor. Both NL_TM and RT_TM metadata now describe the
+  complete conceptual native key.
+- Paired green selection: `8 passed, 30 deselected`. Broader TM/DM/realtime/
+  importer/database/metadata/monitor coverage: `213 passed, 10 skipped, 3
+  subtests passed in 4.35s`.
+- Non-actionable review items were not allowed to expand scope: trusted
+  internal SQL identifiers remain parameterized for all values, and a helper
+  rename was only stylistic. Two test-readability nits were folded into the
+  already-required review commit without production impact.
+- Next: commit the aggregated review fix, run full supported-Python,
+  workflow-equivalent, disposable PostgreSQL, and static validation on the new
+  immutable candidate, then push once without requesting a second Copilot
+  review. Reply to and resolve every existing thread before the final gate.
 - STOP if official sources disagree, a safe migration cannot preserve existing
   rows, any executable check fails on the candidate, or the branch/base drifts.

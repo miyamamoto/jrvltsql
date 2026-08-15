@@ -152,11 +152,14 @@ _MINING_STORAGE_CONFIG: dict[str, dict[str, Any]] = {
 }
 
 
-def _mining_storage_config(
-    record: dict, table_name: str
-) -> tuple[str, dict[str, Any]] | None:
+def _record_type_from_record(record: dict) -> Any:
+    """Resolve every record-type alias accepted by importer entry points."""
+    return record.get("レコード種別ID") or record.get("RecordSpec") or record.get("headRecordSpec")
+
+
+def _mining_storage_config(record: dict, table_name: str) -> tuple[str, dict[str, Any]] | None:
     """Return the DM/TM storage contract that owns this parsed record and table."""
-    record_type = record.get("RecordSpec")
+    record_type = _record_type_from_record(record)
     config = _MINING_STORAGE_CONFIG.get(record_type)
     if config is None:
         return None
@@ -224,7 +227,7 @@ def verify_mining_native_schema(
     table_name: str,
 ) -> bool:
     """Fail closed on a legacy native TM score type before any mutation."""
-    if record.get("RecordSpec") != "TM" or table_name not in {"NL_TM", "RT_TM"}:
+    if _record_type_from_record(record) != "TM" or table_name not in {"NL_TM", "RT_TM"}:
         return False
 
     from src.database.migration import verify_table_schema
@@ -294,7 +297,7 @@ def replace_mining_native_snapshot(
 
 def _is_dm_race_delete(record: dict, table_name: str) -> bool:
     """Return whether a DM record instructs deletion of one complete race."""
-    return record.get("RecordSpec") == "DM" and _is_mining_race_delete(record, table_name)
+    return _record_type_from_record(record) == "DM" and _is_mining_race_delete(record, table_name)
 
 
 def _delete_dm_race_rows(database: BaseDatabase, record: dict, table_name: str) -> int:
@@ -304,14 +307,14 @@ def _delete_dm_race_rows(database: BaseDatabase, record: dict, table_name: str) 
 
 def _dm_native_snapshot_rows(record: dict, table_name: str) -> list[dict] | None:
     """Return all rows from one official native DM snapshot, when available."""
-    if record.get("RecordSpec") != "DM":
+    if _record_type_from_record(record) != "DM":
         return None
     return _mining_native_snapshot_rows(record, table_name)
 
 
 def _is_dm_snapshot_follower(record: dict, table_name: str) -> bool:
     """Skip non-leading rows already represented by one physical DM snapshot."""
-    return record.get("RecordSpec") == "DM" and _is_mining_snapshot_follower(
+    return _record_type_from_record(record) == "DM" and _is_mining_snapshot_follower(
         record, table_name
     )
 
@@ -958,11 +961,7 @@ class DataImporter:
             for record in records:
                 # Get record type and table name
                 # Note: Japanese parsers use 'レコード種別ID', JRA-VAN standard uses 'RecordSpec'
-                record_type = (
-                    record.get("レコード種別ID")
-                    or record.get("RecordSpec")
-                    or record.get("headRecordSpec")
-                )
+                record_type = _record_type_from_record(record)
                 if not record_type:
                     logger.warning(
                         "Record missing record type field",
@@ -1242,9 +1241,7 @@ class DataImporter:
         self._ensure_jravan_tables_ready(auto_commit=auto_commit)
 
         # Note: Japanese parsers use 'レコード種別ID', JRA-VAN standard uses 'RecordSpec'
-        record_type = (
-            record.get("レコード種別ID") or record.get("RecordSpec") or record.get("headRecordSpec")
-        )
+        record_type = _record_type_from_record(record)
         if not record_type:
             logger.warning("Record missing record type field")
             return False

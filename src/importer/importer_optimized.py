@@ -18,6 +18,7 @@ from src.importer.importer import (
     _is_mining_race_delete,
     _is_mining_snapshot_follower,
     _mining_native_snapshot_rows,
+    _record_type_from_record,
     insert_ch_coupled_batch,
     prepare_ch_coupled_rows,
     replace_mining_native_snapshot,
@@ -246,11 +247,7 @@ class OptimizedDataImporter:
         try:
             for record in records:
                 # Get record type and table name
-                record_type = (
-                    record.get("レコード種別ID")
-                    or record.get("RecordSpec")
-                    or record.get("headRecordSpec")
-                )
+                record_type = _record_type_from_record(record)
                 if not record_type:
                     logger.warning(
                         "Record missing record type field",
