@@ -9,6 +9,17 @@ from src.parser.ra_parser import RAParser
 from src.parser.se_parser import SEParser
 
 
+class _ByteOffsetParser(BaseParser):
+    record_type = "ZZ"
+
+    def _define_fields(self):
+        return [
+            FieldDef("RecordSpec", 0, 2),
+            FieldDef("Name", 2, 4),
+            FieldDef("Tail", 6, 2),
+        ]
+
+
 class TestFieldDef:
     """Test cases for FieldDef class."""
 
@@ -45,6 +56,18 @@ class TestBaseParser:
 
         with pytest.raises(ValueError):
             InvalidParser()
+
+    @pytest.mark.parametrize(
+        ("name", "expected_name"),
+        [("ABCD", "ABCD"), ("日本", "日本")],
+    )
+    def test_field_positions_are_byte_offsets(self, name, expected_name):
+        record = b"ZZ" + name.encode("cp932") + b"42"
+
+        result = _ByteOffsetParser().parse(record)
+
+        assert result["Tail"] == "42"
+        assert result["Name"] == expected_name
 
 
 class TestRAParser:
