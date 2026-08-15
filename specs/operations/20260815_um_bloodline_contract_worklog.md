@@ -108,6 +108,16 @@
   at 2026-08-15T10:05:39Z. Issue #156 remains closed as completed; the comment
   explicitly limits the resolution to the proven current contract and does not
   claim a reproducible historical producer.
+- GitHub Codex then identified a P2 proof weakness: several one-byte fields,
+  three earnings fields, and blank text fields shared decoded values, so a
+  swapped parser slice could pass the claimed exact-offset test. Strengthened
+  the fixture so every parsed field has a distinct decoded sentinel and added
+  an invariant that rejects future duplicate sentinels.
+- Red proof before committing the test fix: temporarily changed
+  `RuikeiHonsyoSyogai` to read the `RuikeiFukaSyogai` slice, then ran its one
+  parametrized case. It failed as intended with
+  `assert '000123404' == '000123402'`, exit 1. Restored the production parser
+  without change; the strengthened layout suite then passed 100 tests, exit 0.
 
 ## Current state and next safe commands
 
@@ -116,10 +126,11 @@
    `https://github.com/miyamamoto/jrvltsql/pull/170`. Requested the GitHub
    native Copilot reviewer once at PR creation. The exact candidate proof was
    308 passed plus critical flake8 and `git diff --check`, all exit 0.
-2. Commit this publication record, push the resulting final candidate, and
-   verify its focused tests, Actions, accumulated reviews, unresolved-thread
-   count, and clean worktree once as the final gate. Record the final full SHA
-   and gate evidence on PR #170 because a commit cannot self-record its SHA.
+2. Commit the review-driven sentinel-test correction, push the resulting final
+   candidate, and verify its focused tests, Actions, accumulated reviews,
+   unresolved-thread count, and clean worktree once as the final gate. Record
+   the final full SHA and gate evidence on PR #170 because a commit cannot
+   self-record its SHA.
 3. After merge, start a separate worktree from the new `origin/master` for the
    next genuine compatibility gap. The audit matrix identifies `HN` current
    10-byte registration-number offsets as the smallest remaining byte-level

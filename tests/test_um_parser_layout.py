@@ -32,21 +32,21 @@ CHAKU = [f"{i:03d}" * 6 for i in range(1, 28)]
 
 FIELDS = [
     ("RecordSpec", 1, 2, b"UM"),
-    ("DataKubun", 3, 1, b"1"),
+    ("DataKubun", 3, 1, b"2"),
     ("MakeDate", 4, 8, b"20260801"),
     ("KettoNum", 12, 10, b"2019900001"),
-    ("DelKubun", 22, 1, b"0"),
+    ("DelKubun", 22, 1, b"3"),
     ("RegDate", 23, 8, b"20210401"),
     ("DelDate", 31, 8, b"00000000"),
     ("BirthDate", 39, 8, b"20190315"),
     ("Bamei", 47, 36, _pad("テストウマアルファ", 36, zenkaku=True)),
     ("BameiKana", 83, 36, _pad("ﾃｽﾄｳﾏｱﾙﾌｧ", 36)),
     ("BameiEng", 119, 60, _pad("Test Horse Alpha", 60)),
-    ("ZaikyuFlag", 179, 1, b"0"),
-    ("Reserved", 180, 19, b" " * 19),
+    ("ZaikyuFlag", 179, 1, b"4"),
+    ("Reserved", 180, 19, _pad("RESERVED-180", 19)),
     ("UmaKigoCD", 199, 2, b"00"),
-    ("SexCD", 201, 1, b"1"),
-    ("HinsyuCD", 202, 1, b"1"),
+    ("SexCD", 201, 1, b"5"),
+    ("HinsyuCD", 202, 1, b"6"),
     ("KeiroCD", 203, 2, b"01"),
 ]
 # 項番18 <3代血統情報> 位置205 繰返14 46バイト（繁殖登録番号10 + 馬名36）
@@ -55,21 +55,21 @@ for slot, (num, name) in enumerate(PEDIGREE, start=1):
     FIELDS.append((f"Ketto3InfoHansyokuNum{slot}", base, 10, num.encode("ascii")))
     FIELDS.append((f"Ketto3InfoBamei{slot}", base + 10, 36, _pad(name, 36, zenkaku=True)))
 FIELDS += [
-    ("TozaiCD", 849, 1, b"1"),
+    ("TozaiCD", 849, 1, b"7"),
     ("ChokyosiCode", 850, 5, b"99001"),
     ("ChokyosiRyakusyo", 855, 8, _pad("テスト師", 8, zenkaku=True)),
-    ("Syotai", 863, 20, b" " * 20),
+    ("Syotai", 863, 20, _pad("招待地域", 20, zenkaku=True)),
     ("BreederCode", 883, 8, b"99900001"),
     ("BreederName", 891, 72, _pad("テスト牧場", 72, zenkaku=True)),
     ("SanchiName", 963, 20, _pad("テスト町", 20, zenkaku=True)),
     ("BanusiCode", 983, 6, b"990001"),
     ("BanusiName", 989, 64, _pad("テスト馬主", 64, zenkaku=True)),
-    ("RuikeiHonsyoHeiti", 1053, 9, b"000123400"),
-    ("RuikeiHonsyoSyogai", 1062, 9, b"000000000"),
-    ("RuikeiFukaHeichi", 1071, 9, b"000005600"),
-    ("RuikeiFukaSyogai", 1080, 9, b"000000000"),
-    ("RuikeiSyutokuHeichi", 1089, 9, b"000078900"),
-    ("RuikeiSyutokuSyogai", 1098, 9, b"000000000"),
+    ("RuikeiHonsyoHeiti", 1053, 9, b"000123401"),
+    ("RuikeiHonsyoSyogai", 1062, 9, b"000123402"),
+    ("RuikeiFukaHeichi", 1071, 9, b"000123403"),
+    ("RuikeiFukaSyogai", 1080, 9, b"000123404"),
+    ("RuikeiSyutokuHeichi", 1089, 9, b"000123405"),
+    ("RuikeiSyutokuSyogai", 1098, 9, b"000123406"),
 ]
 CHAKU_NAMES = [
     "SogoChaku", "ChuoGokeiChaku",
@@ -120,6 +120,9 @@ class TestUMParserLayout:
     def test_record_delimiter_closes_the_layout(self):
         delimiter = self.record[UMParser.RECORD_DELIMITER_START:UMParser.RECORD_LENGTH]
         assert delimiter == b"\r\n"
+
+    def test_every_field_uses_a_distinct_decoded_sentinel(self):
+        assert len(set(EXPECTED.values())) == len(EXPECTED)
 
     @pytest.mark.parametrize("field_name", sorted(EXPECTED))
     def test_every_field_is_read_from_its_spec_position(self, field_name):
