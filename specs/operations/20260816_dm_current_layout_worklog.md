@@ -249,6 +249,13 @@
   remains. This worklog evidence update will create a documentation-only final
   PR head. Per the no-self-reference rule, that head SHA and its final test
   evidence belong in PR metadata rather than another self-recording commit.
+- PR #180's one native Copilot review comment on exact head
+  `8875e9c627157661c81734c514159a6c061ff2c6` requested preserving the
+  traceback when realtime snapshot replacement returns structured failures.
+  The finding is accepted as an operational-diagnostics improvement and the
+  logger call now passes `exc_info=True`; it does not change mutation or
+  transaction semantics. The resulting final SHA and focused/Actions evidence
+  are recorded in PR metadata to avoid a worklog self-reference loop.
 
 ## Next safe commands
 

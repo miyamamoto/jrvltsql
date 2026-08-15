@@ -284,7 +284,7 @@ class RealtimeUpdater:
                 for _ in snapshot_rows
             ]
         except Exception as exc:
-            logger.error(f"Failed to replace RT_DM snapshot: {exc}")
+            logger.error(f"Failed to replace RT_DM snapshot: {exc}", exc_info=True)
             return [
                 {
                     "operation": "insert",
