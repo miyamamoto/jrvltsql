@@ -8,7 +8,9 @@ Key optimizations:
 """
 
 from typing import Dict, Iterator, List, Optional, Union
+
 from src.database.base import BaseDatabase, DatabaseError
+from src.importer.importer import _expanded_record_fingerprint
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -214,6 +216,7 @@ class OptimizedDataImporter:
 
         # Group records by type for batch insertion
         batch_buffers: Dict[str, List[dict]] = {}
+        last_expanded_record_fingerprint = None
 
         try:
             for record in records:
@@ -239,6 +242,12 @@ class OptimizedDataImporter:
                     )
                     self._records_failed += 1
                     continue
+
+                fingerprint = _expanded_record_fingerprint(record, table_name)
+                if fingerprint is not None:
+                    if fingerprint == last_expanded_record_fingerprint:
+                        continue
+                    last_expanded_record_fingerprint = fingerprint
 
                 # Add to batch buffer
                 if table_name not in batch_buffers:
@@ -267,9 +276,7 @@ class OptimizedDataImporter:
             # Flush remaining batches
             for table_name, batch in batch_buffers.items():
                 if batch:
-                    self._flush_batch_optimized(
-                        table_name, batch, commit_batch=auto_commit
-                    )
+                    self._flush_batch_optimized(table_name, batch, commit_batch=auto_commit)
 
             # Log summary
             stats = self.get_statistics()

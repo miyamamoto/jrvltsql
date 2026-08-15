@@ -128,30 +128,44 @@
   valid WH record into two `RT_WH` rows, then a matching pre-2003 empty
   DataKubun `0` record deletes the race back to zero rows. The isolated test
   passed.
-- Expanded focused command covering WH, parser compatibility, all schemas and
-  mappings, realtime routing, indexes, metadata, migration,
-  regular/optimized import and expanded storage:
+- Final post-audit candidate
+  `b91d50be57ef9fd0342239a9686705e231a471d3` passed the expanded focused
+  command covering WH, parser compatibility, all schemas and mappings,
+  realtime routing, indexes, metadata, migration, regular/optimized import,
+  and expanded storage:
   `pytest -q tests/test_wh_official_contract.py tests/test_parsers.py
   tests/test_parser.py tests/test_parser_compatibility.py tests/test_realtime.py
   tests/test_indexes.py tests/test_metadata_application.py tests/test_migration.py
   tests/test_all_schemas.py tests/test_table_mappings.py tests/test_importer.py
   tests/test_importer_clean_record.py tests/test_expanded_record_storage.py
-  --basetemp=/tmp/jrvltsql-wh-focused2-pytest` passed **814**, skipped 8,
-  subtests passed 3.
-- The final contract test after all header/value-domain changes passed **24**
-  with the opt-in PostgreSQL case skipped. The full local suite before the
-  final numeric-header check passed **1852**, skipped 45, with 5 subtests and
-  three pre-existing `PytestReturnNotNoneWarning` warnings; it must be rerun on
-  the committed full SHA before merge.
-- An isolated `postgres:16-alpine` container on loopback port 55439 verified
-  real PostgreSQL native `NL_WH` and standard `BATAIJYU` create/import/upsert:
-  **1 passed**. The container was started with `--rm`, stopped, and confirmed
-  absent; existing KPS databases were not contacted.
-- Full fatal `flake8`, targeted `ruff`, `black`, `compileall`, and
-  `git diff --check` passed. A
+  --basetemp=/tmp/jrvltsql-wh-final2-focused-pytest` passed **816**, skipped 8,
+  with 3 subtests. The workflow-equivalent suite passed **862**, skipped 2,
+  with 3 warnings and 3 subtests; the full suite passed **1854**, skipped 45,
+  with 3 warnings and 5 subtests.
+- On the same `b91d50...` candidate, an isolated `postgres:16-alpine`
+  container on loopback port 55439 verified real PostgreSQL native `NL_WH`
+  and standard `BATAIJYU` create/import/upsert: **1 passed**. The container was
+  started with `--rm`, stopped, and confirmed absent; existing KPS databases
+  were not contacted.
+- On the same `b91d50...` candidate, full fatal `flake8`, targeted `ruff`,
+  `black`, `compileall`, and `git diff --check` passed. A
   direct mypy invocation still reports the repository's established baseline
   errors in imported logger/database/importer modules; it reported no WH-parser
   error and is not represented as a green gate.
+- GitHub Actions test/lint and CodeRabbit checks passed for `b91d50...`.
+  GitHub Copilot reviewed all 14 changed files at that SHA and posted no
+  comments. CodeRabbit posted two inline findings in one aggregated review.
+  The standard-name importer finding was reproduced before repair by extending
+  the existing multi-horse integration test: both regular and optimized paths
+  failed `assert 2 == 1`. The fix deduplicates the shared official wide record
+  before batching, including across batch boundaries. Final Codex review then
+  rejected an unbounded all-record fingerprint set because a long historical
+  import would retain memory per race; the implementation now compares only
+  the immediately preceding official wide record and therefore uses O(1)
+  duplicate-detection memory. The other inline finding
+  concerns pre-existing AV/WE/CC/JC/TC standard-name `HappyoTime` contracts;
+  `BATAIJYU.HappyoTime` already correctly preserves official `MMDDhhmm` as
+  `VARCHAR(8)`, so the unrelated family is deferred to a separate iteration.
 
 ## Next safe command
 
@@ -165,14 +179,17 @@ commit a new candidate SHA, then rerun focused, workflow-equivalent, full,
 static, and isolated PostgreSQL gates from the beginning. Do not use results
 from `392663c3a58b8ee85d786ca5245f9789ac55e9d1` as final evidence.
 
-Candidate `e763824154b2de6f5a15883214421c26b2cdd382` passed the
-exact-SHA expanded focused suite (**816 passed, 8 skipped, 3 subtests**),
-workflow-equivalent suite (**862 passed, 2 skipped, 3 warnings, 3 subtests**),
-full suite (**1854 passed, 45 skipped, 3 warnings, 5 subtests**), fatal flake8,
-targeted Ruff/Black, compileall, diff/worktree checks, and isolated PostgreSQL
-16 integration (**1 passed**). The subsequent official SDK 5.0.0/community
-audit changed only this tracked evidence, not code or tests. Commit the audit,
-then rerun the exact-SHA gates required for the resulting final candidate.
+Candidate `b91d50be57ef9fd0342239a9686705e231a471d3` passed all exact-SHA
+gates listed above. The aggregated CodeRabbit remediation is now the only code
+change after that candidate. On the uncommitted remediation tree, the red
+`assert 2 == 1` cases became green with **3 passed** across regular importer,
+optimized importer, and realtime replacement; the expanded focused suite
+passed **816**, skipped 8, with 3 subtests. Fatal flake8, Black, compileall,
+and diff checks passed; repository-wide Ruff still reports its pre-existing
+typing/modernization warnings in the two importer modules. Commit once, then
+rerun the necessary exact-SHA focused/workflow/full/static/PostgreSQL gates.
+Record the resulting final SHA in the PR evidence; do not add a
+self-referential worklog commit solely to write its own SHA.
 
 ## STOP conditions
 

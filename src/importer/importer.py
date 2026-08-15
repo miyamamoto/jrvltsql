@@ -15,6 +15,16 @@ from src.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
+def _expanded_record_fingerprint(record: dict, table_name: str) -> Optional[tuple]:
+    """Identify duplicate expanded rows that share one official wide record."""
+    if table_name != "BATAIJYU":
+        return None
+    wide_record = record.get("_wide_record")
+    if not isinstance(wide_record, dict):
+        return None
+    return tuple(sorted((str(key), repr(value)) for key, value in wide_record.items()))
+
+
 # ============================================================================
 # REAL型フィールドの変換ルール定義
 # JV-Dataでは一部の数値フィールドが10倍された状態で格納されている
@@ -441,6 +451,7 @@ class DataImporter:
 
         # Group records by type for batch insertion
         batch_buffers: Dict[str, List[dict]] = {}
+        last_expanded_record_fingerprint = None
 
         try:
             for record in records:
@@ -467,6 +478,12 @@ class DataImporter:
                     )
                     self._records_failed += 1
                     continue
+
+                fingerprint = _expanded_record_fingerprint(record, table_name)
+                if fingerprint is not None:
+                    if fingerprint == last_expanded_record_fingerprint:
+                        continue
+                    last_expanded_record_fingerprint = fingerprint
 
                 # Add to batch buffer
                 if table_name not in batch_buffers:

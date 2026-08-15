@@ -262,6 +262,27 @@ def test_wh_realtime_insert_and_pre_2003_race_delete(tmp_path) -> None:
         assert all(result and result["success"] for result in inserted)
         assert database.fetch_one("SELECT COUNT(*) AS count FROM RT_WH")["count"] == 2
 
+        corrected = updater.process_record(
+            _wh_record(
+                announcement="06150935",
+                weight="486",
+                make_date="20030710",
+                year="2003",
+                month_day="0710",
+            )
+        )
+
+        assert isinstance(corrected, list)
+        assert len(corrected) == 2
+        assert all(result and result["success"] for result in corrected)
+        current = database.fetch_all(
+            "SELECT Umaban, HappyoTime, BaTaijyu FROM RT_WH ORDER BY Umaban"
+        )
+        assert [dict(row) for row in current] == [
+            {"Umaban": 1, "HappyoTime": "06150935", "BaTaijyu": 486},
+            {"Umaban": 18, "HappyoTime": "06150935", "BaTaijyu": 999},
+        ]
+
         deleted = updater.process_record(
             _wh_record(
                 data_kubun="0",
@@ -371,11 +392,13 @@ def test_wh_standard_schema_import_preserves_all_horse_slots(tmp_path, importer_
         rows = WHParser().parse(_wh_record())
         assert rows is not None
 
-        importer = importer_class(database, use_jravan_schema=True)
-        importer.import_records(iter(rows))
+        importer = importer_class(database, batch_size=1, use_jravan_schema=True)
+        first_stats = importer.import_records(iter(rows))
+        assert first_stats["records_imported"] == 1
         corrected = WHParser().parse(_wh_record(announcement="06150935", weight="486"))
         assert corrected is not None
-        importer.import_records(iter(corrected))
+        corrected_stats = importer.import_records(iter(corrected))
+        assert corrected_stats["records_imported"] == 1
 
         stored = database.fetch_all(
             "SELECT HappyoTime, Umaban1, Bamei1, BaTaijyu1, ZogenSa1, "
