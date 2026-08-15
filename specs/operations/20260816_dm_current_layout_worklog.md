@@ -154,6 +154,17 @@
   `test_dm_standard_import_refuses_legacy_data_master_without_row_loss`;
   result exit 1, `2 failed in 0.27s`. This proves the new fail-closed gate is
   not a vacuous check.
+- Exact candidate `fcda5db6da6155aa155955960c48bcaeef1b8613` exposed one
+  additional snapshot-revision defect during the aggregated code-path review.
+  A later official 18-slot DM record can leave a slot blank, but native
+  `NL_DM` and `RT_DM` upserts retained the prior horse row. Before changing
+  production code, the existing accumulated/realtime revision tests were
+  tightened so horse 02 disappears from the corrected physical record.
+  Command targeted the accumulated revision test and realtime revision test;
+  result exit 1, `3 failed, 2 passed in 0.24s`. Both accumulated importer
+  classes and realtime retained horse 02, while both standard `MINING` cases
+  passed. This is the red proof for race-snapshot replacement; PostgreSQL is
+  covered by the same test module after implementation.
 
 ## Implementation and validation state
 
@@ -165,6 +176,15 @@
   canonically maps `DM` to one keyed `MINING` wide row. The standard DM time
   columns now preserve SDK 5.0.0's five-byte string instead of applying the
   previous divide-by-ten numeric conversion.
+- The aggregated review of candidate
+  `fcda5db6da6155aa155955960c48bcaeef1b8613` found that per-horse upserts did
+  not remove a horse omitted by a later complete physical record. Parser
+  metadata now carries the complete native snapshot plus one leader index.
+  Both accumulated importers and realtime replace `NL_DM`/`RT_DM` by the six
+  race keys, validate every row before deletion, and insert the complete
+  replacement inside the caller's transaction. Only the leader processes a
+  physical record, including when an expanded record crosses a setup chunk
+  boundary. `import_single_record` also replaces the full snapshot.
 - Both accumulated importers flush pending same-table rows before a
   `DataKubun=0` race delete, preserve caller-owned transaction control, and
   reset expanded-record deduplication state after the delete. Realtime deletes
@@ -179,10 +199,25 @@
   including metadata and all migration refusals, passed with
   `851 passed, 6 skipped, 3 subtests passed in 2.09s`.
 - A disposable PostgreSQL 16 container ran the complete DM contract module
-  with integration enabled: `34 passed in 0.86s`. Both importer classes stored
-  18 native rows and one standard row, replaced a revision, preserved raw
-  five-byte times, and deleted the complete race. The container was stopped
-  and removed after the run.
+  with integration enabled before the snapshot-review fix:
+  `36 passed in 0.94s`. Both importer classes stored 18 native rows and one
+  standard row, replaced a revision, preserved raw five-byte times, and
+  deleted the complete race. The container was stopped and removed.
+- Immutable candidate `fcda5db6da6155aa155955960c48bcaeef1b8613` passed the
+  full Python 3.12 suite with `2152 passed, 53 skipped, 3 warnings, 6 subtests`
+  and a sequential Python 3.10 compatibility rerun with the same totals. The
+  workflow-equivalent covered subset passed with
+  `864 passed, 2 skipped, 3 warnings, 3 subtests`. Its blocking flake8,
+  compileall, and diff checks passed. Candidate mypy and exact-base mypy both
+  reported the same pre-existing 79 errors, so this candidate introduced zero
+  new mypy findings.
+- After the stale-horse fix, the complete DM module passed locally with
+  `35 passed, 2 skipped in 0.67s`; related importer/realtime coverage passed
+  with `88 passed, 2 skipped, 3 subtests in 0.52s`. Disposable PostgreSQL 16
+  passed the then-current module with `36 passed in 0.78s`, including 18-to-17
+  horse revision replacement for both importer classes. The final candidate
+  adds one direct `import_single_record` assertion and therefore still needs
+  its immutable-SHA PostgreSQL/full-suite rerun.
 - `python3 -m compileall -q src tests`, `git diff --check`, Black checks for the
   new parser/test, and the workflow's blocking flake8 selection
   `E9,F63,F7,F82` all passed.
@@ -191,12 +226,14 @@
   output for DM, WH, odds, or votes, and still reports the pre-existing broad
   HR/SE/WF mismatches. It is not treated as green evidence; the executable DM
   parser/storage contracts above replace its DM false negative for this scope.
-- Current worktree is intentionally dirty with the implementation and tests;
-  no candidate commit has yet been created.
+- Current worktree is intentionally dirty with the aggregated review fix,
+  expanded contracts, and this worklog. The final replacement candidate commit
+  has not yet been created; old candidate results are not treated as evidence
+  for that future SHA.
 
 ## Next safe commands
 
-1. Review the complete dirty diff and create the first candidate commit.
+1. Review the complete dirty diff and create the replacement candidate commit.
 2. Run focused and full suites against that immutable full SHA on Python 3.10
    and 3.12, plus PostgreSQL and workflow-equivalent lint/static checks.
 3. Perform one aggregated Codex review of the exact candidate, repair all

@@ -129,6 +129,9 @@ def test_dm_parses_all_18_official_entries_by_exact_byte_offset() -> None:
     assert rows[0]["_wide_record"]["Umaban1"] == "01"
     assert rows[0]["_wide_record"]["DMTime18"] == "10018"
     assert rows[0]["_wide_record"] == rows[17]["_wide_record"]
+    assert rows[0]["_dm_snapshot_rows"] is rows[17]["_dm_snapshot_rows"]
+    assert len(rows[0]["_dm_snapshot_rows"]) == 18
+    assert [row["_dm_snapshot_index"] for row in rows] == list(range(18))
 
 
 @pytest.mark.parametrize(
@@ -220,23 +223,27 @@ def test_dm_importers_preserve_every_entry_and_replace_one_race_revision(
         database.commit()
         importer = importer_class(database, batch_size=3, use_jravan_schema=use_standard)
         first = DMParser().parse(_dm_record())
-        corrected = DMParser().parse(
-            _dm_record(make_hm="0945", entries=_official_entries(time_offset=500))
-        )
+        corrected_entries = _official_entries(time_offset=500)
+        corrected_entries[1] = _entry()
+        corrected = DMParser().parse(_dm_record(make_hm="0945", entries=corrected_entries))
         assert first is not None and corrected is not None
 
-        first_stats = importer.import_records(iter(first))
+        first_stats = importer.import_records(iter(first[:1]))
+        follower_stats = importer.import_records(iter(first[1:]))
         corrected_stats = importer.import_records(iter(corrected))
         count = database.fetch_one(f"SELECT COUNT(*) AS count FROM {table_name}")["count"]
 
         if use_standard:
             stored = database.fetch_one(
-                "SELECT MakeHM, Umaban1, DMTime1, Umaban18, DMTime18 FROM MINING"
+                "SELECT MakeHM, Umaban1, DMTime1, Umaban2, DMTime2, "
+                "Umaban18, DMTime18 FROM MINING"
             )
             assert stored == {
                 "MakeHM": "0945",
                 "Umaban1": 1,
                 "DMTime1": "10501",
+                "Umaban2": None,
+                "DMTime2": None,
                 "Umaban18": 18,
                 "DMTime18": "10518",
             }
@@ -244,15 +251,29 @@ def test_dm_importers_preserve_every_entry_and_replace_one_race_revision(
             stored = database.fetch_all("SELECT Umaban, MakeHM, DMTime FROM NL_DM ORDER BY Umaban")
             assert stored[0] == {"Umaban": 1, "MakeHM": "0945", "DMTime": "10501"}
             assert stored[-1] == {"Umaban": 18, "MakeHM": "0945", "DMTime": "10518"}
+            assert all(row["Umaban"] != 2 for row in stored)
 
-    expected_stats = {
+    first_expected_stats = {
         "records_imported": expected_count,
         "records_failed": 0,
-        "batches_processed": 6 if expected_count == 18 else 1,
+        "batches_processed": 1,
     }
-    assert {key: first_stats[key] for key in expected_stats} == expected_stats
-    assert {key: corrected_stats[key] for key in expected_stats} == expected_stats
-    assert count == expected_count
+    corrected_count = 1 if use_standard else 17
+    corrected_expected_stats = {
+        "records_imported": corrected_count,
+        "records_failed": 0,
+        "batches_processed": 1,
+    }
+    assert {key: first_stats[key] for key in first_expected_stats} == first_expected_stats
+    assert {key: follower_stats[key] for key in first_expected_stats} == {
+        "records_imported": 0,
+        "records_failed": 0,
+        "batches_processed": 0,
+    }
+    assert {
+        key: corrected_stats[key] for key in corrected_expected_stats
+    } == corrected_expected_stats
+    assert count == corrected_count
 
 
 @pytest.mark.parametrize(
@@ -305,12 +326,45 @@ def test_dm_delete_respects_caller_owned_transaction(tmp_path, importer_class) -
         assert inserted is not None and deleted is not None
         importer.import_records(iter(inserted))
 
+        corrected_entries = _official_entries(time_offset=500)
+        corrected_entries[1] = _entry()
+        corrected = DMParser().parse(_dm_record(make_hm="0945", entries=corrected_entries))
+        assert corrected is not None
+        importer.import_records(iter(corrected), auto_commit=False)
+        corrected_rows = database.fetch_all("SELECT Umaban, MakeHM FROM NL_DM ORDER BY Umaban")
+        assert len(corrected_rows) == 17
+        assert all(row["Umaban"] != 2 and row["MakeHM"] == "0945" for row in corrected_rows)
+        database.rollback()
+        restored_rows = database.fetch_all("SELECT Umaban, MakeHM FROM NL_DM ORDER BY Umaban")
+        assert len(restored_rows) == 18
+        assert all(row["MakeHM"] == "0930" for row in restored_rows)
+
         importer.import_records(iter(deleted), auto_commit=False)
         assert database.fetch_one("SELECT COUNT(*) AS count FROM NL_DM")["count"] == 0
         database.rollback()
         restored = database.fetch_one("SELECT COUNT(*) AS count FROM NL_DM")["count"]
 
     assert restored == 18
+
+
+def test_dm_single_record_import_replaces_the_complete_native_snapshot(tmp_path) -> None:
+    database = SQLiteDatabase({"path": str(tmp_path / "single-record.db")})
+    with database:
+        database.execute(SCHEMAS["NL_DM"])
+        database.commit()
+        importer = DataImporter(database)
+        first = DMParser().parse(_dm_record())
+        corrected_entries = _official_entries(time_offset=500)
+        corrected_entries[1] = _entry()
+        corrected = DMParser().parse(_dm_record(make_hm="0945", entries=corrected_entries))
+        assert first is not None and corrected is not None
+
+        assert importer.import_single_record(first[-1]) is True
+        assert importer.import_single_record(corrected[0]) is True
+        rows = database.fetch_all("SELECT Umaban, MakeHM FROM NL_DM ORDER BY Umaban")
+
+    assert len(rows) == 17
+    assert all(row["Umaban"] != 2 and row["MakeHM"] == "0945" for row in rows)
 
 
 def test_dm_realtime_expansion_revision_and_race_delete(tmp_path) -> None:
@@ -321,9 +375,9 @@ def test_dm_realtime_expansion_revision_and_race_delete(tmp_path) -> None:
         updater = RealtimeUpdater(database)
 
         first = updater.process_record(_dm_record())
-        corrected = updater.process_record(
-            _dm_record(make_hm="0945", entries=_official_entries(time_offset=500))
-        )
+        corrected_entries = _official_entries(time_offset=500)
+        corrected_entries[1] = _entry()
+        corrected = updater.process_record(_dm_record(make_hm="0945", entries=corrected_entries))
         rows = database.fetch_all("SELECT Umaban, MakeHM, DMTime FROM RT_DM ORDER BY Umaban")
 
         deleted = updater.process_record(
@@ -332,10 +386,12 @@ def test_dm_realtime_expansion_revision_and_race_delete(tmp_path) -> None:
         remaining = database.fetch_one("SELECT COUNT(*) AS count FROM RT_DM")["count"]
 
     assert isinstance(first, list) and len(first) == 18
-    assert isinstance(corrected, list) and len(corrected) == 18
+    assert isinstance(corrected, list) and len(corrected) == 17
     assert all(result and result["success"] for result in first + corrected)
+    assert len(rows) == 17
     assert rows[0] == {"Umaban": 1, "MakeHM": "0945", "DMTime": "10501"}
     assert rows[-1] == {"Umaban": 18, "MakeHM": "0945", "DMTime": "10518"}
+    assert all(row["Umaban"] != 2 for row in rows)
     assert isinstance(deleted, list) and len(deleted) == 1
     assert deleted[0]["success"] is True
     assert remaining == 0
@@ -439,9 +495,9 @@ def test_dm_postgresql_native_and_standard_revision_delete(postgresql_db, import
     postgresql_db.execute(JRAVAN_SCHEMAS["MINING"])
     postgresql_db.commit()
     first = DMParser().parse(_dm_record())
-    corrected = DMParser().parse(
-        _dm_record(make_hm="0945", entries=_official_entries(time_offset=500))
-    )
+    corrected_entries = _official_entries(time_offset=500)
+    corrected_entries[1] = _entry()
+    corrected = DMParser().parse(_dm_record(make_hm="0945", entries=corrected_entries))
     deleted = DMParser().parse(_dm_record(data_kubun="0", entries=[_entry() for _ in range(18)]))
     assert first is not None and corrected is not None and deleted is not None
 
@@ -451,9 +507,7 @@ def test_dm_postgresql_native_and_standard_revision_delete(postgresql_db, import
     standard.import_records(iter(DMParser().parse(_dm_record())))
     native.import_records(iter(corrected))
     standard.import_records(
-        iter(
-            DMParser().parse(_dm_record(make_hm="0945", entries=_official_entries(time_offset=500)))
-        )
+        iter(DMParser().parse(_dm_record(make_hm="0945", entries=corrected_entries)))
     )
 
     native_rows = postgresql_db.fetch_all(
@@ -462,11 +516,13 @@ def test_dm_postgresql_native_and_standard_revision_delete(postgresql_db, import
     )
     standard_row = postgresql_db.fetch_one(
         'SELECT MakeHM AS "MakeHM", Umaban1 AS "Umaban1", '
-        'DMTime1 AS "DMTime1", Umaban18 AS "Umaban18", '
+        'DMTime1 AS "DMTime1", Umaban2 AS "Umaban2", DMTime2 AS "DMTime2", '
+        'Umaban18 AS "Umaban18", '
         'DMTime18 AS "DMTime18" FROM MINING'
     )
-    assert len(native_rows) == 18
+    assert len(native_rows) == 17
     assert dict(native_rows[0]) == {"Umaban": 1, "MakeHM": "0945", "DMTime": "10501"}
+    assert all(row["Umaban"] != 2 for row in native_rows)
     assert dict(native_rows[-1]) == {
         "Umaban": 18,
         "MakeHM": "0945",
@@ -476,6 +532,8 @@ def test_dm_postgresql_native_and_standard_revision_delete(postgresql_db, import
         "MakeHM": "0945",
         "Umaban1": 1,
         "DMTime1": "10501",
+        "Umaban2": None,
+        "DMTime2": None,
         "Umaban18": 18,
         "DMTime18": "10518",
     }
@@ -486,3 +544,44 @@ def test_dm_postgresql_native_and_standard_revision_delete(postgresql_db, import
     )
     assert postgresql_db.fetch_one("SELECT COUNT(*) AS count FROM NL_DM")["count"] == 0
     assert postgresql_db.fetch_one("SELECT COUNT(*) AS count FROM MINING")["count"] == 0
+
+
+def test_dm_postgresql_realtime_snapshot_revision_delete(postgresql_db) -> None:
+    postgresql_db.execute(SCHEMAS["RT_DM"])
+    postgresql_db.commit()
+    updater = RealtimeUpdater(postgresql_db)
+    corrected_entries = _official_entries(time_offset=500)
+    corrected_entries[1] = _entry()
+
+    postgresql_db.begin_transaction()
+    first = updater.process_record(_dm_record())
+    postgresql_db.commit()
+    postgresql_db.begin_transaction()
+    corrected = updater.process_record(_dm_record(make_hm="0945", entries=corrected_entries))
+    realtime_rows = postgresql_db.fetch_all(
+        'SELECT Umaban AS "Umaban", MakeHM AS "MakeHM", DMTime AS "DMTime" '
+        "FROM RT_DM ORDER BY Umaban"
+    )
+    postgresql_db.commit()
+
+    assert isinstance(first, list) and len(first) == 18
+    assert isinstance(corrected, list) and len(corrected) == 17
+    assert all(result["success"] for result in first + corrected)
+    assert len(realtime_rows) == 17
+    assert all(row["Umaban"] != 2 for row in realtime_rows)
+    assert dict(realtime_rows[0]) == {
+        "Umaban": 1,
+        "MakeHM": "0945",
+        "DMTime": "10501",
+    }
+
+    postgresql_db.begin_transaction()
+    deleted = updater.process_record(
+        _dm_record(data_kubun="0", entries=[_entry() for _ in range(18)])
+    )
+    remaining = postgresql_db.fetch_one("SELECT COUNT(*) AS count FROM RT_DM")["count"]
+    postgresql_db.commit()
+
+    assert isinstance(deleted, list) and len(deleted) == 1
+    assert deleted[0]["success"] is True
+    assert remaining == 0

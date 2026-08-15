@@ -127,8 +127,15 @@ class DMParser:
                 return [base]
 
             if populated_entries:
+                snapshot_rows = [{**base, **horse} for horse in populated_entries]
                 return [
-                    {**base, **horse, "_wide_record": wide_record} for horse in populated_entries
+                    {
+                        **horse_row,
+                        "_wide_record": wide_record,
+                        "_dm_snapshot_rows": snapshot_rows,
+                        "_dm_snapshot_index": index,
+                    }
+                    for index, horse_row in enumerate(snapshot_rows)
                 ]
 
             self.logger.warning("DM record has no populated prediction entries")

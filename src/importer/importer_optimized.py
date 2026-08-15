@@ -14,10 +14,13 @@ from src.database.migration import SchemaMigrationError
 from src.importer.importer import (
     _PREPARED_CH_SEISEKI_ROWS_KEY,
     _delete_dm_race_rows,
+    _dm_native_snapshot_rows,
     _expanded_record_fingerprint,
+    _is_dm_snapshot_follower,
     _is_dm_race_delete,
     insert_ch_coupled_batch,
     prepare_ch_coupled_rows,
+    replace_dm_native_snapshot,
     resolve_standard_table_name,
     verify_ch_coupled_table,
 )
@@ -278,6 +281,32 @@ class OptimizedDataImporter:
                     if auto_commit:
                         self.database.commit()
                     last_expanded_record_fingerprint = None
+                    continue
+
+                if _is_dm_snapshot_follower(record, table_name):
+                    continue
+
+                dm_snapshot_rows = _dm_native_snapshot_rows(record, table_name)
+                if dm_snapshot_rows is not None:
+                    pending = batch_buffers.setdefault(table_name, [])
+                    if pending:
+                        self._flush_batch_optimized(
+                            table_name,
+                            pending,
+                            commit_batch=auto_commit,
+                        )
+                        batch_buffers[table_name] = []
+                    if auto_commit:
+                        self.database.begin_transaction()
+                    try:
+                        rows = replace_dm_native_snapshot(self.database, record, table_name)
+                        if auto_commit:
+                            self.database.commit()
+                    except Exception:
+                        self.database.rollback()
+                        raise
+                    self._records_imported += rows
+                    self._batches_processed += 1
                     continue
 
                 fingerprint = _expanded_record_fingerprint(record, table_name)
