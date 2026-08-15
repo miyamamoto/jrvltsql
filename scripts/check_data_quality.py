@@ -587,10 +587,20 @@ class DataQualityChecker:
                   ON ch.ChokyosiCode = result.ChokyosiCode
                 WHERE ch.ChokyosiCode IS NULL
             """)
-            if not incomplete_result or not orphan_result:
+            revision_result = self.db.fetch_one("""
+                SELECT COUNT(*) AS revision_mismatch_count
+                FROM NL_CH_SEISEKI result
+                JOIN NL_CH ch
+                  ON ch.ChokyosiCode = result.ChokyosiCode
+                WHERE result.MakeDate IS NOT ch.MakeDate
+            """)
+            if not incomplete_result or not orphan_result or not revision_result:
                 raise ValueError("normalized CH completeness query returned no result")
             incomplete_count = int(incomplete_result['incomplete_count'])
             orphan_count = int(orphan_result['orphan_count'])
+            revision_mismatch_count = int(
+                revision_result['revision_mismatch_count']
+            )
         except Exception as error:
             logger.error("Normalized CH completeness check failed", error=str(error))
             self._add_issue(
@@ -616,6 +626,13 @@ class DataQualityChecker:
             self._add_issue(
                 'NL_CH_SEISEKI',
                 f'{orphan_count} normalized trainer result row(s) have no parent',
+                'CRITICAL',
+            )
+        if revision_mismatch_count:
+            self._add_issue(
+                'NL_CH_SEISEKI',
+                f'{revision_mismatch_count} normalized trainer result row(s) '
+                'have a different MakeDate than parent',
                 'CRITICAL',
             )
 

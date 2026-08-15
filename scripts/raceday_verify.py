@@ -666,7 +666,16 @@ def check_master_data(con, issues):
         WHERE ch.ChokyosiCode IS NULL
         """,
     )
-    if incomplete is None or orphan is None:
+    revision_mismatch = q(
+        con,
+        """
+        SELECT COUNT(*)
+        FROM NL_CH_SEISEKI result
+        JOIN NL_CH ch ON ch.ChokyosiCode = result.ChokyosiCode
+        WHERE result.MakeDate IS NOT ch.MakeDate
+        """,
+    )
+    if incomplete is None or orphan is None or revision_mismatch is None:
         print("  [FAIL] NL_CH_SEISEKI completeness could not be verified")
         issues.append(
             "NL_CH_SEISEKI completeness could not be verified -- inspect schema"
@@ -674,8 +683,9 @@ def check_master_data(con, issues):
         return
 
     print(
-        f"  {'[OK] ' if ch > 0 and incomplete == 0 and orphan == 0 else '[FAIL]'} "
-        f"NL_CH_SEISEKI incomplete_trainers={incomplete:,} orphan_rows={orphan:,}"
+        f"  {'[OK] ' if ch > 0 and incomplete == 0 and orphan == 0 and revision_mismatch == 0 else '[FAIL]'} "
+        f"NL_CH_SEISEKI incomplete_trainers={incomplete:,} orphan_rows={orphan:,} "
+        f"revision_mismatch_rows={revision_mismatch:,}"
     )
     if incomplete:
         issues.append(
@@ -684,6 +694,11 @@ def check_master_data(con, issues):
     if orphan:
         issues.append(
             f"NL_CH_SEISEKI has {orphan} orphan row(s) -- run full DIFN reimport"
+        )
+    if revision_mismatch:
+        issues.append(
+            f"NL_CH_SEISEKI has {revision_mismatch} row(s) from a different "
+            "parent MakeDate -- run full DIFN reimport"
         )
 
 

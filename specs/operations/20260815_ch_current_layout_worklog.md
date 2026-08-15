@@ -349,3 +349,23 @@
   backend identifier normalization for both table and column names. The paired
   CH metadata tests pass `2 passed`, and the expanded CH/quality/race-day/
   fixture/metadata/database/migration group passes `224 passed, 8 skipped`.
+
+## Exact-candidate revision-integrity repair
+
+- Codex CLI `0.147` (`gpt-5.6-sol`, `xhigh`, ephemeral read-only session
+  `01a0072b-cec9-7422-994b-eb38d4f6260e`) reviewed exact candidate
+  `283cd308d8041c2605ecc9c4b87262ffc05612a4` from base
+  `e54991eb02f5fbee8c4e561bf1f54adb9be255ac`. External reviewers,
+  subagents, network access, and write access were disabled. It found one P2
+  operational-integrity defect: both CH completeness checks accepted three
+  child rows whose `MakeDate` belonged to an older physical CH revision than
+  their parent.
+- The minimal extension of the two existing paired rejection/acceptance tests
+  was red first with `2 failed`: both checks returned no issue for parent
+  `MakeDate=20260815` and child `MakeDate=20260814`. Both checks now perform a
+  separate NULL-safe revision comparison after key/cardinality/orphan checks
+  and report the exact mismatched-row count.
+- The same regressions pass `2 passed`; the broader CH contract,
+  data-quality, race-day, schema, metadata, fixture, database, and migration
+  group passes `227 passed, 9 skipped`. Full exact-SHA and final read-only
+  review evidence will be recorded after committing this repair.

@@ -14,6 +14,7 @@ def _create_ch_database(
     include_parent: bool = True,
     parent_row: bool = True,
     extra_null_result: bool = False,
+    stale_result_revision: bool = False,
     result_count: int | None = None,
 ) -> None:
     database = SQLiteDatabase({"path": str(path)})
@@ -35,7 +36,12 @@ def _create_ch_database(
                 "INSERT INTO NL_CH_SEISEKI (MakeDate, ChokyosiCode, Num, SetYear) "
                 "VALUES (?, ?, ?, ?)",
                 [
-                    ("20260815", "C1", number, 2026 - number)
+                    (
+                        "20260814" if stale_result_revision else "20260815",
+                        "C1",
+                        number,
+                        2026 - number,
+                    )
                     for number in range(1, stored_result_count + 1)
                 ],
             )
@@ -114,6 +120,15 @@ def test_data_quality_rejects_missing_or_incomplete_ch_results_and_accepts_compl
     )
     extra = _ch_issues(DataQualityChecker(str(extra_path)).check_all())
 
+    stale_path = tmp_path / "stale-result-revision.db"
+    _create_ch_database(
+        stale_path,
+        include_results=True,
+        complete_results=True,
+        stale_result_revision=True,
+    )
+    stale = _ch_issues(DataQualityChecker(str(stale_path)).check_all())
+
     assert _issue_signatures(missing) == [
         (
             "NL_CH_SEISEKI",
@@ -151,6 +166,13 @@ def test_data_quality_rejects_missing_or_incomplete_ch_results_and_accepts_compl
         (
             "NL_CH_SEISEKI",
             "1 trainer(s) do not have exactly result rows Num=1,2,3",
+            "CRITICAL",
+        )
+    ]
+    assert _issue_signatures(stale) == [
+        (
+            "NL_CH_SEISEKI",
+            "3 normalized trainer result row(s) have a different MakeDate than parent",
             "CRITICAL",
         )
     ]

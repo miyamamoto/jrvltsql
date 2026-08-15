@@ -14,6 +14,7 @@ def _master_connection(
     include_parent: bool = True,
     parent_row: bool = True,
     extra_null_result: bool = False,
+    stale_result_revision: bool = False,
     result_count: int | None = None,
 ):
     connection = sqlite3.connect(":memory:")
@@ -42,7 +43,14 @@ def _master_connection(
         )
         connection.executemany(
             "INSERT INTO NL_CH_SEISEKI VALUES (?, ?, ?)",
-            [("20260815", "C1", number) for number in range(1, stored_result_count + 1)],
+            [
+                (
+                    "20260814" if stale_result_revision else "20260815",
+                    "C1",
+                    number,
+                )
+                for number in range(1, stored_result_count + 1)
+            ],
         )
         if orphan_result:
             connection.execute(
@@ -141,6 +149,15 @@ def test_master_check_rejects_missing_or_incomplete_ch_results_and_accepts_compl
     raceday_verify.check_master_data(extra, extra_issues)
     extra.close()
 
+    stale = _master_connection(
+        include_results=True,
+        complete_results=True,
+        stale_result_revision=True,
+    )
+    stale_issues = []
+    raceday_verify.check_master_data(stale, stale_issues)
+    stale.close()
+
     assert missing_issues == ["NL_CH_SEISEKI missing -- run create-tables and full DIFN reimport"]
     assert incomplete_issues == [
         "NL_CH_SEISEKI incomplete for 1 trainer(s) -- run full DIFN reimport"
@@ -151,6 +168,10 @@ def test_master_check_rejects_missing_or_incomplete_ch_results_and_accepts_compl
     assert empty_issues == ["NL_CH empty -- run full DIFN reimport"]
     assert extra_issues == [
         "NL_CH_SEISEKI incomplete for 1 trainer(s) -- run full DIFN reimport"
+    ]
+    assert stale_issues == [
+        "NL_CH_SEISEKI has 3 row(s) from a different parent MakeDate -- "
+        "run full DIFN reimport"
     ]
 
 
