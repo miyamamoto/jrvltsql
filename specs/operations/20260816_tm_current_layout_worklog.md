@@ -144,19 +144,23 @@
   container was stopped and removed.
 - Source candidate `46926792663fa4d51428db275b32c966583ed96e` passed the full
   Python 3.12 suite with `2183 passed, 57 skipped, 3 warnings, 6 subtests`, and
-  a sequential Python 3.10 compatibility run with the same totals. The exact
-  workflow selection passed with `864 passed, 2 skipped, 3 warnings, 3
-  subtests` and 56% coverage. Candidate and exact base both reported the same
-  77 mypy errors in 20 files. These runs established the source baseline but
-  are superseded as final-candidate evidence by the native-type review fix.
+  a sequential Python 3.10 compatibility run with the same totals. This was
+  superseded by the native-type review fix.
+- Corrected source candidate `094a0b8ee5b87a222abae81b9cd3ee543ea05eba`
+  passed the full Python 3.12 suite with `2186 passed, 57 skipped, 3 warnings,
+  6 subtests`, and the sequential Python 3.10 compatibility run with the same
+  totals. Its exact workflow selection passed with `864 passed, 2 skipped, 3
+  warnings, 3 subtests` and 56% coverage. Candidate and exact base both report
+  the same 77 mypy errors in 20 files.
 - `git diff --check`, compileall, blocking flake8, and focused Black checks
-  pass. The replacement candidate still requires immutable-SHA full/workflow
-  reruns before publication.
+  pass. The final worklog-only commit receives focused/static validation; its
+  full SHA and exact results are recorded in PR metadata to avoid a
+  self-referential evidence commit loop.
 
 ## Next safe command and STOP conditions
 
-- Next: aggregate-review the complete diff, record any actionable correction,
-  then commit an immutable candidate and run both full supported-Python suites,
-  workflow-equivalent checks, and exact-base static comparison.
+- Next: commit this evidence-only worklog update, run focused/static checks on
+  that exact final SHA, fetch and confirm no base drift, then publish the PR for
+  its single native review and exact-head CI gate.
 - STOP if official sources disagree, a safe migration cannot preserve existing
   rows, any executable check fails on the candidate, or the branch/base drifts.
