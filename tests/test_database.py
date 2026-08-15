@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from src.database.base import DatabaseError
 from src.database.schema import SCHEMAS, SchemaManager
 from src.database.sqlite_handler import SQLiteDatabase
 
@@ -42,6 +43,18 @@ class TestSQLiteDatabase:
             assert db.is_connected()
 
         assert not db.is_connected()
+
+    def test_context_manager_rejects_arbitrary_disconnect_with_uncommitted_write(self, db):
+        """A clean context must not report success after an unrelated disconnect."""
+        with pytest.raises(DatabaseError, match="No active connection"):
+            with db:
+                db.create_table("test", "CREATE TABLE test (id INTEGER PRIMARY KEY)")
+                db.commit()
+                db.insert("test", {"id": 1})
+                db.disconnect()
+
+        with db:
+            assert db.fetch_one("SELECT COUNT(*) AS count FROM test")["count"] == 0
 
     def test_create_table(self, db):
         """Test table creation."""

@@ -276,3 +276,21 @@
 - The paired rollback regressions passed `3 passed`, and the existing database
   context/transaction tests passed `22 passed`. Full exact-SHA and PostgreSQL
   evidence will be recorded on PR #179 after the repair commit is created.
+
+## Fail-closed invalidation refinement
+
+- The exact-candidate Codex review (`gpt-5.6-sol`, `xhigh`, session
+  `01a00701-ca31-7a20-b08b-385c356f325d`) independently reproduced one P2
+  regression in `dfcb0d299d053033b7f851dc703960cb3a3567c2`: treating every
+  disconnected handler as an intentional invalidation allowed a clean context
+  body to disconnect after an uncommitted write, silently lose the row, and
+  still exit successfully.
+- A minimal regression test was red first with `Failed: DID NOT RAISE` for
+  `DatabaseError`. Intentional rollback-failure invalidation is now marked via
+  `BaseDatabase.invalidate_connection()`. Context teardown skips a redundant
+  transaction operation only for that explicit state; an arbitrary public
+  `disconnect()` retains the prior fail-closed `No active connection` error.
+- The paired intentional-invalidation and arbitrary-disconnect regressions pass
+  `4 passed`; the broader database context/dual-transaction group passes
+  `23 passed`. Final full-suite, PostgreSQL, static, and exact-SHA review
+  evidence will be attached to PR #179 after the replacement commit.

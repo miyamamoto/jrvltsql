@@ -50,6 +50,7 @@ class BaseDatabase(ABC):
         self.config = config
         self._connection = None
         self._cursor = None
+        self._context_exit_invalidated = False
         logger.info(f"{self.__class__.__name__} initialized")
 
     def _quote_identifier(self, identifier: str) -> str:
@@ -318,6 +319,21 @@ class BaseDatabase(ABC):
         """
         return self._connection is not None
 
+    def invalidate_connection(self) -> None:
+        """Discard an unsafe session and identify it to context teardown.
+
+        This is deliberately distinct from a caller-requested ``disconnect``:
+        only a failed transactional recovery may skip the context manager's
+        final commit or rollback.
+        """
+        self._context_exit_invalidated = True
+        try:
+            self.disconnect()
+        except Exception:
+            if self.is_connected():
+                self._context_exit_invalidated = False
+            raise
+
     @abstractmethod
     def get_db_type(self) -> str:
         """Get database type identifier.
@@ -329,16 +345,17 @@ class BaseDatabase(ABC):
 
     def __enter__(self):
         """Context manager entry."""
+        self._context_exit_invalidated = False
         self.connect()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit."""
-        # An operation may deliberately invalidate a session when rollback
-        # cannot be confirmed.  In that case the old transaction has already
-        # been discarded by disconnect(), and attempting another commit or
-        # rollback here would only mask the original database error.
-        if not self.is_connected():
+        # A failed transactional recovery may explicitly invalidate the old
+        # session. Arbitrary disconnects retain the normal fail-closed commit
+        # or rollback attempt so lost writes cannot be reported as success.
+        if self._context_exit_invalidated and not self.is_connected():
+            self._context_exit_invalidated = False
             return None
         if exc_type is not None:
             self.rollback()

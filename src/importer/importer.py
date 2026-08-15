@@ -222,7 +222,7 @@ def insert_ch_coupled_batch(
             # A connection with an unconfirmed rollback must never remain
             # available for a later context-manager commit.
             try:
-                database.disconnect()
+                database.invalidate_connection()
             except Exception as disconnect_error:
                 logger.error(
                     "Failed to invalidate database after CH rollback failure",
