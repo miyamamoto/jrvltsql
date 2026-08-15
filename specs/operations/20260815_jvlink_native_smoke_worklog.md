@@ -132,6 +132,25 @@
   path and the historical no-data/close path passed; successful-data JVOpen
   plus JVStatus is deliberately not reported green.
 
+## PR publication and review
+
+- Documentation-only PR #164 was opened against `master`:
+  <https://github.com/miyamamoto/jrvltsql/pull/164>.
+- Initial documentation candidate
+  `016cfb96e86c14b750a687a7581dcbdd58ef0ae2` had successful GitHub Actions
+  `test` and `lint` jobs in run `31867796776`; the documentation-only
+  `performance-test` job was skipped by workflow policy.
+- Codex reviewed the one-file evidence diff against the sanitized command
+  observations and found no actionable contradiction or unsupported green
+  claim. GraphQL review-thread inspection reported zero threads.
+- CodeRabbit was automatically invoked when the PR left draft, but reported
+  `Review rate limited` and produced no review. It is not counted as review
+  evidence or as a required gate.
+- This tracked PR-state update necessarily creates a later final candidate.
+  Its full SHA, checks, and final thread count are recorded in PR metadata to
+  avoid a self-referential commit loop; the initial candidate's checks are not
+  reused for that later SHA.
+
 ## Safety and evidence rules
 
 - Do not print credentials, service keys, registry contents, connection
@@ -150,12 +169,14 @@
 
 ## Next safe command
 
-Publish this sanitized evidence in a documentation-only PR. A later follow-up
-may retry the remaining successful-data `JVOpen -> JVStatus -> JVRead ->
-JVClose` gate on an authorized native Windows/JV-Link host, or first diagnose
-the reproducible deployed-client `JVOpen(RACE)` timeout without changing the
-machine identity. Do not reuse the real-time pass as proof of the unverified
-historical-download path.
+Push this final worklog update to PR #164, record the new candidate full SHA in
+the PR, and verify its focused checks, Codex review, unresolved thread count
+zero, and clean worktree before merging the documentation-only iteration. A
+later follow-up may retry the remaining successful-data `JVOpen -> JVStatus ->
+JVRead -> JVClose` gate on an authorized native Windows/JV-Link host, or first
+diagnose the reproducible deployed-client `JVOpen(RACE)` timeout without
+changing the machine identity. Do not reuse the real-time pass as proof of the
+unverified historical-download path.
 
 ## STOP conditions
 
