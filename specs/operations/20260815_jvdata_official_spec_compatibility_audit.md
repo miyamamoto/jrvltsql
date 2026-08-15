@@ -96,10 +96,10 @@ race identityと`Umaban`を複合主キーに持ち、馬名、馬体重、増�
 
 ### B-04 現行38種のうち複数が公式配列を途中で切る
 
-明らかに短い公開契約は、WH、SK、RA、BN、BRの修正後、次の7種である。
+明らかに短い公開契約は、WH、SK、RA、BN、BR、CHの修正後、次の6種である。
 
 ```text
-CH 592/3862   DM 48/303     KS 772/4173   RC 241/501
+DM 48/303     KS 772/4173   RC 241/501
 TK 727/21657  TM 39/141     YS 146/382
 ```
 
@@ -129,6 +129,16 @@ BRは現行DIFN/4.9.0.1/SDK 5.0.0の545バイトへ統一した。本年・累�
 schemaと一致する`SEISAN`をcanonicalとし、`BREEDER`はread-side aliasに限定した。
 native/standard schemaは8バイト`BreederCode`主キーと27 business fieldで一致し、
 既存native DBも移行後に現行DIFN option 3/4 setupから全件再取込する。
+
+CHは4.8.0.2、4.9.0.1、SDK 5.0.0に共通する3862バイトへ統一した。
+最近重賞3件（163バイト×3）と、本年・前年・累計の成績3件
+（1052バイト×3、各173値）を全展開し、長さ/type/strict CP932/CRLFを厳密検査する。
+保存は公式互換DBの構造に合わせ、native/standardともheader 1行と成績3行へ正規化した。
+headerは`ChokyosiCode`、成績は`(ChokyosiCode, Num)`を主キーとし、1物理レコードを
+両テーブルへ原子的に書く。旧592バイトfixtureは先頭590バイトだけを位置互換の
+repository regressionとして合成し、provider rawとは扱わない。既存native `NL_CH`の
+旧inline成績列はadditive migrationで保持するが、新しいheader/成績表を埋めるには
+現行setupから全件再取込が必要である。
 
 ### B-05 2023年変更対象7種は新旧両対応ではない
 
@@ -272,7 +282,7 @@ skip の扱いに関する実運用上の質問が繰り返されている:
 | O6 | 83285 | current-shape / weak gate | 同上 |
 | UM | 1609 | current-shape | currentのみ、厳密長/CRLF |
 | KS | 4173 | partial | 成績配列を途中で終了、公開長772 |
-| CH | 3862 | partial | 表彰/成績配列を途中で終了、公開長592 |
+| CH | 3862 | current-shape / normalized | 最近重賞3件＋成績3件をheader 1行/成績3行へ原子的に保存、厳密長/type/CRLF |
 | BR | 545 | current-shape | 全位置・全成績配列・厳密長/type/CRLF |
 | BN | 477 | current-shape | 本年・累計成績を全展開、現行長/type/CRLFを厳密検査、413/387byteを拒否 |
 | HN | 251 | current-shape | currentのみ、全フィールドの現行位置と長さ/CRLFを厳密検査 |

@@ -47,7 +47,7 @@ FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures", "jra")
 PARSER_MAP = {
     "BN": (BNParser, BNParser.RECORD_LENGTH),
     "BR": (BRParser, BRParser.RECORD_LENGTH),
-    "CH": (CHParser, 592),
+    "CH": (CHParser, CHParser.RECORD_LENGTH),
     "DM": (DMParser, 48),
     "H1": (H1Parser, 317),   # Fixture files use flat format (317 bytes)
     "H6": (H6Parser, 78),    # Fixture files use flat format (78 bytes)
@@ -73,7 +73,7 @@ PARSER_MAP = {
     "YS": (YSParser, 146),
 }
 EXPANDED_RECORD_TYPES = {"O1", "O2", "O3", "O4", "O5", "O6"}
-LEGACY_RECONSTRUCTED_LENGTHS = {"BN": 387, "BR": 455, "RA": 856, "SK": 78}
+LEGACY_RECONSTRUCTED_LENGTHS = {"BN": 387, "BR": 455, "CH": 592, "RA": 856, "SK": 78}
 
 
 def _has_complete_fixture_records(data, record_type, record_length):
@@ -117,6 +117,11 @@ def load_fixture_records(record_type, record_length):
                 # parser. Only its first 423 core bytes are position-compatible;
                 # the full result arrays are covered by the official contract.
                 chunk = chunk[:423].ljust(BRParser.RECORD_LENGTH - 2, b" ") + b"\r\n"
+            if record_type == "CH" and len(chunk) == 592:
+                # This fixture was reconstructed through the obsolete parser,
+                # which placed CRLF inside the first official result block.
+                # Preserve only the position-compatible 590-byte prefix.
+                chunk = chunk[:590].ljust(CHParser.RECORD_LENGTH - 2, b" ") + b"\r\n"
             if record_type == "SK" and len(chunk) == 78:
                 # This fixture was reconstructed from stored columns through
                 # the obsolete one-pedigree parser. Preserve its core values

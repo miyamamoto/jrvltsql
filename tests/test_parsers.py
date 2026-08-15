@@ -82,7 +82,7 @@ class TestIndividualParsers:
         # そのparserが対応する現行物理長と一致させる。
         record_lengths = {
             'AV': 78, 'BN': 477, 'BR': 545, 'BT': 415, 'CC': 71,
-            'CH': 96, 'CK': 232, 'CS': 208, 'DM': 233,
+            'CH': 3862, 'CK': 232, 'CS': 208, 'DM': 233,
             'H1': 28955, 'H6': 102890, 'HC': 60, 'HN': 251, 'HR': 719, 'HS': 200, 'HY': 123,
             'JC': 252, 'JG': 251, 'KS': 282,
             'O1': 962, 'O2': 2042, 'O3': 2654, 'O4': 4031, 'O5': 12293, 'O6': 83285,
@@ -100,7 +100,7 @@ class TestIndividualParsers:
             remaining = length - len(data)
             data += b' ' * remaining
             # 固定長＋終端CRLFを強制するパーサーは末尾を CRLF にする
-            if record_type in ("BN", "BR", "HN", "RA", "SE", "SK", "UM", "WH"):
+            if record_type in ("BN", "BR", "CH", "HN", "RA", "SE", "SK", "UM", "WH"):
                 data = data[:-2] + b"\r\n"
             if record_type == "WH":
                 mutable = bytearray(data)
@@ -414,7 +414,7 @@ class TestParserRobustness:
         """ParserFactoryインスタンスを返すフィクスチャ"""
         return ParserFactory()
 
-    @pytest.mark.parametrize("record_type", ['RA', 'SE', 'HR', 'UM', 'BN', 'BR'])
+    @pytest.mark.parametrize("record_type", ['RA', 'SE', 'HR', 'UM', 'BN', 'BR', 'CH'])
     def test_parser_handles_exact_length(self, parser_factory, record_type):
         """正確な長さのデータを処理できることを確認"""
         parser = parser_factory.get_parser(record_type)
@@ -424,7 +424,7 @@ class TestParserRobustness:
         data += b'1'
         data += b'20240601'
         data += b' ' * (parser.RECORD_LENGTH - len(data))
-        if record_type in ("BN", "BR", "RA", "SE", "UM"):
+        if record_type in ("BN", "BR", "CH", "RA", "SE", "UM"):
             data = data[:-2] + b"\r\n"
 
         assert len(data) == parser.RECORD_LENGTH

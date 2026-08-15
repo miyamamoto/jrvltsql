@@ -60,6 +60,27 @@ _STANDARD_FIELD_ALIASES = {
         "SibaBabaState2": "MaeSibaBabaCD",
         "DirtBabaState2": "MaeDirtBabaCD",
     },
+    "CHOKYO": {
+        **{
+            f"SaikinJyusyo{block}_{suffix}": (
+                f"SaikinJyusyo{block}SaikinJyusyoid"
+                if suffix == "id"
+                else f"SaikinJyusyo{block}{suffix}"
+            )
+            for block in range(1, 4)
+            for suffix in (
+                "id",
+                "Hondai",
+                "Ryakusyo10",
+                "Ryakusyo6",
+                "Ryakusyo3",
+                "GradeCD",
+                "SyussoTosu",
+                "KettoNum",
+                "Bamei",
+            )
+        }
+    },
 }
 
 
@@ -83,6 +104,130 @@ def _expanded_record_fingerprint(record: dict, table_name: str) -> Optional[tupl
     if not isinstance(wide_record, dict):
         return None
     return tuple(sorted((str(key), repr(value)) for key, value in wide_record.items()))
+
+
+_CH_SEISEKI_ROWS_KEY = "_ch_seiseki_rows"
+_PREPARED_CH_SEISEKI_ROWS_KEY = "_prepared_ch_seiseki_rows"
+
+
+def _ch_result_table_name(main_table_name: str) -> str | None:
+    return {
+        "NL_CH": "NL_CH_SEISEKI",
+        "CHOKYO": "CHOKYO_SEISEKI",
+    }.get(main_table_name)
+
+
+def prepare_ch_coupled_rows(
+    database: BaseDatabase,
+    record: dict,
+    main_table_name: str,
+) -> tuple[str, list[dict]] | None:
+    """Validate and convert the three normalized CH result rows before writes."""
+    result_table = _ch_result_table_name(main_table_name)
+    if result_table is None:
+        return None
+
+    from src.database.migration import verify_table_schema
+    from src.database.schema import SCHEMAS
+    from src.database.schema_jravan import JRAVAN_SCHEMAS
+
+    schema_sql = SCHEMAS.get(result_table) or JRAVAN_SCHEMAS.get(result_table)
+    if not schema_sql or not database.table_exists(result_table):
+        raise SchemaMigrationError(
+            f"CH import requires normalized result table {result_table} before mutation"
+        )
+    verify_table_schema(database, result_table, schema_sql)
+
+    rows = record.get(_CH_SEISEKI_ROWS_KEY)
+    if not isinstance(rows, list) or len(rows) != 3:
+        raise SchemaMigrationError("CH import requires exactly three normalized result rows")
+
+    expected_fields = set(get_table_column_types(result_table))
+    expected_make_date = record.get("MakeDate")
+    expected_code = record.get("ChokyosiCode")
+    converted_rows = []
+    for expected_number, row in enumerate(rows, start=1):
+        if not isinstance(row, dict) or set(row) != expected_fields:
+            raise SchemaMigrationError(
+                f"CH result row {expected_number} does not match {result_table} fields"
+            )
+        if (
+            row.get("MakeDate") != expected_make_date
+            or row.get("ChokyosiCode") != expected_code
+            or str(row.get("Num")) != str(expected_number)
+        ):
+            raise SchemaMigrationError(
+                f"CH result row {expected_number} has inconsistent parent key or sequence"
+            )
+        converted = convert_record_types(row, result_table)
+        if not DataImporter._has_complete_primary_key(result_table, converted):
+            raise SchemaMigrationError(
+                f"CH result row {expected_number} has an incomplete normalized key"
+            )
+        converted_rows.append(converted)
+    return result_table, converted_rows
+
+
+def insert_ch_coupled_batch(
+    database: BaseDatabase,
+    main_table_name: str,
+    prepared: list[tuple[dict, str, list[dict]]],
+    *,
+    commit_batch: bool,
+    optimized: bool,
+) -> tuple[int, int]:
+    """Atomically write CH header/result groups and return physical-record stats."""
+    if not prepared:
+        return 0, 0
+
+    result_tables = {result_table for _, result_table, _ in prepared}
+    if len(result_tables) != 1:
+        raise SchemaMigrationError("CH batch contains inconsistent normalized result tables")
+    result_table = next(iter(result_tables))
+
+    def begin_if_owned() -> None:
+        if commit_batch:
+            begin = getattr(database, "begin_transaction", None)
+            if begin is not None:
+                begin()
+
+    def insert_many(table_name: str, rows: list[dict]) -> int:
+        if optimized and hasattr(database, "insert_many_optimized"):
+            return database.insert_many_optimized(table_name, rows)
+        return database.insert_many(table_name, rows)
+
+    main_rows = [main for main, _, _ in prepared]
+    result_rows = [row for _, _, rows in prepared for row in rows]
+    try:
+        begin_if_owned()
+        insert_many(main_table_name, main_rows)
+        insert_many(result_table, result_rows)
+        if commit_batch:
+            database.commit()
+        return len(prepared), 0
+    except DatabaseError:
+        if not commit_batch:
+            raise
+        database.rollback()
+
+    succeeded = 0
+    failed = 0
+    for main_row, child_table, child_rows in prepared:
+        try:
+            begin_if_owned()
+            database.insert(main_table_name, main_row)
+            insert_many(child_table, child_rows)
+            database.commit()
+            succeeded += 1
+        except DatabaseError as error:
+            failed += 1
+            database.rollback()
+            logger.error(
+                "Failed to insert coupled CH record",
+                table=main_table_name,
+                error=str(error),
+            )
+    return succeeded, failed
 
 
 # ============================================================================
@@ -403,6 +548,15 @@ class DataImporter:
             if schema_sql and self.database.table_exists(standard_name):
                 migrate_table_if_needed(self.database, standard_name, schema_sql, commit=commit)
                 verify_table_schema(self.database, standard_name, schema_sql)
+        child_schema = JRAVAN_SCHEMAS.get("CHOKYO_SEISEKI")
+        if child_schema and self.database.table_exists("CHOKYO_SEISEKI"):
+            migrate_table_if_needed(
+                self.database,
+                "CHOKYO_SEISEKI",
+                child_schema,
+                commit=commit,
+            )
+            verify_table_schema(self.database, "CHOKYO_SEISEKI", child_schema)
 
     def _ensure_jravan_tables_ready(self, *, auto_commit: bool) -> None:
         """Migrate standard-name tables only after the DB is connected."""
@@ -616,10 +770,19 @@ class DataImporter:
             clean_batch = [self._record_for_table(record, table_name) for record in batch]
             # Convert types based on schema definition
             converted_batch = []
-            for record in clean_batch:
+            prepared_ch: list[tuple[dict, str, list[dict]]] = []
+            for original_record, record in zip(batch, clean_batch, strict=True):
                 converted_record = self._convert_record(record, table_name)
                 if self._has_complete_primary_key(table_name, converted_record):
                     converted_batch.append(converted_record)
+                    coupled = prepare_ch_coupled_rows(
+                        self.database,
+                        original_record,
+                        table_name,
+                    )
+                    if coupled is not None:
+                        result_table, result_rows = coupled
+                        prepared_ch.append((converted_record, result_table, result_rows))
                 else:
                     self._records_failed += 1
                     logger.warning(
@@ -629,6 +792,22 @@ class DataImporter:
                     )
 
             if not converted_batch:
+                return
+
+            if prepared_ch:
+                if len(prepared_ch) != len(converted_batch):
+                    raise SchemaMigrationError("CH batch lost its coupled result rows")
+                succeeded, failed = insert_ch_coupled_batch(
+                    self.database,
+                    table_name,
+                    prepared_ch,
+                    commit_batch=auto_commit,
+                    optimized=False,
+                )
+                self._records_imported += succeeded
+                self._records_failed += failed
+                if succeeded:
+                    self._batches_processed += 1
                 return
 
             # Insert batch using INSERT OR REPLACE
@@ -755,6 +934,19 @@ class DataImporter:
                     primary_key=get_table_primary_key_columns(table_name),
                 )
                 return False
+            coupled = prepare_ch_coupled_rows(self.database, record, table_name)
+            if coupled is not None:
+                result_table, result_rows = coupled
+                succeeded, failed = insert_ch_coupled_batch(
+                    self.database,
+                    table_name,
+                    [(converted_record, result_table, result_rows)],
+                    commit_batch=auto_commit,
+                    optimized=False,
+                )
+                self._records_imported += succeeded
+                self._records_failed += failed
+                return succeeded == 1
             self.database.insert(table_name, converted_record, use_replace=True)
             self._records_imported += 1
 

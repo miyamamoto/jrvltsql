@@ -11,7 +11,13 @@ from typing import Dict, Iterator, List, Optional, Union
 
 from src.database.base import BaseDatabase, DatabaseError
 from src.database.migration import SchemaMigrationError
-from src.importer.importer import _expanded_record_fingerprint, resolve_standard_table_name
+from src.importer.importer import (
+    _PREPARED_CH_SEISEKI_ROWS_KEY,
+    _expanded_record_fingerprint,
+    insert_ch_coupled_batch,
+    prepare_ch_coupled_rows,
+    resolve_standard_table_name,
+)
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -110,6 +116,15 @@ class OptimizedDataImporter:
             if schema_sql and self.database.table_exists(standard_name):
                 migrate_table_if_needed(self.database, standard_name, schema_sql, commit=commit)
                 verify_table_schema(self.database, standard_name, schema_sql)
+        child_schema = JRAVAN_SCHEMAS.get("CHOKYO_SEISEKI")
+        if child_schema and self.database.table_exists("CHOKYO_SEISEKI"):
+            migrate_table_if_needed(
+                self.database,
+                "CHOKYO_SEISEKI",
+                child_schema,
+                commit=commit,
+            )
+            verify_table_schema(self.database, "CHOKYO_SEISEKI", child_schema)
 
     def _ensure_jravan_tables_ready(self, *, auto_commit: bool) -> None:
         """Migrate standard-name tables only after the DB is connected."""
@@ -263,6 +278,9 @@ class OptimizedDataImporter:
                     )
                     self._records_failed += 1
                     continue
+                coupled = prepare_ch_coupled_rows(self.database, record, table_name)
+                if coupled is not None:
+                    converted_record[_PREPARED_CH_SEISEKI_ROWS_KEY] = coupled
                 batch_buffers[table_name].append(converted_record)
 
                 # Check if any batch is full
@@ -302,6 +320,34 @@ class OptimizedDataImporter:
     ):
         """Flush a batch with database-specific optimizations."""
         if not batch:
+            return
+
+        prepared_ch = []
+        for record in batch:
+            coupled = record.get(_PREPARED_CH_SEISEKI_ROWS_KEY)
+            if coupled is None:
+                continue
+            result_table, result_rows = coupled
+            main_row = {
+                key: value
+                for key, value in record.items()
+                if key != _PREPARED_CH_SEISEKI_ROWS_KEY
+            }
+            prepared_ch.append((main_row, result_table, result_rows))
+        if prepared_ch:
+            if len(prepared_ch) != len(batch):
+                raise SchemaMigrationError("CH batch lost its coupled result rows")
+            succeeded, failed = insert_ch_coupled_batch(
+                self.database,
+                table_name,
+                prepared_ch,
+                commit_batch=commit_batch,
+                optimized=True,
+            )
+            self._records_imported += succeeded
+            self._records_failed += failed
+            if succeeded:
+                self._batches_processed += 1
             return
 
         try:
