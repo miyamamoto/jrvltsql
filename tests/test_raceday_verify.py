@@ -1,8 +1,45 @@
 """Regression tests for race-day operational recovery paths."""
 
+import sqlite3
 from types import SimpleNamespace
 
 from scripts import raceday_verify
+
+
+def _master_connection(
+    *, include_results: bool, complete_results: bool = False, orphan_result: bool = False
+):
+    connection = sqlite3.connect(":memory:")
+    connection.executescript(
+        """
+        CREATE TABLE NL_UM (KettoNum TEXT PRIMARY KEY);
+        CREATE TABLE NL_KS (KisyuCode TEXT PRIMARY KEY);
+        CREATE TABLE NL_CH (
+            MakeDate TEXT,
+            ChokyosiCode TEXT PRIMARY KEY
+        );
+        INSERT INTO NL_UM VALUES ('H1');
+        INSERT INTO NL_KS VALUES ('J1');
+        INSERT INTO NL_CH VALUES ('20260815', 'C1');
+        """
+    )
+    if include_results:
+        connection.execute(
+            "CREATE TABLE NL_CH_SEISEKI ("
+            "MakeDate TEXT, ChokyosiCode TEXT, Num INTEGER, "
+            "PRIMARY KEY (ChokyosiCode, Num))"
+        )
+        result_count = 3 if complete_results else 2
+        connection.executemany(
+            "INSERT INTO NL_CH_SEISEKI VALUES (?, ?, ?)",
+            [("20260815", "C1", number) for number in range(1, result_count + 1)],
+        )
+        if orphan_result:
+            connection.execute(
+                "INSERT INTO NL_CH_SEISEKI VALUES (?, ?, ?)",
+                ("20260815", "ORPHAN", 1),
+            )
+    return connection
 
 
 def test_result_completion_issue_recommends_race_fetch(monkeypatch):
@@ -25,6 +62,59 @@ def test_result_completion_issue_recommends_race_fetch(monkeypatch):
     raceday_verify.check_se_results(None, "2026", "0815", issues)
 
     assert issues == []
+
+
+def test_schema_check_requires_normalized_ch_results(monkeypatch):
+    monkeypatch.setattr(
+        raceday_verify,
+        "table_exists",
+        lambda _connection, table_name: table_name != "NL_CH_SEISEKI",
+    )
+    issues = []
+
+    raceday_verify.check_schema(None, issues)
+
+    assert issues == ["Missing NL_ tables: ['NL_CH_SEISEKI']"]
+
+
+def test_master_check_rejects_missing_or_incomplete_ch_results_and_accepts_complete():
+    missing = _master_connection(include_results=False)
+    missing_issues = []
+    raceday_verify.check_master_data(missing, missing_issues)
+    missing.close()
+
+    incomplete = _master_connection(include_results=True, complete_results=False)
+    incomplete_issues = []
+    raceday_verify.check_master_data(incomplete, incomplete_issues)
+    incomplete.close()
+
+    complete = _master_connection(include_results=True, complete_results=True)
+    complete_issues = []
+    raceday_verify.check_master_data(complete, complete_issues)
+    complete.close()
+
+    orphan = _master_connection(include_results=True, complete_results=True, orphan_result=True)
+    orphan_issues = []
+    raceday_verify.check_master_data(orphan, orphan_issues)
+    orphan.close()
+
+    assert missing_issues == ["NL_CH_SEISEKI missing -- run create-tables and full DIFN reimport"]
+    assert incomplete_issues == [
+        "NL_CH_SEISEKI incomplete for 1 trainer(s) -- run full DIFN reimport"
+    ]
+    assert complete_issues == []
+    assert orphan_issues == ["NL_CH_SEISEKI has 1 orphan row(s) -- run full DIFN reimport"]
+
+
+def test_master_check_reports_unreadable_ch_result_schema_instead_of_crashing():
+    connection = _master_connection(include_results=False)
+    connection.execute("CREATE TABLE NL_CH_SEISEKI (ChokyosiCode TEXT)")
+    issues = []
+
+    raceday_verify.check_master_data(connection, issues)
+    connection.close()
+
+    assert issues == ["NL_CH_SEISEKI completeness could not be verified -- inspect schema"]
 
 
 def test_post_phase_uses_race_once_to_recover_missing_payouts(monkeypatch):
@@ -56,8 +146,6 @@ def test_post_phase_uses_race_once_to_recover_missing_payouts(monkeypatch):
         "NL_RA  (race header) ": 12,
     }
 
-    raceday_verify.run_phase_post(
-        None, args, "2026", "0815", [], nl_checks, {}
-    )
+    raceday_verify.run_phase_post(None, args, "2026", "0815", [], nl_checks, {})
 
     assert calls == [("RACE", "20260815", "20260815", 1, "data/test.db")]

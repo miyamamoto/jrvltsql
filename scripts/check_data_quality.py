@@ -433,6 +433,8 @@ class DataQualityChecker:
     def _check_referential_integrity(self):
         """Check referential integrity between tables"""
 
+        self._check_ch_normalized_results()
+
         # Check if NL_SE records reference existing NL_RA records
         if self.db.table_exists('NL_SE') and self.db.table_exists('NL_RA'):
             orphan_check = self.db.fetch_one("""
@@ -519,6 +521,64 @@ class DataQualityChecker:
                             f"Unusually low results per race: {ratio:.1f} (expected ~8-18)",
                             'INFO'
                         )
+
+    def _check_ch_normalized_results(self):
+        """Require one complete Num=1,2,3 result group per trainer."""
+        if not self.db.table_exists('NL_CH'):
+            return
+        if not self.db.table_exists('NL_CH_SEISEKI'):
+            self._add_issue(
+                'NL_CH_SEISEKI',
+                'normalized trainer results table is missing',
+                'CRITICAL',
+            )
+            return
+
+        try:
+            incomplete_result = self.db.fetch_one("""
+                SELECT COUNT(*) AS incomplete_count FROM (
+                    SELECT ch.ChokyosiCode
+                    FROM NL_CH ch
+                    LEFT JOIN NL_CH_SEISEKI result
+                      ON result.ChokyosiCode = ch.ChokyosiCode
+                    GROUP BY ch.ChokyosiCode
+                    HAVING COUNT(result.Num) != 3
+                       OR COUNT(DISTINCT CASE WHEN result.Num IN (1, 2, 3)
+                                              THEN result.Num END) != 3
+                ) incomplete
+            """)
+            orphan_result = self.db.fetch_one("""
+                SELECT COUNT(*) AS orphan_count
+                FROM NL_CH_SEISEKI result
+                LEFT JOIN NL_CH ch
+                  ON ch.ChokyosiCode = result.ChokyosiCode
+                WHERE ch.ChokyosiCode IS NULL
+            """)
+            if not incomplete_result or not orphan_result:
+                raise ValueError("normalized CH completeness query returned no result")
+            incomplete_count = int(incomplete_result['incomplete_count'])
+            orphan_count = int(orphan_result['orphan_count'])
+        except Exception as error:
+            logger.error("Normalized CH completeness check failed", error=str(error))
+            self._add_issue(
+                'NL_CH_SEISEKI',
+                'normalized trainer results could not be verified',
+                'CRITICAL',
+            )
+            return
+
+        if incomplete_count:
+            self._add_issue(
+                'NL_CH_SEISEKI',
+                f'{incomplete_count} trainer(s) do not have exactly result rows Num=1,2,3',
+                'CRITICAL',
+            )
+        if orphan_count:
+            self._add_issue(
+                'NL_CH_SEISEKI',
+                f'{orphan_count} normalized trainer result row(s) have no parent',
+                'CRITICAL',
+            )
 
     def _add_issue(self, table: str, message: str, severity: str = 'WARNING'):
         """Add an issue to the issues list

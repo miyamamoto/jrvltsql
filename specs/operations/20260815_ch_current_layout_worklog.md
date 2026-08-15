@@ -160,3 +160,58 @@
 3. Run the exact-SHA Codex critical review, aggregate actionable findings once,
    then push/open the CH PR. Stop for any actionable finding, failed check,
    head drift, unresolved thread, or dirty worktree.
+
+## Exact-SHA Codex findings and repair batch
+
+- Candidate `37c784019d23fa4a5794b99eba83483c3b74bd07` passed the recorded exact-SHA
+  local suites, then received one aggregated Codex CLI review with three
+  actionable findings. The reviewer used `gpt-5.6-sol` at `xhigh`; Claude Code
+  was not used.
+- P1 was independently reproduced: a transient `table_exists` failure during
+  CH child-schema preparation entered the ordinary importer's generic fallback,
+  committed one `NL_CH` header, committed zero `NL_CH_SEISEKI` rows, and
+  reported `records_imported=1`. This candidate must not be published.
+- P2 performance evidence: 1000 CH inputs caused 2000 table-existence and 3000
+  column/key metadata reads before insertion because the child schema was
+  verified per physical record. Verification must be hoisted to once per
+  batch/import call while row payload validation remains per record.
+- P2 operational evidence: `raceday_verify.py` and `check_data_quality.py`
+  could report a usable trainer master when `NL_CH` was populated but the new
+  child table was missing, empty, orphaned, or not exactly three rows per
+  trainer. The repair adds fail-closed existence/cardinality/orphan checks.
+- Per the validator rule, regression tests for the coupled fallback,
+  once-per-batch metadata verification, missing/incomplete/complete race-day
+  checks, and missing/incomplete/complete data-quality checks are added before
+  changing the implementation. The next command is the focused red run; its
+  failure output must be recorded before implementing the repair batch.
+- The pre-implementation focused run was red as required: `6 failed`. The
+  concrete assertions were child count `0 != 3`, ordinary and optimized
+  metadata calls `{table_exists: 10, fetch_all: 15}` instead of `{2, 3}` for
+  five records, and empty issue lists where missing/incomplete normalized CH
+  storage had to be rejected. Separate orphan-path probes were also red
+  (`2 failed`) before the validators changed.
+- The repair verifies the child table once before a CH batch. A first transient
+  catalog `DatabaseError` in the ordinary importer rolls back and retries only
+  the coupled preflight; a second failure aborts before mutation. Per-record
+  field/key/Num validation remains in place, and no generic header-only retry
+  is reachable. The optimized importer caches the verified child contract for
+  the current import call.
+- Both operational checkers now require `NL_CH_SEISEKI`, reject trainers
+  without exactly distinct `Num=1,2,3`, reject child rows without a parent, and
+  turn an unreadable query/schema into a failure rather than a green result or
+  crash. The paired missing/incomplete/orphan/unreadable and complete cases
+  passed `8 passed`; the broader CH/importer/migration/schema bundle passed
+  `107 passed, 7 skipped`.
+- The original 1000-record probe improved from about 4.407 seconds and
+  `{table_exists: 2000, fetch_all: 3000}` to 0.553 seconds and exactly
+  `{table_exists: 2, fetch_all: 3}` while reporting 1000 imported physical
+  records and zero failures. Black on the maintained changed Python files,
+  critical Ruff/Flake8-equivalent selectors across `src tests scripts`,
+  `compileall`, and `git diff --check` pass on the repaired content.
+- A disposable PostgreSQL 16 container then ran the complete CH contract,
+  including the four PostgreSQL-native/standard and rollback cases plus the
+  new SQLite regression cases: `34 passed`. The explicitly named temporary
+  container was stopped and auto-removed. The repaired uncommitted content's
+  full local suite passed `2104 passed, 51 skipped, 3 warnings, 6 subtests`.
+  The warnings are the existing three `test_time_series.py` tests that return
+  booleans; no new warning or failure was introduced.

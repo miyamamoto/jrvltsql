@@ -17,6 +17,7 @@ from src.importer.importer import (
     insert_ch_coupled_batch,
     prepare_ch_coupled_rows,
     resolve_standard_table_name,
+    verify_ch_coupled_table,
 )
 from src.utils.logger import get_logger
 
@@ -232,6 +233,7 @@ class OptimizedDataImporter:
 
         # Group records by type for batch insertion
         batch_buffers: Dict[str, List[dict]] = {}
+        verified_ch_result_tables: Dict[str, str] = {}
         last_expanded_record_fingerprint = None
 
         try:
@@ -278,7 +280,22 @@ class OptimizedDataImporter:
                     )
                     self._records_failed += 1
                     continue
-                coupled = prepare_ch_coupled_rows(self.database, record, table_name)
+                if (
+                    table_name in ("NL_CH", "CHOKYO")
+                    and table_name not in verified_ch_result_tables
+                ):
+                    result_table = verify_ch_coupled_table(self.database, table_name)
+                    if result_table is None:
+                        raise SchemaMigrationError(
+                            f"CH import could not resolve normalized table for {table_name}"
+                        )
+                    verified_ch_result_tables[table_name] = result_table
+                coupled = prepare_ch_coupled_rows(
+                    self.database,
+                    record,
+                    table_name,
+                    verified_result_table=verified_ch_result_tables.get(table_name),
+                )
                 if coupled is not None:
                     converted_record[_PREPARED_CH_SEISEKI_ROWS_KEY] = coupled
                 batch_buffers[table_name].append(converted_record)
@@ -329,9 +346,7 @@ class OptimizedDataImporter:
                 continue
             result_table, result_rows = coupled
             main_row = {
-                key: value
-                for key, value in record.items()
-                if key != _PREPARED_CH_SEISEKI_ROWS_KEY
+                key: value for key, value in record.items() if key != _PREPARED_CH_SEISEKI_ROWS_KEY
             }
             prepared_ch.append((main_row, result_table, result_rows))
         if prepared_ch:

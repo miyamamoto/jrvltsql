@@ -117,12 +117,11 @@ def _ch_result_table_name(main_table_name: str) -> str | None:
     }.get(main_table_name)
 
 
-def prepare_ch_coupled_rows(
+def verify_ch_coupled_table(
     database: BaseDatabase,
-    record: dict,
     main_table_name: str,
-) -> tuple[str, list[dict]] | None:
-    """Validate and convert the three normalized CH result rows before writes."""
+) -> str | None:
+    """Verify the normalized CH result table once before preparing a batch."""
     result_table = _ch_result_table_name(main_table_name)
     if result_table is None:
         return None
@@ -137,6 +136,25 @@ def prepare_ch_coupled_rows(
             f"CH import requires normalized result table {result_table} before mutation"
         )
     verify_table_schema(database, result_table, schema_sql)
+    return result_table
+
+
+def prepare_ch_coupled_rows(
+    database: BaseDatabase,
+    record: dict,
+    main_table_name: str,
+    *,
+    verified_result_table: str | None = None,
+) -> tuple[str, list[dict]] | None:
+    """Validate and convert the three normalized CH result rows before writes."""
+    expected_result_table = _ch_result_table_name(main_table_name)
+    if expected_result_table is None:
+        return None
+    result_table = verified_result_table or verify_ch_coupled_table(database, main_table_name)
+    if result_table != expected_result_table:
+        raise SchemaMigrationError(
+            f"CH import expected normalized result table {expected_result_table}"
+        )
 
     rows = record.get(_CH_SEISEKI_ROWS_KEY)
     if not isinstance(rows, list) or len(rows) != 3:
@@ -765,6 +783,23 @@ class DataImporter:
         if not batch:
             return
 
+        verified_ch_result_table = None
+        if _ch_result_table_name(table_name) is not None:
+            try:
+                verified_ch_result_table = verify_ch_coupled_table(self.database, table_name)
+            except DatabaseError as error:
+                if not auto_commit:
+                    raise
+                logger.warning(
+                    "CH result schema verification failed, retrying coupled batch",
+                    table=table_name,
+                    error=str(error),
+                )
+                self.database.rollback()
+                # Only retry catalog verification. No header or child mutation
+                # has happened yet, and a second failure aborts the import.
+                verified_ch_result_table = verify_ch_coupled_table(self.database, table_name)
+
         try:
             # Clean records to remove metadata fields before insertion
             clean_batch = [self._record_for_table(record, table_name) for record in batch]
@@ -779,6 +814,7 @@ class DataImporter:
                         self.database,
                         original_record,
                         table_name,
+                        verified_result_table=verified_ch_result_table,
                     )
                     if coupled is not None:
                         result_table, result_rows = coupled
