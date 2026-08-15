@@ -168,7 +168,7 @@ class TestJVLinkBridgeAPI:
 
     def test_jv_close(self, bridge):
         bridge._is_open = True
-        _patch_responses(bridge, {"status": "ok"})
+        _patch_responses(bridge, {"status": "ok", "code": 0})
         assert bridge.jv_close() == 0
         assert not bridge._is_open
 
@@ -181,9 +181,10 @@ class TestJVLinkBridgeAPI:
         assert bridge.jv_file_delete("test.jvd") == 0
 
     def test_jv_rt_open(self, bridge):
-        _patch_responses(bridge, {"status": "ok", "code": 0, "readcount": 5})
+        _patch_responses(bridge, {"status": "ok", "code": 0, "readcount": 0})
         code, rc = bridge.jv_rt_open("0B12")
         assert code == 0
+        assert rc == 0
 
     def test_jv_set_service_key_stub(self, bridge):
         """Service key setting is a stub in bridge mode."""
@@ -202,7 +203,7 @@ class TestJVLinkBridgeLifecycle:
         _patch_responses(
             bridge,
             {"status": "ok", "hwnd": 1, "linkType": "jra"},  # init
-            {"status": "ok"},  # close
+            {"status": "ok", "code": 0},  # close
             {"status": "ok", "message": "bye"},  # quit
         )
         with bridge:
@@ -220,10 +221,14 @@ class TestJVLinkBridgeLifecycle:
 
     def test_wait_for_download(self, bridge):
         call_count = [0]
-        statuses = [0, 50, 100, 0]
+        statuses = [0, 50, 100]
         def fake_response(timeout=30.0):
             idx = min(call_count[0], len(statuses) - 1)
             call_count[0] += 1
             return {"status": "ok", "code": statuses[idx]}
         bridge._read_response = fake_response
-        assert bridge.wait_for_download(timeout=5.0, poll_interval=0.01) is True
+        assert bridge.wait_for_download(
+            download_count=100,
+            timeout=5.0,
+            poll_interval=0.01,
+        ) is True

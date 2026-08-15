@@ -210,7 +210,7 @@ def test_materialize_complete_records_rejects_recoverable_read_loss():
         )
 
 
-def test_realtime_fetcher_tracks_recoverable_read_loss():
+def test_realtime_fetcher_fails_on_jvopen_not_called():
     fetcher = RealtimeFetcher.__new__(RealtimeFetcher)
     fetcher.reset_statistics()
     fetcher._files_processed = 0
@@ -223,9 +223,12 @@ def test_realtime_fetcher_tracks_recoverable_read_loss():
         (0, None, None),
     ]
 
-    assert list(fetcher._fetch_and_parse()) == []
-    assert fetcher.get_statistics()["recoverable_read_errors"] == 1
-    fetcher.jvlink.jv_file_delete.assert_called_once_with("corrupt.jvd")
+    with pytest.raises(FetcherError, match="-203"):
+        list(fetcher._fetch_and_parse())
+
+    fetcher.jvlink.jv_read.assert_called_once()
+    assert fetcher.get_statistics()["recoverable_read_errors"] == 0
+    fetcher.jvlink.jv_file_delete.assert_not_called()
 
 
 @pytest.mark.parametrize("error_code", [-402, -403])

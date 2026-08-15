@@ -293,6 +293,8 @@ class HistoricalFetcher(BaseFetcher):
             )
 
             # Check if data is empty
+            if result == -2:
+                raise FetcherError("JVOpen setup dialog was cancelled")
             if result == -1 or (read_count == 0 and download_count == 0):
                 logger.info(
                     "No data available from specified timestamp",
@@ -304,6 +306,8 @@ class HistoricalFetcher(BaseFetcher):
                         f"{data_spec}: サーバーにデータなし"
                     )
                 return  # No data to fetch
+            if result != 0:
+                raise FetcherError(f"JVOpen returned unexpected result code: {result}")
 
             # Wait for download to complete if needed
             if download_count > 0:
@@ -343,7 +347,6 @@ class HistoricalFetcher(BaseFetcher):
                 to_date=to_date,
                 recover_file_error=self._recover_historical_read_error,
                 consume_replayed_record=self._consume_replayed_record,
-                replay_pending=lambda: self._jvd_replay_records_remaining > 0,
             ):
                 raw = data.get("_raw") if active_cache_manager else None
                 if raw is not None and raw is not last_cached_raw:
@@ -582,32 +585,13 @@ class HistoricalFetcher(BaseFetcher):
         """
         start_time = time.time()
         last_status = None
-        retry_count = 0
-        max_retries = 2  # Maximum retries for temporary errors
-        if download_count <= 0:
+        if download_count < 0:
+            raise FetcherError("download_count must not be negative")
+        if download_count == 0:
             return
 
         last_progress_time = start_time  # Track when downloaded-file count last changed.
         stall_timeout = 300.0  # 5 minutes before stall abort
-
-        # Retryable error codes (temporary errors that may resolve)
-        #
-        # Official meanings (JV-Link "3. コード表", JVStatus section) differ
-        # from the labels below:
-        # -201: JVInit not called (not "database busy")
-        # -202: previous JVOpen/JVRTOpen/JVMVOpen not JVClose'd (not "file busy")
-        # -203: JVOpen not called (not "incomplete setup/cache issue")
-        # -502: download failed (communication/disk error)
-        # -503: (JVStatus doesn't define -503; kept here for the bounded
-        #        max_retries=2 safety net below in case JVRead's -503,
-        #        file not found, surfaces through this status poll)
-        #
-        # -201/-203 indicate a call-order bug (JVInit/JVOpen genuinely not
-        # called), which polling jv_status() again cannot fix -- it will keep
-        # returning the same code. They remain in this retryable set
-        # unchanged (bounded by max_retries=2 below) pending a decision on
-        # whether that's still the right classification.
-        retryable_errors = {-201, -202, -203, -502, -503}
 
         while True:
             # Check if timeout exceeded
@@ -618,11 +602,11 @@ class HistoricalFetcher(BaseFetcher):
             try:
                 # Get download status
                 # JVStatus returns the number of downloaded files, not a
-                # percentage.  Download is complete when the count reaches the
-                # JVOpen download_count value.
+                # percentage. Download is complete only when the count equals
+                # the JVOpen download_count value retained until JVClose.
                 status = self.jvlink.jv_status()
 
-                if status >= download_count:
+                if status == download_count:
                     logger.info(
                         "Download completed",
                         elapsed_seconds=int(elapsed),
@@ -642,6 +626,17 @@ class HistoricalFetcher(BaseFetcher):
                     logger.info("File write wait completed")
                     return
 
+                if status > download_count:
+                    raise FetcherError(
+                        "JVStatus downloaded-file count exceeded JVOpen "
+                        f"download_count: {status} > {download_count}"
+                    )
+
+                if status < 0:
+                    raise FetcherError(
+                        f"Download failed with JVStatus code: {status}"
+                    )
+
                 if status != last_status:
                     last_progress_time = time.time()  # Reset stall timer on any change
                     if status >= 0:
@@ -660,8 +655,6 @@ class HistoricalFetcher(BaseFetcher):
                                 completed=status,
                                 status=f"{status}/{download_count} - {int(elapsed)}秒経過",
                             )
-                        # Reset retry count on progress
-                        retry_count = 0
                     last_status = status
                 else:
                     # Stall detection: abort if downloaded-file count does not
@@ -678,25 +671,6 @@ class HistoricalFetcher(BaseFetcher):
                             raise FetcherError(
                                 f"Download stalled at {status}/{download_count} files for {stall_elapsed:.0f}s"
                             )
-
-                if status < 0:
-                    if status in retryable_errors:
-                        retry_count += 1
-                        if retry_count <= max_retries:
-                            logger.warning(
-                                "Retryable download error, will retry",
-                                status_code=status,
-                                retry_count=retry_count,
-                                max_retries=max_retries,
-                            )
-                            time.sleep(interval * 2)  # Wait longer before retry
-                            continue
-                        else:
-                            raise FetcherError(
-                                f"Download failed after {max_retries} retries with status code: {status}"
-                            )
-                    else:
-                        raise FetcherError(f"Download failed with status code: {status}")
 
                 # Wait before next status check
                 time.sleep(interval)

@@ -55,6 +55,64 @@ CP1252_TO_BYTE = {
 }
 
 
+def _recover_com_buffer(value, expected_size: int, method_name: str) -> bytes:
+    """Recover the exact JV-Data bytes from a pywin32 out buffer.
+
+    Depending on the COM marshaling path, pywin32 can expose the buffer as a
+    byte array, a BSTR containing one Unicode code point per byte, or decoded
+    CP932 text.  Recovery must be lossless: replacement characters and unknown
+    code points are protocol failures, never plausible ``0``/``?`` data.
+    """
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        recovered = bytes(value)
+    elif isinstance(value, str):
+        if "\ufffd" in value:
+            raise JVLinkError(
+                f"{method_name} buffer contains an irreversible Unicode replacement character"
+            )
+
+        try:
+            recovered = value.encode("latin-1")
+        except UnicodeEncodeError:
+            if any(ord(char) in CP1252_TO_BYTE for char in value):
+                result = bytearray()
+                for char in value:
+                    codepoint = ord(char)
+                    if codepoint <= 0xFF:
+                        result.append(codepoint)
+                    elif codepoint in CP1252_TO_BYTE:
+                        result.append(CP1252_TO_BYTE[codepoint])
+                    else:
+                        try:
+                            result.extend(char.encode("cp932"))
+                        except UnicodeEncodeError as exc:
+                            raise JVLinkError(
+                                f"{method_name} buffer contains an unrecoverable "
+                                f"character U+{codepoint:04X}"
+                            ) from exc
+                recovered = bytes(result)
+            else:
+                try:
+                    recovered = value.encode("cp932")
+                except UnicodeEncodeError as exc:
+                    bad = exc.object[exc.start]
+                    raise JVLinkError(
+                        f"{method_name} buffer contains an unrecoverable "
+                        f"character U+{ord(bad):04X}"
+                    ) from exc
+    else:
+        raise JVLinkError(
+            f"{method_name} returned unsupported buffer type {type(value).__name__}"
+        )
+
+    if len(recovered) < expected_size:
+        raise JVLinkError(
+            f"{method_name} buffer is shorter than its return byte count: "
+            f"{len(recovered)} < {expected_size}"
+        )
+    return recovered[:expected_size]
+
+
 class JVLinkError(Exception):
     """JV-Link related error."""
 
@@ -110,6 +168,7 @@ class JVLinkWrapper:
         self.sid = sid
         self._jvlink = None
         self._is_open = False
+        self._needs_close = False
         self._com_initialized = False
 
         try:
@@ -259,9 +318,33 @@ class JVLinkWrapper:
 
         try:
             # JVOpen signature: (dataspec, fromtime, option, ref readCount, ref downloadCount, out lastFileTimestamp)
-            # pywin32: COM methods with ref/out parameters return them as tuple
-            # Call with only IN parameters (dataspec, fromtime, option)
-            jv_result = self._jvlink.JVOpen(data_spec, fromtime, option)
+            # Dynamic pywin32 dispatch still requires placeholders for all
+            # official ref/out parameters and returns their values as a tuple.
+            jv_result = self._jvlink.JVOpen(
+                data_spec,
+                fromtime,
+                option,
+                0,
+                0,
+                "",
+            )
+
+            # JVOpen has already changed COM state before pywin32 marshals its
+            # out values. Preserve the close obligation even when that
+            # marshaled response is malformed and cannot be returned.
+            possible_result = (
+                jv_result[0]
+                if isinstance(jv_result, tuple) and jv_result
+                else jv_result
+            )
+            if type(possible_result) is int and possible_result in (
+                0,
+                -1,
+                -2,
+                -202,
+            ):
+                self._needs_close = True
+                self._is_open = possible_result == 0
 
             # Handle return value
             if isinstance(jv_result, tuple):
@@ -273,16 +356,20 @@ class JVLinkWrapper:
                 # Unexpected single value
                 raise ValueError(f"Unexpected JVOpen return type: {type(jv_result)}, expected tuple")
 
+            if type(result) is not int:
+                raise JVLinkError(
+                    f"JVOpen returned a non-integer result code: {result!r}"
+                )
+
             # Handle result codes for JVOpen (per official spec "3. コード表",
             # JVOpen/JVRTOpen never returns -100/-101/-102/-103 -- those are
             # JVSetUIProperties/JVSetServiceKey/JVInit codes; JVOpen's actual
             # errors start at -111):
             # 0 (JV_RT_SUCCESS): Success with data
             # -1: No data available (NOT an error - normal when no new data)
-            # -2: No data available (alternative code)
+            # -2: Setup dialog cancelled by the user
             # <= -111: Actual errors (e.g., -111=dataspec invalid, -301=auth error, etc.)
-            if result < -2:
-                # Real errors are -111 or below (see comment above)
+            if result not in (0, -1, -2):
                 logger.error(
                     "JVOpen failed",
                     data_spec=data_spec,
@@ -291,16 +378,46 @@ class JVLinkWrapper:
                     error_code=result,
                 )
                 raise JVLinkError("JVOpen failed", error_code=result)
-            elif result in (-1, -2):
-                # -1 and -2 both mean "no data available" - NOT an error
+            elif result == -1:
                 logger.info(
                     "JVOpen: No data available",
                     data_spec=data_spec,
                     fromtime=fromtime,
                     result_code=result,
                 )
+            elif result == -2:
+                logger.warning(
+                    "JVOpen: setup dialog cancelled",
+                    data_spec=data_spec,
+                    fromtime=fromtime,
+                    result_code=result,
+                )
 
-            self._is_open = True
+            malformed_fields = []
+            if type(read_count) is not int or read_count < 0:
+                malformed_fields.append(f"invalid read_count={read_count!r}")
+            if type(download_count) is not int or download_count < 0:
+                malformed_fields.append(
+                    f"invalid download_count={download_count!r}"
+                )
+            if (
+                type(read_count) is int
+                and type(download_count) is int
+                and download_count > read_count
+            ):
+                malformed_fields.append(
+                    "download_count exceeds read_count: "
+                    f"{download_count} > {read_count}"
+                )
+            if not isinstance(last_file_timestamp, str):
+                malformed_fields.append(
+                    "invalid last_file_timestamp="
+                    f"{last_file_timestamp!r}"
+                )
+            if malformed_fields:
+                raise JVLinkError(
+                    "Malformed JVOpen response: " + ", ".join(malformed_fields)
+                )
 
             logger.info(
                 "JVOpen successful",
@@ -338,29 +455,65 @@ class JVLinkWrapper:
             >>> result, count = wrapper.jv_rt_open("0B12")  # Race results
         """
         try:
-            # JVRTOpen returns (return_code, read_count) as a tuple in pywin32
+            # The official JVRTOpen return value is the result code only. Keep
+            # accepting the historical two-item wrapper shape for API
+            # compatibility, but never reinterpret a positive result code as
+            # a read count.
             jv_result = self._jvlink.JVRTOpen(data_spec, key)
 
-            # Handle both tuple and single value returns
+            possible_result = (
+                jv_result[0]
+                if isinstance(jv_result, tuple) and jv_result
+                else jv_result
+            )
+            if type(possible_result) is int and possible_result in (
+                0,
+                -1,
+                -2,
+                -202,
+            ):
+                self._needs_close = True
+                if possible_result != -202:
+                    self._is_open = possible_result == 0
+
             if isinstance(jv_result, tuple):
+                if len(jv_result) != 2:
+                    raise JVLinkError(
+                        "Unexpected JVRTOpen return tuple length: "
+                        f"{len(jv_result)}, expected 2"
+                    )
                 result, read_count = jv_result
             else:
-                # Single value: if negative, it's an error code; if positive/zero, it's read_count
-                if jv_result < 0:
-                    result = jv_result
-                    read_count = 0
-                else:
-                    result = JV_RT_SUCCESS
-                    read_count = jv_result
+                result = jv_result
+                read_count = 0
 
-            if result < 0:
+            if type(result) is not int:
+                raise JVLinkError(
+                    f"Unexpected JVRTOpen result code: {result!r}"
+                )
+            if type(read_count) is not int or read_count < 0:
+                raise JVLinkError(
+                    f"Unexpected JVRTOpen compatibility read count: {read_count!r}"
+                )
+
+            if result in (0, -1) and read_count != 0:
+                raise JVLinkError(
+                    "JVRTOpen compatibility read count must be 0, "
+                    f"got {read_count}"
+                )
+
+            if result != JV_RT_SUCCESS:
                 # -1: 該当データなし（正常系 - 指定キーにデータが存在しない）
                 if result == -1:
                     logger.debug("JVRTOpen: no data available", data_spec=data_spec, key=key, error_code=result)
                     # データなしは例外にせず、結果をそのまま返す
                     return result, read_count
+                if result in (-2, -202):
+                    # The shared official return-code table requires JVClose
+                    # after setup cancellation or an already-open result.
+                    self._needs_close = True
                 # -114: 契約外データ種別（警告レベル、ユーザーには問題なし）
-                elif result == -114:
+                if result == -114:
                     logger.debug("JVRTOpen: data spec not subscribed", data_spec=data_spec, error_code=result)
                     raise JVLinkError("JVRTOpen failed", error_code=result)
                 else:
@@ -368,6 +521,7 @@ class JVLinkWrapper:
                     raise JVLinkError("JVRTOpen failed", error_code=result)
 
             self._is_open = True
+            self._needs_close = True
 
             logger.info(
                 "JVRTOpen successful",
@@ -416,20 +570,34 @@ class JVLinkWrapper:
             raise JVLinkError("JV-Link stream not open. Call jv_open() or jv_rt_open() first.")
 
         try:
-            # JVRead signature: JVRead(String buff, Long size, String filename)
-            # Call with empty strings and buffer size
-            # pywin32 returns 4-tuple: (return_code, buff_str, size_int, filename_str)
-            jv_result = self._jvlink.JVRead("", BUFFER_SIZE_JVREAD, "")
+            # Official signature: JVRead(String buff, Long size, String
+            # filename). bytearray placeholders avoid unstable pywin32 out-
+            # parameter marshaling observed with empty strings.
+            jv_result = self._jvlink.JVRead(
+                bytearray(),
+                BUFFER_SIZE_JVREAD,
+                bytearray(),
+            )
 
             # Handle result - pywin32 returns (return_code, buff_str, size, filename_str)
-            if isinstance(jv_result, tuple) and len(jv_result) >= 4:
+            if isinstance(jv_result, tuple) and len(jv_result) == 4:
                 result = jv_result[0]
                 buff_str = jv_result[1]
                 # jv_result[2] is size (int) - not needed
                 filename_str = jv_result[3]
+            elif isinstance(jv_result, tuple) and len(jv_result) == 3:
+                # Some pywin32 dispatch paths omit the input-only size from
+                # the returned out-parameter tuple.
+                result, buff_str, filename_str = jv_result
             else:
                 # Unexpected return format
-                raise JVLinkError(f"Unexpected JVRead return format: {type(jv_result)}, length={len(jv_result) if isinstance(jv_result, tuple) else 'N/A'}")
+                result_length = (
+                    len(jv_result) if isinstance(jv_result, tuple) else "N/A"
+                )
+                raise JVLinkError(
+                    "Unexpected JVRead return format: "
+                    f"{type(jv_result)}, length={result_length}"
+                )
 
             # Return code meanings:
             # > 0: Success, value is data length in bytes
@@ -456,52 +624,7 @@ class JVLinkWrapper:
                 # - Bytes 0x80-0x9F are C1 control characters in Unicode
                 # - These cannot be encoded as Shift-JIS, causing 'replace' to fail
                 # - This caused 99.7% of Japanese text data to be corrupted with '?'
-                if buff_str:
-                    # JV-Link COM returns Shift-JIS encoded data.
-                    # pywin32 may handle this in different ways:
-                    #
-                    # 1. Raw bytes as code points (0x00-0xFF) - ideal case
-                    #    -> Use latin-1 to extract bytes directly
-                    #
-                    # 2. Some bytes interpreted as CP1252 by Windows/pywin32
-                    #    -> Bytes 0x80-0x9F become Unicode chars like U+201C
-                    #    -> Need to convert these back to original bytes
-                    #    -> Use module-level CP1252_TO_BYTE mapping
-                    #
-                    # 3. Proper Unicode (Japanese chars as U+3000+)
-                    #    -> Encode to cp932 for parsers
-
-                    # 高速変換: 3段階のエンコード戦略
-                    # 1. Latin-1（ASCII + 拡張ASCII）- 最速
-                    # 2. CP932（日本語）- 高速
-                    # 3. 個別処理（CP1252変換が必要な場合）- 低速だが稀
-                    try:
-                        data_bytes = buff_str.encode('latin-1')
-                    except UnicodeEncodeError:
-                        try:
-                            # 日本語を含む場合はcp932で一括変換
-                            data_bytes = buff_str.encode('cp932')
-                        except UnicodeEncodeError:
-                            # CP1252変換が必要な文字が含まれる場合のみ個別処理
-                            result_bytes = bytearray()
-                            for c in buff_str:
-                                cp = ord(c)
-                                if cp <= 0xFF:
-                                    result_bytes.append(cp)
-                                elif cp in CP1252_TO_BYTE:
-                                    result_bytes.append(CP1252_TO_BYTE[cp])
-                                elif cp == 0xFFFD:
-                                    # Unicode replacement character - データ破損
-                                    # 数値フィールドでエラーを避けるため'0'に置換
-                                    result_bytes.append(0x30)  # '0'
-                                else:
-                                    try:
-                                        result_bytes.extend(c.encode('cp932'))
-                                    except UnicodeEncodeError:
-                                        result_bytes.append(0x3F)  # '?'
-                            data_bytes = bytes(result_bytes)
-                else:
-                    data_bytes = b""
+                data_bytes = _recover_com_buffer(buff_str, result, "JVRead")
 
                 # Note: Per-record debug logging removed to reduce verbosity
                 return result, data_bytes, filename_str
@@ -515,6 +638,13 @@ class JVLinkWrapper:
                 # File switch (-1)
                 # Note: Debug log removed - this is very frequent during data fetching
                 return result, None, None
+
+            elif result == -3:
+                logger.debug(
+                    "JVRead waiting for file download",
+                    filename=filename_str,
+                )
+                return result, None, filename_str
 
             elif result in (-402, -403):
                 # Preserve the filename returned by JVRead so the fetcher can
@@ -573,19 +703,29 @@ class JVLinkWrapper:
             raise JVLinkError("JV-Link stream not open. Call jv_open() or jv_rt_open() first.")
 
         try:
-            # JVGets signature: JVGets(String buff, Long buffsize)
-            # Call with empty string and buffer size
-            # pywin32 returns tuple: (return_code, buff_str, buffsize)
-            jv_result = self._jvlink.JVGets("", BUFFER_SIZE_JVREAD)
+            # Official signature: JVGets(Byte Array buff, Long size,
+            # String filename). Dynamic dispatch requires all placeholders.
+            jv_result = self._jvlink.JVGets(
+                bytearray(),
+                BUFFER_SIZE_JVREAD,
+                bytearray(),
+            )
 
-            # Handle result - pywin32 returns (return_code, buff_str, buffsize)
-            if isinstance(jv_result, tuple) and len(jv_result) >= 2:
+            # Working dynamic-dispatch paths return (return_code, memoryview,
+            # filename). Accept a four-item variant as well for compatibility
+            # with type libraries that echo the input size.
+            if isinstance(jv_result, tuple) and len(jv_result) in (3, 4):
                 result = jv_result[0]
                 buff_str = jv_result[1]
-                # jv_result[2] is buffsize (int) - not needed
             else:
                 # Unexpected return format
-                raise JVLinkError(f"Unexpected JVGets return format: {type(jv_result)}, length={len(jv_result) if isinstance(jv_result, tuple) else 'N/A'}")
+                result_length = (
+                    len(jv_result) if isinstance(jv_result, tuple) else "N/A"
+                )
+                raise JVLinkError(
+                    "Unexpected JVGets return format: "
+                    f"{type(jv_result)}, length={result_length}"
+                )
 
             # Return code meanings:
             # > 0: Success, value is data length in bytes
@@ -593,46 +733,7 @@ class JVLinkWrapper:
             # -1: File switch (continue reading)
             # < -1: Error
             if result > 0:
-                # Successfully read data (result is data length)
-                # JVGets returns Shift-JIS encoded byte array directly
-                # pywin32 may represent this as a string where each byte is a character
-                if buff_str:
-                    # Convert string to Shift-JIS bytes
-                    # JVGets stores Shift-JIS bytes in a BSTR, similar to JVRead
-                    # Use latin-1 encoding to extract raw bytes (1:1 mapping for 0x00-0xFF)
-                    # 高速変換: 3段階のエンコード戦略
-                    # 1. Latin-1（ASCII + 拡張ASCII）- 最速
-                    # 2. CP932（日本語）- 高速
-                    # 3. 個別処理（CP1252変換が必要な場合）- 低速だが稀
-                    try:
-                        data_bytes = buff_str.encode('latin-1')
-                    except UnicodeEncodeError:
-                        # If latin-1 fails, try cp932 encoding
-                        try:
-                            data_bytes = buff_str.encode('cp932')
-                        except UnicodeEncodeError:
-                            # Fallback: character-by-character conversion with CP1252 handling
-                            result_bytes = bytearray()
-                            for c in buff_str:
-                                cp = ord(c)
-                                if cp <= 0xFF:
-                                    result_bytes.append(cp)
-                                elif cp in CP1252_TO_BYTE:
-                                    result_bytes.append(CP1252_TO_BYTE[cp])
-                                elif cp == 0xFFFD:
-                                    # Unicode replacement character - データ破損
-                                    # 数値フィールドでエラーを避けるため'0'に置換
-                                    result_bytes.append(0x30)  # '0'
-                                else:
-                                    try:
-                                        result_bytes.extend(c.encode('cp932'))
-                                    except UnicodeEncodeError:
-                                        result_bytes.append(0x3F)  # '?'
-                            data_bytes = bytes(result_bytes)
-                else:
-                    data_bytes = b""
-
-                return result, data_bytes
+                return result, _recover_com_buffer(buff_str, result, "JVGets")
 
             elif result == JV_READ_SUCCESS:
                 # Read complete (0)
@@ -640,6 +741,10 @@ class JVLinkWrapper:
 
             elif result == JV_READ_NO_MORE_DATA:
                 # File switch (-1)
+                return result, None
+
+            elif result == -3:
+                logger.debug("JVGets waiting for file download")
                 return result, None
 
             else:
@@ -669,20 +774,27 @@ class JVLinkWrapper:
         """
         try:
             result = self._jvlink.JVClose()
+            if type(result) is not int or result != 0:
+                raise JVLinkError(
+                    f"JVClose returned an invalid result code: {result!r}",
+                    error_code=result if type(result) is int else None,
+                )
             self._is_open = False
+            self._needs_close = False
             logger.info("JV-Link stream closed")
             return result
         except Exception as e:
+            if isinstance(e, JVLinkError):
+                raise
             raise JVLinkError(f"JVClose failed: {e}")
 
     def jv_file_delete(self, filename: str) -> int:
         """Delete a cached file from JV-Link cache.
 
-        This method is used to handle recoverable errors (-203, -402, -403, -502, -503)
-        during data reading. When these errors occur, the corrupted file should be
-        deleted and the read operation retried.
-
-        Based on kmy-keiba's JVLinkReader.cs error handling pattern.
+        This method is used for the official corrupt-downloaded-file errors
+        (-402 and -403). After deleting the exact filename returned by
+        JVRead/JVGets, callers must restart from JVOpen. Other call-order,
+        download, or missing-file errors are not repaired by blind deletion.
 
         Args:
             filename: The filename to delete (as returned by JVRead)
@@ -733,7 +845,7 @@ class JVLinkWrapper:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit."""
-        if self._is_open:
+        if self._is_open or getattr(self, "_needs_close", False):
             self.jv_close()
 
     def reinitialize_com(self):
@@ -763,7 +875,7 @@ class JVLinkWrapper:
             logger.warning("Reinitializing COM component due to error...")
 
             # Close any open streams
-            if self._is_open:
+            if self._is_open or getattr(self, "_needs_close", False):
                 try:
                     self.jv_close()
                 except Exception:
@@ -796,6 +908,7 @@ class JVLinkWrapper:
                 raise
 
             self._is_open = False
+            self._needs_close = False
 
             logger.info("COM component reinitialized successfully", sid=self.sid)
 
@@ -830,7 +943,9 @@ class JVLinkWrapper:
             gc = None
 
         # Close stream if still open
-        if hasattr(self, '_is_open') and self._is_open:
+        if hasattr(self, '_is_open') and (
+            self._is_open or getattr(self, '_needs_close', False)
+        ):
             try:
                 self.jv_close()
             except Exception:

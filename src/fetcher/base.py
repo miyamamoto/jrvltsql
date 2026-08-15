@@ -16,6 +16,9 @@ from src.utils.progress import JVLinkProgressDisplay
 
 logger = get_logger(__name__)
 
+JV_READ_DOWNLOAD_TIMEOUT_SECONDS = 300.0
+JV_READ_DOWNLOAD_POLL_INTERVAL_SECONDS = 0.2
+
 
 class FetcherError(Exception):
     """Data fetcher error."""
@@ -95,7 +98,6 @@ class BaseFetcher(ABC):
         to_date: Optional[str] = None,
         recover_file_error: Optional[Callable[[int, str], None]] = None,
         consume_replayed_record: Optional[Callable[[], bool]] = None,
-        replay_pending: Optional[Callable[[], bool]] = None,
     ) -> Iterator[dict]:
         """Internal method to fetch and parse records.
 
@@ -106,8 +108,6 @@ class BaseFetcher(ABC):
                 corrupt downloaded files (-402/-403).
             consume_replayed_record: Optional callback that returns True when a
                 record replayed after recovery must be skipped.
-            replay_pending: Optional callback that returns True while a
-                historical recovery is still replaying an emitted prefix.
 
         Yields:
             Dictionary of parsed record data
@@ -119,11 +119,32 @@ class BaseFetcher(ABC):
         last_update_time = self._start_time
         update_interval = 2.0  # Update progress every 2 seconds
         last_gc_time = self._start_time  # Periodic GC to free COM buffers
+        download_wait_started: Optional[float] = None
 
         while True:
             try:
                 # Read next record
                 ret_code, buff, filename = self.jvlink.jv_read()
+
+                if ret_code == -3:
+                    now = time.monotonic()
+                    if download_wait_started is None:
+                        download_wait_started = now
+                    elapsed = now - download_wait_started
+                    if elapsed >= JV_READ_DOWNLOAD_TIMEOUT_SECONDS:
+                        raise FetcherError(
+                            "JVRead file-downloading wait timeout after "
+                            f"{elapsed:.1f} seconds"
+                        )
+                    logger.debug(
+                        "JVRead waiting for file download",
+                        filename=filename,
+                        elapsed_seconds=elapsed,
+                    )
+                    time.sleep(JV_READ_DOWNLOAD_POLL_INTERVAL_SECONDS)
+                    continue
+
+                download_wait_started = None
 
                 # Return code meanings:
                 # > 0: Success with data (value is data length)
@@ -251,71 +272,26 @@ class BaseFetcher(ABC):
                             )
                         last_update_time = current_time
 
-                elif ret_code in (-201, -202, -203, -402, -403, -502, -503):
-                    # Recoverable errors - delete corrupted file and continue
-                    #
-                    # Official meanings (JV-Link "3. コード表", JVRead/JVGets
-                    # section) differ from the original kmy-keiba-derived
-                    # labels below:
-                    # -201: JVInit not called (not "database busy")
-                    # -202: previous JVOpen/JVRTOpen/JVMVOpen not JVClose'd (not "file busy")
-                    # -203: JVOpen not called (not "setup not complete or file corruption")
-                    # -402, -403: downloaded file abnormal -- size 0 / bad content (file, not database)
-                    # -502: download failed (communication/disk error)
-                    # -503: file not found
-                    #
-                    # -201/-203 in particular indicate a call-order bug (JVInit/
-                    # JVOpen genuinely not called), which deleting a file and
-                    # retrying jv_read() cannot fix -- retrying will just hit
-                    # the same code again. They remain in this recoverable set
-                    # unchanged pending a decision on whether that's still the
-                    # right classification; see the PR description.
-                    if (
-                        ret_code not in (-402, -403)
-                        and replay_pending is not None
-                        and replay_pending()
-                    ):
-                        raise FetcherError(
-                            "JVRead returned legacy recoverable error "
-                            f"{ret_code} while historical recovery replay was pending; "
-                            "cannot preserve stream position safely"
-                        )
-
-                    # Error-specific guidance
-                    error_messages = {
-                        -201: "JVInitが行なわれていません（内部エラー）。一時的なエラーとして続行します。",
-                        -202: "前回のOpenがJVCloseされていません（オープン中）。一時的なエラーとして続行します。",
-                        -203: "JVOpenが行なわれていません（内部エラー）。ファイルを削除して続行します。",
-                        -402: "ダウンロードしたファイルが異常です（サイズ0）。破損ファイルを削除して続行します。",
-                        -403: "ダウンロードしたファイルが異常です（データ内容）。破損ファイルを削除して続行します。",
-                        -502: "ダウンロードに失敗しました（通信エラーやディスクエラーなど）。破損ファイルを削除して続行します。",
-                        -503: "読み出すべきファイルが見つかりません。ファイルを削除して続行します。",
-                    }
-
-                    error_msg = error_messages.get(ret_code, "リカバリー可能なエラーが発生しました。")
+                elif ret_code in (-402, -403):
+                    # Only the two official corrupt-downloaded-file statuses
+                    # enter targeted file recovery. Call-order errors
+                    # (-201/-202/-203), download failure (-502), and missing
+                    # file (-503) cannot be repaired by repeating JVRead or by
+                    # deleting the returned path.
                     logger.warning(
-                        f"Recoverable JVRead error: {error_msg}",
+                        "JVRead returned a corrupt downloaded file",
                         ret_code=ret_code,
                         filename=filename,
-                        recommended_action="Deleting corrupted file and continuing",
                     )
-                    if ret_code in (-203, -402, -403, -502, -503):
-                        if recover_file_error is not None and ret_code in (-402, -403):
-                            recover_file_error(ret_code, filename or "")
-                            self._repaired_read_errors += 1
-                        elif filename and hasattr(self.jvlink, 'jv_file_delete'):
-                            # Continuing lets non-snapshot imports drain later
-                            # files, but this response is no longer complete.
-                            self._recoverable_read_errors += 1
-                            try:
-                                self.jvlink.jv_file_delete(filename)
-                                logger.info(f"Deleted corrupted file: {filename}")
-                            except Exception as e:
-                                logger.warning(f"Failed to delete file {filename}: {e}")
-                        else:
-                            self._recoverable_read_errors += 1
+                    if recover_file_error is not None:
+                        recover_file_error(ret_code, filename or "")
+                        self._repaired_read_errors += 1
                     else:
                         self._recoverable_read_errors += 1
+                        raise FetcherError(
+                            "JVRead corrupt-file recovery is unavailable for "
+                            f"error code {ret_code} ({filename or 'unknown file'})"
+                        )
                     continue
 
                 else:

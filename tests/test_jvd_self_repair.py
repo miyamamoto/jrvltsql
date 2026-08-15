@@ -449,18 +449,17 @@ def test_replay_skip_still_runs_periodic_com_buffer_gc():
     )
 
 
-def test_legacy_read_error_during_replay_fails_closed():
+def test_file_not_found_during_replay_fails_closed():
     fetcher = _fetcher()
     fetcher._jvd_replay_records_remaining = 1
     fetcher.jvlink.jv_read.side_effect = [
         (-503, None, "missing.jvd"),
     ]
 
-    with pytest.raises(FetcherError, match="while historical recovery replay was pending"):
+    with pytest.raises(FetcherError, match="-503"):
         list(
             fetcher._fetch_and_parse(
                 consume_replayed_record=fetcher._consume_replayed_record,
-                replay_pending=lambda: fetcher._jvd_replay_records_remaining > 0,
             )
         )
 
@@ -564,20 +563,22 @@ def test_read_recovery_rejects_nonzero_delete_result():
 
 
 @pytest.mark.parametrize("error_code", [-203, -502, -503])
-def test_other_recoverable_error_uses_legacy_delete_without_stream_restart(error_code):
+def test_non_corruption_error_fails_without_delete_or_stream_restart(error_code):
     fetcher = _fetcher()
     fetcher.jvlink.jv_read.side_effect = [
         (error_code, None, "other.jvd"),
         (0, None, None),
     ]
 
-    assert list(
-        fetcher._fetch_and_parse(
-            recover_file_error=fetcher._recover_historical_read_error,
+    with pytest.raises(FetcherError, match=str(error_code)):
+        list(
+            fetcher._fetch_and_parse(
+                recover_file_error=fetcher._recover_historical_read_error,
+            )
         )
-    ) == []
 
-    fetcher.jvlink.jv_file_delete.assert_called_once_with("other.jvd")
+    fetcher.jvlink.jv_read.assert_called_once()
+    fetcher.jvlink.jv_file_delete.assert_not_called()
     fetcher.jvlink.jv_close.assert_not_called()
     fetcher.jvlink.jv_open.assert_not_called()
 

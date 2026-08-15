@@ -282,7 +282,7 @@ class TestWrapperRejectsBeforeCOM:
 
         assert (result, read_count) == (0, 100)
         wrapper._jvlink.JVOpen.assert_called_once_with(
-            data_spec, "20240101000000", option
+            data_spec, "20240101000000", option, 0, 0, ""
         )
 
 

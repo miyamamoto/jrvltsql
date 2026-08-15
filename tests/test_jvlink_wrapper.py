@@ -94,7 +94,9 @@ class TestJVLinkWrapper:
         assert download_count == 0
         assert last_file_timestamp == "20241231235959"
         assert wrapper.is_open()
-        mock_com.JVOpen.assert_called_once_with("RACE", "20240101000000", 1)
+        mock_com.JVOpen.assert_called_once_with(
+            "RACE", "20240101000000", 1, 0, 0, ""
+        )
 
     @patch("win32com.client.Dispatch")
     def test_jv_open_with_option(self, mock_dispatch):
@@ -113,13 +115,15 @@ class TestJVLinkWrapper:
         assert read_count == 500
         assert download_count == 100
         assert last_file_timestamp == "20241231235959"
-        mock_com.JVOpen.assert_called_once_with("SNPN", "20240101000000", 2)
+        mock_com.JVOpen.assert_called_once_with(
+            "SNPN", "20240101000000", 2, 0, 0, ""
+        )
 
     @patch("win32com.client.Dispatch")
     def test_jv_open_failure(self, mock_dispatch):
         """Test JVOpen failure with actual error code (<-2)."""
         mock_com = MagicMock()
-        # JVOpen: -1/-2 are "no data" (not errors), -100 is setup required (real error)
+        # JVOpen: -1 is no data, -2 is setup cancel, and -100 is an error.
         mock_com.JVOpen.return_value = (-100, 0, 0, "")
         mock_dispatch.return_value = mock_com
 
@@ -140,20 +144,22 @@ class TestJVLinkWrapper:
         wrapper = JVLinkWrapper(sid="TEST")
         # Should NOT raise - -1 means no data, not an error
         wrapper.jv_open("RACE", "20240101000000")
+        assert not wrapper.is_open()
 
     @patch("win32com.client.Dispatch")
     def test_jv_rt_open_success(self, mock_dispatch):
         """Test JVRTOpen success."""
         mock_com = MagicMock()
-        # JVRTOpen can return either (result, read_count) or single value
-        mock_com.JVRTOpen.return_value = (0, 10)
+        # JVRTOpen officially returns only a result code. The wrapper keeps a
+        # zero compatibility count in its public tuple.
+        mock_com.JVRTOpen.return_value = (0, 0)
         mock_dispatch.return_value = mock_com
 
         wrapper = JVLinkWrapper(sid="TEST")
         result, count = wrapper.jv_rt_open("0B12")
 
         assert result == JV_RT_SUCCESS
-        assert count == 10
+        assert count == 0
         assert wrapper.is_open()
         mock_com.JVRTOpen.assert_called_once_with("0B12", "")
 
@@ -183,6 +189,7 @@ class TestJVLinkWrapper:
         result, count = wrapper.jv_rt_open("0B12")
         assert result == -1
         assert count == 0
+        assert not wrapper.is_open()
 
     @patch("win32com.client.Dispatch")
     def test_jv_rt_open_with_new_specs(self, mock_dispatch):
@@ -193,16 +200,16 @@ class TestJVLinkWrapper:
         wrapper = JVLinkWrapper(sid="TEST")
 
         # Test 0B41 (時系列オッズ 単複枠)
-        mock_com.JVRTOpen.return_value = (0, 5)
+        mock_com.JVRTOpen.return_value = (0, 0)
         result, count = wrapper.jv_rt_open("0B41")
         assert result == JV_RT_SUCCESS
-        assert count == 5
+        assert count == 0
 
         # Test 0B42 (時系列オッズ 馬連)
-        mock_com.JVRTOpen.return_value = (0, 3)
+        mock_com.JVRTOpen.return_value = (0, 0)
         result, count = wrapper.jv_rt_open("0B42")
         assert result == JV_RT_SUCCESS
-        assert count == 3
+        assert count == 0
 
     @patch("win32com.client.Dispatch")
     def test_jv_read_success(self, mock_dispatch):

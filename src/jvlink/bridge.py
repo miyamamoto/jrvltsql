@@ -8,6 +8,7 @@ This replaces the Python win32com-based JVLinkWrapper, eliminating:
 """
 
 import base64
+import binascii
 import json
 import subprocess
 import sys
@@ -25,6 +26,40 @@ from src.jvlink.constants import (
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+def _require_response_code(response: dict, command: str) -> int:
+    if "code" not in response:
+        raise JVLinkBridgeError(f"{command} response has no result code")
+    code = response["code"]
+    if type(code) is not int:
+        raise JVLinkBridgeError(
+            f"{command} response result code is not an integer: {code!r}"
+        )
+    return code
+
+
+def _require_nonnegative_count(response: dict, field: str, command: str) -> int:
+    if field not in response:
+        raise JVLinkBridgeError(f"{command} response has no {field}")
+    value = response[field]
+    if type(value) is not int or value < 0:
+        raise JVLinkBridgeError(
+            f"{command} response {field} is not a non-negative integer: {value!r}"
+        )
+    return value
+
+
+def _require_string(response: dict, field: str, command: str) -> str:
+    if field not in response:
+        raise JVLinkBridgeError(f"{command} response has no {field}")
+    value = response[field]
+    if not isinstance(value, str):
+        raise JVLinkBridgeError(
+            f"{command} response {field} is not a string: {value!r}"
+        )
+    return value
+
 
 # Default bridge executable locations (searched in order)
 _BRIDGE_SEARCH_PATHS = [
@@ -99,6 +134,7 @@ class JVLinkBridge:
         self._timeout = timeout
         self._process: Optional[subprocess.Popen] = None
         self._is_open = False
+        self._needs_close = False
 
         if bridge_path:
             self._bridge_path = Path(bridge_path)
@@ -233,15 +269,35 @@ class JVLinkBridge:
             timeout=120.0,
         )
 
-        code = response.get("code", -1)
-        read_count = response.get("readcount", 0)
-        download_count = response.get("downloadcount", 0)
-        last_ts = response.get("lastfiletimestamp", "")
+        # A protocol-level success means the remote COM call has already
+        # opened state even if a malformed response omits its result code.
+        # Preserve the close obligation before validating response fields.
+        if response.get("status") == "ok":
+            self._needs_close = True
+        code = _require_response_code(response, "JVOpen")
 
-        if code < -2:
+        # The remote COM call has already changed state before its JSON out
+        # fields are validated. A malformed success/no-data/cancel response
+        # must still be closed instead of leaking into a later -202.
+        if code in (0, -1, -2, -202):
+            self._needs_close = True
+            if code != -202:
+                self._is_open = code == 0
+
+        read_count = _require_nonnegative_count(response, "readcount", "JVOpen")
+        download_count = _require_nonnegative_count(
+            response, "downloadcount", "JVOpen"
+        )
+        last_ts = _require_string(response, "lastfiletimestamp", "JVOpen")
+
+        if code not in (0, -1, -2):
             raise JVLinkBridgeError("JVOpen failed", error_code=code)
+        if download_count > read_count:
+            raise JVLinkBridgeError(
+                "JVOpen response downloadcount exceeds readcount: "
+                f"{download_count} > {read_count}"
+            )
 
-        self._is_open = True
         logger.info("JVOpen via bridge", data_spec=data_spec, read_count=read_count, download_count=download_count)
         return code, read_count, download_count, last_ts
 
@@ -251,13 +307,30 @@ class JVLinkBridge:
             timeout=30.0,
         )
 
-        code = response.get("code", -1)
-        read_count = response.get("readcount", 0)
+        if response.get("status") == "ok":
+            self._needs_close = True
+        code = _require_response_code(response, "JVRTOpen")
+        # JVRTOpen officially has no read-count output. Older bridge builds
+        # include a compatibility field on success but omit it for -1.
+        read_count = 0
+        if "readcount" in response:
+            read_count = _require_nonnegative_count(
+                response, "readcount", "JVRTOpen"
+            )
 
-        if code < -2:
+        if code in (0, -1, -2, -202):
+            self._needs_close = True
+            if code != -202:
+                self._is_open = code == 0
+
+        if code not in (0, -1):
             raise JVLinkBridgeError("JVRTOpen failed", error_code=code)
+        if read_count != 0:
+            raise JVLinkBridgeError(
+                "JVRTOpen compatibility readcount must be 0, "
+                f"got {read_count}"
+            )
 
-        self._is_open = True
         return code, read_count
 
     def jv_read(self) -> Tuple[int, Optional[bytes], Optional[str]]:
@@ -269,13 +342,29 @@ class JVLinkBridge:
             timeout=60.0,
         )
 
-        code = response.get("code", 0)
+        code = _require_response_code(response, "JVRead")
 
         if code > 0:
             data_b64 = response.get("data", "")
-            data_bytes = base64.b64decode(data_b64) if data_b64 else b""
+            try:
+                data_bytes = base64.b64decode(data_b64, validate=True)
+            except (binascii.Error, TypeError, ValueError) as exc:
+                raise JVLinkBridgeError(
+                    "JVRead bridge payload is not valid base64"
+                ) from exc
+            if len(data_bytes) < code:
+                raise JVLinkBridgeError(
+                    "JVRead bridge payload is shorter than its return byte "
+                    f"count: {len(data_bytes)} < {code}"
+                )
+            declared_size = response.get("size")
+            if declared_size is not None and declared_size != code:
+                raise JVLinkBridgeError(
+                    "JVRead bridge size does not match its return byte count: "
+                    f"{declared_size} != {code}"
+                )
             filename = response.get("filename", "")
-            return code, data_bytes, filename
+            return code, data_bytes[:code], filename
         elif code == JV_READ_SUCCESS:  # 0
             return code, None, None
         elif code == JV_READ_NO_MORE_DATA:  # -1
@@ -289,22 +378,41 @@ class JVLinkBridge:
             return code, None, response.get("filename")
 
     def jv_gets(self) -> Tuple[int, Optional[bytes]]:
-        """JV-Link doesn't have JVGets; delegates to jv_read."""
+        """Expose the bridge's byte payload through the JVGets-shaped API.
+
+        JV-Link has a native JVGets method, but the JSON bridge has only one
+        read command and already returns CP932 bytes, so it delegates here.
+        """
         code, buff, filename = self.jv_read()
         return code, buff
 
     def jv_close(self) -> int:
-        try:
-            self._send_command({"cmd": "close"}, timeout=10.0)
-        except JVLinkBridgeError:
-            pass
+        response = self._send_command({"cmd": "close"}, timeout=10.0)
+        if response.get("status") != "ok":
+            raise JVLinkBridgeError(
+                response.get("error", "JVClose returned an invalid response")
+            )
+        if "code" in response:
+            code = _require_response_code(response, "JVClose")
+            if code != 0:
+                raise JVLinkBridgeError("JVClose failed", error_code=code)
+        else:
+            # jrvltsql-wine-runtime through be759ee acknowledges close with
+            # only {"status":"ok"}. Preserve compatibility until that
+            # adapter propagates JVClose's official Long result code.
+            logger.warning(
+                "JVClose bridge response omitted the native result code; "
+                "accepting the legacy runtime acknowledgment"
+            )
+            code = 0
         self._is_open = False
+        self._needs_close = False
         logger.info("JV-Link stream closed via bridge")
-        return 0
+        return code
 
     def jv_status(self) -> int:
         response = self._send_command({"cmd": "status"}, timeout=10.0)
-        return response.get("code", 0)
+        return _require_response_code(response, "JVStatus")
 
     def jv_file_delete(self, filename: str) -> int:
         response = self._send_command(
@@ -320,24 +428,39 @@ class JVLinkBridge:
         # The production jrvltsql-wine-runtime bridge serializes the COM
         # JVFiledelete return value as ``code``. A missing value is a protocol
         # violation, not an implicit success.
-        if "code" not in response:
-            raise JVLinkBridgeError(
-                f"JVFiledelete response has no result code for {filename}"
-            )
-        return response["code"]
+        return _require_response_code(response, f"JVFiledelete for {filename}")
 
-    def wait_for_download(self, timeout: float = 300.0, poll_interval: float = 0.5) -> bool:
+    def wait_for_download(
+        self,
+        download_count: int,
+        timeout: float = 300.0,
+        poll_interval: float = 0.5,
+    ) -> bool:
+        """Wait until JVStatus exactly matches JVOpen's download count."""
+        if download_count < 0:
+            raise ValueError("download_count must not be negative")
+        if download_count == 0:
+            return True
+
         start = time.time()
-        download_started = False
 
         while time.time() - start < timeout:
             status = self.jv_status()
-            if status > 0:
-                download_started = True
-            elif status == 0 and download_started:
-                logger.info("Download completed via bridge")
+            if status == download_count:
+                logger.info(
+                    "Download completed via bridge",
+                    downloaded_files=status,
+                    download_count=download_count,
+                )
                 return True
-            elif status < 0:
+            if status > download_count:
+                logger.error(
+                    "JVStatus count exceeded JVOpen download count",
+                    status=status,
+                    download_count=download_count,
+                )
+                return False
+            if status < 0:
                 logger.error("Download error via bridge", status=status)
                 return False
             time.sleep(poll_interval)
@@ -345,8 +468,13 @@ class JVLinkBridge:
         logger.warning("Download timeout via bridge", timeout=timeout)
         return False
 
-    def jv_wait_for_download(self, timeout: float = 300.0, poll_interval: float = 0.5) -> bool:
-        return self.wait_for_download(timeout, poll_interval)
+    def jv_wait_for_download(
+        self,
+        download_count: int,
+        timeout: float = 300.0,
+        poll_interval: float = 0.5,
+    ) -> bool:
+        return self.wait_for_download(download_count, timeout, poll_interval)
 
     def is_open(self) -> bool:
         return self._is_open
@@ -367,13 +495,14 @@ class JVLinkBridge:
                     pass
         self._process = None
         self._is_open = False
+        self._needs_close = False
 
     def __enter__(self):
         self.jv_init()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if self._is_open:
+        if self._is_open or getattr(self, "_needs_close", False):
             self.jv_close()
         self.cleanup()
 
