@@ -218,6 +218,24 @@
   horse revision replacement for both importer classes. The final candidate
   adds one direct `import_single_record` assertion and therefore still needs
   its immutable-SHA PostgreSQL/full-suite rerun.
+- Replacement code candidate
+  `3d7d96c68423572992361d15914d5ae024a92970` passed both full suites:
+  Python 3.12 and Python 3.10 each reported
+  `2153 passed, 53 skipped, 3 warnings, 6 subtests`. The exact workflow test
+  selection passed with `864 passed, 2 skipped, 3 warnings, 3 subtests` and
+  56% aggregate coverage. PostgreSQL 16 passed the DM module with
+  `37 passed`; blocking flake8 reported zero, compileall/diff/changed-file
+  Black checks passed, and mypy remained the same 79 errors in 20 files as
+  the exact base comparison (zero newly introduced findings).
+- The final Codex-only review then required explicit PostgreSQL evidence for
+  the realtime path instead of inferring it from the shared helper. No new
+  production-code defect was found. Candidate
+  `55466bbd1b7d1da0c8e9bc5d143dee679d3a0d5b` added only that integration
+  contract and passed the complete DM module on PostgreSQL 16 with
+  `38 passed in 0.94s`: `RT_DM` replaced 18 rows with a 17-row revision,
+  removed the omitted horse, and deleted the race inside explicit caller
+  transactions. Its non-PostgreSQL focused module passed with
+  `35 passed, 3 skipped in 0.70s`.
 - `python3 -m compileall -q src tests`, `git diff --check`, Black checks for the
   new parser/test, and the workflow's blocking flake8 selection
   `E9,F63,F7,F82` all passed.
@@ -226,20 +244,21 @@
   output for DM, WH, odds, or votes, and still reports the pre-existing broad
   HR/SE/WF mismatches. It is not treated as green evidence; the executable DM
   parser/storage contracts above replace its DM false negative for this scope.
-- Current worktree is intentionally dirty with the aggregated review fix,
-  expanded contracts, and this worklog. The final replacement candidate commit
-  has not yet been created; old candidate results are not treated as evidence
-  for that future SHA.
+- The production/test candidate is clean at
+  `55466bbd1b7d1da0c8e9bc5d143dee679d3a0d5b`; no actionable Codex finding
+  remains. This worklog evidence update will create a documentation-only final
+  PR head. Per the no-self-reference rule, that head SHA and its final test
+  evidence belong in PR metadata rather than another self-recording commit.
 
 ## Next safe commands
 
-1. Review the complete dirty diff and create the replacement candidate commit.
-2. Run focused and full suites against that immutable full SHA on Python 3.10
-   and 3.12, plus PostgreSQL and workflow-equivalent lint/static checks.
-3. Perform one aggregated Codex review of the exact candidate, repair all
-   actionable findings in one batch, and rerun only impacted evidence.
-4. Push, open the DM PR, record exact-SHA evidence, clear all review threads,
-   and merge only after the final gate is green.
+1. Commit this worklog-only evidence update and run the final immutable head's
+   full Python 3.10/3.12 suites, PostgreSQL DM module, workflow-equivalent
+   coverage selection, and blocking lint/static checks.
+2. Fetch `origin/master`, push, open the DM PR, and record the final full SHA
+   and exact results in PR metadata.
+3. Inspect checks, annotations, review comments, and unresolved threads once;
+   merge only if the final gate is green and the worktree is clean.
 
 ## STOP conditions
 
