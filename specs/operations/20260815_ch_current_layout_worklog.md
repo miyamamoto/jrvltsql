@@ -256,3 +256,23 @@
   applied directly. Four review-body-only nitpicks about test comments,
   generated-column style, and named parser constants are non-behavioral and do
   not justify further candidate churn under the aggregated-review policy.
+
+## Exact-candidate Codex review repair
+
+- Codex CLI `0.147` (`gpt-5.6-sol`, `xhigh`, session
+  `01a006fa-7870-7370-b6c6-1b3028864207`) reviewed exact candidate
+  `6ad8cdf8a9233b7e8b9c59834680417f9d580def`. It found one P2 issue: the
+  rollback-failure invalidation safely discarded the transaction but the
+  documented `with database:` teardown then attempted a second transaction
+  operation on the disconnected handler, masking the original error.
+- Red-first evidence against that candidate was `3 failed`: ordinary and
+  optimized batch imports surfaced `DatabaseError("No active connection")`
+  instead of their `ImporterError`, and `import_single_record()` returned
+  `False` before context teardown raised the same new error.
+- `BaseDatabase.__exit__` now recognizes an already-invalidated session and
+  skips its redundant commit/rollback. The connection remains closed, so the
+  uncertain transaction cannot be reused or committed; an active connection
+  retains the original context-manager behavior.
+- The paired rollback regressions passed `3 passed`, and the existing database
+  context/transaction tests passed `22 passed`. Full exact-SHA and PostgreSQL
+  evidence will be recorded on PR #179 after the repair commit is created.

@@ -334,6 +334,12 @@ class BaseDatabase(ABC):
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit."""
+        # An operation may deliberately invalidate a session when rollback
+        # cannot be confirmed.  In that case the old transaction has already
+        # been discarded by disconnect(), and attempting another commit or
+        # rollback here would only mask the original database error.
+        if not self.is_connected():
+            return None
         if exc_type is not None:
             self.rollback()
         else:

@@ -375,13 +375,59 @@ def test_ch_batch_metadata_retry_never_commits_header_without_results(
 def test_ch_rollback_failure_never_enters_parent_only_fallback(
     tmp_path, importer_class
 ) -> None:
-    """Even a failed rollback must not route coupled CH through generic fallback."""
+    """A failed rollback must neither fall back nor break context teardown."""
     database = SQLiteDatabase({"path": str(tmp_path / "rollback-failure.db")})
     parsed = CHParser().parse(build_record()[0])
     assert parsed is not None
 
-    database.connect()
-    try:
+    with pytest.raises(ImporterError):
+        with database:
+            database.create_table("NL_CH", SCHEMAS["NL_CH"])
+            database.create_table("NL_CH_SEISEKI", SCHEMAS["NL_CH_SEISEKI"])
+            database.commit()
+            original_insert_many = database.insert_many
+            original_rollback = database.rollback
+            child_failed = False
+            rollback_failed = False
+
+            def fail_child_once(table_name: str, rows, use_replace: bool = True):
+                nonlocal child_failed
+                if table_name == "NL_CH_SEISEKI" and not child_failed:
+                    child_failed = True
+                    raise DatabaseError("child batch failure")
+                return original_insert_many(table_name, rows, use_replace)
+
+            def fail_rollback_once():
+                nonlocal rollback_failed
+                if not rollback_failed:
+                    rollback_failed = True
+                    raise DatabaseError("rollback failure")
+                return original_rollback()
+
+            database.insert_many = fail_child_once
+            database.rollback = fail_rollback_once
+            importer_class(database).import_records(iter([parsed]))
+
+    assert database.is_connected() is False
+    with database:
+        main_count = database.fetch_one("SELECT COUNT(*) AS count FROM NL_CH")["count"]
+        result_count = database.fetch_one("SELECT COUNT(*) AS count FROM NL_CH_SEISEKI")[
+            "count"
+        ]
+
+    assert child_failed is True
+    assert rollback_failed is True
+    assert main_count == 0
+    assert result_count == 0
+
+
+def test_ch_single_record_rollback_failure_preserves_false_contract(tmp_path) -> None:
+    """A swallowed insert error must not make context teardown raise a new error."""
+    database = SQLiteDatabase({"path": str(tmp_path / "single-rollback-failure.db")})
+    parsed = CHParser().parse(build_record()[0])
+    assert parsed is not None
+
+    with database:
         database.create_table("NL_CH", SCHEMAS["NL_CH"])
         database.create_table("NL_CH_SEISEKI", SCHEMAS["NL_CH_SEISEKI"])
         database.commit()
@@ -406,17 +452,14 @@ def test_ch_rollback_failure_never_enters_parent_only_fallback(
 
         database.insert_many = fail_child_once
         database.rollback = fail_rollback_once
-        with pytest.raises(ImporterError):
-            importer_class(database).import_records(iter([parsed]))
-        assert database.is_connected() is False
+        inserted = DataImporter(database).import_single_record(parsed)
 
-        database.connect()
+    assert database.is_connected() is False
+    with database:
         main_count = database.fetch_one("SELECT COUNT(*) AS count FROM NL_CH")["count"]
         result_count = database.fetch_one("SELECT COUNT(*) AS count FROM NL_CH_SEISEKI")["count"]
-    finally:
-        if database.is_connected():
-            database.disconnect()
 
+    assert inserted is False
     assert child_failed is True
     assert rollback_failed is True
     assert main_count == 0
