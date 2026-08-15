@@ -191,9 +191,28 @@
   internal SQL identifiers remain parameterized for all values, and a helper
   rename was only stylistic. Two test-readability nits were folded into the
   already-required review commit without production impact.
-- Next: commit the aggregated review fix, run full supported-Python,
-  workflow-equivalent, disposable PostgreSQL, and static validation on the new
-  immutable candidate, then push once without requesting a second Copilot
-  review. Reply to and resolve every existing thread before the final gate.
+- Aggregated review-fix candidate
+  `4d5d9ddb855a3b3d1ef53c3fef6bb28e56c68df5` passed:
+  - Python 3.12.11 full suite: `2188 passed, 57 skipped, 3 warnings, 6
+    subtests passed in 45.30s`;
+  - explicit Python 3.10.12 compatibility suite: the same totals in 45.55s;
+  - Python 3.12 workflow-equivalent selection: `864 passed, 2 skipped, 3
+    warnings, 3 subtests passed in 34.09s`, 56% coverage;
+  - disposable PostgreSQL 16 TM integration: `38 passed in 0.87s`; the
+    disposable container was removed after validation;
+  - Python 3.12 compileall, `git diff --check`, and blocking flake8: passed.
+- A first `uv run pytest` invocation was identified from its executable path as
+  host Python 3.10 and was not misreported as 3.12 evidence. The isolated 3.12
+  environment initially exposed undeclared test-only `python-dotenv` at
+  collection; after installing that test dependency outside the repository,
+  the explicit `python -m pytest` command above passed. No product code was
+  changed for the environment issue.
+- System mypy remains the exact-base 77 errors in 20 files. Python 3.12 mypy
+  reports 82 errors in 21 files on both exact base and candidate, including the
+  same missing optional YAML stubs; the review fix adds no type-check delta.
+- Next: commit this evidence-only worklog update, run focused/static validation
+  on that final SHA, push once without requesting a second Copilot review, then
+  reply to and resolve every existing thread before the final gate. The final
+  worklog-only SHA is recorded in PR metadata to avoid a self-reference loop.
 - STOP if official sources disagree, a safe migration cannot preserve existing
   rows, any executable check fails on the candidate, or the branch/base drifts.
