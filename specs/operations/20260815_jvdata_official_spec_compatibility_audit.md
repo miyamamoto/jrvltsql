@@ -119,7 +119,10 @@ BNは4.8.0.2、4.9.0.1、SDK 5.0.0に共通する477バイトへ統一した。�
 60バイト成績blockを各9項目へ全展開し、CRLFとrecord typeを厳密検査して、
 native/standard schemaと両importerのround-tripを固定した。2003年以前の公式413バイトと
 旧repository由来387バイトは現行setupへ混在させず拒否する。既存のkeyless `BANUSI` は
-安全に主キーを追加できないため、行を保持したままfail closedで再構築を要求する。
+安全に主キーを追加できないため、行を保持したままfail closedで再構築を要求する。既存の
+`NL_BN` は主キーを保持したadditive migrationが可能だが、新しい18成績列は既存行では
+NULLになる。option 1の差分更新だけでは変更のない馬主を補完できないため、移行後は現行
+`DIFN` のoption 3/4 setupから全件を再取込する。
 
 ### B-05 2023年変更対象7種は新旧両対応ではない
 

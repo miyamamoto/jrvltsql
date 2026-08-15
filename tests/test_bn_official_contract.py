@@ -5,7 +5,7 @@ from itertools import pairwise
 
 import pytest
 
-from src.database.migration import SchemaMigrationError
+from src.database.migration import SchemaMigrationError, migrate_table_if_needed
 from src.database.schema import SCHEMAS
 from src.database.schema_jravan import JRAVAN_SCHEMAS
 from src.database.schema_types import (
@@ -209,6 +209,70 @@ OBSOLETE_STANDARD_SCHEMA = """
         R_ChakuKaisu5 TEXT
     )
 """
+
+
+OBSOLETE_NATIVE_SCHEMA = """
+    CREATE TABLE IF NOT EXISTS NL_BN (
+        RecordSpec TEXT,
+        DataKubun TEXT,
+        MakeDate TEXT,
+        BanusiCode TEXT,
+        BanusiName_Co TEXT,
+        BanusiName TEXT,
+        BanusiNameKana TEXT,
+        BanusiNameEng TEXT,
+        Fukusyoku TEXT,
+        SetYear INTEGER,
+        HonSyokinTotal BIGINT,
+        FukaSyokin BIGINT,
+        ChakuKaisu INTEGER,
+        Reserved_386 TEXT,
+        PRIMARY KEY (BanusiCode)
+    )
+"""
+
+
+@pytest.mark.parametrize("importer_class", [DataImporter, OptimizedDataImporter])
+def test_native_migration_requires_and_supports_full_current_bn_reimport(
+    tmp_path, importer_class
+) -> None:
+    database = SQLiteDatabase({"path": str(tmp_path / "obsolete-nl-bn.db")})
+    with database:
+        database.execute(OBSOLETE_NATIVE_SCHEMA)
+        database.execute(
+            "INSERT INTO NL_BN "
+            "(RecordSpec, DataKubun, MakeDate, BanusiCode, BanusiName, SetYear, Reserved_386) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            ("BN", "1", "20000101", "123456", "legacy-owner", 2000, "legacy-tail"),
+        )
+        database.commit()
+
+        assert migrate_table_if_needed(database, "NL_BN", SCHEMAS["NL_BN"])
+        migrated = database.fetch_one(
+            "SELECT BanusiCode, BanusiName, SetYear, Reserved_386, "
+            "H_SetYear, R_ChakuKaisu6 FROM NL_BN"
+        )
+
+        importer = importer_class(database)
+        first_stats = importer.import_records(iter([BNParser().parse(build_record())]))
+        second_stats = importer.import_records(iter([BNParser().parse(build_record())]))
+        completed = database.fetch_one("SELECT * FROM NL_BN")
+        row_count = database.fetch_one("SELECT COUNT(*) AS count FROM NL_BN")["count"]
+
+    assert migrated == {
+        "BanusiCode": "123456",
+        "BanusiName": "legacy-owner",
+        "SetYear": 2000,
+        "Reserved_386": "legacy-tail",
+        "H_SetYear": None,
+        "R_ChakuKaisu6": None,
+    }
+    assert first_stats["records_imported"] == 1
+    assert second_stats["records_imported"] == 1
+    assert row_count == 1
+    assert completed["BanusiName"] == EXPECTED["BanusiName"]
+    assert completed["H_SetYear"] == int(EXPECTED["H_SetYear"])
+    assert completed["R_ChakuKaisu6"] == int(EXPECTED["R_ChakuKaisu6"])
 
 
 @pytest.mark.parametrize("importer_class", [DataImporter, OptimizedDataImporter])

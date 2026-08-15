@@ -93,7 +93,16 @@
   safe additive migration. Both importers raise `SchemaMigrationError` before
   mutation and preserve its existing row; operators must rebuild and reimport
   current-shape BN source records. Existing native `NL_BN` already has the
-  correct key, so missing result columns remain additively migratable.
+  correct key, so its missing result columns are additively migratable without
+  dropping legacy rows. Migration cannot infer those 18 result values,
+  however: every pre-existing row has NULL in the new columns until it is
+  replaced from current-shape source data. After deploying this change,
+  operators must therefore run a complete current `DIFN` setup import
+  (`jltsql fetch --from <start> --to <end> --spec DIFN --option 3`, or the
+  supported split-setup option 4) rather than relying on option-1 differences.
+  The regression contract proves that migration preserves the legacy row and
+  primary key, leaves unknown new values NULL, and that full current-record
+  reimport fills the new fields idempotently without duplicating the owner.
 - The historical three-record BN binary fixture was reconstructed through the
   non-official 387-byte parser. Only its position-compatible first 355 bytes
   are retained in a synthetic current record for core-value regression; it is
@@ -119,12 +128,20 @@
 - Do not release from this iteration. Fresh provider acquisition with the final
   merged release-candidate SHA remains mandatory before any release.
 
+## Candidate review and response
+
+- Candidate `0c866612b543c6d820ff95f303bf3ec168c847f0` passed the exact official
+  layout review with no P0/P1/P2 finding. Independent storage review found one
+  P2 operational-contract gap: native additive migration alone leaves the 18
+  new result columns NULL for existing owners.
+- The response is batched into one follow-up candidate: document the mandatory
+  complete current `DIFN` setup reimport and add one migration/reimport contract
+  covering both importers. No parser or schema offset changed in response.
+
 ## Next safe commands
 
-1. Extract the exact BN field rows and change history from both official
-   workbooks and SDK 5.0.0; compare them with code and PR #174.
-2. Add an independent official-layout/storage contract and run it red on this
-   base before product changes.
-3. Implement the smallest complete BN parser/schema/importer repair, run
-   focused/full/workflow-equivalent validation, and request complementary
-   exact-SHA Codex reviews.
+1. Run the focused migration/importer contract, exact full suite, and
+   workflow-equivalent checks on the follow-up candidate.
+2. Obtain one final exact-SHA Codex review of the aggregated P2 response.
+3. Push the candidate, open the PR, resolve all actionable review threads, and
+   merge only with required checks green and the worktree clean.
