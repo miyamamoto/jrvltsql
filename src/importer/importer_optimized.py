@@ -284,7 +284,18 @@ class OptimizedDataImporter:
                     table_name in ("NL_CH", "CHOKYO")
                     and table_name not in verified_ch_result_tables
                 ):
-                    result_table = verify_ch_coupled_table(self.database, table_name)
+                    try:
+                        result_table = verify_ch_coupled_table(self.database, table_name)
+                    except DatabaseError as error:
+                        if not auto_commit:
+                            raise
+                        logger.warning(
+                            "CH result schema verification failed, retrying coupled import",
+                            table=table_name,
+                            error=str(error),
+                        )
+                        self.database.rollback()
+                        result_table = verify_ch_coupled_table(self.database, table_name)
                     if result_table is None:
                         raise SchemaMigrationError(
                             f"CH import could not resolve normalized table for {table_name}"

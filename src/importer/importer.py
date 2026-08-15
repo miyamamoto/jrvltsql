@@ -214,6 +214,23 @@ def insert_ch_coupled_batch(
             return database.insert_many_optimized(table_name, rows)
         return database.insert_many(table_name, rows)
 
+    def rollback_or_invalidate() -> None:
+        """Rollback a coupled write or close a session that cannot roll back."""
+        try:
+            database.rollback()
+        except DatabaseError:
+            # A connection with an unconfirmed rollback must never remain
+            # available for a later context-manager commit.
+            try:
+                database.disconnect()
+            except Exception as disconnect_error:
+                logger.error(
+                    "Failed to invalidate database after CH rollback failure",
+                    table=main_table_name,
+                    error=str(disconnect_error),
+                )
+            raise
+
     main_rows = [main for main, _, _ in prepared]
     result_rows = [row for _, _, rows in prepared for row in rows]
     try:
@@ -226,7 +243,7 @@ def insert_ch_coupled_batch(
     except DatabaseError:
         if not commit_batch:
             raise
-        database.rollback()
+        rollback_or_invalidate()
 
     succeeded = 0
     failed = 0
@@ -239,7 +256,7 @@ def insert_ch_coupled_batch(
             succeeded += 1
         except DatabaseError as error:
             failed += 1
-            database.rollback()
+            rollback_or_invalidate()
             logger.error(
                 "Failed to insert coupled CH record",
                 table=main_table_name,
@@ -867,6 +884,9 @@ class DataImporter:
                 # The database handler has already rolled back the enclosing
                 # transaction. Individual retries here would create a partial
                 # import and invalidate BatchProcessor's atomicity guarantee.
+                raise
+            if _ch_result_table_name(table_name) is not None:
+                # Coupled CH writes must never enter the parent-only fallback.
                 raise
 
             # Rollback failed batch transaction

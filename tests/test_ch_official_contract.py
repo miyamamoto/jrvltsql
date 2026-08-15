@@ -13,7 +13,7 @@ from src.database.schema import SCHEMAS
 from src.database.schema_jravan import JRAVAN_SCHEMAS
 from src.database.schema_types import get_table_column_types, get_table_primary_key_columns
 from src.database.sqlite_handler import SQLiteDatabase
-from src.importer.importer import DataImporter
+from src.importer.importer import DataImporter, ImporterError
 from src.importer.importer_optimized import OptimizedDataImporter
 from src.parser.ch_parser import CHParser
 
@@ -336,7 +336,10 @@ def test_ch_single_record_api_stores_one_header_and_three_results(
     assert result_count == 3
 
 
-def test_ch_batch_metadata_retry_never_commits_header_without_results(tmp_path) -> None:
+@pytest.mark.parametrize("importer_class", [DataImporter, OptimizedDataImporter])
+def test_ch_batch_metadata_retry_never_commits_header_without_results(
+    tmp_path, importer_class
+) -> None:
     """A concrete-backend catalog failure must retry before any CH write."""
     database = SQLiteDatabase({"path": str(tmp_path / "metadata-retry.db")})
     parsed = CHParser().parse(build_record()[0])
@@ -357,7 +360,7 @@ def test_ch_batch_metadata_retry_never_commits_header_without_results(tmp_path) 
             return original_fetch_one(sql, parameters)
 
         database.fetch_one = transient_fetch_one
-        stats = DataImporter(database).import_records(iter([parsed]))
+        stats = importer_class(database).import_records(iter([parsed]))
         main_count = database.fetch_one("SELECT COUNT(*) AS count FROM NL_CH")["count"]
         result_count = database.fetch_one("SELECT COUNT(*) AS count FROM NL_CH_SEISEKI")["count"]
 
@@ -366,6 +369,58 @@ def test_ch_batch_metadata_retry_never_commits_header_without_results(tmp_path) 
     assert stats["records_failed"] == 0
     assert main_count == 1
     assert result_count == 3
+
+
+@pytest.mark.parametrize("importer_class", [DataImporter, OptimizedDataImporter])
+def test_ch_rollback_failure_never_enters_parent_only_fallback(
+    tmp_path, importer_class
+) -> None:
+    """Even a failed rollback must not route coupled CH through generic fallback."""
+    database = SQLiteDatabase({"path": str(tmp_path / "rollback-failure.db")})
+    parsed = CHParser().parse(build_record()[0])
+    assert parsed is not None
+
+    database.connect()
+    try:
+        database.create_table("NL_CH", SCHEMAS["NL_CH"])
+        database.create_table("NL_CH_SEISEKI", SCHEMAS["NL_CH_SEISEKI"])
+        database.commit()
+        original_insert_many = database.insert_many
+        original_rollback = database.rollback
+        child_failed = False
+        rollback_failed = False
+
+        def fail_child_once(table_name: str, rows, use_replace: bool = True):
+            nonlocal child_failed
+            if table_name == "NL_CH_SEISEKI" and not child_failed:
+                child_failed = True
+                raise DatabaseError("child batch failure")
+            return original_insert_many(table_name, rows, use_replace)
+
+        def fail_rollback_once():
+            nonlocal rollback_failed
+            if not rollback_failed:
+                rollback_failed = True
+                raise DatabaseError("rollback failure")
+            return original_rollback()
+
+        database.insert_many = fail_child_once
+        database.rollback = fail_rollback_once
+        with pytest.raises(ImporterError):
+            importer_class(database).import_records(iter([parsed]))
+        assert database.is_connected() is False
+
+        database.connect()
+        main_count = database.fetch_one("SELECT COUNT(*) AS count FROM NL_CH")["count"]
+        result_count = database.fetch_one("SELECT COUNT(*) AS count FROM NL_CH_SEISEKI")["count"]
+    finally:
+        if database.is_connected():
+            database.disconnect()
+
+    assert child_failed is True
+    assert rollback_failed is True
+    assert main_count == 0
+    assert result_count == 0
 
 
 @pytest.mark.parametrize("importer_class", [DataImporter, OptimizedDataImporter])

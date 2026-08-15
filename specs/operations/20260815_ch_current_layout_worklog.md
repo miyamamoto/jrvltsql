@@ -154,7 +154,7 @@
 ## Next safe commands
 
 1. Review the complete staged diff and create one CH candidate commit.
-2. Run the required focused/full/workflow-equivalent/static commands again on
+2. Run the focused/full/workflow-equivalent/static commands required for
    that immutable full SHA and record the SHA in PR metadata rather than adding
    a self-referential worklog commit.
 3. Run the exact-SHA Codex critical review, aggregate actionable findings once,
@@ -184,7 +184,7 @@
   checks, and missing/incomplete/complete data-quality checks are added before
   changing the implementation. The next command is the focused red run; its
   failure output must be recorded before implementing the repair batch.
-- The pre-implementation focused run was red as required: `6 failed`. The
+- The focused run before implementation was red, as required: `6 failed`. The
   concrete assertions were child count `0 != 3`, ordinary and optimized
   metadata calls `{table_exists: 10, fetch_all: 15}` instead of `{2, 3}` for
   five records, and empty issue lists where missing/incomplete normalized CH
@@ -229,3 +229,30 @@
   ordinary importer can now distinguish a missing child table from an
   unreadable catalog and retry only the latter before any mutation. The paired
   regression plus migration contract passed `28 passed` after the fix.
+
+## PR #179 aggregated review repair
+
+- PR #179 was opened at
+  `71763a6df90f940ece9487e739832212fffd4f6c`. GitHub Actions `test` and
+  `lint` passed, GitHub Copilot reviewed all 24 changed files with no comment,
+  and CodeRabbit raised three actionable threads after its review completed.
+- Two code findings were independently reproduced. The optimized importer did
+  not retry a transient concrete-backend catalog error. More importantly, if a
+  child insert failed and the coupled rollback itself raised, the ordinary
+  importer entered its generic parent-only fallback. The optimized importer
+  did not enter that fallback, but both paths could leave an uncommitted parent
+  on the connection for a later context-manager commit.
+- Red-first evidence on the PR head was `3 failed, 1 passed`: optimized catalog
+  retry aborted, ordinary rollback failure reported success after committing
+  one parent, and optimized rollback failure left one visible parent. A
+  tightened rollback-invalidation contract was separately red for both
+  importers (`2 failed`) before implementation.
+- Coupled rollback failure now invalidates the database session, which discards
+  any uncommitted parent and prevents a later implicit commit. The ordinary
+  importer also refuses to route any CH table through its generic single-table
+  fallback. The optimized importer retries only its mutation-free catalog
+  preflight once. The paired catalog and rollback regressions pass `4 passed`.
+- The remaining actionable thread requested clearer worklog wording and was
+  applied directly. Four review-body-only nitpicks about test comments,
+  generated-column style, and named parser constants are non-behavioral and do
+  not justify further candidate churn under the aggregated-review policy.
