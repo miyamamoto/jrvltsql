@@ -115,13 +115,42 @@
   be rebuilt before import. Treating that incompatible table as usable would
   make distinct foals collide or become unaddressable.
 
+## Candidate review and batched repair
+
+- Initial candidate full SHA:
+  `8743e5bc34a0528a928449a58b34c9d2e31e57e2`.
+- Exact-SHA full suite: `1955 passed, 47 skipped, 5 subtests passed`.
+  Workflow-equivalent selected suite: `862 passed, 2 skipped, 3 subtests
+  passed`.
+- Independent Codex layout review was GREEN with no P0/P1/P2 findings.
+- Independent Codex storage review found one P1: a database containing only the
+  former standard-name SK table routed new imports to `SANKU`, then returned
+  failed statistics instead of an explicit migration error. Full-branch Codex
+  review also found two P2 fixture regressions: current regenerated records
+  were still split at 78 bytes, and the source-inspection fixture generator
+  could not discover pedigree slices expressed only through a loop.
+- Added all regression tests before repair. Against the initial candidate the
+  selected run failed four cases, exit 1: both importers did not raise for the
+  legacy-only standard database, the extractor omitted the pedigree fields,
+  and the fixture map remained 78 instead of 208.
+- Batched repair now rejects the legacy-only standard storage with an explicit
+  `SchemaMigrationError` and rebuild/reimport instruction; if canonical
+  `SANKU` exists it remains the destination. Both importers share the same
+  resolver and preserve this exception rather than reducing it to failed-row
+  statistics. The parser exposes all fourteen literal slices to the fixture
+  generator, and the fixture loader prefers complete 208-byte records while
+  retaining explicit compatibility for the repository's reconstructed
+  78-byte fixture. The four red cases now pass; the affected parser, fixture,
+  importer, schema, migration, mapping, and batch suite completed at
+  `845 passed, 1 skipped`.
+
 ## Current state and next safe commands
 
-1. Run formatting, critical lint, and diff checks over the completed batch.
-2. Commit once, record the full candidate SHA, and rerun the affected workflow
-   tests against that exact SHA.
-3. Gather the required Codex reviews in one batch, resolve all actionable
-   findings together, then push and complete PR gates.
+1. Run the affected focused suite, full suite, formatting, critical lint, and
+   diff checks over the completed review repair.
+2. Commit the batched repair once, record the new full candidate SHA, and rerun
+   required tests against that exact SHA.
+3. Re-review the repaired areas once, then push and complete PR gates.
 
 ## Queued follow-up outside this iteration
 

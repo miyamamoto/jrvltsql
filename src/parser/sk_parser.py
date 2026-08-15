@@ -23,22 +23,6 @@ class SKParser:
 
     RECORD_TYPE = "SK"
     RECORD_LENGTH = 208
-    PEDIGREE_FIELDS = (
-        "FNum",
-        "MNum",
-        "FFNum",
-        "FMNum",
-        "MFNum",
-        "MMNum",
-        "FFFNum",
-        "FFMNum",
-        "FMFNum",
-        "FMMNum",
-        "MFFNum",
-        "MFMNum",
-        "MMFNum",
-        "MMMNum",
-    )
 
     def __init__(self):
         self.logger = get_logger(__name__)
@@ -112,9 +96,21 @@ class SKParser:
             result["SanchiName"] = self.decode_field(data[46:66])
 
             # 13. 3代血統 繁殖登録番号 (位置:67, 14回, 長さ:10)
-            for index, field_name in enumerate(self.PEDIGREE_FIELDS):
-                start = 66 + 10 * index
-                result[field_name] = self.decode_field(data[start : start + 10])
+            # fixture再構築ツールも同じsliceを読めるよう、生成コード形式で明示する。
+            result["FNum"] = self.decode_field(data[66:76])
+            result["MNum"] = self.decode_field(data[76:86])
+            result["FFNum"] = self.decode_field(data[86:96])
+            result["FMNum"] = self.decode_field(data[96:106])
+            result["MFNum"] = self.decode_field(data[106:116])
+            result["MMNum"] = self.decode_field(data[116:126])
+            result["FFFNum"] = self.decode_field(data[126:136])
+            result["FFMNum"] = self.decode_field(data[136:146])
+            result["FMFNum"] = self.decode_field(data[146:156])
+            result["FMMNum"] = self.decode_field(data[156:166])
+            result["MFFNum"] = self.decode_field(data[166:176])
+            result["MFMNum"] = self.decode_field(data[176:186])
+            result["MMFNum"] = self.decode_field(data[186:196])
+            result["MMMNum"] = self.decode_field(data[196:206])
 
             # 14. レコード区切 (位置:207, 長さ:2)
             result["RecordDelimiter"] = self.decode_field(data[206:208])

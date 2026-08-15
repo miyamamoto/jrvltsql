@@ -10,7 +10,8 @@ Key optimizations:
 from typing import Dict, Iterator, List, Optional, Union
 
 from src.database.base import BaseDatabase, DatabaseError
-from src.importer.importer import _expanded_record_fingerprint
+from src.database.migration import SchemaMigrationError
+from src.importer.importer import _expanded_record_fingerprint, resolve_standard_table_name
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -139,9 +140,7 @@ class OptimizedDataImporter:
             return None
 
         if self.use_jravan_schema:
-            from src.database.table_mappings import JLTSQL_TO_JRAVAN
-
-            return JLTSQL_TO_JRAVAN.get(table_name, table_name)
+            return resolve_standard_table_name(self.database, table_name)
 
         return table_name
 
@@ -286,6 +285,8 @@ class OptimizedDataImporter:
 
             return stats
 
+        except SchemaMigrationError:
+            raise
         except Exception as e:
             logger.error("Import failed", error=str(e))
 

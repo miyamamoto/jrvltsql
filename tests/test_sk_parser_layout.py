@@ -3,6 +3,7 @@
 
 import pytest
 
+from scripts.extract_fixtures_from_db import extract_parser_info
 from src.database.migration import SchemaMigrationError
 from src.database.schema import SCHEMAS
 from src.database.schema_jravan import JRAVAN_SCHEMAS
@@ -175,6 +176,36 @@ def test_standard_import_refuses_the_obsolete_keyless_schema(tmp_path):
 
     assert "KettoNum" not in columns
     assert "MMMNum" not in columns
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_standard_import_refuses_a_legacy_alias_only_database(tmp_path, importer_class):
+    legacy_schema = SCHEMAS["NL_SK"].replace("NL_SK", "HANSYOKU_UMA", 1)
+    database = SQLiteDatabase({"path": str(tmp_path / "legacy-alias-only.db")})
+    with database:
+        database.execute(legacy_schema)
+        with pytest.raises(
+            SchemaMigrationError,
+            match=r"HANSYOKU_UMA.*SANKU|SANKU.*HANSYOKU_UMA",
+        ):
+            importer_class(database, use_jravan_schema=True).import_records(
+                iter([SKParser().parse(build_current_record())])
+            )
+        row_count = database.fetch_one("SELECT COUNT(*) AS count FROM HANSYOKU_UMA")
+
+    assert row_count["count"] == 0
+
+
+def test_fixture_extractor_discovers_every_current_sk_field():
+    parser_path = "src/parser/sk_parser.py"
+    fields, record_length = extract_parser_info(parser_path)
+    discovered = {name: (start, end) for name, start, end in fields}
+
+    assert record_length == SKParser.RECORD_LENGTH
+    assert set(discovered) == set(EXPECTED)
+    for index, field_name in enumerate(PEDIGREE_FIELDS):
+        start = 66 + 10 * index
+        assert discovered[field_name] == (start, start + 10)
 
 
 @pytest.mark.parametrize(

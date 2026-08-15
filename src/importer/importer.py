@@ -6,6 +6,7 @@ This module imports parsed JV-Data records into database.
 from typing import Any, Dict, Iterator, List, Optional
 
 from src.database.base import BaseDatabase, DatabaseError
+from src.database.migration import SchemaMigrationError
 from src.database.schema_types import (
     get_table_column_types,
     get_table_primary_key_columns,
@@ -13,6 +14,25 @@ from src.database.schema_types import (
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+def resolve_standard_table_name(database: BaseDatabase, native_table_name: str) -> str:
+    """Resolve a canonical standard table and reject unsupported legacy-only storage."""
+    from src.database.table_mappings import JLTSQL_TO_JRAVAN
+
+    standard_name = JLTSQL_TO_JRAVAN.get(native_table_name, native_table_name)
+    if (
+        native_table_name == "NL_SK"
+        and database.is_connected()
+        and database.table_exists("HANSYOKU_UMA")
+        and not database.table_exists(standard_name)
+    ):
+        raise SchemaMigrationError(
+            "Legacy standard table HANSYOKU_UMA exists but canonical SANKU does not. "
+            "Automatic SK import is refused; rebuild the standard table as SANKU and "
+            "reimport current-shape source records."
+        )
+    return standard_name
 
 
 _STANDARD_FIELD_ALIASES = {
@@ -385,9 +405,7 @@ class DataImporter:
 
         # Convert to JRA-VAN standard name if requested
         if self.use_jravan_schema:
-            from src.database.table_mappings import JLTSQL_TO_JRAVAN
-
-            return JLTSQL_TO_JRAVAN.get(table_name, table_name)
+            return resolve_standard_table_name(self.database, table_name)
 
         return table_name
 
@@ -540,6 +558,8 @@ class DataImporter:
 
             return stats
 
+        except SchemaMigrationError:
+            raise
         except Exception as e:
             logger.error("Import failed", error=str(e))
             raise ImporterError(f"Failed to import records: {e}")

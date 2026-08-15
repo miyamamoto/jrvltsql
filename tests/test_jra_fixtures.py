@@ -66,13 +66,21 @@ PARSER_MAP = {
     "RA": (RAParser, 856),
     "RC": (RCParser, 241),
     "SE": (SEParser, 463),
-    "SK": (SKParser, 78),  # Reconstructed fixture contains only the old 78-byte projection.
+    "SK": (SKParser, SKParser.RECORD_LENGTH),
     "TK": (TKParser, 727),
     "TM": (TMParser, 39),
     "WF": (WFParser, 169),  # Historical fixture uses the obsolete compact layout.
     "YS": (YSParser, 146),
 }
 EXPANDED_RECORD_TYPES = {"O1", "O2", "O3", "O4", "O5", "O6"}
+LEGACY_RECONSTRUCTED_LENGTHS = {"SK": 78}
+
+
+def _has_complete_fixture_records(data, record_type, record_length):
+    if not data or len(data) % record_length:
+        return False
+    marker = record_type.encode("ascii")
+    return all(data[offset : offset + 2] == marker for offset in range(0, len(data), record_length))
 
 
 def load_fixture_records(record_type, record_length):
@@ -82,10 +90,18 @@ def load_fixture_records(record_type, record_length):
         pytest.skip(f"Fixture file not found: {filepath}")
     with open(filepath, "rb") as f:
         data = f.read()
+    source_record_length = record_length
+    legacy_length = LEGACY_RECONSTRUCTED_LENGTHS.get(record_type)
+    if (
+        legacy_length
+        and not _has_complete_fixture_records(data, record_type, record_length)
+        and _has_complete_fixture_records(data, record_type, legacy_length)
+    ):
+        source_record_length = legacy_length
     records = []
-    for i in range(0, len(data), record_length):
-        chunk = data[i : i + record_length]
-        if len(chunk) == record_length:
+    for i in range(0, len(data), source_record_length):
+        chunk = data[i : i + source_record_length]
+        if len(chunk) == source_record_length:
             # The historical SE fixture was reconstructed with the obsolete
             # 463-byte parser and has no official tail. Preserve its core-field
             # checks while the tail is covered by a dedicated 555-byte test.
@@ -302,3 +318,14 @@ def test_se_storage_schemas_keep_all_three_opponent_slots():
         ):
             assert f"{column} TEXT" in schema
         assert "Reserved_462" not in schema
+
+
+def test_sk_current_fixture_file_is_split_at_the_current_record_length(tmp_path, monkeypatch):
+    record = b"SK" + b" " * (SKParser.RECORD_LENGTH - 4) + b"\r\n"
+    (tmp_path / "sk_records.bin").write_bytes(record * 2)
+    monkeypatch.setattr("tests.test_jra_fixtures.FIXTURES_DIR", str(tmp_path))
+
+    records = load_fixture_records("SK", PARSER_MAP["SK"][1])
+
+    assert PARSER_MAP["SK"][1] == SKParser.RECORD_LENGTH
+    assert records == [record, record]
