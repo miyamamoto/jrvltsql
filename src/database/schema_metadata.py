@@ -7,6 +7,11 @@ for LLM-based applications to understand the database schema.
 from copy import deepcopy
 from typing import Dict, List, TypedDict
 
+from src.database.schema_types import (
+    get_table_column_types,
+    get_table_primary_key_columns,
+)
+
 
 class ColumnMetadata(TypedDict):
     """Column metadata definition."""
@@ -26,6 +31,37 @@ class TableMetadata(TypedDict):
     columns: List[ColumnMetadata]
     primary_key: List[str]
     indexes: List[str]
+
+
+def _schema_backed_metadata(
+    table_name: str,
+    *,
+    record_type: str,
+    description: str,
+    purpose: str,
+    indexes: List[str],
+) -> TableMetadata:
+    """Build metadata from the executable schema so public names cannot drift."""
+
+    primary_key = get_table_primary_key_columns(table_name)
+    return {
+        "table_name": table_name,
+        "record_type": record_type,
+        "description": description,
+        "purpose": purpose,
+        "columns": [
+            {
+                "name": column_name,
+                "type": column_type,
+                "description": column_name,
+                "example": "",
+                "nullable": column_name not in primary_key,
+            }
+            for column_name, column_type in get_table_column_types(table_name).items()
+        ],
+        "primary_key": primary_key,
+        "indexes": indexes,
+    }
 
 
 # 主要テーブルのメタデータ定義
@@ -849,24 +885,20 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
         "indexes": ["系統ID"]
     },
 
-    "NL_CH": {
-        "table_name": "NL_CH",
-        "record_type": "CH",
-        "description": "調教師マスタ情報",
-        "purpose": "調教師の基本情報、免許情報、所属、成績を格納",
-        "columns": [
-            {"name": "レコード種別ID", "type": "TEXT", "description": "レコード種別識別子（'CH'）", "example": "CH", "nullable": False},
-            {"name": "調教師コード", "type": "TEXT", "description": "調教師識別コード（5桁）", "example": "01234", "nullable": False},
-            {"name": "調教師名", "type": "TEXT", "description": "調教師氏名", "example": "藤沢和雄", "nullable": True},
-            {"name": "調教師免許交付年月日", "type": "TEXT", "description": "調教師免許取得日", "example": "19800401", "nullable": True},
-            {"name": "調教師免許抹消年月日", "type": "TEXT", "description": "調教師免許失効日（引退時）", "example": "20200331", "nullable": True},
-            {"name": "生年月日", "type": "TEXT", "description": "調教師の生年月日", "example": "19540101", "nullable": True},
-            {"name": "調教師東西所属コード", "type": "TEXT", "description": "所属（1=美浦（関東）、2=栗東（関西））", "example": "1", "nullable": False},
-            {"name": "本年累計成績情報", "type": "TEXT", "description": "当年・累計の1着-着外回数と獲得賞金", "example": "50-45-40-120", "nullable": True}
-        ],
-        "primary_key": ["調教師コード"],
-        "indexes": ["調教師名", "調教師東西所属コード"]
-    },
+    "NL_CH": _schema_backed_metadata(
+        "NL_CH",
+        record_type="CH",
+        description="調教師マスタ基本情報",
+        purpose="調教師の基本情報、免許情報、所属、最近の重賞勝利3件を格納",
+        indexes=["ChokyosiName", "TozaiCD"],
+    ),
+    "NL_CH_SEISEKI": _schema_backed_metadata(
+        "NL_CH_SEISEKI",
+        record_type="CH",
+        description="調教師マスタ成績情報",
+        purpose="調教師ごとの本年・前年・累計成績をNum=1,2,3の3行で格納",
+        indexes=["ChokyosiCode", "SetYear"],
+    ),
 
     "NL_HN": {
         "table_name": "NL_HN",

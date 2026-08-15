@@ -24,6 +24,10 @@ from src.database.sqlite_handler import SQLiteDatabase
 from src.database.postgresql_handler import PostgreSQLDatabase
 from src.database.schema import SchemaManager
 from src.database.schema_metadata import TABLE_METADATA
+from src.database.schema_types import (
+    get_table_column_types,
+    get_table_primary_key_columns,
+)
 
 
 def test_metadata_primary_key_columns_are_described():
@@ -33,6 +37,18 @@ def test_metadata_primary_key_columns_are_described():
         defined_columns = {column["name"] for column in metadata["columns"]}
         missing = set(metadata.get("primary_key", [])) - defined_columns
         assert not missing, f"{table_name} primary_key references missing columns: {sorted(missing)}"
+
+
+def test_ch_metadata_matches_normalized_native_schema():
+    """CH MCP metadata must expose both normalized tables exactly as stored."""
+
+    for table_name in ("NL_CH", "NL_CH_SEISEKI"):
+        metadata = TABLE_METADATA[table_name]
+        metadata_types = {
+            column["name"]: column["type"] for column in metadata["columns"]
+        }
+        assert metadata_types == get_table_column_types(table_name)
+        assert metadata["primary_key"] == get_table_primary_key_columns(table_name)
 
 
 def test_av_metadata_matches_scratch_exclusion_schema():

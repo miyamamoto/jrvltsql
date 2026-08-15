@@ -294,3 +294,26 @@
   `4 passed`; the broader database context/dual-transaction group passes
   `23 passed`. Final full-suite, PostgreSQL, static, and exact-SHA review
   evidence will be attached to PR #179 after the replacement commit.
+
+## Public schema-metadata repair
+
+- The cumulative Codex review (`gpt-5.6-sol`, `xhigh`, session
+  `01a0070a-48ac-78a0-9ca4-cd1771a38d8b`) reviewed the complete change from
+  base `e54991eb02f5fbee8c4e561bf1f54adb9be255ac` through candidate
+  `3b618f3ee44bb4b7eb714b08e9c94b3c39e592e4`. Its focused run passed
+  `797 passed, 6 skipped`; its independent full run passed `2109 passed,
+  51 skipped, 3 warnings, 6 subtests`, and it reported no actionable finding.
+- A separate mechanical comparison of executable DDL against the MCP schema
+  metadata then found a real CH inconsistency: `NL_CH` still described eight
+  obsolete Japanese-name summary fields rather than the 42 stored columns,
+  and `NL_CH_SEISEKI` had no metadata entry despite being part of the public
+  normalized schema. This would give MCP/application consumers a schema that
+  cannot address the stored columns.
+- The minimal regression was red first with `1 failed`: the old `NL_CH`
+  metadata dictionary differed from the executable schema (and iteration over
+  the missing child would subsequently fail). Both CH metadata entries are now
+  generated from the executable DDL's normalized types and primary keys, so
+  column names cannot independently drift. The paired exact-schema and
+  primary-key metadata tests pass `2 passed`; MCP export reports 42 parent
+  columns with key `ChokyosiCode` and 176 child columns with key
+  `ChokyosiCode, Num`.
