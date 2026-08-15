@@ -22,28 +22,31 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             RecordSpec                     CHAR(2)             ,  -- レコード種別ID
             DataKubun                      CHAR(1)             ,  -- データ区分
             MakeDate                       DATE                ,  -- YYYYMMDD形式の日付
-            BanusiName                     VARCHAR(255)        ,  -- テキスト
-            BanusiName_Co                  VARCHAR(64)         ,  -- 文字列(64)
-            BanusiNameKana                 VARCHAR(255)        ,  -- テキスト
-            BanusiNameEng                  VARCHAR(255)        ,  -- テキスト
-            Fukusyoku                      VARCHAR(255)        ,  -- テキスト
-            H_SetYear                      VARCHAR(255)        ,  -- テキスト
-            H_HonSyokinTotal               VARCHAR(255)        ,  -- テキスト
-            H_FukaSyokin                   VARCHAR(255)        ,  -- テキスト
-            H_ChakuKaisu1                  VARCHAR(255)        ,  -- テキスト
-            H_ChakuKaisu2                  VARCHAR(255)        ,  -- テキスト
-            H_ChakuKaisu3                  VARCHAR(255)        ,  -- テキスト
-            H_ChakuKaisu4                  VARCHAR(255)        ,  -- テキスト
-            H_ChakuKaisu5                  VARCHAR(255)        ,  -- テキスト
-            H_ChakuKaisu6                  VARCHAR(255)        ,  -- テキスト
-            R_SetYear                      VARCHAR(255)        ,  -- テキスト
-            R_HonSyokinTotal               VARCHAR(255)        ,  -- テキスト
-            R_FukaSyokin                   VARCHAR(255)        ,  -- テキスト
-            R_ChakuKaisu1                  VARCHAR(255)        ,  -- テキスト
-            R_ChakuKaisu2                  VARCHAR(255)        ,  -- テキスト
-            R_ChakuKaisu3                  VARCHAR(255)        ,  -- テキスト
-            R_ChakuKaisu4                  VARCHAR(255)        ,  -- テキスト
-            R_ChakuKaisu5                  VARCHAR(255)          -- テキスト
+            BanusiCode                     VARCHAR(6)          ,  -- 馬主コード
+            BanusiName_Co                  VARCHAR(64)         ,  -- 馬主名(法人格有)
+            BanusiName                     VARCHAR(64)         ,  -- 馬主名(法人格無)
+            BanusiNameKana                 VARCHAR(50)         ,  -- 馬主名半角カナ
+            BanusiNameEng                  VARCHAR(100)        ,  -- 馬主名欧字
+            Fukusyoku                      VARCHAR(60)         ,  -- 服色標示
+            H_SetYear                      SMALLINT            ,  -- 本年設定年
+            H_HonSyokinTotal               BIGINT              ,  -- 本年本賞金合計
+            H_FukaSyokin                   BIGINT              ,  -- 本年付加賞金合計
+            H_ChakuKaisu1                  INTEGER             ,  -- 本年1着回数
+            H_ChakuKaisu2                  INTEGER             ,  -- 本年2着回数
+            H_ChakuKaisu3                  INTEGER             ,  -- 本年3着回数
+            H_ChakuKaisu4                  INTEGER             ,  -- 本年4着回数
+            H_ChakuKaisu5                  INTEGER             ,  -- 本年5着回数
+            H_ChakuKaisu6                  INTEGER             ,  -- 本年着外回数
+            R_SetYear                      SMALLINT            ,  -- 累計設定年
+            R_HonSyokinTotal               BIGINT              ,  -- 累計本賞金合計
+            R_FukaSyokin                   BIGINT              ,  -- 累計付加賞金合計
+            R_ChakuKaisu1                  INTEGER             ,  -- 累計1着回数
+            R_ChakuKaisu2                  INTEGER             ,  -- 累計2着回数
+            R_ChakuKaisu3                  INTEGER             ,  -- 累計3着回数
+            R_ChakuKaisu4                  INTEGER             ,  -- 累計4着回数
+            R_ChakuKaisu5                  INTEGER             ,  -- 累計5着回数
+            R_ChakuKaisu6                  INTEGER             ,  -- 累計着外回数
+            PRIMARY KEY (BanusiCode)
         )
     """,
     "BATAIJYU": """

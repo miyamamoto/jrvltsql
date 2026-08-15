@@ -220,10 +220,10 @@ def make_wf_record(data_kubun="1", make_date="20260101", **kwargs) -> bytes:
 
 
 def make_bn_record(data_kubun="1", make_date="20260101", **kwargs) -> bytes:
-    """Create BN record (387 bytes)."""
-    data = bytearray(387)
+    """Create one current 477-byte BN record."""
+    data = bytearray(b" " * 477)
     data[0:2] = _pad("BN", 2)
     data[2:3] = _pad(data_kubun, 1)
     data[3:11] = _pad(make_date, 8)
-    data[385:387] = b'\r\n'
+    data[475:477] = b'\r\n'
     return bytes(data)

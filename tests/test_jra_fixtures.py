@@ -45,7 +45,7 @@ FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures", "jra")
 
 # Record type -> (ParserClass, record_length)
 PARSER_MAP = {
-    "BN": (BNParser, 387),
+    "BN": (BNParser, BNParser.RECORD_LENGTH),
     "BR": (BRParser, 455),
     "CH": (CHParser, 592),
     "DM": (DMParser, 48),
@@ -73,7 +73,7 @@ PARSER_MAP = {
     "YS": (YSParser, 146),
 }
 EXPANDED_RECORD_TYPES = {"O1", "O2", "O3", "O4", "O5", "O6"}
-LEGACY_RECONSTRUCTED_LENGTHS = {"RA": 856, "SK": 78}
+LEGACY_RECONSTRUCTED_LENGTHS = {"BN": 387, "RA": 856, "SK": 78}
 
 
 def _has_complete_fixture_records(data, record_type, record_length):
@@ -107,6 +107,11 @@ def load_fixture_records(record_type, record_length):
             # checks while the tail is covered by a dedicated 555-byte test.
             if record_type == "SE" and len(chunk) == 463:
                 chunk = chunk.ljust(SEParser.RECORD_LENGTH - 2, b" ") + b"\r\n"
+            if record_type == "BN" and len(chunk) == 387:
+                # This fixture was reconstructed through the former 387-byte
+                # parser. Only its first 355 core bytes are position-compatible;
+                # the full result arrays are covered by the official contract.
+                chunk = chunk[:355].ljust(BNParser.RECORD_LENGTH - 2, b" ") + b"\r\n"
             if record_type == "SK" and len(chunk) == 78:
                 # This fixture was reconstructed from stored columns through
                 # the obsolete one-pedigree parser. Preserve its core values

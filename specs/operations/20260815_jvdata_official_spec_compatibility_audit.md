@@ -96,15 +96,15 @@ race identityと`Umaban`を複合主キーに持ち、馬名、馬体重、増�
 
 ### B-04 現行38種のうち複数が公式配列を途中で切る
 
-明らかに短い公開契約は、WH、SK、RAの修正後、次の9種である。
+明らかに短い公開契約は、WH、SK、RA、BNの修正後、次の8種である。
 
 ```text
-BN 387/477    BR 455/545    CH 592/3862   DM 48/303
-KS 772/4173   RC 241/501
+BR 455/545    CH 592/3862   DM 48/303     KS 772/4173
+RC 241/501
 TK 727/21657  TM 39/141     YS 146/382
 ```
 
-左が実装上の公開長または終端、右が公式現行長。BN/BR/CH/KS の成績配列、DM/TM の
+左が実装上の公開長または終端、右が公式現行長。BR/CH/KS の成績配列、DM/TM の
 18頭配列、TK の300頭配列、RC の3頭分記録、YS の3競走案内などを
 1件または一部だけ取り、公式レコード内部に `RecordDelimiter` を置くものがある。
 これは「不要列を捨てる」だけではなく、繰返し要素のデータ損失と key collision を
@@ -114,6 +114,12 @@ RAはこのイテレーションで4.8.0.2、4.9.0.1、SDK 5.0.0に共通する1
 賞金4配列、25ラップ、4コーナー、更新区分を全展開し、CRLFを厳密検証して、native/standard schemaと
 両importerのround-tripを固定した。旧856バイトfixtureは公式rawとは扱わず、位置互換な
 先頭713バイトだけをcurrent shapeへ合成するrepository regressionに限定した。
+
+BNは4.8.0.2、4.9.0.1、SDK 5.0.0に共通する477バイトへ統一した。本年・累計の
+60バイト成績blockを各9項目へ全展開し、CRLFとrecord typeを厳密検査して、
+native/standard schemaと両importerのround-tripを固定した。2003年以前の公式413バイトと
+旧repository由来387バイトは現行setupへ混在させず拒否する。既存のkeyless `BANUSI` は
+安全に主キーを追加できないため、行を保持したままfail closedで再構築を要求する。
 
 ### B-05 2023年変更対象7種は新旧両対応ではない
 
@@ -259,7 +265,7 @@ skip の扱いに関する実運用上の質問が繰り返されている:
 | KS | 4173 | partial | 成績配列を途中で終了、公開長772 |
 | CH | 3862 | partial | 表彰/成績配列を途中で終了、公開長592 |
 | BR | 545 | partial | 新幅の基本部のみ、公開長455 |
-| BN | 477 | partial | 成績配列の一部のみ、公開長387 |
+| BN | 477 | current-shape | 本年・累計成績を全展開、現行長/type/CRLFを厳密検査、413/387byteを拒否 |
 | HN | 251 | current-shape | currentのみ、全フィールドの現行位置と長さ/CRLFを厳密検査 |
 | SK | 208 | current-shape | currentのみ、14件血統と長さ/CRLFを厳密検査 |
 | CK | 6870 | current-shape / weak gate | byte-first修正済み、旧長の明示拒否なし |
@@ -309,6 +315,7 @@ blocking data loss とはしない。
 - これらを layout version / dataspec / record length で dispatch する共通機構はない。
 - 現行 setup が現行形へ正規化する経路だけを製品契約にするなら、古い raw cache/fixture を
   明示拒否する必要がある。現在、多くの parser は短い record を warning 後も parse する。
+- BNは現行477バイトだけを受理し、旧公式413バイトと旧repositoryの387バイトを明示拒否する。
 
 ### 同じ長さで意味が変わった UM（2006年）
 
@@ -416,7 +423,7 @@ credential/Windows/JV-Link runtimeが必要であり、実行不能ならrelease
 後戻りを抑えるため、次の順で別PRにする。
 
 1. **残る現行 layout/schema の再生成**
-   残る9 partial recordを公式 Excel から再実装する。偽 delimiter とDB再構築 fixture
+   残る8 partial recordを公式 Excel から再実装する。偽 delimiter とDB再構築 fixture
    を公式raw扱いしない。
 2. **2023 generation boundary**
    staff 推奨の new-only rebuild 方針を維持し、連結 token、cache、raw import の全入口で旧物理
