@@ -1779,28 +1779,31 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             RecordSpec                     CHAR(2)             ,  -- レコード種別ID
             DataKubun                      CHAR(1)             ,  -- データ区分
             MakeDate                       DATE                ,  -- YYYYMMDD形式の日付
-            BreederName_Co                 VARCHAR(72)         ,  -- 文字列(72)
-            BreederName                    VARCHAR(72)         ,  -- 文字列(72)
-            BreederNameKana                VARCHAR(72)         ,  -- 文字列(72)
-            BreederNameEng                 VARCHAR(168)        ,  -- 文字列(168)
-            Address                        VARCHAR(20)         ,  -- 文字列(20)
-            H_SetYear                      VARCHAR(4)          ,  -- 文字列(4)
-            H_HonSyokinTotal               VARCHAR(10)         ,  -- 文字列(10)
-            H_FukaSyokin                   VARCHAR(10)         ,  -- 文字列(10)
-            H_ChakuKaisu1                  VARCHAR(6)          ,  -- 文字列(6)
-            H_ChakuKaisu2                  VARCHAR(6)          ,  -- 文字列(6)
-            H_ChakuKaisu3                  VARCHAR(6)          ,  -- 文字列(6)
-            H_ChakuKaisu4                  VARCHAR(6)          ,  -- 文字列(6)
-            H_ChakuKaisu5                  VARCHAR(6)          ,  -- 文字列(6)
-            H_ChakuKaisu6                  VARCHAR(6)          ,  -- 文字列(6)
-            R_SetYear                      VARCHAR(4)          ,  -- 文字列(4)
-            R_HonSyokinTotal               VARCHAR(10)         ,  -- 文字列(10)
-            R_FukaSyokin                   VARCHAR(10)         ,  -- 文字列(10)
-            R_ChakuKaisu1                  VARCHAR(6)          ,  -- 文字列(6)
-            R_ChakuKaisu2                  VARCHAR(6)          ,  -- 文字列(6)
-            R_ChakuKaisu3                  VARCHAR(6)          ,  -- 文字列(6)
-            R_ChakuKaisu4                  VARCHAR(6)          ,  -- 文字列(6)
-            R_ChakuKaisu5                  VARCHAR(6)            -- 文字列(6)
+            BreederCode                    VARCHAR(8)          ,  -- 生産者コード
+            BreederName_Co                 VARCHAR(72)         ,  -- 生産者名(法人格有)
+            BreederName                    VARCHAR(72)         ,  -- 生産者名(法人格無)
+            BreederNameKana                VARCHAR(72)         ,  -- 生産者名半角カナ
+            BreederNameEng                 VARCHAR(168)        ,  -- 生産者名欧字
+            Address                        VARCHAR(20)         ,  -- 生産者住所自治省名
+            H_SetYear                      SMALLINT            ,  -- 本年設定年
+            H_HonSyokinTotal               BIGINT              ,  -- 本年本賞金合計
+            H_FukaSyokin                   BIGINT              ,  -- 本年付加賞金合計
+            H_ChakuKaisu1                  INTEGER             ,  -- 本年1着回数
+            H_ChakuKaisu2                  INTEGER             ,  -- 本年2着回数
+            H_ChakuKaisu3                  INTEGER             ,  -- 本年3着回数
+            H_ChakuKaisu4                  INTEGER             ,  -- 本年4着回数
+            H_ChakuKaisu5                  INTEGER             ,  -- 本年5着回数
+            H_ChakuKaisu6                  INTEGER             ,  -- 本年着外回数
+            R_SetYear                      SMALLINT            ,  -- 累計設定年
+            R_HonSyokinTotal               BIGINT              ,  -- 累計本賞金合計
+            R_FukaSyokin                   BIGINT              ,  -- 累計付加賞金合計
+            R_ChakuKaisu1                  INTEGER             ,  -- 累計1着回数
+            R_ChakuKaisu2                  INTEGER             ,  -- 累計2着回数
+            R_ChakuKaisu3                  INTEGER             ,  -- 累計3着回数
+            R_ChakuKaisu4                  INTEGER             ,  -- 累計4着回数
+            R_ChakuKaisu5                  INTEGER             ,  -- 累計5着回数
+            R_ChakuKaisu6                  INTEGER             ,  -- 累計着外回数
+            PRIMARY KEY (BreederCode)
         )
     """,
     "TAISENGATA_MINING": """

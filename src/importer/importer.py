@@ -32,6 +32,17 @@ def resolve_standard_table_name(database: BaseDatabase, native_table_name: str) 
             "Automatic SK import is refused; rebuild the standard table as SANKU and "
             "reimport current-shape source records."
         )
+    if (
+        native_table_name == "NL_BR"
+        and database.is_connected()
+        and database.table_exists("BREEDER")
+        and not database.table_exists(standard_name)
+    ):
+        raise SchemaMigrationError(
+            "Legacy standard table BREEDER exists but canonical SEISAN does not. "
+            "Automatic BR import is refused; rebuild the standard table as SEISAN and "
+            "reimport current-shape source records."
+        )
     return standard_name
 
 

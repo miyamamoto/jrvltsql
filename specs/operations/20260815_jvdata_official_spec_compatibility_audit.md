@@ -96,15 +96,14 @@ race identityと`Umaban`を複合主キーに持ち、馬名、馬体重、増�
 
 ### B-04 現行38種のうち複数が公式配列を途中で切る
 
-明らかに短い公開契約は、WH、SK、RA、BNの修正後、次の8種である。
+明らかに短い公開契約は、WH、SK、RA、BN、BRの修正後、次の7種である。
 
 ```text
-BR 455/545    CH 592/3862   DM 48/303     KS 772/4173
-RC 241/501
+CH 592/3862   DM 48/303     KS 772/4173   RC 241/501
 TK 727/21657  TM 39/141     YS 146/382
 ```
 
-左が実装上の公開長または終端、右が公式現行長。BR/CH/KS の成績配列、DM/TM の
+左が実装上の公開長または終端、右が公式現行長。CH/KS の成績配列、DM/TM の
 18頭配列、TK の300頭配列、RC の3頭分記録、YS の3競走案内などを
 1件または一部だけ取り、公式レコード内部に `RecordDelimiter` を置くものがある。
 これは「不要列を捨てる」だけではなく、繰返し要素のデータ損失と key collision を
@@ -124,6 +123,13 @@ native/standard schemaと両importerのround-tripを固定した。2003年以前
 NULLになる。option 1の差分更新だけでは変更のない馬主を補完できないため、移行後は現行
 `DIFN` のoption 3/4 setupから全件を再取込する。
 
+BRは現行DIFN/4.9.0.1/SDK 5.0.0の545バイトへ統一した。本年・累計の60バイト
+成績blockを各9項目へ全展開し、record type、strict CP932、CRLFを厳密検査する。
+旧DIFF/4.8.0.2の537バイトと旧repository由来455バイトは拒否する。標準名mappingは
+schemaと一致する`SEISAN`をcanonicalとし、`BREEDER`はread-side aliasに限定した。
+native/standard schemaは8バイト`BreederCode`主キーと27 business fieldで一致し、
+既存native DBも移行後に現行DIFN option 3/4 setupから全件再取込する。
+
 ### B-05 2023年変更対象7種は新旧両対応ではない
 
 4.8.0.2 から 4.9.0.1 への物理長変化は次の7種だけである。
@@ -131,7 +137,7 @@ NULLになる。option 1の差分更新だけでは変更のない馬主を補�
 | ID | 旧長 | 現行長 | 現行実装 | 旧実装 | 判定 |
 |---|---:|---:|---|---|---|
 | UM | 1577 | 1609 | 現行位置・厳密長/CRLF | 拒否 | 現行のみ可 |
-| BR | 537 | 545 | 新幅だが455まで | version dispatchなし | 両方不可 |
+| BR | 537 | 545 | 現行全位置・厳密長/CRLF | 拒否 | 現行のみ可 |
 | HN | 245 | 251 | 現行全位置・厳密長/CRLF | 拒否 | 現行のみ可 |
 | SK | 178 | 208 | 現行全位置・血統14件・厳密長/CRLF | 拒否 | 現行のみ可 |
 | CK | 6864 | 6870 | 現行offset、byte-first | version dispatchなし | 現行可、旧拒否未達 |
@@ -267,7 +273,7 @@ skip の扱いに関する実運用上の質問が繰り返されている:
 | UM | 1609 | current-shape | currentのみ、厳密長/CRLF |
 | KS | 4173 | partial | 成績配列を途中で終了、公開長772 |
 | CH | 3862 | partial | 表彰/成績配列を途中で終了、公開長592 |
-| BR | 545 | partial | 新幅の基本部のみ、公開長455 |
+| BR | 545 | current-shape | 全位置・全成績配列・厳密長/type/CRLF |
 | BN | 477 | current-shape | 本年・累計成績を全展開、現行長/type/CRLFを厳密検査、413/387byteを拒否 |
 | HN | 251 | current-shape | currentのみ、全フィールドの現行位置と長さ/CRLFを厳密検査 |
 | SK | 208 | current-shape | currentのみ、14件血統と長さ/CRLFを厳密検査 |

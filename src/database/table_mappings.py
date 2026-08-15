@@ -24,7 +24,7 @@ JRAVAN_TO_JLTSQL: Dict[str, str] = {
     "KISYU": "NL_KS",         # 騎手マスタ (Jockey Master)
     "CHOKYO": "NL_CH",        # 調教師マスタ (Trainer Master)
     "BANUSI": "NL_BN",        # 馬主マスタ (Owner Master)
-    "BREEDER": "NL_BR",       # 生産者マスタ (Breeder Master)
+    "BREEDER": "NL_BR",       # 生産者マスタ (legacy English alias)
     "HANSYOKU": "NL_HN",      # 繁殖馬マスタ (Breeding Horse Master)
 
     # レースデータ (Race Data)
@@ -78,6 +78,7 @@ JRAVAN_TO_JLTSQL: Dict[str, str] = {
     "KISYU_CHANGE": "NL_JC",  # 騎手変更
     "HASSOU_JIKOKU_CHANGE": "NL_TC",  # 発走時刻変更
     "SANKU": "NL_SK",  # 産駒マスタ
+    "SEISAN": "NL_BR",  # 生産者マスタ
 }
 
 # レコード種別コード → テーブル名 (Record Type Code -> Table Name)
