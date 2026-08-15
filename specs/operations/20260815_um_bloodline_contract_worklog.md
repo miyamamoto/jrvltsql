@@ -2,7 +2,7 @@
 
 ## Iteration identity
 
-- Started: 2026-08-15 JST.
+- Started: 2026-08-15 JST
 - Objective: resolve the remaining official-spec gap reported in issue #156 by
   proving whether the current `UM` parser reads all 14 three-generation
   pedigree slots and every following field at the official byte offsets, then
@@ -10,11 +10,11 @@
 - Minimum scope: `UM` parser/layout, directly coupled schema/import paths,
   focused byte-level regression tests, migration/reimport guidance if stored
   rows are affected, and directly affected documentation.
-- Repository: `miyamamoto/jrvltsql`.
-- Worktree: `/home/keiba/scratch/20260815_jrvltsql_um_bloodline`.
-- Branch: `agent/um-bloodline-contract-20260815`.
+- Repository: `miyamamoto/jrvltsql`
+- Worktree: `/home/keiba/scratch/20260815_jrvltsql_um_bloodline`
+- Branch: `agent/um-bloodline-contract-20260815`
 - Base / initial HEAD / `origin/master` full SHA:
-  `dec167b10426aa74284a4d3a1745638af98c2b96`.
+  `dec167b10426aa74284a4d3a1745638af98c2b96`
 - Related issue: #156.
 - Dependency: PR #169 is merged at the base SHA; this iteration is independent
   of the `HappyoTime` storage correction.
