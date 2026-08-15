@@ -423,7 +423,7 @@ def verify_table_schema(db: BaseDatabase, table_name: str, schema_sql: str) -> N
             verify_table_schema(target, table_name, schema_sql)
         return
 
-    if not db.table_exists(table_name):
+    if not db.table_exists_strict(table_name):
         raise SchemaMigrationError(f"Required table does not exist: {table_name}")
 
     expected_definitions = _extract_column_definitions(schema_sql)

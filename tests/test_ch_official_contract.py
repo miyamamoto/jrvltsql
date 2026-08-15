@@ -337,7 +337,7 @@ def test_ch_single_record_api_stores_one_header_and_three_results(
 
 
 def test_ch_batch_metadata_retry_never_commits_header_without_results(tmp_path) -> None:
-    """A transient catalog failure must retry the complete CH group."""
+    """A concrete-backend catalog failure must retry before any CH write."""
     database = SQLiteDatabase({"path": str(tmp_path / "metadata-retry.db")})
     parsed = CHParser().parse(build_record()[0])
     assert parsed is not None
@@ -346,17 +346,17 @@ def test_ch_batch_metadata_retry_never_commits_header_without_results(tmp_path) 
         database.create_table("NL_CH", SCHEMAS["NL_CH"])
         database.create_table("NL_CH_SEISEKI", SCHEMAS["NL_CH_SEISEKI"])
         database.commit()
-        original_table_exists = database.table_exists
+        original_fetch_one = database.fetch_one
         failed_once = False
 
-        def transient_table_exists(table_name: str) -> bool:
+        def transient_fetch_one(sql: str, parameters=None):
             nonlocal failed_once
-            if table_name == "NL_CH_SEISEKI" and not failed_once:
+            if "sqlite_master" in sql and parameters == ("NL_CH_SEISEKI",) and not failed_once:
                 failed_once = True
                 raise DatabaseError("transient catalog failure")
-            return original_table_exists(table_name)
+            return original_fetch_one(sql, parameters)
 
-        database.table_exists = transient_table_exists
+        database.fetch_one = transient_fetch_one
         stats = DataImporter(database).import_records(iter([parsed]))
         main_count = database.fetch_one("SELECT COUNT(*) AS count FROM NL_CH")["count"]
         result_count = database.fetch_one("SELECT COUNT(*) AS count FROM NL_CH_SEISEKI")["count"]
@@ -379,21 +379,21 @@ def test_ch_batch_verifies_result_schema_once(tmp_path, importer_class) -> None:
         database.create_table("NL_CH", SCHEMAS["NL_CH"])
         database.create_table("NL_CH_SEISEKI", SCHEMAS["NL_CH_SEISEKI"])
         database.commit()
-        original_table_exists = database.table_exists
+        original_fetch_one = database.fetch_one
         original_fetch_all = database.fetch_all
-        metadata_calls = {"table_exists": 0, "fetch_all": 0}
+        metadata_calls = {"catalog_exists": 0, "fetch_all": 0}
 
-        def counting_table_exists(table_name: str) -> bool:
-            if table_name == "NL_CH_SEISEKI":
-                metadata_calls["table_exists"] += 1
-            return original_table_exists(table_name)
+        def counting_fetch_one(sql: str, parameters=None):
+            if "sqlite_master" in sql and parameters == ("NL_CH_SEISEKI",):
+                metadata_calls["catalog_exists"] += 1
+            return original_fetch_one(sql, parameters)
 
         def counting_fetch_all(sql: str, parameters=None):
             if "NL_CH_SEISEKI" in sql:
                 metadata_calls["fetch_all"] += 1
             return original_fetch_all(sql, parameters)
 
-        database.table_exists = counting_table_exists
+        database.fetch_one = counting_fetch_one
         database.fetch_all = counting_fetch_all
         stats = importer_class(database, batch_size=5).import_records(
             iter([parsed.copy() for _ in range(5)])
@@ -401,7 +401,7 @@ def test_ch_batch_verifies_result_schema_once(tmp_path, importer_class) -> None:
 
     assert stats["records_imported"] == 5
     assert stats["records_failed"] == 0
-    assert metadata_calls == {"table_exists": 2, "fetch_all": 3}
+    assert metadata_calls == {"catalog_exists": 2, "fetch_all": 3}
 
 
 @pytest.mark.parametrize("importer_class", [DataImporter, OptimizedDataImporter])

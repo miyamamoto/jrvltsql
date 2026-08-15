@@ -242,12 +242,16 @@ class SQLiteDatabase(BaseDatabase):
             True if table exists, False otherwise
         """
         try:
-            sql = "SELECT name FROM sqlite_master WHERE type='table' AND name=?"
-            row = self.fetch_one(sql, (table_name,))
-            return row is not None
+            return self.table_exists_strict(table_name)
 
         except DatabaseError:
             return False
+
+    def table_exists_strict(self, table_name: str) -> bool:
+        """Check if a table exists and propagate catalog query failures."""
+        sql = "SELECT name FROM sqlite_master WHERE type='table' AND name=?"
+        row = self.fetch_one(sql, (table_name,))
+        return row is not None
 
     def get_table_info(self, table_name: str) -> List[Dict[str, Any]]:
         """Get table schema information.

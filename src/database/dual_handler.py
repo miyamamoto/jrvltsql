@@ -225,6 +225,9 @@ class DualDatabase(BaseDatabase):
     def table_exists(self, table_name: str) -> bool:
         return self._primary.table_exists(table_name)
 
+    def table_exists_strict(self, table_name: str) -> bool:
+        return self._primary.table_exists_strict(table_name)
+
     # ------------------------------------------------------------------
     # Writes: dual
     # ------------------------------------------------------------------

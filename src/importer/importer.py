@@ -131,7 +131,7 @@ def verify_ch_coupled_table(
     from src.database.schema_jravan import JRAVAN_SCHEMAS
 
     schema_sql = SCHEMAS.get(result_table) or JRAVAN_SCHEMAS.get(result_table)
-    if not schema_sql or not database.table_exists(result_table):
+    if not schema_sql or not database.table_exists_strict(result_table):
         raise SchemaMigrationError(
             f"CH import requires normalized result table {result_table} before mutation"
         )

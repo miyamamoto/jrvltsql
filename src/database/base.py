@@ -173,6 +173,16 @@ class BaseDatabase(ABC):
         """
         pass
 
+    def table_exists_strict(self, table_name: str) -> bool:
+        """Check for a table without suppressing catalog query failures.
+
+        Backends whose compatibility ``table_exists`` method converts a
+        ``DatabaseError`` to ``False`` must override this method.  Callers use
+        this strict variant when a missing table and an unreadable catalog
+        require different recovery paths.
+        """
+        return self.table_exists(table_name)
+
     def insert(self, table_name: str, data: Dict[str, Any], use_replace: bool = True) -> int:
         """Insert single row into table.
 

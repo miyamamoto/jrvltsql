@@ -204,7 +204,7 @@
   `107 passed, 7 skipped`.
 - The original 1000-record probe improved from about 4.407 seconds and
   `{table_exists: 2000, fetch_all: 3000}` to 0.553 seconds and exactly
-  `{table_exists: 2, fetch_all: 3}` while reporting 1000 imported physical
+  two catalog-existence queries plus three metadata reads while reporting 1000 imported physical
   records and zero failures. Black on the maintained changed Python files,
   critical Ruff/Flake8-equivalent selectors across `src tests scripts`,
   `compileall`, and `git diff --check` pass on the repaired content.
@@ -215,3 +215,17 @@
   full local suite passed `2104 passed, 51 skipped, 3 warnings, 6 subtests`.
   The warnings are the existing three `test_time_series.py` tests that return
   booleans; no new warning or failure was introduced.
+- The exact-SHA Codex review of
+  `f78bdcd7d9856d80e492ff973b96a50e30c7e139` found one further P2: the
+  concrete SQLite/PostgreSQL `table_exists` compatibility methods suppress a
+  catalog `DatabaseError` as `False`, so the ordinary importer's documented
+  preflight retry was unreachable for a real backend query failure. Replacing
+  the mock-level failure with a transient failure in SQLite `fetch_one`
+  reproduced the defect before implementation: the new regression failed
+  with `SchemaMigrationError` rather than retrying.
+- Added a strict catalog-existence API that preserves query errors while
+  retaining the existing compatibility semantics of `table_exists` for other
+  callers. CH preflight and schema verification use the strict path; the
+  ordinary importer can now distinguish a missing child table from an
+  unreadable catalog and retry only the latter before any mutation. The paired
+  regression plus migration contract passed `28 passed` after the fix.

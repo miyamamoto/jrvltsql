@@ -450,15 +450,19 @@ class PostgreSQLDatabase(BaseDatabase):
             True if table exists, False otherwise
         """
         try:
-            sql = "SELECT to_regclass(?) AS oid"
-            row = self.fetch_one(sql, (table_name.lower(),))
-            if row is None:
-                return False
-            oid = row.get("oid") if isinstance(row, dict) else row[0]
-            return oid is not None
+            return self.table_exists_strict(table_name)
 
         except DatabaseError:
             return False
+
+    def table_exists_strict(self, table_name: str) -> bool:
+        """Check for a visible table and propagate catalog query failures."""
+        sql = "SELECT to_regclass(?) AS oid"
+        row = self.fetch_one(sql, (table_name.lower(),))
+        if row is None:
+            return False
+        oid = row.get("oid") if isinstance(row, dict) else row[0]
+        return oid is not None
 
     def get_table_columns(self, table_name: str) -> List[Dict[str, Any]]:
         """Get table column information.
