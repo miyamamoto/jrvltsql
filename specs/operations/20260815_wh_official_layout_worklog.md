@@ -32,6 +32,22 @@
   current 40-byte weather layout as legacy would accept a format that was never
   official WH.
 - Data-spec `0B11` maps to format 101 / record type `WH` (速報馬体重).
+- Final current-package audit (2026-08-15): the official SDK page now offers
+  SDK 5.0.0 dated 2026-08-04, while that archive still embeds JV-Data spec
+  4.9.0.1. The 64-bit archive SHA-256 was
+  `21f4d54706ff050e383f21f3571f59ffe8de38ed46a01be3e5b7756ee957f9d7`;
+  its 2026-07-14 Python `JVData_Struct.py` SHA-256 was
+  `8994f985fce846f1b4fcbc3ddf2a5c6394c586a458478346891222b3b61e4ee3`.
+  `JV_WH_BATAIJYU.SetDataB` still reads header bytes 1-11, race identity
+  12-27, announcement 28-35, 18 entries at `36 + 45*i`, and CR/LF 846-847;
+  `BATAIJYU_INFO` remains 2/36/3/1/3 bytes. Thus SDK 5.0.0 introduces no WH
+  layout fork and the implemented old/current compatibility remains valid.
+- Community review found no alternate WH layout. The current staff notice says
+  post-2023 accumulated DIFF moved to `DIFN`, which is a data-spec selection
+  change rather than a WH record-layout change. Current JVOpen discussions also
+  recommend distinguishing retrieval/configuration failures with the official
+  validation tool and specification; they do not justify accepting malformed
+  WH bytes.
 
 ## Initial repository finding and safety
 
@@ -148,6 +164,15 @@ relaxed. Update only the shared fixture with an official numeric header,
 commit a new candidate SHA, then rerun focused, workflow-equivalent, full,
 static, and isolated PostgreSQL gates from the beginning. Do not use results
 from `392663c3a58b8ee85d786ca5245f9789ac55e9d1` as final evidence.
+
+Candidate `e763824154b2de6f5a15883214421c26b2cdd382` passed the
+exact-SHA expanded focused suite (**816 passed, 8 skipped, 3 subtests**),
+workflow-equivalent suite (**862 passed, 2 skipped, 3 warnings, 3 subtests**),
+full suite (**1854 passed, 45 skipped, 3 warnings, 5 subtests**), fatal flake8,
+targeted Ruff/Black, compileall, diff/worktree checks, and isolated PostgreSQL
+16 integration (**1 passed**). The subsequent official SDK 5.0.0/community
+audit changed only this tracked evidence, not code or tests. Commit the audit,
+then rerun the exact-SHA gates required for the resulting final candidate.
 
 ## STOP conditions
 
