@@ -74,12 +74,6 @@
   import failed; and a legacy temporal column was incorrectly accepted by
   schema verification. The paired lossless `TEXT` verification case passed.
 
-## Next safe command
-
-Implement the smallest shared correction, then rerun the focused contract and
-migration tests with a fresh `--basetemp`. Do not silently rewrite an existing
-temporal column.
-
 ## Implementation and focused verification
 
 - CC/JC/TC no longer apply the lossy `TIME` converter. AV/WE remain raw
@@ -105,15 +99,42 @@ temporal column.
   21 deselected**. It proves both exact `06150930` storage and rejection of an
   actual PostgreSQL `TIMESTAMP` legacy column.
 
+## Candidate and final local gate
+
+- First code candidate full SHA:
+  `21d5311d759c8b78f6b6f11e3bc4870a77a33d5f`.
+- `python3 -m pytest -q --basetemp=/tmp/jrvltsql-happyo-full-sequential-21d5311`:
+  **1875 passed, 47 skipped, 3 warnings, 5 subtests passed**. A prior attempt
+  overlapped the full suite with PostgreSQL integration and produced two
+  transient failures; each passed immediately with `--lf`, and two subsequent
+  sequential full-suite runs were green. Only the sequential results are used
+  as final evidence.
+- Exact-candidate PostgreSQL run:
+  `JLTSQL_RUN_POSTGRESQL_INTEGRATION=1 ... python3 -m pytest -q
+  tests/test_happyo_time_contract.py tests/test_wh_official_contract.py
+  -k postgresql --basetemp=/tmp/jrvltsql-happyo-pg-candidate-21d5311`:
+  **3 passed, 46 deselected**.
+- Workflow-equivalent critical lint (`flake8` E9/F63/F7/F82), `git diff
+  --check`, and `compileall` completed successfully. The new regression file
+  also passes Ruff and Black checks. Repository-wide Ruff/Black findings are
+  pre-existing and are outside this iteration; CI's blocking lint command is
+  the critical Flake8 selection.
+- Codex CLI 0.147.0 using `gpt-5.6-sol` at `xhigh` independently reviewed
+  commit `21d5311d759c8b78f6b6f11e3bc4870a77a33d5f` and reran the full suite
+  (**1875 passed, 47 skipped**). Final finding count: **0**. Its conclusion was
+  that parser, schema, mapping, importer, and migration changes consistently
+  preserve the official `MMDDhhmm` value.
+- This worklog-only evidence update follows that reviewed code candidate. It
+  does not alter production code or tests. The PR body/comment will identify
+  the final pushed full SHA; GitHub native review and final thread/check audit
+  apply to that SHA without rerunning the unchanged external review pipeline.
+
 ## Current handoff state
 
-- Worktree is intentionally dirty with this iteration's implementation,
-  regression tests, documentation, and this worklog; no unrelated paths are
-  modified.
-- Next safe command: run workflow-equivalent lint/test checks, inspect the
-  complete diff, then create the first candidate commit. After the full SHA is
-  fixed, run exact-SHA focused/full/PostgreSQL tests and Codex review before
-  push/PR.
+- Next safe command: commit this evidence-only update, run exact-final-SHA
+  focused checks, push the clean branch, and open the PR. Do not merge until
+  the PR head SHA, checks, reviews, and unresolved thread count have been
+  checked together.
 
 ## STOP conditions
 
