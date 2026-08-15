@@ -194,6 +194,16 @@
   exit 0 with 22 Windows-only skips. `git diff --check` also exits 0. These
   tests are recorded as repository-regression evidence, not official-format
   proof, for the fixture/mock reasons stated above.
+- Committed the documentation-only audit as
+  `2a25c85e27c236de00b7d5a03b2d88962580fed2`, pushed branch
+  `codex/jvdata-official-spec-audit-20260815`, and opened PR #162:
+  `https://github.com/miyamamoto/jrvltsql/pull/162`. The PR body records that
+  merging this documentation does not approve the audited product code and
+  that the product verdict remains RED / DO NOT RELEASE.
+- Re-ran the focused audit selection on full SHA
+  `2a25c85e27c236de00b7d5a03b2d88962580fed2`; exit 0 with the same 22
+  Windows-only skips. `git diff HEAD^ --check` exits 0 and the worktree was
+  clean before this required post-PR worklog update.
 
 ## Remaining evidence gaps
 
@@ -210,11 +220,11 @@
 
 ## Next safe commands
 
-- Inspect the documentation-only diff, commit it, and repeat the necessary
-  report/link checks on the resulting full SHA.
-- Publish the documentation-only PR, verify its head/threads/checks once, then
-  merge only the audit report iteration. Do not describe that merge as approval
-  of the product code; the report verdict remains RED.
+- Commit and push this post-PR evidence update, then record the final candidate
+  full SHA in the PR conversation (not in a self-referential commit).
+- Verify PR #162 head/checks/threads once against that SHA, then merge only the
+  documentation audit iteration. Do not describe that merge as approval of the
+  product code; the report verdict remains RED.
 
 ## STOP conditions
 
