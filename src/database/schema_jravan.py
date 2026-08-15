@@ -1555,19 +1555,19 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             Honsyokin5                     INTEGER             ,  -- 5着本賞金
             Honsyokin6                     INTEGER             ,  -- 6着本賞金
             Honsyokin7                     INTEGER             ,  -- 7着本賞金
-            HonsyokinBefore1               VARCHAR(8)          ,  -- 文字列(8)
-            HonsyokinBefore2               VARCHAR(8)          ,  -- 文字列(8)
-            HonsyokinBefore3               VARCHAR(8)          ,  -- 文字列(8)
-            HonsyokinBefore4               VARCHAR(8)          ,  -- 文字列(8)
-            HonsyokinBefore5               VARCHAR(8)          ,  -- 文字列(8)
+            HonsyokinBefore1               INTEGER             ,  -- 変更前1着本賞金
+            HonsyokinBefore2               INTEGER             ,  -- 変更前2着本賞金
+            HonsyokinBefore3               INTEGER             ,  -- 変更前3着本賞金
+            HonsyokinBefore4               INTEGER             ,  -- 変更前4着本賞金
+            HonsyokinBefore5               INTEGER             ,  -- 変更前5着本賞金
             Fukasyokin1                    INTEGER             ,  -- 1着付加賞金
             Fukasyokin2                    INTEGER             ,  -- 2着付加賞金
             Fukasyokin3                    INTEGER             ,  -- 3着付加賞金
             Fukasyokin4                    INTEGER             ,  -- 4着付加賞金
             Fukasyokin5                    INTEGER             ,  -- 5着付加賞金
-            FukasyokinBefore1              VARCHAR(8)          ,  -- 文字列(8)
-            FukasyokinBefore2              VARCHAR(8)          ,  -- 文字列(8)
-            FukasyokinBefore3              VARCHAR(8)          ,  -- 文字列(8)
+            FukasyokinBefore1              INTEGER             ,  -- 変更前1着付加賞金
+            FukasyokinBefore2              INTEGER             ,  -- 変更前2着付加賞金
+            FukasyokinBefore3              INTEGER             ,  -- 変更前3着付加賞金
             HassoTime                      TIME                ,  -- 発走時刻(HHMM)
             HassoTimeBefore                VARCHAR(4)          ,  -- 文字列(4)
             TorokuTosu                     SMALLINT            ,  -- 登録頭数
@@ -1579,12 +1579,12 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             LapTime1                       DECIMAL(4,1)        ,  -- ラップタイム1(秒)
             LapTime2                       DECIMAL(4,1)        ,  -- ラップタイム2
             LapTime3                       DECIMAL(4,1)        ,  -- ラップタイム3
-            LapTime4                       VARCHAR(3)          ,  -- 文字列(3)
-            LapTime5                       VARCHAR(3)          ,  -- 文字列(3)
-            LapTime6                       VARCHAR(3)          ,  -- 文字列(3)
-            LapTime7                       VARCHAR(3)          ,  -- 文字列(3)
-            LapTime8                       VARCHAR(3)          ,  -- 文字列(3)
-            LapTime9                       VARCHAR(3)          ,  -- 文字列(3)
+            LapTime4                       DECIMAL(4,1)        ,  -- ラップタイム4(秒)
+            LapTime5                       DECIMAL(4,1)        ,  -- ラップタイム5(秒)
+            LapTime6                       DECIMAL(4,1)        ,  -- ラップタイム6(秒)
+            LapTime7                       DECIMAL(4,1)        ,  -- ラップタイム7(秒)
+            LapTime8                       DECIMAL(4,1)        ,  -- ラップタイム8(秒)
+            LapTime9                       DECIMAL(4,1)        ,  -- ラップタイム9(秒)
             LapTime10                      DECIMAL(4,1)        ,  -- ラップタイム0(秒)
             LapTime11                      DECIMAL(4,1)        ,  -- ラップタイム1(秒)
             LapTime12                      DECIMAL(4,1)        ,  -- ラップタイム2(秒)
@@ -1618,7 +1618,8 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             Corner4                        VARCHAR(1)          ,  -- 文字列(1)
             Syukaisu4                      VARCHAR(1)          ,  -- 文字列(1)
             Jyuni4                         VARCHAR(70)         ,  -- 文字列(70)
-            RecordUpKubun                  VARCHAR(1)            -- 文字列(1)
+            RecordUpKubun                  VARCHAR(1)          ,  -- 文字列(1)
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
         )
     """,
     "RECORD": """

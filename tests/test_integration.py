@@ -88,7 +88,7 @@ class TestIntegration:
 
             # Sample column count verification for key tables
             test_tables = {
-                "NL_RA": 71,   # Race details table (incl. corner sets 2-4)
+                "NL_RA": 122,  # Official 1,272-byte race layout plus compatibility aliases
                 "NL_SE": 103,  # Results plus canonical-v2 and provider-raw audit fields
                 "NL_UM": 90,   # Horse master (incl. 項番34-62 着回数/脚質傾向/登録レース数)
                 "NL_KS": 68,   # Jockey master table

@@ -101,7 +101,7 @@ DIVIDE_BY_10_PREFIXES = frozenset(
 )
 
 # 完全一致で10で割るべきフィールド名
-DIVIDE_BY_10_EXACT = frozenset(["Odds", "Time"])
+DIVIDE_BY_10_EXACT = frozenset(["Odds", "SyogaiMileTime", "Time"])
 
 # Explicit-unit fields are already canonicalized by the parser contract.
 CANONICAL_SE_FIELDS = frozenset(

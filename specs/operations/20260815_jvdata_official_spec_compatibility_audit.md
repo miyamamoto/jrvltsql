@@ -2,23 +2,21 @@
 
 ## 結論
 
-対象 `master` は、公式仕様準拠を根拠に追加のコード変更をマージ、または
-リリースできる状態ではない。判定は **RED / DO NOT RELEASE** とする。
+対象 `master` は、まだ公式仕様準拠としてリリースできる状態ではない。判定は
+**RED / DO NOT RELEASE** とする。blockerを解消する個別PRは、その変更範囲の
+exact-SHA testとreviewがgreenなら順次mergeしてよい。
 
 2023年8月8日の仕様変更に対して「旧 dataspec を拒否し、N 付き dataspec で
 全件再セットアップする」という方針は、JRA-VAN スタッフの推奨と整合する。
 しかし、その入口検査は連結 dataspec を防げず、変更対象7レコードの現行形式も
 安全に処理できていない。加えて、変更時期とは独立した次の重大な矛盾がある。
 
-- native pywin32 経路の `JVOpen` / `JVGets` 呼出しが公式 COM シグネチャと異なる。
-- 共通パーサが Shift-JIS を全文デコードしてからバイト位置でスライスし、全角文字
-  より後ろの項目を破壊する。
-- 10レコードの公開長または終端位置が公式現行長より短く、多くは公式配列の1件目
+- 9レコードの公開長または終端位置が公式現行長より短く、多くは公式配列の1件目
   だけを保存して途中に偽のレコード区切りを置いている。
 
 したがって、今回の監査報告そのものは保存してよいが、下記 blocker を直して
-実 Windows/JV-Link を含む検証を終えるまで、コードの「仕様準拠」マージ判定には
-使えない。
+実 Windows/JV-Link を含む最終検証を終えるまで、製品全体の「仕様準拠」または
+release判定には使えない。
 
 ## 対象と証跡
 
@@ -65,42 +63,25 @@
 
 ## Blocker / high findings
 
-### B-01 native `JVOpen` と `JVGets` の COM 呼出しが不一致
+### B-01 解消済み: native COM transport contract
 
-公式 `JVOpen` は6引数
-`(dataspec, fromtime, option, readcount, downloadcount, lastfiletimestamp)` である。
-`src/jvlink/wrapper.py` は3引数だけで呼ぶ。戻り値だけは4要素 tuple を期待しており、
-入力側と出力側の前提が噛み合っていない。公式コミュニティ上の現行 pywin32 実例も
-`JVOpen("RACE", ..., 2, 0, 0, "")` と6引数を渡している:
-<https://developer.jra-van.jp/t/topic/632>。
+監査開始時の `JVOpen` / `JVGets` 呼出しは公式シグネチャと不一致だったが、PR #163
+（`2dad8a5`）で6引数 `JVOpen`、3引数 `JVGets`、`-2` / `-3`、`JVStatus`、
+decode failure、close obligationを修正した。PR #165（`fc5d4fb`）ではheadless runtime
+起動と既知dialogの安全な拒否を追加し、exact staged sourceで
+`JVInit=0 -> JVOpen=0/readcount=30/downloadcount=29 -> JVStatus=29 ->
+JVRead=80 bytes -> JVClose=0` を実測した。transport blocker自体は解消済みである。
+ただし、この古いSHAのsmokeを最終release candidateの証跡には流用しない。ユーザー指定の
+release gateとして、最終マージ済みfull SHAでfresh data acquisitionを再実行する。
 
-`JVGets` も公式は `(Byte Array buff, size, filename)` の3引数だが、コードは
-`JVGets("", size)` の2引数で、結果を文字列として扱う。JVGets は内部 fetcher では
-未使用だが、公開 API としては壊れている。
+### B-02 解消済み: `BaseParser` のbyte-first field extraction
 
-既存テストの COM mock は誤った3引数呼出しを期待するため緑になる。リポジトリには
-bridge 実行本体の source/binary がなく、通常 fallback である native wrapper を実際の
-32-bit Windows COM に接続した証跡もない。このため、実 Windows smoke が終わるまで
-historical fetch 自体を release-ready と判定できない。
-
-### B-02 `BaseParser` がバイト位置を文字位置として使う
-
-公式の開始位置と長さはバイト単位で、Shift-JIS の全角文字は2バイトである。
-`BaseParser.parse()` はレコード全体を Unicode へデコードした後、`FieldDef.start` と
-`length` で文字列を切る。`errors='replace'` では位置を保存できない。
-
-公式現行長6870の CK 合成レコードで、byte 38 に `テスト`、byte 74 に
-`123456789` を置いた実測結果:
-
-```text
-Bamei                  'テスト                              123'
-HeichiHonsyokinTotal   '456789'
-RecordDelimiter        None
-```
-
-CK の賞金が桁落ちし、馬名には後続数値が混入した。BT は系統名より後ろの系統説明、
-JC は馬名・騎手名より後ろの負担重量・コード類が同じ理由で壊れる。CS は説明本文が
-実質最後の項目なので主要本文への影響は限定的だが、区切り検証はできない。
+公式の開始位置と長さはバイト単位である。監査開始時はレコード全体をUnicodeへdecodeして
+からbyte offsetを文字位置として使っていたが、PR #166（`56acaaf`）で各fieldをraw bytes
+から先にsliceし、その後CP932 decodeする実装へ変更した。ASCII正常系と全角`日本`の後続
+fieldを対にしたred-first test、全parser focused suite、full suiteで固定されている。
+これによりCK/BT/JCの全角文字より後ろの現行offsetは正しく読める。各parser固有の
+length/delimiter gateや旧physical layout拒否は別の互換性課題として残る。
 
 ### B-03 解消済み: `WH` 速報馬体重の全展開
 
@@ -115,11 +96,11 @@ race identityと`Umaban`を複合主キーに持ち、馬名、馬体重、増�
 
 ### B-04 現行38種のうち複数が公式配列を途中で切る
 
-明らかに短い公開契約は、WHとSKの修正後、次の10種である。
+明らかに短い公開契約は、WH、SK、RAの修正後、次の9種である。
 
 ```text
 BN 387/477    BR 455/545    CH 592/3862   DM 48/303
-KS 772/4173   RA 856/1272   RC 241/501
+KS 772/4173   RC 241/501
 TK 727/21657  TM 39/141     YS 146/382
 ```
 
@@ -129,9 +110,10 @@ TK 727/21657  TM 39/141     YS 146/382
 これは「不要列を捨てる」だけではなく、繰返し要素のデータ損失と key collision を
 固定する schema になっている。
 
-RA には1272バイト分岐が追加されているが、公開定数と fixture は856バイトのままで、
-ラップタイム全配列、本賞金・付加賞金全配列などを保持しない。856は直前の4.8.0.2も
-1272バイトだったため、「旧公式レイアウト」とする根拠はない。
+RAはこのイテレーションで4.8.0.2、4.9.0.1、SDK 5.0.0に共通する1272バイトへ統一した。
+賞金4配列、25ラップ、4コーナー、更新区分、CRLFを全展開し、native/standard schemaと
+両importerのround-tripを固定した。旧856バイトfixtureは公式rawとは扱わず、位置互換な
+先頭713バイトだけをcurrent shapeへ合成するrepository regressionに限定した。
 
 ### B-05 2023年変更対象7種は新旧両対応ではない
 
@@ -143,9 +125,9 @@ RA には1272バイト分岐が追加されているが、公開定数と fixtur
 | BR | 537 | 545 | 新幅だが455まで | version dispatchなし | 両方不可 |
 | HN | 245 | 251 | 現行全位置・厳密長/CRLF | 拒否 | 現行のみ可 |
 | SK | 178 | 208 | 現行全位置・血統14件・厳密長/CRLF | 拒否 | 現行のみ可 |
-| CK | 6864 | 6870 | 現行offsetだが B-02 で破壊 | version dispatchなし | 両方不可 |
+| CK | 6864 | 6870 | 現行offset、byte-first | version dispatchなし | 現行可、旧拒否未達 |
 | HS | 196 | 200 | 現行10byte番号に対応 | version dispatchなし | 現行のみ可 |
-| BT | 6887 | 6889 | 現行offsetだが B-02 で破壊 | version dispatchなし | 両方不可 |
+| BT | 6887 | 6889 | 現行offset、byte-first | version dispatchなし | 現行可、旧拒否未達 |
 
 「長い方を受け入れる」「警告後も読む」は version 対応ではない。幅が2バイト増えると
 後続キー・名前・区切りがすべてずれるため、layout を識別して別 offset を使うか、旧物理
@@ -256,14 +238,13 @@ skip の扱いに関する実運用上の質問が繰り返されている:
 - `current-shape`: 現行長の主要 offset/配列分解が実装されている。ただし実 Windows raw
   record での完全一致を証明するものではなく、弱い length/delimiter 検査は別 risk。
 - `partial`: 現行レコードの繰返しまたは末尾を捨てる。
-- `byte-bug`: 公式 offset 自体は現行寄りだが B-02 の文字/バイト混同で破壊される。
 - `wrong`: 別構造または旧 offset を current として扱う。
 - `undocumented fallback`: current branch に加え、公式根拠のない短い形も受理する。
 
 | ID | 公式長 | 実装判定 | 主要根拠 |
 |---|---:|---|---|
 | TK | 21657 | partial | 300頭配列の先頭付近、公開長727 |
-| RA | 1272 | partial + undocumented fallback | 1272分岐あり、配列不足、公開長856 |
+| RA | 1272 | current-shape | 全配列、現行長/CRLFを厳密検査、856byteを拒否 |
 | SE | 555 | current-shape | byte slice、現行長とCRLFを厳密検査 |
 | HR | 719 | current-shape / weak gate | 払戻全配列を展開するが100byte以上を受理 |
 | H1 | 28955 | current-shape + undocumented fallback | full配列に加え317byteを受理 |
@@ -281,13 +262,13 @@ skip の扱いに関する実運用上の質問が繰り返されている:
 | BN | 477 | partial | 成績配列の一部のみ、公開長387 |
 | HN | 251 | current-shape | currentのみ、全フィールドの現行位置と長さ/CRLFを厳密検査 |
 | SK | 208 | current-shape | currentのみ、14件血統と長さ/CRLFを厳密検査 |
-| CK | 6870 | byte-bug | current offsetだが馬名後の全項目がずれる |
+| CK | 6870 | current-shape / weak gate | byte-first修正済み、旧長の明示拒否なし |
 | RC | 501 | partial | 3頭ブロックを途中で終了、公開長241 |
 | HC | 60 | current-shape / weak gate | 現行末尾まで |
 | HS | 200 | current-shape / weak gate | 2023 current幅 |
 | HY | 123 | current-shape / weak gate | 現行末尾まで |
 | YS | 382 | partial | 競走案内3件の一部、公開長146 |
-| BT | 6889 | byte-bug | current offsetだが系統名後の説明がずれる |
+| BT | 6889 | current-shape / weak gate | byte-first修正済み、旧長の明示拒否なし |
 | CS | 6829 | current-shape / delimiter caveat | 説明が実質末尾、BaseParserでCRLF検査不能 |
 | DM | 303 | partial | 18頭中1頭、公開長48 |
 | TM | 141 | partial | 18頭中1頭、公開長39 |
@@ -297,7 +278,7 @@ skip の扱いに関する実運用上の質問が繰り返されている:
 | WH | 847 | current-shape | 18頭を全展開し、現行長/CRLFを厳密検査 |
 | WE | 42 | current-shape / delimiter caveat | 現行末尾まで |
 | AV | 78 | current-shape | byte slice override |
-| JC | 161 | byte-bug | 馬名/騎手名後の項目がずれる |
+| JC | 161 | current-shape / weak gate | byte-first修正済み、長さ/CRLF gateは弱い |
 | TC | 45 | current-shape / delimiter caveat | CRLF以外の43byteを定義 |
 | CC | 50 | current-shape / delimiter caveat | CRLF以外の48byteを定義 |
 
@@ -419,35 +400,32 @@ findings はこの出力だけではなく個別に再現したものに限定�
 - current/previous Excel を列比較し、2023年の長さ変更が7種であることを確認。
 - 全38種について official record length と parser/schema の終端・loop count を比較。
 
-実施できていない必須検証:
+後続PR #163～#166でtransport contract、authenticated realtime record、positive-download
+`JVOpen/JVStatus/JVRead/JVClose`、byte-first coreの実環境またはfocused evidenceを得た。
+それでも、次のrelease gateは未完了である。
 
-- 32-bit Windows + インストール済み JV-Link COM による native wrapper smoke。
-- JRA-VAN から保存した provenance 付き raw record を使う全38種 end-to-end fixture。
+- 最終マージ済みrelease candidate full SHAを実際の対応JV-Link環境へstagingし、providerから
+  fresh dataを新規取得して、acquisition、parse、DB保存、件数、key、代表値を検証する。
+- provenance付きraw recordによる全38種end-to-end coverageを確認する。
 
-この2点は credential/Windows/JV-Link runtime が必要で、static audit で green に代替しない。
+古いSHAのsmoke、mock、合成fixture、保存済みdataの再読込はfresh acquisitionの代替にしない。
+credential/Windows/JV-Link runtimeが必要であり、実行不能ならreleaseしない。
 
 ## 推奨する修正イテレーション
 
 後戻りを抑えるため、次の順で別PRにする。
 
-1. **COM transport contract**
-   `JVOpen` 6引数、`JVGets` ByteArray/filename、`-2`、`-3`、JVStatus 完了条件、decode
-   failure を直す。シグネチャを強制する fake で修正前 red を確認し、実 Windows smoke を gate
-   にする。
-2. **byte-first parser core**
-   field ごとに raw byte slice してから cp932 decode する。CK/BT/JC に「全角文字より後ろの
-   numeric/text field」の最小 red/green test を置く。
-3. **全38種の現行 layout/schema 再生成**
-   残る10 partial recordを公式 Excel から再実装する。偽 delimiter とDB再構築 fixture
+1. **残る現行 layout/schema の再生成**
+   残る9 partial recordを公式 Excel から再実装する。偽 delimiter とDB再構築 fixture
    を公式raw扱いしない。
-4. **2023 generation boundary**
+2. **2023 generation boundary**
    staff 推奨の new-only rebuild 方針を維持し、連結 token、cache、raw import の全入口で旧物理
    record を拒否する。7種すべての current positive と old negative を置く。true dual parser を
    選ぶ場合だけ、明示 version dispatcher を別設計する。
-5. **dataspec / updater semantics**
+3. **dataspec / updater semantics**
    O1～O6を JVOpen matrix から除き、単一/連結 public API 契約を統一し、中止 `9` を物理削除
    せず domain state として保存する。
-6. **fixture provenance / resume / forward compatibility**
+4. **fixture provenance / resume / forward compatibility**
    provenance付き raw fixture、未知 record skip policy、JVSkip setup resume を独立して整備する。
 
 各検査・validator の修正では、不正 record/シグネチャが修正前に実際に赤になることを先に
@@ -460,6 +438,7 @@ findings はこの出力だけではなく個別に再現したものに限定�
 - 変更前と変更後の物理 layout の両対応: **未達**。
 - new-only 方針として旧 layout を全入口で拒否: **未達**。
 - 現行4.9.0.1の全38種 parse/schema対応: **未達**。
-- JV-Link public API/状態機械: **未達**。
+- JV-Link public API/状態機械: **transport契約は解消済み**（最終SHAのfresh acquisitionは未実施）。
 - realtime ID/時系列保持区分の定義: **概ね整合**（WH実体はPR #167で解消済み）。
-- コードを仕様準拠としてマージ/リリース: **不可**。
+- 個別blocker修正のmerge: **対象scopeのgate通過時のみ可**。
+- コード全体を仕様準拠としてリリース: **不可**。

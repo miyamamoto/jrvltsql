@@ -76,11 +76,11 @@ class TestRAParser:
         assert result["Kyori"] == "1400"
 
     def test_ra_record_length(self, factory):
-        """RA record should be exactly 856 bytes."""
+        """RA record should be the official 1,272 bytes including CRLF."""
         data = make_ra_record()
-        assert len(data) == 856
+        assert len(data) == 1272
         parser = factory.get_parser("RA")
-        assert parser.RECORD_LENGTH == 856
+        assert parser.RECORD_LENGTH == 1272
 
     def test_ra_all_jyo_codes(self, factory):
         """RA parser works with JRA (01-10) and regional (30-57) codes."""
@@ -233,7 +233,7 @@ class TestAllParsersBasic:
         'HS': 200, 'HY': 123,
         'JG': 80, 'KS': 772,
         'O1': 962, 'O2': 2042, 'O3': 2654, 'O4': 4031, 'O5': 12293, 'O6': 83285,
-        'RA': 856, 'RC': 241, 'SE': 555, 'SK': 208,
+        'RA': 1272, 'RC': 241, 'SE': 555, 'SK': 208,
         'TK': 727, 'TM': 39,
         'UM': 1609, 'WF': 7215, 'YS': 146,
     }

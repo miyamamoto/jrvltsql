@@ -7,6 +7,7 @@ from src.parser.factory import ParserFactory, get_parser_factory
 from src.parser.hr_parser import HRParser
 from src.parser.ra_parser import RAParser
 from src.parser.se_parser import SEParser
+from tests.fixtures.record_factory import make_ra_record
 
 
 class _ByteOffsetParser(BaseParser):
@@ -77,24 +78,21 @@ class TestRAParser:
         """Test RA parser initialization."""
         parser = RAParser()
         assert parser.RECORD_TYPE == "RA"
-        assert parser.RECORD_LENGTH == 856
+        assert parser.RECORD_LENGTH == 1272
 
     def test_parse_ra_record(self):
         """Test parsing RA record."""
         parser = RAParser()
 
-        # Create a minimal valid RA record (fixed-length)
-        # Format: RecordSpec(2) + DataKubun(1) + MakeDate(8) + ...
-        record = b"RA1"  # RecordSpec + DataKubun
-        record += b"20240601"  # MakeDate
-        record += b"2024"  # idYear (offset 11)
-        record += b"0601"  # idMonthDay (offset 15)
-        record += b"06"  # idJyoCD (offset 19)
-        record += b"03"  # idKaiji (offset 21)
-        record += b"08"  # idNichiji (offset 23)
-        record += b"11"  # idRaceNum (offset 25)
-        # Pad to reach minimum expected length
-        record += b" " * (856 - len(record))  # Correct record length
+        record = make_ra_record(
+            make_date="20240601",
+            year="2024",
+            month_day="0601",
+            jyo_cd="06",
+            kaiji="03",
+            nichiji="08",
+            race_num="11",
+        )
 
         data = parser.parse(record)
         assert data is not None
@@ -108,31 +106,22 @@ class TestRAParser:
     def test_parse_invalid_record_type(self):
         """Test parsing with wrong record type."""
         parser = RAParser()
-        record = b"SE1" + b" " * 1000
+        record = b"SE" + make_ra_record()[2:]
 
-        # RAParser doesn't validate record type, just returns parsed data
         data = parser.parse(record)
-        assert data is not None
-        assert data["RecordSpec"] == "SE"  # Will return what's in the record
+        assert data is None
 
     def test_parse_empty_record(self):
         """Test parsing empty record."""
         parser = RAParser()
 
-        # RAParser handles empty records by logging warning and returning partial data
-        data = parser.parse(b"")
-        # May return None or partial data depending on implementation
-        assert data is None or isinstance(data, dict)
+        assert parser.parse(b"") is None
 
     def test_parse_returns_all_expected_fields(self):
         """Test that parse returns expected fields."""
         parser = RAParser()
 
-        # Create a minimal valid RA record
-        record = b"RA1" + b"20240601" + b"2024" + b"0601" + b"06" + b"03" + b"08" + b"11"
-        record += b" " * (856 - len(record))
-
-        data = parser.parse(record)
+        data = parser.parse(make_ra_record())
         assert data is not None
         assert "RecordSpec" in data
         assert "Year" in data
@@ -332,10 +321,7 @@ class TestParserFactory:
         factory = ParserFactory()
 
         # Create RA record
-        record = b"RA1" + b"20240601" + b"2024" + b"0601" + b"06" + b"03" + b"08" + b"11"
-        record += b" " * (856 - len(record))  # Correct record length
-
-        data = factory.parse(record)
+        data = factory.parse(make_ra_record())
         assert data is not None
         assert data["RecordSpec"] == "RA"
 

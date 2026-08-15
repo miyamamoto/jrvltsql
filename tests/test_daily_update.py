@@ -143,6 +143,7 @@ def _build_rt_ra_record() -> bytes:
         data[base : base + 1] = corner
         data[base + 1 : base + 2] = syukaisu
         data[base + 2 : base + 2 + len(jyuni)] = jyuni
+    data[1270:1272] = b"\r\n"
     return bytes(data)
 
 

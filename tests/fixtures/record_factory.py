@@ -39,8 +39,8 @@ def make_ra_record(
     tenko_cd="1", siba_baba_cd="1", dirt_baba_cd="0",
     **kwargs,
 ) -> bytes:
-    """Create RA record (856 bytes)."""
-    data = bytearray(856)
+    """Create one official 1,272-byte RA record including CRLF."""
+    data = bytearray(b" " * 1272)
     data[0:2] = _pad("RA", 2)
     data[2:3] = _pad(data_kubun, 1)
     data[3:11] = _pad(make_date, 8)
@@ -55,14 +55,14 @@ def make_ra_record(
     data[32:92] = _pad(hondai, 60)
     data[697:701] = _pad(kyori, 4)
     data[705:707] = _pad(track_cd, 2)
-    data[745:749] = _pad(hasso_time, 4)
-    data[753:755] = _pad(toroku_tosu, 2)
-    data[755:757] = _pad(syusso_tosu, 2)
-    data[757:759] = _pad(nyusen_tosu, 2)
-    data[759:760] = _pad(tenko_cd, 1)
-    data[760:761] = _pad(siba_baba_cd, 1)
-    data[761:762] = _pad(dirt_baba_cd, 1)
-    data[854:856] = b'\r\n'
+    data[873:877] = _pad(hasso_time, 4)
+    data[881:883] = _pad(toroku_tosu, 2)
+    data[883:885] = _pad(syusso_tosu, 2)
+    data[885:887] = _pad(nyusen_tosu, 2)
+    data[887:888] = _pad(tenko_cd, 1)
+    data[888:889] = _pad(siba_baba_cd, 1)
+    data[889:890] = _pad(dirt_baba_cd, 1)
+    data[1270:1272] = b'\r\n'
     return bytes(data)
 
 

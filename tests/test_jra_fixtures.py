@@ -63,7 +63,7 @@ PARSER_MAP = {
     "O4": (O4Parser, 66),     # Fixture files use legacy compact format (66 bytes)
     "O5": (O5Parser, 68),     # Fixture files use legacy compact format (68 bytes)
     "O6": (O6Parser, 70),     # Fixture files use legacy compact format (70 bytes)
-    "RA": (RAParser, 856),
+    "RA": (RAParser, RAParser.RECORD_LENGTH),
     "RC": (RCParser, 241),
     "SE": (SEParser, 463),
     "SK": (SKParser, SKParser.RECORD_LENGTH),
@@ -73,7 +73,7 @@ PARSER_MAP = {
     "YS": (YSParser, 146),
 }
 EXPANDED_RECORD_TYPES = {"O1", "O2", "O3", "O4", "O5", "O6"}
-LEGACY_RECONSTRUCTED_LENGTHS = {"SK": 78}
+LEGACY_RECONSTRUCTED_LENGTHS = {"RA": 856, "SK": 78}
 
 
 def _has_complete_fixture_records(data, record_type, record_length):
@@ -113,6 +113,13 @@ def load_fixture_records(record_type, record_length):
                 # as a synthetic current-shape record; the exact 208-byte
                 # contract is covered by test_sk_parser_layout.py.
                 chunk = chunk[:76].ljust(SKParser.RECORD_LENGTH - 2, b" ") + b"\r\n"
+            if record_type == "RA" and len(chunk) == 856:
+                # This fixture was reconstructed with the repository's former
+                # non-official 856-byte parser. Only its pre-array 713-byte
+                # prefix is position-compatible. Keep those core-value checks
+                # in a synthetic current record; the full arrays are covered
+                # by test_ra_official_contract.py.
+                chunk = chunk[:713].ljust(RAParser.RECORD_LENGTH - 2, b" ") + b"\r\n"
             if record_type == "WF" and len(chunk) == 169:
                 chunk = chunk[:11].ljust(WFParser.RECORD_LENGTH - 2, b" ") + b"\r\n"
             records.append(chunk)
@@ -248,7 +255,7 @@ class TestRAParserRealData:
 
     def setup_method(self):
         self.parser = RAParser()
-        self.records = load_fixture_records("RA", 856)
+        self.records = load_fixture_records("RA", RAParser.RECORD_LENGTH)
 
     def test_year_is_valid(self):
         for rec in self.records:
