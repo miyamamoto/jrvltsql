@@ -90,7 +90,18 @@
 
 ## Red-first regression evidence
 
-- Pending.
+- Before changing production code, added `tests/test_tm_official_contract.py`
+  against base-plus-worklog commit
+  `adc885d2b474b0a07665b9cf86af81420b741438`.
+- Command:
+  `pytest -q -p no:cov -o addopts='' --basetemp=/tmp/jltsql-tm-red tests/test_tm_official_contract.py`
+- Result: exit 1, `30 failed, 2 skipped in 0.64s`. The first failure was
+  `assert TMParser.RECORD_LENGTH == 141`, with actual value 39. The remaining
+  failures demonstrated acceptance of truncated/corrupt records, single-entry
+  parsing, absent complete-snapshot revision/deletion, wrong standard mapping,
+  lossy native score typing, and keyless/legacy standard tables not failing
+  closed. This is the required proof that the new checks can reject the old
+  unsafe behavior; the paired green run remains pending.
 
 ## Implementation and validation state
 
