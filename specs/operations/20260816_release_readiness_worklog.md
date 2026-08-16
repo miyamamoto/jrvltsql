@@ -1427,7 +1427,7 @@
   SQLite connection leak which makes the complete release suite fail
   nondeterministically under Python 3.13 warning enforcement. Repository:
   `miyamamoto/jrvltsql`; dedicated worktree:
-  `/home/keiba/scratch/20260817_jrvltsql_test_resource`; branch:
+  `$WORKSPACE/20260817_jrvltsql_test_resource`; branch:
   `agent/test-resource-cleanup-20260817`; base and initial HEAD:
   `1b66f45629b9ede51fc2f4415e688784b2f55a2c`.
 - The leak is independent of the in-progress BT standard-schema iteration and
@@ -1444,3 +1444,15 @@
   clean committed full SHA; then open and merge this prerequisite before
   rebasing the BT work. STOP if any resource warning remains, migration behavior
   changes, or the finalizer does not execute after a test assertion failure.
+- Clean code candidate `25c02ebcc233ba7e6d515f4d09649c487781d9d4`
+  passed the exact red-first HR-to-HY sequence with the ResourceWarning promoted
+  to an error (`25 passed, 1 skipped`) and the complete local suite (`2,431
+  passed, 112 skipped, 15 subtests passed`). Fatal lint, compileall, the
+  fail-closed test-gate validator, strict MkDocs, and `git diff --check` passed.
+- An independent Codex read-only review of the same exact candidate returned
+  GREEN with no P0/P1/P2 finding. It reproduced the parent leak, confirmed that
+  explicit close removes it, and deliberately failed the test body to prove the
+  registered finalizer runs exactly once even on failure. It found no warning
+  filter, exception suppression, forced collection, production-code change, or
+  migration behavior change. The final worklog-only commit will be recorded in
+  PR metadata rather than adding a self-referential SHA commit.
