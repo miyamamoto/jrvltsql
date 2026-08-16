@@ -1190,9 +1190,9 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
             {"name": "開催日目", "type": "INTEGER", "description": "開催日目", "example": "8", "nullable": False},
             {"name": "レース番号", "type": "INTEGER", "description": "レース番号", "example": "11", "nullable": False},
             {"name": "競走種別コード", "type": "TEXT", "description": "競走年齢・障害区分", "example": "13", "nullable": False},
-            {"name": "距離", "type": "TEXT", "description": "コース距離", "example": "2400", "nullable": False},
+            {"name": "距離", "type": "INTEGER", "description": "コース距離", "example": "2400", "nullable": False},
             {"name": "トラックコード", "type": "TEXT", "description": "トラック種別", "example": "10", "nullable": False},
-            {"name": "レコードタイム", "type": "TEXT", "description": "レコードタイム（分秒形式）", "example": "2:22.1", "nullable": True},
+            {"name": "レコードタイム", "type": "TEXT", "description": "公式4桁のレコードタイム", "example": "2221", "nullable": True},
             {"name": "レコード保持馬1～3", "type": "TEXT", "description": "同着を含む全保持馬・調教師・負担重量・騎手", "example": "○○○○", "nullable": True}
         ],
         "primary_key": ["レコード識別区分", "開催年", "開催月日", "競馬場コード", "開催回", "開催日目", "レース番号", "特別競走番号", "競走種別コード", "距離", "トラックコード"],

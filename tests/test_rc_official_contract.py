@@ -295,6 +295,9 @@ def test_rc_delete_is_ordered_and_scoped_to_the_complete_official_key(
     database = SQLiteDatabase({"path": str(tmp_path / f"delete-{table_name}.db")})
     schema = JRAVAN_SCHEMAS[table_name] if use_jravan_schema else SCHEMAS[table_name]
     first = RCParser().parse(build_rc_record()[0])
+    replacement = RCParser().parse(
+        build_rc_record(data_kubun="2", horse_prefix="REPLACED")[0]
+    )
     second = RCParser().parse(
         build_rc_record(
             data_kubun="2",
@@ -303,19 +306,112 @@ def test_rc_delete_is_ordered_and_scoped_to_the_complete_official_key(
         )[0]
     )
     delete_first = RCParser().parse(build_rc_record(data_kubun="0")[0])
-    assert first is not None and second is not None and delete_first is not None
+    assert all(row is not None for row in (first, replacement, second, delete_first))
 
     with database:
         database.create_table(table_name, schema)
-        stats = importer_class(
+        importer = importer_class(
             database,
             use_jravan_schema=use_jravan_schema,
-        ).import_records(iter([first, second, delete_first]))
+        )
+        replacement_stats = importer.import_records(iter([first, replacement]))
+        replaced = database.fetch_all(
+            f"SELECT DataKubun, SyubetuCD, RecUmaBamei1 FROM {table_name}"
+        )
+        stats = importer.import_records(iter([second, delete_first]))
         rows = database.fetch_all(f"SELECT DataKubun, SyubetuCD, RecUmaBamei1 FROM {table_name}")
 
-    assert stats["records_imported"] == 3
+    assert replacement_stats["records_imported"] == 2
+    assert replacement_stats["records_failed"] == 0
+    assert replaced == [
+        {"DataKubun": "2", "SyubetuCD": "13", "RecUmaBamei1": "REPLACED1"}
+    ]
+    assert stats["records_imported"] == 2
     assert stats["records_failed"] == 0
     assert rows == [{"DataKubun": "2", "SyubetuCD": "14", "RecUmaBamei1": "OTHER1"}]
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_incomplete_rc_key_aborts_the_whole_batch_before_mutation(
+    tmp_path,
+    importer_class,
+) -> None:
+    database = SQLiteDatabase({"path": str(tmp_path / "incomplete-key.db")})
+    valid = RCParser().parse(build_rc_record()[0])
+    incomplete = RCParser().parse(
+        build_rc_record(
+            data_kubun="0",
+            key_overrides={"TokuNum": ""},
+        )[0]
+    )
+    assert valid is not None and incomplete is not None
+
+    with database:
+        database.create_table("NL_RC", SCHEMAS["NL_RC"])
+        with pytest.raises(SchemaMigrationError, match="incomplete official key"):
+            importer_class(database).import_records(iter([valid, incomplete]))
+
+        assert database.fetch_one("SELECT COUNT(*) AS count FROM NL_RC")["count"] == 0
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_unsupported_rc_data_kubun_aborts_before_mutation(
+    tmp_path,
+    importer_class,
+) -> None:
+    database = SQLiteDatabase({"path": str(tmp_path / "unsupported-data-kubun.db")})
+    unsupported = RCParser().parse(build_rc_record(data_kubun="9")[0])
+    assert unsupported is not None
+
+    with database:
+        database.create_table("NL_RC", SCHEMAS["NL_RC"])
+        with pytest.raises(SchemaMigrationError, match="unsupported DataKubun"):
+            importer_class(database).import_records(iter([unsupported]))
+
+        assert database.fetch_one("SELECT COUNT(*) AS count FROM NL_RC")["count"] == 0
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_rc_batches_only_consecutive_upserts_around_ordered_deletes(
+    tmp_path,
+    monkeypatch,
+    importer_class,
+) -> None:
+    database = SQLiteDatabase({"path": str(tmp_path / "ordered-batches.db")})
+    first = RCParser().parse(build_rc_record()[0])
+    second = RCParser().parse(
+        build_rc_record(key_overrides={"SyubetuCD": "14"}, horse_prefix="OTHER")[0]
+    )
+    delete_first = RCParser().parse(build_rc_record(data_kubun="0")[0])
+    replacement = RCParser().parse(
+        build_rc_record(data_kubun="2", horse_prefix="LAST")[0]
+    )
+    assert all(row is not None for row in (first, second, delete_first, replacement))
+
+    with database:
+        database.create_table("NL_RC", SCHEMAS["NL_RC"])
+        original_insert_many = database.insert_many
+        batch_sizes = []
+
+        def record_batch(table_name, rows, use_replace=True):
+            batch_sizes.append(len(rows))
+            return original_insert_many(table_name, rows, use_replace=use_replace)
+
+        monkeypatch.setattr(database, "insert_many", record_batch)
+        stats = importer_class(database).import_records(
+            iter([first, second, delete_first, replacement])
+        )
+        rows = database.fetch_all(
+            "SELECT SyubetuCD, RecUmaBamei1 FROM NL_RC ORDER BY SyubetuCD"
+        )
+
+    assert stats["records_imported"] == 4
+    assert stats["records_failed"] == 0
+    assert batch_sizes == [2, 1]
+    assert rows == [
+        {"SyubetuCD": "13", "RecUmaBamei1": "LAST1"},
+        {"SyubetuCD": "14", "RecUmaBamei1": "OTHER1"},
+    ]
 
 
 def _obsolete_rc_schema(table_name: str) -> str:
@@ -358,6 +454,36 @@ def test_existing_obsolete_rc_key_fails_closed_without_data_loss(
             ).import_records(iter([parsed]))
 
         assert database.fetch_one(f"SELECT COUNT(*) AS count FROM {table_name}")["count"] == 1
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_obsolete_standard_rc_table_does_not_block_unrelated_standard_import(
+    tmp_path,
+    importer_class,
+) -> None:
+    database = SQLiteDatabase({"path": str(tmp_path / "unrelated-standard.db")})
+    unrelated = {
+        "RecordSpec": "HN",
+        "DataKubun": "1",
+        "MakeDate": "20260816",
+        "HansyokuNum": "1234567890",
+        "Bamei": "UNRELATED",
+    }
+
+    with database:
+        database.execute(_obsolete_rc_schema("RECORD"))
+        database.execute(JRAVAN_SCHEMAS["HANSYOKU"])
+        database.commit()
+
+        stats = importer_class(database, use_jravan_schema=True).import_records(
+            iter([unrelated])
+        )
+
+        assert stats["records_imported"] == 1
+        assert stats["records_failed"] == 0
+        assert database.fetch_one(
+            "SELECT HansyokuNum, Bamei FROM HANSYOKU"
+        ) == {"HansyokuNum": "1234567890", "Bamei": "UNRELATED"}
 
 
 @pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))

@@ -123,6 +123,40 @@
 - Workflow-fatal flake8 selection passed with zero findings; `git diff --check`
   passed.
 
+## PR review correction
+
+- Opened PR #183 from implementation SHA
+  `1af0bea142deaaf71576e399bd5728a353a1ce19`. A local final-diff review found
+  the module-level schema documentation still named the obsolete seven-column
+  RC key; the executable schema was already correct. The documentation-only
+  candidate `7333d5017104a336efa49338356cb3901d244b77` passed the full 2,241-test
+  suite, the 864-test workflow selection, 22 PostgreSQL RC tests, compileall,
+  fatal flake8, and clean-worktree checks before push.
+- One GitHub-native Copilot review was requested at PR creation. Codex,
+  Copilot, and CodeRabbit findings were collected before changing the candidate.
+  Actionable findings were: an obsolete unused standard `RECORD` table blocked
+  unrelated standard imports during global startup verification; generic key
+  filtering removed malformed RC rows before the fail-closed validator; the
+  legacy-2 same-key replacement contract was not directly tested; consecutive
+  upserts were written one statement at a time; and MCP metadata advertised the
+  wrong `Kyori` type and a formatted rather than raw `RecTime` example.
+- Before the review fixes, the new focused regression selection ran against the
+  unchanged candidate and failed **6 cases**: both importers committed the one
+  valid row instead of raising on an incomplete deletion key, both emitted
+  upsert batch sizes `[1, 1, 1]` rather than `[2, 1]` around a delete, and both
+  stopped an unrelated HN standard import because the unused `RECORD` key was
+  obsolete. This is the required red evidence for the revised checks.
+- The aggregated correction routes every RC row to the RC validator, verifies
+  standard `RECORD` only when RC is actually written, batches only consecutive
+  upserts and flushes at every delete boundary, adds a same-key legacy-2
+  replacement assertion, and aligns exported metadata. The first focused green
+  run passed **70 tests with 2 optional PostgreSQL skips**.
+- The unsupported-`DataKubun` validator branch also lacked a direct negative
+  contract. A minimal test for value `9` was added; with that rejection branch
+  temporarily disabled, both importer cases failed with `DID NOT RAISE` and
+  persisted the row. Restoring the allowed set to `0/1/2` produced a final
+  focused result of **72 passed with 2 optional PostgreSQL skips**.
+
 ## Plan and gates
 
 - Extract every RC offset, repeated-holder field, key, initial value, and
@@ -143,6 +177,7 @@
 
 ## Next safe command
 
-- Review the complete diff once more, commit the implementation/worklog, then
-  rerun full and PostgreSQL validation against that exact full candidate SHA
-  before pushing a single RC-only PR.
+- Review and commit the aggregated PR feedback once, then rerun focused/full,
+  workflow-equivalent, and disposable PostgreSQL validation against the new
+  exact full SHA. Push once, resolve all review threads with evidence, and merge
+  only with green CI, zero unresolved threads, and a clean worktree.

@@ -132,7 +132,10 @@ class OptimizedDataImporter:
             schema_sql = JRAVAN_SCHEMAS.get(standard_name)
             if schema_sql and self.database.table_exists(standard_name):
                 migrate_table_if_needed(self.database, standard_name, schema_sql, commit=commit)
-                verify_table_schema(self.database, standard_name, schema_sql)
+                # RECORD is verified by the RC-specific writer. Its manual key
+                # migration must not prevent unrelated standard-table imports.
+                if standard_name not in _RC_STORAGE_TABLES:
+                    verify_table_schema(self.database, standard_name, schema_sql)
         for child_table in ("CHOKYO_SEISEKI", "KISYU_SEISEKI"):
             child_schema = JRAVAN_SCHEMAS.get(child_table)
             if child_schema and self.database.table_exists(child_table):
@@ -340,7 +343,10 @@ class OptimizedDataImporter:
 
                 clean_record = self._record_for_table(record, table_name)
                 converted_record = self._convert_record(clean_record, table_name)
-                if not self._has_complete_primary_key(table_name, converted_record):
+                if (
+                    table_name not in _RC_STORAGE_TABLES
+                    and not self._has_complete_primary_key(table_name, converted_record)
+                ):
                     logger.warning(
                         "Record has incomplete primary key after conversion",
                         table=table_name,
@@ -444,6 +450,8 @@ class OptimizedDataImporter:
             return
 
         if table_name in _RC_STORAGE_TABLES:
+            # RC validation/write failures propagate directly and never enter
+            # the generic per-row fallback below.
             rows = apply_rc_batch(
                 self.database,
                 table_name,
@@ -536,9 +544,6 @@ class OptimizedDataImporter:
                 # The backend may already have rolled back the caller-owned
                 # transaction. Retrying rows here would create a partial import
                 # and make the reported statistics diverge from persisted data.
-                raise
-
-            if table_name in _RC_STORAGE_TABLES:
                 raise
 
             # Try inserting one by one on batch failure

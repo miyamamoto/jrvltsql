@@ -197,23 +197,29 @@ def apply_rc_batch(
                 )
             raise
 
-    def write_one(row: dict) -> None:
-        if row["DataKubun"] == "0":
+    def write_upserts(upserts: list[dict]) -> None:
+        if not upserts:
+            return
+        if optimized and hasattr(database, "insert_many_optimized"):
+            database.insert_many_optimized(table_name, upserts)
+        else:
+            database.insert_many(table_name, upserts, use_replace=True)
+
+    try:
+        begin_if_owned()
+        pending_upserts: list[dict] = []
+        for row in rows:
+            if row["DataKubun"] != "0":
+                pending_upserts.append(row)
+                continue
+            write_upserts(pending_upserts)
+            pending_upserts = []
             where = " AND ".join(f"{column} = ?" for column in _RC_KEY_COLUMNS)
             database.execute(
                 f"DELETE FROM {table_name} WHERE {where}",
                 tuple(row[column] for column in _RC_KEY_COLUMNS),
             )
-            return
-        if optimized and hasattr(database, "insert_many_optimized"):
-            database.insert_many_optimized(table_name, [row])
-        else:
-            database.insert_many(table_name, [row], use_replace=True)
-
-    try:
-        begin_if_owned()
-        for row in rows:
-            write_one(row)
+        write_upserts(pending_upserts)
         if commit_batch:
             database.commit()
     except DatabaseError:
@@ -1096,7 +1102,11 @@ class DataImporter:
             schema_sql = JRAVAN_SCHEMAS.get(standard_name)
             if schema_sql and self.database.table_exists(standard_name):
                 migrate_table_if_needed(self.database, standard_name, schema_sql, commit=commit)
-                verify_table_schema(self.database, standard_name, schema_sql)
+                # RECORD has a deliberately non-automatic key migration. Verify
+                # it only when an RC row is actually about to be written so an
+                # obsolete unused table cannot block unrelated standard imports.
+                if standard_name not in _RC_STORAGE_TABLES:
+                    verify_table_schema(self.database, standard_name, schema_sql)
         for child_table in ("CHOKYO_SEISEKI", "KISYU_SEISEKI"):
             child_schema = JRAVAN_SCHEMAS.get(child_table)
             if child_schema and self.database.table_exists(child_table):
@@ -1397,7 +1407,10 @@ class DataImporter:
             prepared_ks: list[tuple[dict, str, list[dict]]] = []
             for original_record, record in zip(batch, clean_batch, strict=True):
                 converted_record = self._convert_record(record, table_name)
-                if self._has_complete_primary_key(table_name, converted_record):
+                if (
+                    table_name in _RC_STORAGE_TABLES
+                    or self._has_complete_primary_key(table_name, converted_record)
+                ):
                     converted_batch.append(converted_record)
                     coupled = prepare_ch_coupled_rows(
                         self.database,
@@ -1620,7 +1633,10 @@ class DataImporter:
                 return True
             clean_record = self._record_for_table(record, table_name)
             converted_record = self._convert_record(clean_record, table_name)
-            if not self._has_complete_primary_key(table_name, converted_record):
+            if (
+                table_name not in _RC_STORAGE_TABLES
+                and not self._has_complete_primary_key(table_name, converted_record)
+            ):
                 self._records_failed += 1
                 logger.warning(
                     "Skipping record with incomplete primary key",
