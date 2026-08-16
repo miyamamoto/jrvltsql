@@ -741,8 +741,17 @@
   is 30 passed, the repository self-check is `TEST GATE PASS`, and the exact
   isolated fatal command reports zero findings across `src tests scripts
   tools`.
+- GitHub Actions run `31949422208` executed on exact code/review-fix candidate
+  `6afb96ad694f3a54ccf647344ae4f64417bf6eda`: the fail-closed self-check,
+  isolated fatal lint, Linux deterministic tree, distribution build/content
+  validation, and 32-bit Windows launcher contract all passed. The Linux tree
+  reported 2,293 passed, 79 explicit environment skips, 14 slow deselections,
+  and 15 passing subtests; both wheel and sdist passed the distribution-content
+  gate. The later worklog-heading correction is documentation-only, so its
+  successor SHA still requires the automatically triggered final checks rather
+  than reusing this run as exact-SHA evidence.
 
-## Next safe action
+## Next safe action: test-truth gate
 
 - Commit and push the review repairs, run the affected gate/PostgreSQL/CLI
   checks and the whole-tree workflow on the exact pushed SHA, resolve every
