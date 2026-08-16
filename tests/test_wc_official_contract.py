@@ -197,11 +197,11 @@ def test_wc_layout_is_bound_to_the_pinned_sdk_manifest() -> None:
         )
     )
     structures = manifest["structures"]
-    actual = []
+    sdk_compact_contract = []
     for field in structures["JV_WC_WOOD"]["fields"]:
         if field["name"] == "head":
             for header_field in structures[field["struct"]]["fields"]:
-                actual.append(
+                sdk_compact_contract.append(
                     (
                         header_field["name"],
                         field["start"] + header_field["start"] - 1,
@@ -209,39 +209,43 @@ def test_wc_layout_is_bound_to_the_pinned_sdk_manifest() -> None:
                     )
                 )
         else:
-            actual.append(
-                (
-                    {
-                        "BabaAround": "BabaMawari",
-                        "HaronTime10": "HaronTime10Total",
-                        "LapTime10": "LapTime_2000M_1800M",
-                        "HaronTime9": "HaronTime9Total",
-                        "LapTime9": "LapTime_1800M_1600M",
-                        "HaronTime8": "HaronTime8Total",
-                        "LapTime8": "LapTime_1600M_1400M",
-                        "HaronTime7": "HaronTime7Total",
-                        "LapTime7": "LapTime_1400M_1200M",
-                        "HaronTime6": "HaronTime6Total",
-                        "LapTime6": "LapTime_1200M_1000M",
-                        "HaronTime5": "HaronTime5Total",
-                        "LapTime5": "LapTime_1000M_800M",
-                        "HaronTime4": "HaronTime4Total",
-                        "LapTime4": "LapTime_800M_600M",
-                        "HaronTime3": "HaronTime3Total",
-                        "LapTime3": "LapTime_600M_400M",
-                        "HaronTime2": "HaronTime2Total",
-                        "LapTime2": "LapTime_400M_200M",
-                        "LapTime1": "LapTime_200M_0M",
-                        "crlf": "RecordDelimiter",
-                    }.get(field["name"], field["name"]),
-                    field["start"],
-                    field["width"],
-                )
-            )
+            sdk_compact_contract.append((field["name"], field["start"], field["width"]))
 
-    expected = [(name, position, width) for name, position, width, _ in FIELDS]
-    assert actual == expected
+    parser_fields = WCParser()._fields
+    fixture_contract = [(name, position, width) for name, position, width, _ in FIELDS]
+    assert [
+        (field.name, field.start + 1, field.length) for field in parser_fields
+    ] == fixture_contract
     assert _STANDARD_FIELD_ALIASES["WOOD"] == STANDARD_ALIASES
+    parser_canonical_contract = [
+        (
+            (
+                "crlf"
+                if field.name == "RecordDelimiter"
+                else _STANDARD_FIELD_ALIASES["WOOD"].get(field.name, field.name)
+            ),
+            field.start + 1,
+            field.length,
+        )
+        for field in parser_fields
+    ]
+    assert parser_canonical_contract == sdk_compact_contract
+
+
+def test_wc_manifest_oracle_rejects_production_parser_offset_drift(monkeypatch) -> None:
+    original_define_fields = WCParser._define_fields
+
+    def swapped_equal_width_fields(self):
+        fields = original_define_fields(self)
+        by_name = {field.name: field for field in fields}
+        first = by_name["LapTime_2000M_1800M"]
+        second = by_name["LapTime_1800M_1600M"]
+        first.start, second.start = second.start, first.start
+        return fields
+
+    monkeypatch.setattr(WCParser, "_define_fields", swapped_equal_width_fields)
+    with pytest.raises(AssertionError):
+        test_wc_layout_is_bound_to_the_pinned_sdk_manifest()
 
 
 def test_wc_accepts_real_calendar_dates_and_midnight() -> None:
@@ -288,7 +292,18 @@ def test_wc_rejects_noncurrent_or_corrupt_records(record: bytes) -> None:
 
 
 def test_wc_delete_record_keeps_the_exact_official_key_without_blank_body_rule() -> None:
-    deleted = WCParser().parse(build_record(data_kubun="0", course="4", all_nines=True))
+    deleted = WCParser().parse(
+        build_record(
+            data_kubun="0",
+            course="8",
+            baba_mawari="8",
+            field_overrides={
+                "reserved": "A",
+                "HaronTime10Total": "ABCD",
+                "LapTime_1000M_800M": "A1B",
+            },
+        )
+    )
     assert deleted is not None
     assert deleted["DataKubun"] == "0"
     assert [deleted[name] for name in OFFICIAL_KEY] == [
@@ -385,7 +400,13 @@ def test_wc_official_key_coexistence_course_update_and_provider_ordered_delete(
         ordered = importer.import_records(
             iter(
                 [
-                    parsed_record(data_kubun="0", tresen_kubun="0", course="4"),
+                    parsed_record(
+                        data_kubun="0",
+                        tresen_kubun="0",
+                        course="8",
+                        baba_mawari="8",
+                        field_overrides={"HaronTime10Total": "ABCD"},
+                    ),
                     parsed_record(tresen_kubun="0", course="2"),
                 ]
             ),
@@ -455,6 +476,37 @@ def test_wc_caller_built_rows_are_revalidated_before_mutation(
 
         blank_reserved = parsed_record(chokyo_time="0633", field_overrides={"reserved": ""})
         assert importer.import_records(iter([blank_reserved]))["records_imported"] == 1
+
+        zero_measurements = parsed_record(
+            chokyo_time="0634",
+            field_overrides={name: "0" * width for name, width in TIME_FIELDS},
+        )
+        assert importer.import_records(iter([zero_measurements]))["records_imported"] == 1
+        if standard:
+            zero_columns = ("HaronTime10", "LapTime5", "LapTime1")
+        else:
+            zero_columns = (
+                "HaronTime10Total",
+                "LapTime_1000M_800M",
+                "LapTime_200M_0M",
+            )
+        zero_row = database.fetch_one(
+            f"SELECT {zero_columns[0]} AS first_value, "
+            f"{zero_columns[1]} AS middle_value, {zero_columns[2]} AS last_value "
+            f"FROM {table_name} WHERE ChokyoTime = ?",
+            ("0634",),
+        )
+        assert zero_row == {"first_value": 0.0, "middle_value": 0.0, "last_value": 0.0}
+
+        opaque_delete = parsed_record(
+            data_kubun="0",
+            course="8",
+            baba_mawari="8",
+            field_overrides={"HaronTime10Total": "ABCD"},
+        )
+        opaque_delete["reserved"] = "OVERSIZED"
+        assert importer.import_records(iter([opaque_delete]))["records_imported"] == 1
+        assert importer.import_records(iter([parsed_record()]))["records_imported"] == 1
 
         if standard:
             canonical = _canonical_only(parsed_record(chokyo_time="0632", all_nines=True))
@@ -608,10 +660,14 @@ def test_wc_single_record_uses_the_same_validation_and_exact_delete(
         invalid_time["ChokyoTime"] = "1160"
         with pytest.raises(SchemaMigrationError):
             importer.import_single_record(invalid_time, auto_commit=auto_commit)
-        assert importer.import_single_record(
-            parsed_record(data_kubun="0", course="4", all_nines=True),
-            auto_commit=auto_commit,
+        opaque_delete = parsed_record(
+            data_kubun="0",
+            course="8",
+            baba_mawari="8",
+            field_overrides={"HaronTime10Total": "ABCD"},
         )
+        opaque_delete["reserved"] = "OVERSIZED"
+        assert importer.import_single_record(opaque_delete, auto_commit=auto_commit)
         assert database.fetch_one(f"SELECT COUNT(*) AS count FROM {table_name}")["count"] == 0
 
 

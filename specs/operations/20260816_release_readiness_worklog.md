@@ -2031,3 +2031,32 @@
   CI-equivalent full suite, and resume the same Codex reviewer for one
   aggregated delta review. STOP on a failed full test, post-commit drift, or a
   remaining correctness/data-integrity finding.
+- Repaired candidate `56a86301a89cfe5382c1d5d4f167d0e744c79bb2` was clean and
+  completed the exact Python 3.12 CI-equivalent full suite: `2560 passed, 109
+  skipped, 14 deselected, 15 subtests passed` with coverage. Fresh wheel and
+  sdist 1.6.10 built successfully and the two-artifact distribution-content
+  gate passed, retaining the required exclusion of tracked `specs/` and oracle
+  materials. The only build output was the existing future setuptools license-
+  metadata deprecation. Open PR inspection still returned zero PRs.
+- The resumed Codex delta review of exact `56a86301...` closed both prior P1s
+  and the worklog correction, and found no new production correctness blocker,
+  but returned `P0=0 / P1=0 / P2=2` NEEDS_CHANGES for test-oracle gaps. It
+  independently demonstrated that swapping two equal-width production parser
+  offsets escaped the manifest test, and noted that all tracked status-0 bodies
+  were also valid status-1 bodies while official measurement-failure zero
+  values lacked storage readback. Before repairing the oracle, a minimal
+  monkeypatch regression on unchanged production produced the required red
+  result: `1 failed, 50 passed, 1 PostgreSQL opt-in skip`. The repaired test now
+  compares all 30 tuples from `WCParser()._fields`, after applying the
+  production WOOD alias map, directly with the compact pinned SDK structure;
+  the same injected offset drift must raise. Existing parameterized paths now
+  use a physically decodable but status-1-invalid status-0 body, include a
+  caller-built over-width body for exact delete, and read back first/middle/last
+  official zero measurements as `0.0`. Focused SQLite is `51 passed, 1 skip`
+  (`74 passed, 5 skipped` with metadata tests), and a fresh disposable
+  PostgreSQL 16 run is `52 passed`; the container was removed. Test gate,
+  official oracle, focused Black/Ruff, and `diff --check` pass. Next safe
+  action: commit this test/worklog-only delta, confirm the production parent is
+  unchanged, and request one final carry-forward review rather than restarting
+  the full review loop. STOP on a non-test/non-worklog delta, false-green
+  mutation probe, failed PostgreSQL path, or unresolved reviewer finding.
