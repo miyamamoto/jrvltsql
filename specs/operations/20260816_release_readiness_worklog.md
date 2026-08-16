@@ -523,6 +523,36 @@
   environment boundaries, fixtures, and CI ordering interact. The initial
   turn is read-only critical audit; implementation review will resume the same
   session for this worktree and iteration.
+- Codex audited the exact clean start commit
+  `29b4b464927fc061d52939294af2b6272d5b01b9`: pytest collected 2,555 tests
+  from 76 files, while the workflow selected only 16 files and omitted 60.
+  A warning-strict deterministic run reported 5 failed, 2,446 passed, 84
+  skipped, and 15 subtests. Three failures were the known non-None pytest
+  returns. The two CLI failures passed immediately in isolation and with all
+  preceding modules, so they are recorded as a concurrent-run/transient
+  observation rather than an attributed defect. The exact failing return
+  functions and CI collection gap remain reproducible.
+- The independent Fable audit inspected actual clean HEAD
+  `29b4b464927fc061d52939294af2b6272d5b01b9` and classified the iteration
+  `NEEDS_CHANGES`. It independently measured 2,555 collected tests, found the
+  workflow selecting about 41% of collected cases, reproduced three
+  `PytestReturnNotNoneWarning` failures, verified fatal flake8 has a true
+  failing negative case but is currently advisory, and found repo-wide mypy
+  remains advisory debt. It also reproduced collection failure without the
+  undeclared dotenv package, import-time logging resource warnings, misleading
+  PostgreSQL skip reasons, and self-derived database-row fixture provenance.
+  The initial prompt contained an incorrect expanded SHA after the valid short
+  prefix; Fable explicitly rejected that value, resolved and reported the
+  actual full HEAD above, and performed the audit against it.
+- The grouped implementation scope after reconciliation is: add one
+  fail-closed CI configuration validator with a negative and positive control;
+  remove undeclared dotenv collection dependencies and boolean-return live
+  pseudo-tests; make warnings fatal without import-time log resources; gate
+  live PostgreSQL tests on an explicit environment variable and fail when an
+  opted-in server is unavailable; remove duplicate no-assert parser cases;
+  label and relocate reconstructed database-row fixtures away from provider or
+  official fixture namespaces; and make the workflow collect the whole
+  deterministic tree. Production data-contract defects remain out of scope.
 
 ## Next safe action
 

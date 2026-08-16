@@ -224,6 +224,7 @@ scripts/migrate_*.py
 scripts/profile_*.py
 scripts/validate_*.py
 !scripts/validate_schema_parser.py
+!scripts/validate_test_gate.py
 scripts/verify_*.py
 
 # Generated directories (allow specific documentation)
