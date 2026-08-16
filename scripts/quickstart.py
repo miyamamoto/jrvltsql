@@ -73,7 +73,11 @@ except ImportError:
     RICH_AVAILABLE = False
 
 from src.utils.lock_manager import ProcessLock, ProcessLockError
-from src.jvlink.constants import is_valid_jvopen_combination
+from src.jvlink.constants import (
+    is_retired_data_spec,
+    is_valid_jvopen_combination,
+    validate_jvopen_combination,
+)
 
 
 # Windows cp932対策: stdoutをUTF-8に設定した上でConsoleを作成
@@ -3283,11 +3287,18 @@ class QuickstartRunner:
             logger.error(details['error_message'])
             return ("failed", details)
 
-        # Use the shared official JVOpen contract for every option before
-        # database/schema side effects.
-        if not is_valid_jvopen_combination(spec, option):
-            details['error_type'] = 'invalid_option'
-            details['error_message'] = f'option={option} は {spec} に対応していません'
+        # Use the shared official JVOpen contract before database/schema side
+        # effects, while preserving a precise user-facing failure category.
+        try:
+            validate_jvopen_combination(spec, option)
+        except ValueError as exc:
+            if not isinstance(spec, str) or not spec or len(spec) % 4:
+                details['error_type'] = 'invalid_dataspec'
+            elif is_retired_data_spec(spec):
+                details['error_type'] = 'retired_dataspec'
+            else:
+                details['error_type'] = 'invalid_option'
+            details['error_message'] = str(exc)
             logger.warning(details['error_message'])
             return ("skipped", details)
 

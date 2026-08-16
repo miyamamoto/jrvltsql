@@ -222,10 +222,23 @@
 - Focused review-repair selection (JVOpen contract, CLI, cache, quickstart,
   batch, and historical cache tests): **291 passed**. Compileall, fatal flake8,
   strict MkDocs, and diff check also passed. No Claude session or code was used.
+- The single requested Copilot review became visible after the first aggregated
+  repair push. Its absolute-path finding duplicated the already-fixed
+  CodeRabbit finding. Its remaining finding was actionable: quickstart stopped
+  malformed and mixed legacy requests before database setup, but labeled both
+  as option incompatibility and hid the shared validator's precise remedy.
+- Extended the existing quickstart boundary test for `O1` and one mixed legacy
+  request. Before repair both cases failed because `error_type` remained
+  `invalid_option` and the message was only `option=...` (**2 failed**).
+  Quickstart now delegates acceptance to the shared validator, returns its
+  exact diagnostic, and classifies malformed, retired, and option-incompatible
+  requests separately without moving the pre-database guard. The central
+  quickstart/contract/batch selection then passed **223 tests**. No additional
+  review request was issued.
 
 ## Next safe command
 
-- Commit and push the aggregated repair once, repeat the focused/local,
+- Commit this final collected Copilot repair, repeat the affected focused,
   distribution, and acquisition gates on the resulting full SHA, reply to and
-  resolve both review threads, then merge only after CI and final state are
+  resolve the remaining threads, then merge only after CI and final state are
   green.
