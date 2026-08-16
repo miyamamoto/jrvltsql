@@ -120,6 +120,22 @@ strict documentation build, disclosure scan, and clean-tree check. The full
 and workflow-equivalent suites above remain the code-tree evidence and are not
 repeated for a documentation-only SHA update.
 
+## GitHub review repair
+
+- PR #186 was opened at final candidate
+  `04a1860dd10783059600da77646451d87c9fc657`. GitHub Actions test and lint
+  completed successfully. CodeRabbit reported a usage-limit skip and therefore
+  supplied no review finding; it is not treated as review evidence.
+- The single requested GitHub-native Copilot review was submitted against that
+  full SHA and produced one concrete performance finding: `TarFile.getmembers()`
+  materialized the complete sdist member list even though the checker consumes
+  it once. The finding is accepted. The checker now iterates the `TarFile`
+  directly, preserving the same fail-closed member checks with bounded memory.
+- This does not add or change a validation rule, so the original red-first
+  negative tests remain the contract. The review delta must pass the focused
+  distribution suite, actual wheel/sdist build and inspection, strict MkDocs,
+  fatal lint/compile, disclosure scan, and clean-tree gate before push.
+
 ## Next safe command
 
 - Commit this evidence-only worklog update, run the proportional final-SHA

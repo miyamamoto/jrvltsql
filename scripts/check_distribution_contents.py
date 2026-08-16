@@ -34,7 +34,7 @@ def _archive_members(path: Path, kind: str) -> Iterable[str]:
             yield from archive.namelist()
         return
     with tarfile.open(path, "r:gz") as archive:
-        for member in archive.getmembers():
+        for member in archive:
             yield member.name
 
 
