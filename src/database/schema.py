@@ -24,7 +24,10 @@ Primary Keys Implemented:
 Race-related Tables:
     NL_RA, RT_RA: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
     NL_SE, RT_SE: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
-    NL_RC: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, RecInfoKubun)
+    NL_RC: PRIMARY KEY (
+        RecInfoKubun, Year, MonthDay, JyoCD, Kaiji, Nichiji,
+        RaceNum, TokuNum, SyubetuCD, Kyori, TrackCD
+    )
     NL_TK: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, KettoNum)
     NL_YS: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji)
 
