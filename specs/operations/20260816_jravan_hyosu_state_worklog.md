@@ -212,11 +212,23 @@
   passed `16 passed, 6 skipped`, and expanded storage/mapping/parser
   compatibility passed `257 passed, 20 skipped`. Because this repair changes
   source after the first freeze, SHA `941c783...` is not the PR candidate.
+- The repaired source candidate is
+  `bcb91bf51d96e0b8b1f515910f748cb9f7716832`, based directly on current
+  `origin/master` `dde898c3394c24c9b781024d959c770ee7add58e`.
+  On this exact source SHA, Python 3.12.11 expanded storage/mapping/parser
+  compatibility passed `257 passed, 20 skipped`; a second disposable fresh
+  PostgreSQL 16 run passed all 67 expanded-storage cases; blocking flake8 found
+  zero errors; and diff/status checks were clean.
+- Targeted mypy reported 31 pre-existing shared logger/database/type-annotation
+  findings and no finding in the new H1/H6 storage or positional-array blocks.
+  The workflow treats mypy as warning-only. A Python 3.12 registered-data replay
+  on the exact source SHA again stored status-9 H1 (1,501 source rows) and H6
+  (4,896 source rows) through both importers and removed all owner/child rows on
+  status 0, without exposing race identity.
 
 ## Next safe action
 
-- Commit the positional-array review repair and this evidence, freeze the new
-  full candidate SHA, and rerun the focused Python 3.12 and PostgreSQL gates
-  required by the source change. Then push once, open the PR, collect the
+- Commit this evidence-only worklog update, run the smallest focused contract
+  on that final documentation head, then push once and open the PR. Collect the
   single GitHub-native Copilot review plus configured automated reviewers,
   aggregate findings, and repair once if necessary.
