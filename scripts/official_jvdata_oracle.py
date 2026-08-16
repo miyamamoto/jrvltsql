@@ -293,9 +293,17 @@ def _validate_manifest(manifest: Any) -> list[str]:
     source = manifest.get("source")
     if not isinstance(source, dict) or not SHA256_PATTERN.fullmatch(str(source.get("sha256", ""))):
         errors.append("source:invalid-sha256")
-    if not isinstance(source, dict) or not str(source.get("artifact", "")).strip():
+    if (
+        not isinstance(source, dict)
+        or not isinstance(source.get("artifact"), str)
+        or not source["artifact"].strip()
+    ):
         errors.append("source:artifact-missing")
-    if not isinstance(source, dict) or not str(source.get("jvdata_version", "")).strip():
+    if (
+        not isinstance(source, dict)
+        or not isinstance(source.get("jvdata_version"), str)
+        or not source["jvdata_version"].strip()
+    ):
         errors.append("source:jvdata-version-missing")
 
     structures = manifest.get("structures")
@@ -307,6 +315,10 @@ def _validate_manifest(manifest: Any) -> list[str]:
         return errors + ["root-records:not-an-object"]
     if not isinstance(summary, dict):
         return errors + ["summary:not-an-object"]
+    if not structures:
+        errors.append("structures:empty")
+    if not root_records:
+        errors.append("root-records:empty")
 
     calculated_repeat_count = 0
     for structure_name, structure in structures.items():
@@ -328,9 +340,14 @@ def _validate_manifest(manifest: Any) -> list[str]:
             if not isinstance(field, dict):
                 errors.append(f"{structure_name}:invalid-field")
                 continue
-            field_name = str(field.get("name", ""))
+            raw_field_name = field.get("name")
+            field_name = str(raw_field_name)
             prefix = f"{structure_name}.{field_name}"
-            if not field_name or field_name in names:
+            if (
+                not isinstance(raw_field_name, str)
+                or not raw_field_name.strip()
+                or field_name in names
+            ):
                 errors.append(f"{structure_name}:invalid-or-duplicate-field:{field_name}")
             names.add(field_name)
             kind = field.get("kind")
@@ -360,11 +377,25 @@ def _validate_manifest(manifest: Any) -> list[str]:
                     errors.append(f"{prefix}:invalid-element-kind")
                     continue
                 end = start + stride * (count - 1) + field_width - 1
-                target = field.get("struct") if element_kind == "nested" else None
+                if element_kind == "scalar":
+                    target = None
+                    if field.get("decoder") not in {"text", "bytes"}:
+                        errors.append(f"{prefix}:invalid-decoder")
+                else:
+                    target = field.get("struct")
             else:
                 end = start + field_width - 1
-                target = field.get("struct") if kind == "nested" else None
+                if kind == "scalar":
+                    target = None
+                    if field.get("decoder") not in {"text", "bytes"}:
+                        errors.append(f"{prefix}:invalid-decoder")
+                else:
+                    target = field.get("struct")
 
+            if kind == "nested" or (kind == "repeat" and field.get("element_kind") == "nested"):
+                if not isinstance(target, str) or not target.strip():
+                    errors.append(f"{prefix}:struct-missing")
+                    target = None
             if target is not None:
                 if target not in structures:
                     errors.append(f"{prefix}:unknown-struct:{target}")
@@ -437,7 +468,10 @@ def _validate_manifest(manifest: Any) -> list[str]:
     root_leaf_count = 0
     for record_type, contract in root_records.items():
         prefix = f"root:{record_type}"
-        if not isinstance(record_type, str) or not re.fullmatch(r"[A-Z0-9]{2}", record_type):
+        valid_record_type = isinstance(record_type, str) and bool(
+            re.fullmatch(r"[A-Z0-9]{2}", record_type)
+        )
+        if not valid_record_type:
             errors.append(f"{prefix}:invalid-record-type")
         if not isinstance(contract, dict):
             errors.append(f"{prefix}:invalid-contract")
@@ -446,6 +480,16 @@ def _validate_manifest(manifest: Any) -> list[str]:
         if structure_name not in structures:
             errors.append(f"{prefix}:unknown-struct:{structure_name}")
             continue
+        if valid_record_type and not structure_name.startswith(f"JV_{record_type}_"):
+            errors.append(f"{prefix}:structure-name-mismatch:{structure_name}")
+        root_fields = structures[structure_name].get("fields")
+        if (
+            not isinstance(root_fields, list)
+            or not root_fields
+            or not isinstance(root_fields[0], dict)
+            or root_fields[0].get("name") != "head"
+        ):
+            errors.append(f"{prefix}:head-missing:{structure_name}")
         length = contract.get("length")
         structure_width = structures[structure_name].get("width")
         if not _plain_integer(length) or length != structure_width:

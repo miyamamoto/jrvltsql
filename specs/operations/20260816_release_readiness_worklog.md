@@ -860,6 +860,32 @@
   import `tomllib`, so it was not treated as project evidence after that
   precondition failure; all accepted local evidence uses the required 3.12
   runtime.
+- The first clean local candidate was
+  `9374c8df1f19cd84a638a0a14f3613cb16a65502`. Exact-SHA focused evidence was
+  209 passed, `TEST GATE PASS`, fatal flake8 zero, and a clean worktree. It was
+  not pushed because the grouped critical review had not yet completed.
+- Started a new Claude Code session
+  `365b9699-b517-405f-b567-b6c87fd77266` with `--model fable --effort high` for
+  a read-only critical review of that candidate. Fable was selected because a
+  validator can create false release confidence if it fails open. The request
+  stopped at the service session limit before any review content or source
+  inspection ran; it is not review evidence and must be resumed in the same
+  session after the next 01:10 JST reset before merge.
+- While that external review was unavailable, Codex independently challenged
+  the generic validator rather than waiting idle. A single grouped negative
+  matrix proved 10 fail-open shapes red on the first candidate: empty manifests,
+  non-string source identities, non-string field names, missing scalar/repeat
+  decoders, missing direct/repeated nested targets, a root without `head`, and
+  a root redirected to a non-root structure. The run was 10 failed and 16
+  passed. The validator now rejects each shape directly, while the paired
+  complete fixture and official manifest remain green; the broader affected
+  selection is 219 passed with the CI self-check and fatal lint still green.
+- A separate search found a `BameiEng VARCHAR(80)` declaration and tested the
+  hypothesis that the 2006 UM change remained unfixed. It belongs to the
+  distinct `HANSYOKU`/HN contract, whose current official English-name field is
+  80 bytes. The `UMA`/UM standard table is correctly 60 bytes with the 1-byte
+  flag and 19-byte reserve, so no UM schema change is warranted from that
+  search result.
 - Known findings remain release blockers rather than oracle exceptions: HY
   field/primary-key semantics, CK omitted repeats, six standard-schema storage
   routes, schema metadata integrity, obsolete routes, and strict fresh

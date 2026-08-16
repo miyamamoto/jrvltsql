@@ -96,6 +96,38 @@ def _make_child_self_referential(manifest):
     }
 
 
+def _point_root_at_non_root_child(manifest):
+    manifest["root_records"]["ZZ"] = {"struct": "Child", "length": 2}
+    manifest["summary"]["expanded_leaf_count"] = 1
+
+
+def _remove_child_decoder(manifest):
+    manifest["structures"]["Child"]["fields"][0].pop("decoder")
+
+
+def _remove_repeat_decoder(manifest):
+    manifest["structures"]["JV_ZZ_ROOT"]["fields"][1].pop("decoder")
+
+
+def _make_repeat_nested_without_target(manifest):
+    field = manifest["structures"]["JV_ZZ_ROOT"]["fields"][1]
+    field.pop("decoder")
+    field["element_kind"] = "nested"
+    manifest["structures"]["JV_ZZ_ROOT"]["expanded_leaf_count"] = 1
+    manifest["summary"]["expanded_leaf_count"] = 1
+
+
+def _empty_oracle(manifest):
+    manifest["structures"] = {}
+    manifest["root_records"] = {}
+    manifest["summary"] = {
+        "structure_count": 0,
+        "repeat_template_count": 0,
+        "root_record_count": 0,
+        "expanded_leaf_count": 0,
+    }
+
+
 @pytest.mark.parametrize(
     ("mutate", "expected_error"),
     [
@@ -129,12 +161,52 @@ def _make_child_self_referential(manifest):
             "source:artifact-missing",
         ),
         (
+            _set(("source", "artifact"), 123),
+            "source:artifact-missing",
+        ),
+        (
             _set(("source", "jvdata_version"), ""),
+            "source:jvdata-version-missing",
+        ),
+        (
+            _set(("source", "jvdata_version"), 4901),
             "source:jvdata-version-missing",
         ),
         (
             _set(("structures", "Child", "expanded_leaf_count"), True),
             "Child:expanded-leaf-count:True!=1",
+        ),
+        (
+            _set(("structures", "Child", "fields", 0, "name"), None),
+            "Child:invalid-or-duplicate-field:None",
+        ),
+        (
+            _set(("structures", "JV_ZZ_ROOT", "fields", 0, "struct"), None),
+            "JV_ZZ_ROOT.head:struct-missing",
+        ),
+        (
+            _remove_child_decoder,
+            "Child.value:invalid-decoder",
+        ),
+        (
+            _remove_repeat_decoder,
+            "JV_ZZ_ROOT.values:invalid-decoder",
+        ),
+        (
+            _make_repeat_nested_without_target,
+            "JV_ZZ_ROOT.values:struct-missing",
+        ),
+        (
+            _set(("structures", "JV_ZZ_ROOT", "fields", 0, "name"), "not_head"),
+            "root:ZZ:head-missing:JV_ZZ_ROOT",
+        ),
+        (
+            _point_root_at_non_root_child,
+            "root:ZZ:structure-name-mismatch:Child",
+        ),
+        (
+            _empty_oracle,
+            "structures:empty",
         ),
         (
             _make_child_self_referential,
