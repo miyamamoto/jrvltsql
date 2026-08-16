@@ -243,13 +243,12 @@ def preflight_standard_schema_migrations(
         schema_sql = JRAVAN_SCHEMAS.get(standard_name)
         if not schema_sql or not database.table_exists(standard_name):
             continue
-        if standard_name in _ORDERED_MASTER_STORAGE_TABLES:
-            continue
         verify_table_schema(
             database,
             standard_name,
             schema_sql,
             allow_missing_columns=(standard_name not in _STRICT_NONADDITIVE_STANDARD_TABLES),
+            allow_primary_key_mismatch=(standard_name in _ORDERED_MASTER_STORAGE_TABLES),
         )
 
     for child_table in ("CHOKYO_SEISEKI", "KISYU_SEISEKI"):
@@ -3455,9 +3454,10 @@ class DataImporter:
                         schema_sql,
                         commit=commit,
                     )
-                # Ordered masters have deliberately non-automatic key migrations.
-                # Verify them only when a matching row is about to be written so
-                # an obsolete unused table cannot block unrelated imports.
+                # Ordered masters receive a complete field/key check only when
+                # a matching row is written. Their existing types and capacities
+                # were checked by preflight; a mismatched key makes the additive
+                # migrator a no-op and remains the dedicated writer's concern.
                 if standard_name not in _ORDERED_MASTER_STORAGE_TABLES:
                     verify_table_schema(self.database, standard_name, schema_sql)
         for child_table in ("CHOKYO_SEISEKI", "KISYU_SEISEKI"):

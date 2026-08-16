@@ -89,6 +89,19 @@ def _race_schema_without_youbi(*, narrow_record_spec: bool = False) -> str:
     return schema
 
 
+def _record_schema_without_hondai(*, narrow_record_spec: bool = False) -> str:
+    schema = JRAVAN_SCHEMAS["RECORD"].replace(
+        "            Hondai                         VARCHAR(60)         ,  -- 文字列(60)\n",
+        "",
+    )
+    if narrow_record_spec:
+        schema = schema.replace(
+            "            RecordSpec                     CHAR(2)             ,",
+            "            RecordSpec                     CHAR(1)             ,",
+        )
+    return schema
+
+
 @pytest.fixture
 def postgresql_db():
     if os.getenv("JLTSQL_RUN_POSTGRESQL_INTEGRATION") != "1":
@@ -388,40 +401,79 @@ def test_schema_verifier_accepts_exact_or_unbounded_bt_text_columns() -> None:
 
 
 @pytest.mark.parametrize(
-    ("importer_class", "auto_commit"),
+    ("importer_class", "auto_commit", "single_record"),
     [
-        pytest.param(importer_class, auto_commit, id=f"{importer_class.__name__}-{auto_commit}")
+        pytest.param(
+            importer_class,
+            auto_commit,
+            False,
+            id=f"{importer_class.__name__}-{auto_commit}-batch",
+        )
         for importer_class in (DataImporter, OptimizedDataImporter)
         for auto_commit in (True, False)
+    ]
+    + [
+        pytest.param(
+            DataImporter,
+            auto_commit,
+            True,
+            id=f"DataImporter-{auto_commit}-single",
+        )
+        for auto_commit in (True, False)
     ],
+)
+@pytest.mark.parametrize(
+    ("table_name", "schema_sql"),
+    (
+        pytest.param(
+            "RACE",
+            _race_schema_without_youbi(narrow_record_spec=True),
+            id="ordinary-table",
+        ),
+        pytest.param(
+            "RECORD",
+            _record_schema_without_hondai(narrow_record_spec=True),
+            id="ordered-master",
+        ),
+    ),
 )
 def test_standard_preflight_rejects_before_any_additive_schema_mutation(
     tmp_path,
     importer_class,
     auto_commit: bool,
+    single_record: bool,
+    table_name: str,
+    schema_sql: str,
 ) -> None:
     database = SQLiteDatabase({"path": str(tmp_path / "mixed-schema.db")})
     with database:
-        database.execute(_race_schema_without_youbi(narrow_record_spec=True))
+        database.execute(schema_sql)
+        database.execute(CANONICAL_KEITO_SCHEMA)
         database.commit()
-        before_columns = database.fetch_all("PRAGMA table_info(RACE)")
+        before_columns = database.fetch_all(f'PRAGMA table_info("{table_name}")')
         before_sql = database.fetch_one(
-            "SELECT sql FROM sqlite_master WHERE type='table' AND name='RACE'"
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name=?",
+            (table_name,),
         )
+        before_keito_rows = database.fetch_all("SELECT * FROM KEITO")
 
         with pytest.raises(SchemaMigrationError, match="column capacities"):
-            importer_class(database, use_jravan_schema=True).import_records(
-                iter(()),
-                auto_commit=auto_commit,
-            )
+            importer = importer_class(database, use_jravan_schema=True)
+            if single_record:
+                importer.import_single_record(parsed_record(), auto_commit=auto_commit)
+            else:
+                importer.import_records(iter(()), auto_commit=auto_commit)
 
-        after_columns = database.fetch_all("PRAGMA table_info(RACE)")
+        after_columns = database.fetch_all(f'PRAGMA table_info("{table_name}")')
         after_sql = database.fetch_one(
-            "SELECT sql FROM sqlite_master WHERE type='table' AND name='RACE'"
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name=?",
+            (table_name,),
         )
+        after_keito_rows = database.fetch_all("SELECT * FROM KEITO")
 
     assert after_columns == before_columns
     assert after_sql == before_sql
+    assert after_keito_rows == before_keito_rows
 
 
 @pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
@@ -512,24 +564,31 @@ def test_bt_postgresql_roundtrip_delete_and_narrow_schema_rejection(postgresql_d
     ) == {"hansyoku_num": "12345678", "keito_ex": "preserve"}
 
     postgresql_db.execute("DROP TABLE KEITO")
-    postgresql_db.execute(_race_schema_without_youbi(narrow_record_spec=True))
-    postgresql_db.commit()
     column_query = (
         "SELECT a.attname AS name, format_type(a.atttypid, a.atttypmod) AS type "
         "FROM pg_attribute a WHERE a.attrelid = to_regclass(?) "
         "AND a.attnum > 0 AND NOT a.attisdropped ORDER BY a.attnum"
     )
-    before_columns = postgresql_db.fetch_all(column_query, ("race",))
-
-    for importer_class, auto_commit in (
-        (DataImporter, True),
-        (OptimizedDataImporter, False),
+    for table_name, schema_sql in (
+        ("RACE", _race_schema_without_youbi(narrow_record_spec=True)),
+        ("RECORD", _record_schema_without_hondai(narrow_record_spec=True)),
     ):
-        with pytest.raises(SchemaMigrationError, match="column capacities"):
-            importer_class(postgresql_db, use_jravan_schema=True).import_records(
-                iter(()),
-                auto_commit=auto_commit,
-            )
-        after_columns = postgresql_db.fetch_all(column_query, ("race",))
-        assert after_columns == before_columns
-        postgresql_db.rollback()
+        postgresql_db.execute(schema_sql)
+        postgresql_db.commit()
+        before_columns = postgresql_db.fetch_all(column_query, (table_name.lower(),))
+
+        for importer_class, auto_commit in (
+            (DataImporter, True),
+            (OptimizedDataImporter, False),
+        ):
+            with pytest.raises(SchemaMigrationError, match="column capacities"):
+                importer_class(postgresql_db, use_jravan_schema=True).import_records(
+                    iter(()),
+                    auto_commit=auto_commit,
+                )
+            after_columns = postgresql_db.fetch_all(column_query, (table_name.lower(),))
+            assert after_columns == before_columns
+            postgresql_db.rollback()
+
+        postgresql_db.execute(f"DROP TABLE {table_name}")
+        postgresql_db.commit()

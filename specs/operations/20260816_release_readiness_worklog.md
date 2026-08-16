@@ -1598,8 +1598,8 @@
   numeric capacity (including national/variant spellings), preserves a distinct
   unknown-bounded result instead of treating it as unbounded, and adds an
   `allow_missing_columns` mode used only for read-only preflight. Both importers
-  first validate every existing non-ordered standard table, strict canonical
-  table, coupled child, and known legacy/canonical pair; only after that entire
+  first validate every existing standard table, strict canonical table,
+  coupled child, and known legacy/canonical pair; only after that entire
   phase succeeds can the existing additive migration loop execute.
 - Post-repair grouped SQLite verification completed `33 passed, 1 PostgreSQL
   opt-in skip`; the affected parser/history/mapping/migration/importer/database
@@ -1612,3 +1612,41 @@
   repair, then perform one exact-SHA final gate/review. STOP if any existing
   declared schema becomes a false positive or full-suite/resource handling is
   not clean enough for a repeatable release gate.
+- After rebasing onto prerequisite PR `#197` merge SHA
+  `755cf5a77d54e8a346ca6539b74841272fa5ae0b`, clean candidate
+  `4022f82eeddbf1c968e09fc5ba94cd2c17ce5110` passed the complete local suite
+  (`2,464 passed, 113 skipped, 15 subtests passed`) and disposable PostgreSQL
+  16 BT contract (`34 passed`). Test-gate, fatal lint, compileall, strict
+  MkDocs, and public-document checks also passed, but this candidate was not
+  accepted because the final independent Codex review found one remaining P1.
+- The remaining P1 was an explicit ordered-master preflight exclusion. An
+  existing `RECORD` with its official primary key but a narrow `RecordSpec`
+  and missing additive `Hondai` bypassed preflight; both importers and both
+  commit modes added the missing column, and `import_single_record` could also
+  store BT while retaining the incompatible existing type. This contradicted
+  the documented all-existing-table preflight contract.
+- Red-first evidence on unchanged `4022f82eeddbf1c968e09fc5ba94cd2c17ce5110`
+  extended the existing grouped regression rather than adding a new test per
+  path. The ordinary-table cases remained green while all six ordered-master
+  paths failed their expected rejection (`6 failed, 6 passed, 30 deselected`):
+  DataImporter and OptimizedDataImporter with both commit modes, plus both
+  DataImporter single-record modes.
+- The final aggregate repair now gives ordered masters a read-only existing
+  type/capacity preflight with missing columns allowed. Legacy key mismatches
+  remain non-blocking for unrelated records: additive migration already treats
+  them as a no-op, while the dedicated writer owns the complete field/key and
+  row-order checks when a matching record arrives.
+  Next safe action: rerun the grouped, affected, PostgreSQL, full, packaging,
+  and exact-SHA independent-review gates once. STOP on any ordered-master false
+  positive, schema mutation before rejection, failed gate, or review finding.
+- A first strict-key implementation was rejected before commit because four
+  existing RC/TK contracts correctly require a legacy ordered-master key to
+  remain non-blocking for unrelated imports. The retained preflight therefore
+  allows only that key mismatch while still rejecting incompatible existing
+  types and capacities; the additive migrator independently makes mismatched
+  keys a no-op. This preserves lazy dedicated-writer rejection without startup
+  mutation. The affected RC/YS/TK/migration/BT selection then passed `199
+  passed, 10 skipped`; the complete SQLite BT contract passed `41 passed, 1
+  skipped`; and disposable PostgreSQL 16 passed all `42` BT tests, including
+  ordinary and ordered-master catalog equality after rejection for both
+  importer paths. The disposable database was removed.

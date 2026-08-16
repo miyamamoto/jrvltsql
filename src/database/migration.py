@@ -424,15 +424,19 @@ def verify_table_schema(
     schema_sql: str,
     *,
     allow_missing_columns: bool = False,
+    allow_primary_key_mismatch: bool = False,
 ) -> None:
     """Verify required columns and primary key after migration/creation.
 
     Extra legacy columns are allowed because the default migration policy is
     additive. A primary-key mismatch, a temporal or numeric column where
     lossless text is required, or an insufficient declared text capacity are
-    unsafe. ``allow_missing_columns`` is reserved for a read-only preflight
-    immediately before an additive migration; normal verification still
-    requires every expected column.
+    unsafe. ``allow_missing_columns`` and ``allow_primary_key_mismatch`` are
+    reserved for a read-only preflight immediately before an additive
+    migration; normal verification still requires every expected column and
+    key. The latter permits legacy ordered masters whose additive migrator will
+    refuse to alter a mismatched key and whose dedicated writer verifies the
+    complete schema before storing a matching record.
     """
     targets = _migration_targets(db)
     if targets != (db,):
@@ -442,6 +446,7 @@ def verify_table_schema(
                 table_name,
                 schema_sql,
                 allow_missing_columns=allow_missing_columns,
+                allow_primary_key_mismatch=allow_primary_key_mismatch,
             )
         return
 
@@ -499,7 +504,11 @@ def verify_table_schema(
     problems = []
     if missing_columns and not allow_missing_columns:
         problems.append(f"missing columns={missing_columns}")
-    if expected_pk_lower and existing_pk_lower != expected_pk_lower:
+    if (
+        expected_pk_lower
+        and existing_pk_lower != expected_pk_lower
+        and not allow_primary_key_mismatch
+    ):
         problems.append(f"primary key existing={existing_pk}, expected={expected_pk}")
     if unknown_text_types:
         problems.append(f"unknown column types={unknown_text_types}")

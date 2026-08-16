@@ -177,8 +177,9 @@ class OptimizedDataImporter:
                         schema_sql,
                         commit=commit,
                     )
-                # Ordered masters are verified by their dedicated writers. Their
-                # manual key migrations must not block unrelated imports.
+                # Ordered masters receive a complete field/key check only in
+                # their dedicated writers. Preflight checks existing types and
+                # capacities; a mismatched key makes additive migration a no-op.
                 if standard_name not in _ORDERED_MASTER_STORAGE_TABLES:
                     verify_table_schema(self.database, standard_name, schema_sql)
         for child_table in ("CHOKYO_SEISEKI", "KISYU_SEISEKI"):
