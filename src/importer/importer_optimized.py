@@ -46,6 +46,7 @@ from src.importer.importer import (
     insert_standard_odds_batch,
     insert_standard_vote_batch,
     insert_tk_coupled_batch,
+    preflight_standard_schema_migrations,
     prepare_ch_coupled_rows,
     prepare_ck_coupled_rows,
     prepare_ks_coupled_rows,
@@ -163,7 +164,9 @@ class OptimizedDataImporter:
         from src.database.migration import migrate_table_if_needed, verify_table_schema
         from src.database.schema_jravan import JRAVAN_SCHEMAS
 
-        for native_name in set(self._table_map.values()):
+        native_table_names = set(self._table_map.values())
+        preflight_standard_schema_migrations(self.database, native_table_names)
+        for native_name in native_table_names:
             standard_name = resolve_standard_storage_table_name(native_name)
             schema_sql = JRAVAN_SCHEMAS.get(standard_name)
             if schema_sql and self.database.table_exists(standard_name):

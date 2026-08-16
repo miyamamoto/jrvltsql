@@ -1565,3 +1565,50 @@
   Fable and Codex critical review on its full SHA, aggregate any actionable
   findings, then execute final exact-SHA gates. STOP on any storage mutation
   before schema rejection, review blocker, or PostgreSQL/SQLite divergence.
+- Candidate `af99773de6d5f1e3b7afd7fabf00d3b5b84932a2` was reviewed read-only by
+  Claude Code `2.1.233` with `--model fable`, session
+  `b1064e56-4d66-41af-9e99-130d59de7bf7`. Fable was selected because this
+  iteration modifies a fail-closed schema validator and migration ordering.
+  Claude returned GREEN after independently replaying the original 19 reds,
+  SQLite/PostgreSQL BT storage and deletion, parser boundaries, all declared
+  schemas, and full tests. It reported only the existing SQLite ResourceWarning
+  flake and minor coverage/documentation notes.
+- A separate fresh Codex critical review returned `NEEDS_CHANGES` on the same
+  clean exact SHA with two independently reproduced P1 findings that Claude's
+  table did not cover. First, the eager standard migration loop can ALTER and
+  commit a safely additive column in one table before discovering an
+  incompatible capacity, partial `KEITO`, or legacy-only `BLOOD`. Both
+  importers, both auto-commit modes, and `import_single_record` can therefore
+  fail while leaving unrelated schema mutated. Second, the capacity parser
+  conflates truly unbounded text with bounded spellings it does not recognize;
+  `NVARCHAR(8)`, `NCHAR(8)`, `CHAR VARYING(8)`, and `VARCHAR2(8)` all passed a
+  `VARCHAR(10)` contract. The Codex findings are accepted despite Claude's
+  GREEN because they have concrete false-green and mutation reproductions.
+- The existing grouped regression was extended rather than adding one test per
+  reviewer hypothesis. Red-first execution on the unchanged candidate completed
+  `10 failed, 23 passed, 1 skipped`: four unrecognized bounded spellings did not
+  raise; both importers in both auto-commit modes added `RACE.YoubiCD` before
+  rejecting an existing narrow `RecordSpec`; and both importers altered that
+  unrelated `RACE` before rejecting legacy-only `BLOOD`. Existing positive
+  cases, original BT behavior, and exact/unbounded text remained green. The
+  aggregate repair must distinguish bounded/unbounded declarations and perform
+  a read-only compatibility/legacy preflight across all existing standard
+  tables before the first additive ALTER.
+- The aggregated repair now parses any declared lossless-text type with a
+  numeric capacity (including national/variant spellings), preserves a distinct
+  unknown-bounded result instead of treating it as unbounded, and adds an
+  `allow_missing_columns` mode used only for read-only preflight. Both importers
+  first validate every existing non-ordered standard table, strict canonical
+  table, coupled child, and known legacy/canonical pair; only after that entire
+  phase succeeds can the existing additive migration loop execute.
+- Post-repair grouped SQLite verification completed `33 passed, 1 PostgreSQL
+  opt-in skip`; the affected parser/history/mapping/migration/importer/database
+  selection completed `319 passed, 2 skipped`. A fresh disposable PostgreSQL
+  16 run completed the expanded contract `34 passed`, now including catalog
+  equality before/after mixed missing-column plus incompatible-capacity failure
+  for DataImporter auto-commit and OptimizedDataImporter caller-owned
+  transaction paths. The PostgreSQL schema and container were removed. Next
+  safe action: run mechanical checks, commit this single aggregated review
+  repair, then perform one exact-SHA final gate/review. STOP if any existing
+  declared schema becomes a false positive or full-suite/resource handling is
+  not clean enough for a repeatable release gate.

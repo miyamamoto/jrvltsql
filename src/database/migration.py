@@ -224,13 +224,12 @@ def _definition_type(column_definition: str) -> str:
 
 
 def _bounded_text_capacity(declared_type: str) -> Optional[int]:
-    """Return a declared CHAR/VARCHAR limit, or None for unbounded text."""
+    """Return a declared text limit, None if unbounded, or -1 if unknown."""
     normalized = re.sub(r"\s+", " ", declared_type.strip().upper())
-    match = re.fullmatch(
-        r"(?:CHAR|CHARACTER|VARCHAR|CHARACTER VARYING)\s*\(\s*(\d+)\s*\)",
-        normalized,
-    )
-    return int(match.group(1)) if match else None
+    if not _is_lossless_text_type(normalized) or "(" not in normalized:
+        return None
+    match = re.search(r"\(\s*(\d+)(?:\s+(?:BYTE|CHAR))?\s*\)\s*$", normalized)
+    return int(match.group(1)) if match else -1
 
 
 def _get_existing_column_types(db: BaseDatabase, table_name: str) -> Dict[str, str]:
@@ -419,18 +418,31 @@ def migrate_all_tables(db: BaseDatabase, schemas: Dict[str, str]) -> int:
     return migrated
 
 
-def verify_table_schema(db: BaseDatabase, table_name: str, schema_sql: str) -> None:
+def verify_table_schema(
+    db: BaseDatabase,
+    table_name: str,
+    schema_sql: str,
+    *,
+    allow_missing_columns: bool = False,
+) -> None:
     """Verify required columns and primary key after migration/creation.
 
     Extra legacy columns are allowed because the default migration policy is
-    additive. Missing required columns, a primary-key mismatch, or a temporal
-    or numeric column where lossless text is required are unsafe: imports must
-    stop instead of writing records against an obsolete layout.
+    additive. A primary-key mismatch, a temporal or numeric column where
+    lossless text is required, or an insufficient declared text capacity are
+    unsafe. ``allow_missing_columns`` is reserved for a read-only preflight
+    immediately before an additive migration; normal verification still
+    requires every expected column.
     """
     targets = _migration_targets(db)
     if targets != (db,):
         for target in targets:
-            verify_table_schema(target, table_name, schema_sql)
+            verify_table_schema(
+                target,
+                table_name,
+                schema_sql,
+                allow_missing_columns=allow_missing_columns,
+            )
         return
 
     if not db.table_exists_strict(table_name):
@@ -485,7 +497,7 @@ def verify_table_schema(db: BaseDatabase, table_name: str, schema_sql: str) -> N
     )
 
     problems = []
-    if missing_columns:
+    if missing_columns and not allow_missing_columns:
         problems.append(f"missing columns={missing_columns}")
     if expected_pk_lower and existing_pk_lower != expected_pk_lower:
         problems.append(f"primary key existing={existing_pk}, expected={expected_pk}")

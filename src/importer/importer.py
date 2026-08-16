@@ -197,9 +197,15 @@ _TK_ROWS_KEY = "_tk_registered_horse_rows"
 _HY_STORAGE_TABLES = frozenset({"NL_HY", "BAMEIORIGIN"})
 _BT_STORAGE_TABLES = frozenset({"NL_BT", "KEITO"})
 _STRICT_NONADDITIVE_STANDARD_TABLES = frozenset({"KEITO"})
-_ORDERED_MASTER_STORAGE_TABLES = (
-    _RC_STORAGE_TABLES | _YS_STORAGE_TABLES | _TK_CHILD_STORAGE_TABLES
+_LEGACY_STANDARD_PREFLIGHT_NATIVE_TABLES = (
+    "NL_BT",
+    "NL_SK",
+    "NL_BR",
+    "NL_HY",
+    "NL_DM",
+    "NL_TM",
 )
+_ORDERED_MASTER_STORAGE_TABLES = _RC_STORAGE_TABLES | _YS_STORAGE_TABLES | _TK_CHILD_STORAGE_TABLES
 
 
 def verify_bt_storage_schema(database: BaseDatabase, table_name: str) -> bool:
@@ -216,6 +222,45 @@ def verify_bt_storage_schema(database: BaseDatabase, table_name: str) -> bool:
         raise SchemaMigrationError(f"BT storage schema is undefined: {table_name}")
     verify_table_schema(database, table_name, schema_sql)
     return True
+
+
+def preflight_standard_schema_migrations(
+    database: BaseDatabase,
+    native_table_names: set[str],
+) -> None:
+    """Reject every known incompatibility before the first additive ALTER."""
+    from src.database.migration import verify_table_schema
+    from src.database.schema_jravan import JRAVAN_SCHEMAS
+
+    # Alias-only layouts are not reconstructable. Resolve all known pairs before
+    # touching an unrelated table so a later record cannot expose a partial
+    # startup migration.
+    for native_name in _LEGACY_STANDARD_PREFLIGHT_NATIVE_TABLES:
+        resolve_standard_table_name(database, native_name)
+
+    for native_name in native_table_names:
+        standard_name = resolve_standard_storage_table_name(native_name)
+        schema_sql = JRAVAN_SCHEMAS.get(standard_name)
+        if not schema_sql or not database.table_exists(standard_name):
+            continue
+        if standard_name in _ORDERED_MASTER_STORAGE_TABLES:
+            continue
+        verify_table_schema(
+            database,
+            standard_name,
+            schema_sql,
+            allow_missing_columns=(standard_name not in _STRICT_NONADDITIVE_STANDARD_TABLES),
+        )
+
+    for child_table in ("CHOKYO_SEISEKI", "KISYU_SEISEKI"):
+        child_schema = JRAVAN_SCHEMAS.get(child_table)
+        if child_schema and database.table_exists(child_table):
+            verify_table_schema(
+                database,
+                child_table,
+                child_schema,
+                allow_missing_columns=True,
+            )
 
 
 def verify_hy_storage_schema(database: BaseDatabase, table_name: str) -> bool:
@@ -3397,7 +3442,9 @@ class DataImporter:
         from src.database.migration import migrate_table_if_needed, verify_table_schema
         from src.database.schema_jravan import JRAVAN_SCHEMAS
 
-        for table_name in set(self._table_map.values()):
+        native_table_names = set(self._table_map.values())
+        preflight_standard_schema_migrations(self.database, native_table_names)
+        for table_name in native_table_names:
             standard_name = self._get_table_name_for_native(table_name)
             schema_sql = JRAVAN_SCHEMAS.get(standard_name)
             if schema_sql and self.database.table_exists(standard_name):

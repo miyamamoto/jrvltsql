@@ -76,6 +76,19 @@ def parsed_record(**kwargs) -> dict:
     return BTParser().parse(build_record(**kwargs))
 
 
+def _race_schema_without_youbi(*, narrow_record_spec: bool = False) -> str:
+    schema = JRAVAN_SCHEMAS["RACE"].replace(
+        "            YoubiCD                        VARCHAR(1)          ,  -- 文字列(1)\n",
+        "",
+    )
+    if narrow_record_spec:
+        schema = schema.replace(
+            "            RecordSpec                     CHAR(2)             ,",
+            "            RecordSpec                     CHAR(1)             ,",
+        )
+    return schema
+
+
 @pytest.fixture
 def postgresql_db():
     if os.getenv("JLTSQL_RUN_POSTGRESQL_INTEGRATION") != "1":
@@ -125,6 +138,10 @@ def test_bt_standard_mapping_and_schema_are_complete() -> None:
     assert JLTSQL_TO_JRAVAN["NL_BT"] == "KEITO"
     assert set(get_table_column_types("KEITO")) == BUSINESS_FIELDS
     assert get_table_primary_key_columns("KEITO") == ["HansyokuNum"]
+    database = SQLiteDatabase({"path": ":memory:"})
+    with database:
+        database.execute(JRAVAN_SCHEMAS["KEITO"])
+        verify_table_schema(database, "KEITO", CANONICAL_KEITO_SCHEMA)
 
 
 @pytest.mark.parametrize(
@@ -286,6 +303,7 @@ def test_bt_partial_keyless_keito_is_refused_without_schema_or_row_mutation(
 ) -> None:
     database = SQLiteDatabase({"path": str(tmp_path / "partial-keito.db")})
     with database:
+        database.execute(_race_schema_without_youbi())
         database.execute(
             "CREATE TABLE KEITO (RecordSpec TEXT, DataKubun TEXT, MakeDate TEXT, "
             "KeitoId TEXT, KeitoName TEXT)"
@@ -296,14 +314,17 @@ def test_bt_partial_keyless_keito_is_refused_without_schema_or_row_mutation(
         )
         database.commit()
         before_columns = database.fetch_all("PRAGMA table_info(KEITO)")
+        before_race_columns = database.fetch_all("PRAGMA table_info(RACE)")
 
         with pytest.raises(SchemaMigrationError, match="Schema verification failed"):
             importer_class(database, use_jravan_schema=True).import_records(iter([parsed_record()]))
 
         after_columns = database.fetch_all("PRAGMA table_info(KEITO)")
+        after_race_columns = database.fetch_all("PRAGMA table_info(RACE)")
         rows = database.fetch_all("SELECT * FROM KEITO")
 
     assert after_columns == before_columns
+    assert after_race_columns == before_race_columns
     assert rows == [
         {
             "RecordSpec": "BT",
@@ -315,21 +336,44 @@ def test_bt_partial_keyless_keito_is_refused_without_schema_or_row_mutation(
     ]
 
 
-def test_schema_verifier_rejects_narrow_bt_text_columns() -> None:
+@pytest.mark.parametrize(
+    ("column_definitions", "narrow_columns"),
+    (
+        pytest.param(
+            "RecordSpec CHAR(1), DataKubun CHAR(1), MakeDate DATE, "
+            "HansyokuNum VARCHAR(8), KeitoId VARCHAR(29), KeitoName VARCHAR(35), "
+            "KeitoEx VARCHAR(6799)",
+            ("RecordSpec", "HansyokuNum", "KeitoId", "KeitoName", "KeitoEx"),
+            id="standard-spellings",
+        ),
+        *(
+            pytest.param(
+                "RecordSpec CHAR(2), DataKubun CHAR(1), MakeDate DATE, "
+                f"HansyokuNum {declared_type}, KeitoId VARCHAR(30), "
+                "KeitoName VARCHAR(36), KeitoEx VARCHAR(6800)",
+                ("HansyokuNum",),
+                id=declared_type.lower().replace(" ", "-"),
+            )
+            for declared_type in (
+                "NVARCHAR(8)",
+                "NCHAR(8)",
+                "CHAR VARYING(8)",
+                "VARCHAR2(8)",
+            )
+        ),
+    ),
+)
+def test_schema_verifier_rejects_narrow_bt_text_columns(
+    column_definitions: str,
+    narrow_columns: tuple[str, ...],
+) -> None:
     database = SQLiteDatabase({"path": ":memory:"})
     with database:
-        database.execute(
-            "CREATE TABLE KEITO (RecordSpec CHAR(1), DataKubun CHAR(1), MakeDate DATE, "
-            "HansyokuNum VARCHAR(8), KeitoId VARCHAR(29), KeitoName VARCHAR(35), "
-            "KeitoEx VARCHAR(6799), PRIMARY KEY (HansyokuNum))"
-        )
+        database.execute(f"CREATE TABLE KEITO ({column_definitions}, PRIMARY KEY (HansyokuNum))")
         with pytest.raises(SchemaMigrationError, match="column capacities") as error:
             verify_table_schema(database, "KEITO", CANONICAL_KEITO_SCHEMA)
 
-    assert all(
-        name.lower() in str(error.value).lower()
-        for name in ("RecordSpec", "HansyokuNum", "KeitoId", "KeitoName", "KeitoEx")
-    )
+    assert all(name.lower() in str(error.value).lower() for name in narrow_columns)
 
 
 def test_schema_verifier_accepts_exact_or_unbounded_bt_text_columns() -> None:
@@ -343,6 +387,43 @@ def test_schema_verifier_accepts_exact_or_unbounded_bt_text_columns() -> None:
         verify_table_schema(database, "KEITO", CANONICAL_KEITO_SCHEMA)
 
 
+@pytest.mark.parametrize(
+    ("importer_class", "auto_commit"),
+    [
+        pytest.param(importer_class, auto_commit, id=f"{importer_class.__name__}-{auto_commit}")
+        for importer_class in (DataImporter, OptimizedDataImporter)
+        for auto_commit in (True, False)
+    ],
+)
+def test_standard_preflight_rejects_before_any_additive_schema_mutation(
+    tmp_path,
+    importer_class,
+    auto_commit: bool,
+) -> None:
+    database = SQLiteDatabase({"path": str(tmp_path / "mixed-schema.db")})
+    with database:
+        database.execute(_race_schema_without_youbi(narrow_record_spec=True))
+        database.commit()
+        before_columns = database.fetch_all("PRAGMA table_info(RACE)")
+        before_sql = database.fetch_one(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='RACE'"
+        )
+
+        with pytest.raises(SchemaMigrationError, match="column capacities"):
+            importer_class(database, use_jravan_schema=True).import_records(
+                iter(()),
+                auto_commit=auto_commit,
+            )
+
+        after_columns = database.fetch_all("PRAGMA table_info(RACE)")
+        after_sql = database.fetch_one(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='RACE'"
+        )
+
+    assert after_columns == before_columns
+    assert after_sql == before_sql
+
+
 @pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
 def test_bt_legacy_blood_only_storage_is_refused_without_row_loss(
     tmp_path,
@@ -350,12 +431,14 @@ def test_bt_legacy_blood_only_storage_is_refused_without_row_loss(
 ) -> None:
     database = SQLiteDatabase({"path": str(tmp_path / "legacy-blood.db")})
     with database:
+        database.execute(_race_schema_without_youbi())
         database.execute(CANONICAL_KEITO_SCHEMA.replace("KEITO", "BLOOD"))
         database.execute(
             "INSERT INTO BLOOD VALUES (?, ?, ?, ?, ?, ?, ?)",
             ("BT", "1", "20000101", "12345678", "legacy-id", "legacy", "preserve"),
         )
         database.commit()
+        before_race_columns = database.fetch_all("PRAGMA table_info(RACE)")
 
         with pytest.raises(
             SchemaMigrationError,
@@ -363,8 +446,10 @@ def test_bt_legacy_blood_only_storage_is_refused_without_row_loss(
         ):
             importer_class(database, use_jravan_schema=True).import_records(iter([parsed_record()]))
         rows = database.fetch_all("SELECT HansyokuNum, KeitoEx FROM BLOOD")
+        after_race_columns = database.fetch_all("PRAGMA table_info(RACE)")
 
     assert rows == [{"HansyokuNum": "12345678", "KeitoEx": "preserve"}]
+    assert after_race_columns == before_race_columns
 
 
 def test_bt_postgresql_roundtrip_delete_and_narrow_schema_rejection(postgresql_db) -> None:
@@ -425,3 +510,26 @@ def test_bt_postgresql_roundtrip_delete_and_narrow_schema_rejection(postgresql_d
             "SELECT HansyokuNum AS hansyoku_num, KeitoEx AS keito_ex FROM KEITO"
         )
     ) == {"hansyoku_num": "12345678", "keito_ex": "preserve"}
+
+    postgresql_db.execute("DROP TABLE KEITO")
+    postgresql_db.execute(_race_schema_without_youbi(narrow_record_spec=True))
+    postgresql_db.commit()
+    column_query = (
+        "SELECT a.attname AS name, format_type(a.atttypid, a.atttypmod) AS type "
+        "FROM pg_attribute a WHERE a.attrelid = to_regclass(?) "
+        "AND a.attnum > 0 AND NOT a.attisdropped ORDER BY a.attnum"
+    )
+    before_columns = postgresql_db.fetch_all(column_query, ("race",))
+
+    for importer_class, auto_commit in (
+        (DataImporter, True),
+        (OptimizedDataImporter, False),
+    ):
+        with pytest.raises(SchemaMigrationError, match="column capacities"):
+            importer_class(postgresql_db, use_jravan_schema=True).import_records(
+                iter(()),
+                auto_commit=auto_commit,
+            )
+        after_columns = postgresql_db.fetch_all(column_query, ("race",))
+        assert after_columns == before_columns
+        postgresql_db.rollback()
