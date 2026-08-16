@@ -24,7 +24,8 @@
 - Release at start: `v1.6.10` at
   `dbb299a756e01bad4c79efd76d934c64f3d8af69`; project version `1.6.10`.
 - Planned next patch version: `1.6.11`, subject to all gates below.
-- Reviewer: Codex. No Claude session is used.
+- Reviewers: Codex plus one independent read-only Claude Code critical review
+  documented below.
 
 ## Required gates
 
@@ -110,9 +111,9 @@
   pre-JRA-only backup and an obsolete E2E script remained; the installer banner
   retained a removed product name; one historical H6 length was wrong; the
   package Documentation URL was invalid; and the v1.4.1 link had no matching
-  changelog section. All are repaired in the unpublished candidate. Stale test
+  changelog section. All are repaired in PR #191. Stale test
   install/count documentation had already been replaced while the review ran.
-- The two missed launchers received their own red-first replay on unpublished
+- The two missed launchers received their own red-first replay on intermediate
   commit `175cde9691d7d261218cd43440554c45664acdb8`: the retained regression
   failed because `fetch_timeseries_postgres.bat` lacked the validated
   interpreter branch. The same regression is included in the aggregate
@@ -133,6 +134,16 @@
   master only in `src/database/schema_metadata.py`; its one residual useful
   change is independently implemented here with the fourteen-slot regression
   test. Neither stale head is safe to merge.
+- Split the public-contract/SDK/packaging iteration into branch
+  `agent/sdk-docs-audit-20260816` and opened PR #191. Its pre-worklog-update
+  candidate `717c09138f5e502c9d9d649e6a66242618f19eb6` was verified from a clean
+  exact-SHA worktree: 115 focused tests passed with 4 environment-specific
+  skips; strict MkDocs passed; sdist and wheel built; both generated artifacts
+  passed the distribution-content checker; fatal flake8 checks reported zero
+  findings; `git diff --check` was clean; and generated-archive plus tracked
+  Markdown privacy/path scans passed. The final candidate SHA is recorded in
+  PR metadata after this worklog update rather than by a self-referential
+  follow-up commit.
 
 ## Audit iteration: fixed-record envelope
 
@@ -165,10 +176,11 @@
 
 ## Next safe action
 
-- Split the aggregate worktree into two logical commits/PRs: public
-  SDK/documentation/metadata first, then fixed-record envelope validation.
-  Run proportional tests, strict docs, disclosure and distribution checks on
-  each exact candidate SHA. Merge each only with green checks, aggregated
-  review findings, unresolved threads zero, and a clean worktree. Then remove
-  the obsolete realtime route in a third focused iteration. Stop before version
-  changes or authenticated acquisition until all audit iterations are merged.
+- Complete PR #191 at its final exact SHA with proportional local tests, strict
+  docs, disclosure/distribution checks, aggregated review findings, unresolved
+  threads zero, green applicable checks, and a clean worktree. Merge it before
+  rebasing the fixed-record envelope iteration onto the resulting
+  `origin/master`. Then repair the fail-open real-data E2E harness and remove
+  the obsolete realtime route as separate red-first iterations. Stop before
+  version changes or authenticated acquisition until all audit iterations are
+  merged.
