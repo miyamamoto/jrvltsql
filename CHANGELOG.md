@@ -9,16 +9,17 @@
 
 ### Changed
 
-- JV-Link SDK 5.0.0 の公式 64-bit 版に対応し、インストーラ、quickstart、
-  日次同期、時系列取得を Python 3.12 の 32-bit / 64-bit 両方から起動可能に変更。
-  Python と JV-Link の bit 数は一致させ、既存の 32-bit 構成も継続利用可能
+- JV-Link SDK 5.0.0 で公式 64-bit 版が追加されたことを文書へ反映。ただし
+  jrvltsql の 64-bit 実行経路は未検証であり、x64 SDK の実導入・取得・parse・
+  DB保存を完了するまでは対応済みとしない。インストーラとランチャーは、
+  リリース検証済みの 32-bit Python / JV-Link 経路を既定として維持
 - Python の実行要件を `pyproject.toml` と一致する 3.12 以上へ統一
 - 公式 64-bit 版と競合し得る旧レジストリ回避ツールを削除
 
 ### Fixed
 
-- JV-Link COM class 未登録時に「64-bit は非対応」と誤案内していた診断を修正し、
-  実行中 Python と同じ bit 数の JV-Link を案内
+- JV-Link COM class 未登録時の診断を、公式SDKが提供する同じbit数のJV-Linkと、
+  jrvltsqlでリリース検証済みの32-bit経路を区別する案内へ修正
 - `NL_SK` の公開メタデータに欠けていた曽祖父母8頭の繁殖登録番号を追加し、
   parser が保持する3代14頭分の血統番号と一致
 
@@ -195,6 +196,13 @@
 - `quickstart_postgres_timeseries.bat` 完了時に Windows タスクスケジューラ登録を確認するよう変更
 - `install_tasks.ps1` で `daily_sync.bat` の DB 種別・日付窓・PostgreSQL 環境変数永続化を指定可能に変更
 
+## [1.4.1] - 2026-06-08
+
+### Fixed
+
+- Windowsタスクからの日次同期で実行場所を正しく復元し、非対話更新の失敗を
+  呼び出し元へ返すように修正
+
 ## [1.4.0] - 2026-05-03
 
 ### Added
@@ -285,7 +293,7 @@
 ### Added
 - ワンコマンドインストーラー (`install.ps1`) — `irm ... | iex` で一発セットアップ
 - 自動アップデート機能 (`jltsql update`, `jltsql version --check`)
-- H1/H6パーサーのフルストラクト対応（28,955 / 102,900バイト）
+- H1/H6パーサーのフルストラクト対応（28,955 / 102,890バイト）
 - quickstart.bat で JRA-VAN 契約ページの自動オープン
 - テストカバレッジ大幅拡充（1,247件: 1,239 pass, 8 skip）
 - JRA実データテストフィクスチャ（27パーサー, 81レコード）

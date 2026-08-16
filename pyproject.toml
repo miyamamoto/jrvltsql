@@ -52,7 +52,7 @@ jltsql = "src.cli.main:cli"
 
 [project.urls]
 Homepage = "https://github.com/miyamamoto/jrvltsql"
-Documentation = "https://github.com/miyamamoto/jrvltsql/docs"
+Documentation = "https://miyamamoto.github.io/jrvltsql/"
 Repository = "https://github.com/miyamamoto/jrvltsql"
 Issues = "https://github.com/miyamamoto/jrvltsql/issues"
 

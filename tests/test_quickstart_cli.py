@@ -261,33 +261,35 @@ class TestQuickstartFailureAggregation:
 class TestQuickstartBatchRoles:
     """Test Windows batch role separation."""
 
-    def test_launchers_prefer_python_312_without_forcing_one_bitness(self):
+    def test_launchers_prefer_release_validated_32bit_python(self):
         root = Path(__file__).resolve().parents[1]
         launchers = [
             root / "quickstart.bat",
             root / "quickstart_timeseries.bat",
             root / "quickstart_postgres_timeseries.bat",
             root / "daily_sync.bat",
+            root / "fetch_timeseries_postgres.bat",
+            root / "scripts/quickstart.bat",
         ]
 
         for launcher in launchers:
             text = launcher.read_text(encoding="utf-8")
             assert "py -3.12 --version" in text, launcher.name
             assert "py -3.12-32 --version" in text, launcher.name
-            assert text.index("py -3.12 --version") < text.index(
-                "py -3.12-32 --version"
+            assert text.index("py -3.12-32 --version") < text.index(
+                "py -3.12 --version"
             ), launcher.name
             assert "64-bit Python may not support JV-Link" not in text
             assert "Python 3.10+" not in text
 
-    def test_installers_accept_matching_32_or_64_bit_python(self):
+    def test_installers_default_to_release_validated_32bit_python(self):
         root = Path(__file__).resolve().parents[1]
         batch = (root / "install.bat").read_text(encoding="utf-8")
         powershell = (root / "install.ps1").read_text(encoding="utf-8")
 
         assert "Checking Python 3.12" in batch
-        assert batch.index("py -3.12 --version") < batch.index(
-            "py -3.12-32 --version"
+        assert batch.index("py -3.12-32 --version") < batch.index(
+            "py -3.12 --version"
         )
         assert "Checking 32-bit Python" not in batch
         assert "32-bit Python 3.12 not found" not in batch
@@ -295,6 +297,39 @@ class TestQuickstartBatchRoles:
         assert "Checking Python $PYTHON_VERSION" in powershell
         assert "Checking 32-bit Python" not in powershell
         assert "32-bit Python $PYTHON_VERSION not found" not in powershell
+
+    def test_public_docs_do_not_claim_unverified_x64_support(self):
+        root = Path(__file__).resolve().parents[1]
+        public_sources = [
+            root / "README.md",
+            root / "CHANGELOG.md",
+            root / "docs/getting_started.md",
+            root / "docs/architecture.md",
+            root / "src/cli/main.py",
+            root / "src/fetcher/base.py",
+            root / "src/jvlink/bridge.py",
+        ]
+
+        combined = "\n".join(path.read_text(encoding="utf-8") for path in public_sources)
+        assert "64-bit JV-Link対応" not in combined
+        assert "公式 64-bit 版に対応" not in combined
+        assert "64-bit 両方から起動可能" not in combined
+        assert "Works with 64-bit Python" not in combined
+        assert "Eliminates 32-bit Python requirement" not in combined
+        assert "64-bit 実行経路は未検証" in combined
+
+    def test_test_documentation_matches_current_jra_release_workflow(self):
+        root = Path(__file__).resolve().parents[1]
+        overview = (root / "tests/README.md").read_text(encoding="utf-8")
+        strategy = (root / "tests/TEST_STRATEGY.md").read_text(encoding="utf-8")
+        integration = (root / "tests/integration/README.md").read_text(encoding="utf-8")
+
+        assert "requirements-dev.txt" not in overview
+        assert "415 passed" not in overview
+        assert "e2e_nar_smoke.py" not in strategy
+        assert "test_nar_502_recovery.py" not in strategy
+        assert "JLTSQL_RUN_REAL_INTEGRATION=1" in integration
+        assert "JVLINK_SERVICE_KEY" not in integration
 
     def test_quickstart_does_not_chain_postgresql_timeseries(self):
         batch = Path(__file__).resolve().parents[1] / "quickstart.bat"

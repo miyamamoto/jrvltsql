@@ -1,352 +1,85 @@
-# JRVLTSQL Test Suite
+# JRVLTSQL test suite
 
-## Overview
+The repository separates deterministic local tests from authenticated JV-Link
+tests. A green local suite is necessary but does not prove that a release can
+acquire and store current provider data.
 
-Comprehensive test suite for the JRVLTSQL project covering all parsers, database operations, and end-to-end workflows.
+## Setup
 
-The suite covers parser contracts, database operations, transactions, type
-conversions, error handling, and Windows execution-path configuration.
-
-## Running Tests
-
-### Prerequisites
-
-- Python 3.12+
-- pytest and dependencies installed:
-  ```bash
-  pip install -r requirements-dev.txt
-  ```
-
-### Run All Tests
+Python 3.12 or later is required.
 
 ```bash
-python -m pytest tests/ -v
+uv sync --python 3.12 --all-extras
 ```
 
-### Run Specific Test Files
+Without `uv`, install the project extras directly:
 
 ```bash
-# Parser unit tests only
-python -m pytest tests/test_parsers.py -v
-
-# Integration tests only
-python -m pytest tests/test_integration.py -v
+python -m pip install -e ".[dev,postgres]"
 ```
 
-### Run Specific Test Classes or Methods
+## Local tests
+
+Run the full local suite outside the authenticated Windows-only directories:
 
 ```bash
-# Run specific test class
-python -m pytest tests/test_parsers.py::TestIndividualParsers -v
-
-# Run tests matching a pattern (e.g., all RA parser tests)
-python -m pytest tests/test_parsers.py -k "RA" -v
-
-# Run a specific integration test
-python -m pytest tests/test_integration.py::TestIntegration::test_parse_and_import_ra_record -v
+python -m pytest tests/ -q \
+  --ignore=tests/integration/ \
+  --ignore=tests/e2e/ \
+  --basetemp=.pytest-tmp-local
 ```
 
-### Run with Coverage Report
+Useful focused selections:
 
 ```bash
-python -m pytest tests/ --cov=src --cov-report=html --cov-report=term
+python -m pytest tests/test_current_record_validation.py -q --no-cov
+python -m pytest tests/test_integration.py -q --no-cov
+python -m pytest tests/test_retired_data_specs.py tests/test_realtime.py -q --no-cov
 ```
 
-Coverage report will be generated in `htmlcov/index.html`.
+`test_current_record_validation.py` checks every current record ID at the
+physical envelope: exact supported length, record ID, strict CP932, and CRLF.
+Record-specific tests separately check offsets, repeated arrays, schema,
+upsert/delete behavior, and SQLite/PostgreSQL storage.
 
-## Test Categories
+The GitHub Actions selection is defined in `.github/workflows/test.yml`. Do not
+copy a fixed test count into documentation; the suite changes with each
+official-contract repair.
 
-### 1. Parser Unit Tests (test_parsers.py)
+## Authenticated tests
 
-Parser tests cover the supported JRA-VAN record contracts with consistent validation.
+`tests/integration/test_jvlink_real.py` performs a real fetch, parse, SQLite
+import, and readback. It is skipped unless explicitly enabled on an authorized
+JV-Link host:
 
-#### Test Coverage per Parser
-
-Each supported parser is tested for:
-
-1. **Basic Functionality** (3 tests per parser)
-   - Parser instance creation
-   - `RECORD_TYPE` / `record_type` attribute validation
-   - `RECORD_LENGTH` attribute validation (where applicable)
-
-2. **Parsing Operations** (3 tests per parser)
-   - `parse()` method existence and invocability
-   - Successful parsing with sample data
-   - Common field validation (RecordSpec, DataKubun, MakeDate)
-
-3. **Data Integrity** (1 test per parser)
-   - RecordSpec value accuracy in parsed output
-
-4. **Error Handling** (3 tests per parser)
-   - Empty data handling
-   - Short/truncated data handling
-   - Wrong record type handling
-
-#### Test Classes
-
-1. **TestParserFactory** (5 tests)
-   - Factory initialization
-   - Supported types enumeration (38 parsers)
-   - Invalid record type handling
-   - Empty/None type handling
-
-2. **TestIndividualParsers** (342 tests = 38 parsers × 9 tests)
-   - Parametrized tests for all parser types
-   - Consistent interface validation
-   - Sample data parsing
-
-3. **TestParserFactoryParseMethod** (4 tests)
-   - Factory-level parse method
-   - Valid/invalid record handling via factory
-
-4. **TestParserCaching** (2 tests)
-   - Parser instance caching behavior
-   - Parser independence verification
-
-5. **TestParserFieldExtraction** (2 tests)
-   - Detailed field extraction for RA parser
-   - Detailed field extraction for SE parser
-
-6. **TestParserEncodingHandling** (1 test)
-   - CP932 encoding validation
-   - Japanese character handling
-
-7. **TestParserRobustness** (8 tests)
-   - Exact-length data processing
-   - Over-length data handling
-
-8. **TestAllParsersComprehensive** (2 tests)
-   - Verification all 38 parsers load correctly
-   - Interface consistency across all parsers
-
-#### Supported Parser Types (38 total)
-
-```
-AV, BN, BR, BT, CC, CH, CK, CS, DM,
-H1, H6, HC, HN, HR, HS, HY,
-JC, JG, KS,
-O1, O2, O3, O4, O5, O6,
-RA, RC, SE, SK, TC, TK, TM,
-UM, WC, WE, WF, WH, YS
+```cmd
+set JLTSQL_RUN_REAL_INTEGRATION=1
+py -3.12-32 -m pytest tests\integration\test_jvlink_real.py -v -s --no-cov
 ```
 
-### 2. Integration Tests (test_integration.py)
+The currently release-validated runtime path is 32-bit Python with 32-bit
+JV-Link. The x64 path must not be reported as supported until an actual x64 SDK
+installation completes the same acquisition and storage workflow.
 
-**11 comprehensive integration tests** validating complete workflows from parsing through database operations.
+Standalone Windows E2E scripts are documented in `tests/e2e/README.md`.
+Release evidence must use the exact release candidate full SHA, acquire at
+least one new provider record, store it through the candidate code, read it
+back, and close the JV-Link session cleanly. A mock, reconstructed fixture,
+cached replay, or an older SHA is not a substitute.
 
-#### Test Coverage
+## Test-writing rules
 
-1. **test_create_all_tables**
-   - Creates all defined database tables
-   - Verifies table existence and column structure
-   - Tests idempotent table creation
-
-2. **test_table_column_counts**
-   - Validates expected column counts for major tables
-   - Verifies schema integrity
-
-3. **test_parse_and_import_ra_record**
-   - RA (race details) record parsing
-   - Database import verification
-   - Data retrieval and validation
-
-4. **test_parse_and_import_se_record**
-   - SE (horse race result) record parsing
-   - Type conversion validation
-   - Japanese text handling
-
-5. **test_duplicate_handling_with_replace**
-   - INSERT OR REPLACE behavior validation
-   - Duplicate key handling
-   - Update vs insert verification
-
-6. **test_batch_import_with_transactions**
-   - Batch processing (50 records)
-   - Transaction handling
-   - Import statistics tracking
-
-7. **test_mixed_record_types_batch_import**
-   - Multiple record types in single batch (RA, SE, HR)
-   - Cross-table transaction processing
-   - Record routing to correct tables
-
-8. **test_type_conversion_integration**
-   - INTEGER field conversion
-   - REAL field conversion (including /10 for odds/weights)
-   - TEXT field preservation
-   - NULL handling
-
-9. **test_transaction_rollback_on_error**
-   - Batch failure fallback to individual inserts
-   - Failed record tracking
-   - Partial batch success handling
-
-10. **test_primary_key_enforcement**
-    - Primary key constraint validation
-    - REPLACE behavior on constraint violation
-
-11. **test_end_to_end_workflow**
-    - Complete workflow: parse → import → query
-    - Multi-record type handling
-    - Data integrity verification
-
-## Test Data
-
-### Parser Unit Tests
-
-Sample data structure for each record type:
-
-```python
-# RecordSpec (2 bytes) + DataKubun (1 byte) + MakeDate (8 bytes) + padding
-data = record_type.encode('cp932')  # e.g., "RA", "SE"
-data += b'1'                             # DataKubun
-data += b'20240601'                      # MakeDate
-data += b' ' * (RECORD_LENGTH - 11)      # Padding to full length
-```
-
-### Integration Tests
-
-Realistic test records with:
-- Complete required fields
-- Japanese text (UTF-8 encoded)
-- Various numeric types for conversion testing
-- Primary key combinations for duplicate testing
-
-## Coverage Statistics
-
-### Overall Coverage
-
-Run `python -m pytest tests/ --cov=src --cov-report=term` to see current coverage.
-
-### Key Module Coverage
-
-- **src/parser/**: Parser implementations and factory
-- **src/database/**: Database operations, schema management
-- **src/importer/**: Data import and type conversion logic
-- **src/converters/**: Type conversion utilities
-
-## Continuous Integration
-
-These tests are designed to run in CI/CD pipelines:
-
-```yaml
-# Example GitHub Actions workflow
-- name: Run test suite
-  run: |
-    pip install -r requirements-dev.txt
-    pytest tests/ -v --tb=short --cov=src --cov-report=xml
-
-- name: Upload coverage
-  uses: codecov/codecov-action@v3
-  with:
-    file: ./coverage.xml
-```
-
-## Troubleshooting
-
-### pytest Not Found
-
-```bash
-pip install pytest pytest-cov pytest-mock
-```
-
-### Import Errors
-
-Ensure PYTHONPATH includes project root:
-
-```bash
-# Windows
-set PYTHONPATH=%CD%
-python -m pytest tests/ -v
-
-# Linux/Mac
-export PYTHONPATH=$(pwd)
-pytest tests/ -v
-```
-
-### Encoding Issues
-
-Ensure your terminal supports UTF-8 for Japanese text output:
-
-```bash
-# Windows (PowerShell)
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-
-# Windows (Command Prompt)
-chcp 65001
-```
-
-### Test Failures
-
-View detailed error output:
-
-```bash
-python -m pytest tests/ -v --tb=long
-```
-
-View only failed tests:
-
-```bash
-python -m pytest tests/ --lf -v  # Last Failed
-```
-
-## Development Workflow
-
-### Adding New Tests
-
-1. **For new parsers**: Add to `ALL_RECORD_TYPES` in `src/parser/factory.py`
-   - Parametrized tests automatically cover new parsers
-
-2. **For new features**: Add integration tests in `test_integration.py`
-   - Follow existing test patterns
-   - Include docstrings explaining what's tested
-
-3. **Run tests locally** before committing:
-   ```bash
-   python -m pytest tests/ -v
-   ```
-
-### Test Conventions
-
-- Use descriptive test names: `test_<what>_<condition>_<expected_result>`
-- Include docstrings explaining test purpose and verification steps
-- Use pytest fixtures for common setup (database, importer, parser factory)
-- Parametrize tests when testing same logic across multiple inputs
-- Clean up resources (temp files, database connections) in fixtures
-
-## Future Improvements
-
-- [ ] Performance benchmarking tests for large datasets
-- [ ] Real JV-Link data validation tests
-- [ ] Boundary value testing for all field types
-- [ ] Memory leak detection tests
-- [ ] Parallel execution stress tests
-- [ ] Schema migration tests
-- [ ] Backup/restore functionality tests
+- For a new or changed validator/gate, first prove that the pre-fix code fails
+  a negative case, then retain the paired positive case.
+- Fixed-width provider records are byte-oriented CP932 records. Do not build a
+  positive fixture with a short body, space padding in place of CRLF, or a
+  database-row reconstruction presented as provider raw data.
+- Use a dedicated `--basetemp` for concurrent runs.
+- Keep credentials, runtime identities, raw payloads, and provider filenames
+  out of test output and tracked evidence.
 
 ## References
 
-- [pytest Documentation](https://docs.pytest.org/)
-- [JV-Data Specification v4.9.0.1](http://www.jra-van.jp/dlb/sdv/index.html)
-- [SQLite Documentation](https://www.sqlite.org/docs.html)
-- Project README: [../README.md](../README.md)
-
-## Test Results
-
-Latest test run (as of last documentation update):
-
-```
-================================ test session starts ================================
-collected 415 items
-
-test_parsers.py::TestParserFactory::test_factory_initialization PASSED
-test_parsers.py::TestParserFactory::test_supported_types PASSED
-test_parsers.py::TestParserFactory::test_get_parser_invalid_type PASSED
-...
-test_integration.py::TestIntegration::test_create_all_tables PASSED
-test_integration.py::TestIntegration::test_end_to_end_workflow PASSED
-
-================================ 415 passed in ~5.2s ================================
-```
-
-**Success Rate**: 100% (415/415 tests passing)
+- [JV-Data specification 4.9.0.1](https://jra-van.jp/dlb/sdv/sdk/JV-Data4901.pdf)
+- [pytest documentation](https://docs.pytest.org/)
+- [Project README](../README.md)

@@ -8,9 +8,9 @@ COM API のエラーハンドリングを実データで検証:
 
 実行方法 (GUI セッションのある Windows 実機上):
   cd <jrvltsql checkout>
-  py -3.12 tests\\e2e\\e2e_error_recovery.py
+  py -3.12-32 tests\\e2e\\e2e_error_recovery.py
 
-既存の 32-bit 版 JV-Link を使う場合は ``py -3.12-32`` を指定する。
+x64経路は実SDKでのE2Eが完了するまでリリース検証済みとは扱わない。
 """
 
 import io

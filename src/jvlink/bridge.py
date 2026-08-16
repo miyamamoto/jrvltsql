@@ -1,10 +1,9 @@
 """JV-Link Bridge Client (JRA/中央競馬).
 
 Communicates with the C# JVLinkBridge subprocess via stdin/stdout JSON protocol.
-This replaces the Python win32com-based JVLinkWrapper, eliminating:
-- 32-bit Python requirement
-- COM threading/marshaling issues
-- win32com dependency
+This provides an out-of-process alternative to the Python win32com-based
+JVLinkWrapper. Supported runtime architectures are established by release E2E
+evidence, not by the process boundary alone.
 
 Platform support:
 - Windows: runs JVLinkBridge.exe directly
@@ -167,10 +166,9 @@ class JVLinkBridge:
     Spawns the C# bridge subprocess with type="jra" to use JVDTLab.JVLink COM.
     Provides the same interface as JVLinkWrapper for drop-in replacement.
 
-    Benefits over JVLinkWrapper:
-    - Works with 64-bit Python (no 32-bit restriction)
-    - No win32com/pythoncom dependency
-    - Native C# COM interop (more stable)
+    The client itself does not import win32com/pythoncom. End-to-end support
+    still depends on a validated bridge, JV-Link installation, and matching
+    runtime architecture.
 
     Examples:
         >>> bridge = JVLinkBridge(sid="UNKNOWN")

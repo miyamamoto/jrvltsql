@@ -111,21 +111,14 @@ if defined PYTHON (
     goto :check_result
 )
 
-if exist "%~dp0.venv\Scripts\python.exe" (
-    "%~dp0.venv\Scripts\python.exe" %SYNC_SCRIPT% !SYNC_ARGS!
-    set "SCRIPT_EXIT_CODE=!errorlevel!"
-    goto :check_result
-)
-
 if exist "%~dp0venv32\Scripts\python.exe" (
     "%~dp0venv32\Scripts\python.exe" %SYNC_SCRIPT% !SYNC_ARGS!
     set "SCRIPT_EXIT_CODE=!errorlevel!"
     goto :check_result
 )
 
-py -3.12 --version >nul 2>&1
-if !errorlevel!==0 (
-    py -3.12 %SYNC_SCRIPT% !SYNC_ARGS!
+if exist "%~dp0.venv\Scripts\python.exe" (
+    "%~dp0.venv\Scripts\python.exe" %SYNC_SCRIPT% !SYNC_ARGS!
     set "SCRIPT_EXIT_CODE=!errorlevel!"
     goto :check_result
 )
@@ -133,6 +126,13 @@ if !errorlevel!==0 (
 py -3.12-32 --version >nul 2>&1
 if !errorlevel!==0 (
     py -3.12-32 %SYNC_SCRIPT% !SYNC_ARGS!
+    set "SCRIPT_EXIT_CODE=!errorlevel!"
+    goto :check_result
+)
+
+py -3.12 --version >nul 2>&1
+if !errorlevel!==0 (
+    py -3.12 %SYNC_SCRIPT% !SYNC_ARGS!
     set "SCRIPT_EXIT_CODE=!errorlevel!"
     goto :check_result
 )

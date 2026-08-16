@@ -75,10 +75,13 @@
   documents remain version 4.9.0.1, and the official announcement states that
   their data and interface contracts did not change in SDK 5.0.0.
 - Updated installation and quickstart entry points to require Python 3.12 or
-  later and to select an interpreter whose bitness matches the installed
-  JV-Link. The ordinary Python 3.12 launcher is preferred for a new setup; the
-  explicit 32-bit launcher and an existing legacy virtual environment remain
-  supported for upgrades.
+  later. An initial local commit preferred the ordinary interpreter and used
+  wording that could be read as jrvltsql x64 support. That candidate was not
+  pushed or proposed for merge. Maintainer review correctly required an actual
+  x64 SDK end-to-end test before such a claim. The public text now separates
+  the official SDK announcement from project evidence, and automatic launchers
+  keep the already release-validated 32-bit path first. An explicit x64
+  interpreter may be used only for the pending bounded validation.
 - Removed two obsolete registry/launcher workaround files. Updated the
   class-not-registered diagnosis to recommend the matching JV-Link
   architecture rather than declaring one Python architecture unsupported.
@@ -93,6 +96,37 @@
   - the matching-bitness diagnostic plus lineage metadata selection failed
     three tests;
   - the installer/launcher architecture selection failed two tests.
+- Red-first evidence for the corrected support boundary: three tests failed on
+  the unpublished initial commit because launchers preferred the unverified
+  architecture and public text claimed support without an SDK E2E result.
+- Claude Code `--model fable --effort high` performed an independent read-only
+  documentation review in session
+  `bd9ea27f-29c0-4d9e-b829-419498a41712`. Fable was selected because a false
+  release-support claim has a high rollback cost and the audit crosses docs,
+  installers, launchers, packaging metadata, and release gates. Claude was
+  denied edit/write tools and created no repository artifact.
+- Actionable Claude findings were independently reproduced: two secondary
+  launchers bypassed the release-validated interpreter preference; a tracked
+  pre-JRA-only backup and an obsolete E2E script remained; the installer banner
+  retained a removed product name; one historical H6 length was wrong; the
+  package Documentation URL was invalid; and the v1.4.1 link had no matching
+  changelog section. All are repaired in the unpublished candidate. Stale test
+  install/count documentation had already been replaced while the review ran.
+- The two missed launchers received their own red-first replay on unpublished
+  commit `175cde9691d7d261218cd43440554c45664acdb8`: the retained regression
+  failed because `fetch_timeseries_postgres.bat` lacked the validated
+  interpreter branch. The same regression is included in the aggregate
+  launcher test after the repair.
+- Codex additionally found that the current standalone real-data E2E harness
+  passes a removed constructor argument, reads dict statistics as attributes,
+  and queries a non-existent race-name column. It cannot gate a release in its
+  present state. This is a separate validator repair: prove these failures red,
+  repair the harness, and run it with fresh provider data before release.
+- Post-repair focused docs/installer/metadata/distribution selection:
+  115 passed, 4 environment-specific skips. Fatal flake8 syntax/undefined-name
+  selection reported zero findings; strict MkDocs completed successfully;
+  staged `git diff --check` is clean. Tracked Markdown scans found no prohibited
+  runtime disclosure or maintainer-local home path.
 - Focused green evidence after implementation: the same five tests pass.
 - PR #173 remains open but conflicting; its RC/KS/CH parser/schema changes are
   superseded by merged official-layout PRs. PR #174 now differs from current

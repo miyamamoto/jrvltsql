@@ -52,8 +52,8 @@ class BaseFetcher(ABC):
             sid: Session ID for JV-Link API (default: "UNKNOWN")
             show_progress: Show stylish progress display (default: True)
         """
-        # Prefer C# JVLinkBridge over Python win32com for JRA operations.
-        # Eliminates 32-bit Python requirement and COM instability.
+        # Prefer the configured subprocess bridge over in-process COM.
+        # Runtime architecture support is established only by the release E2E.
         from src.jvlink.bridge import find_bridge_executable
         bridge_exe = find_bridge_executable()
         if bridge_exe is not None:

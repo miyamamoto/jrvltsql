@@ -25,15 +25,10 @@ if not "%~1"=="" (
 
 set "PYTHON_CMD="
 
-REM An explicit interpreter lets existing 32-bit installations keep using
-REM their matching JV-Link while new 64-bit installations use x64.
+REM An explicit interpreter permits a bounded x64 validation. Automatic
+REM discovery keeps the release-validated 32-bit path first.
 if defined PYTHON (
     set "PYTHON_CMD="%PYTHON%""
-    goto :run
-)
-
-if exist "%~dp0.venv\Scripts\python.exe" (
-    set "PYTHON_CMD="%~dp0.venv\Scripts\python.exe""
     goto :run
 )
 
@@ -42,15 +37,20 @@ if exist "%~dp0venv32\Scripts\python.exe" (
     goto :run
 )
 
-py -3.12 --version >nul 2>&1
-if !errorlevel!==0 (
-    set "PYTHON_CMD=py -3.12"
+if exist "%~dp0.venv\Scripts\python.exe" (
+    set "PYTHON_CMD="%~dp0.venv\Scripts\python.exe""
     goto :run
 )
 
 py -3.12-32 --version >nul 2>&1
 if !errorlevel!==0 (
     set "PYTHON_CMD=py -3.12-32"
+    goto :run
+)
+
+py -3.12 --version >nul 2>&1
+if !errorlevel!==0 (
+    set "PYTHON_CMD=py -3.12"
     goto :run
 )
 
@@ -128,7 +128,7 @@ echo   CLI commands:
 echo     jltsql status   - Check database status
 echo     jltsql fetch    - Fetch additional data
 echo     quickstart.bat --yes --include-timeseries - Fill SQLite TS_O1/TS_O2 odds
-echo     quickstart_postgres_timeseries.bat  - PostgreSQL setup + TS_O1/TS_O2
+echo     quickstart_timeseries.bat --db postgresql  - PostgreSQL + TS_O1/TS_O2
 echo     jltsql --help   - Other commands
 echo.
 echo   For Claude Code / Claude Desktop users:

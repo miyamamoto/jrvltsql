@@ -27,17 +27,17 @@ if defined PYTHON (
     )
 )
 
-REM Prefer the normal 3.12 installation (usually 64-bit), then retain an
-REM explicit 32-bit fallback for existing JV-Link installations.
-py -3.12 --version >nul 2>&1
-if !errorlevel!==0 (
-    set "PYTHON_CMD=py -3.12"
-    goto :found_python
-)
-
+REM Keep the release-validated 32-bit JV-Link path as the automatic default.
+REM A caller may opt into another matching interpreter through PYTHON.
 py -3.12-32 --version >nul 2>&1
 if !errorlevel!==0 (
     set "PYTHON_CMD=py -3.12-32"
+    goto :found_python
+)
+
+py -3.12 --version >nul 2>&1
+if !errorlevel!==0 (
+    set "PYTHON_CMD=py -3.12"
     goto :found_python
 )
 
@@ -72,6 +72,7 @@ exit /b 1
 for /f "tokens=*" %%v in ('%PYTHON_CMD% --version 2^>^&1') do set "PYVER=%%v"
 for /f %%a in ('%PYTHON_CMD% -c "import struct; print(struct.calcsize('P') * 8)" 2^>nul') do set "PYTHON_BITS=%%a"
 echo   [OK] Found: !PYVER! ^(!PYTHON_BITS!-bit^)
+if "!PYTHON_BITS!"=="64" echo   [!!] 64-bit execution is not release-validated; use only for explicit SDK validation.
 
 REM === Step 2: Check Git ===
 echo.

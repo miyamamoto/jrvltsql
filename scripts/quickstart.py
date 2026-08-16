@@ -411,7 +411,8 @@ def _check_jvlink_service_key() -> tuple[bool, str]:
                     "JV-Link検出不可 (64-bit Python使用中)\n"
                     "    → Pythonと同じ64-bit版JV-Linkをインストール・登録してください"
                     "（64-bit版はSDK 5.0.0以降）\n"
-                    "    → 既存の32-bit版JV-Linkを使う場合は32-bit Pythonを使用してください"
+                    "    → jrvltsqlの64-bit経路は未検証です。リリース検証済みの"
+                    "32-bit版JV-Linkを使う場合は32-bit Pythonを使用してください"
                 )
             return False, (
                 "JV-Link検出不可 (32-bit Python使用中)\n"

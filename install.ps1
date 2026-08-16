@@ -43,7 +43,7 @@ function Write-Banner {
     Write-Host ""
     Write-Host "  ============================================" -ForegroundColor Blue
     Write-Host "    JLTSQL Installer" -ForegroundColor White
-    Write-Host "    JRA-VAN DataLab / UmaConn -> SQL" -ForegroundColor DarkGray
+    Write-Host "    JRA-VAN DataLab -> SQL" -ForegroundColor DarkGray
     Write-Host "  ============================================" -ForegroundColor Blue
     Write-Host ""
 }
@@ -64,8 +64,8 @@ if ($env:PYTHON) {
     $candidates += @{ Command = $env:PYTHON; Arguments = @(); Display = $env:PYTHON }
 }
 $candidates += @(
-    @{ Command = "py"; Arguments = @("-$PYTHON_VERSION"); Display = "py -$PYTHON_VERSION" },
     @{ Command = "py"; Arguments = @("-$PYTHON_VERSION-32"); Display = "py -$PYTHON_VERSION-32" },
+    @{ Command = "py"; Arguments = @("-$PYTHON_VERSION"); Display = "py -$PYTHON_VERSION" },
     @{ Command = "py"; Arguments = @("-3"); Display = "py -3" },
     @{ Command = "python"; Arguments = @(); Display = "python" }
 )
@@ -81,6 +81,9 @@ foreach ($candidate in $candidates) {
             $pythonBits = & $pythonCommand @pythonArguments -c "import struct; print(struct.calcsize('P') * 8)"
             $ver = & $pythonCommand @pythonArguments --version 2>&1
             Write-Ok "Found: $ver ($pythonBits-bit; $pythonDisplay)"
+            if ($pythonBits -eq "64") {
+                Write-Warn "64-bit execution is not release-validated; use only for explicit SDK validation."
+            }
             break
         }
     } catch {}

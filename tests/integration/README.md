@@ -1,167 +1,55 @@
-# Integration Tests
+# Real JV-Link integration tests
 
-This directory contains integration tests that use **real JV-Link API** to fetch actual horse racing data from JRA-VAN DataLab.
+`test_jvlink_real.py` uses the real JV-Link API and verifies connection,
+provider acquisition, parsing, SQLite import, and readback. These tests are
+never enabled implicitly.
 
 ## Requirements
 
-1. **JV-Link Installation**
-   - JV-Link must be installed on Windows
-   - COM object `JVDTLab.JVLink` must be available
+- GUI-capable Windows environment
+- Python 3.12 or later
+- Installed JV-Link and active JRA-VAN DataLab subscription
+- Service key configured through the normal JRA-VAN DataLab/JV-Link settings
 
-2. **JRA-VAN Subscription**
-   - Active JRA-VAN DataLab subscription required (月額2,090円)
-   - Valid service key needed
+The release-validated path is 32-bit Python with 32-bit JV-Link. An x64 run is
+release evidence only after an actual x64 SDK installation completes the full
+acquisition and storage test; architecture matching alone is not proof.
 
-3. **Environment Setup**
-   - Set `JVLINK_SERVICE_KEY` environment variable with your service key
+## Run
 
-## Setup
+From the exact candidate checkout:
 
-### Windows Command Prompt
 ```cmd
-set JVLINK_SERVICE_KEY=YOUR_SERVICE_KEY_HERE
+set JLTSQL_RUN_REAL_INTEGRATION=1
+py -3.12-32 -m pytest tests\integration\test_jvlink_real.py -v -s --no-cov --basetemp=.pytest-tmp-real
 ```
 
-### Windows PowerShell
-```powershell
-$env:JVLINK_SERVICE_KEY="YOUR_SERVICE_KEY_HERE"
-```
+Without `JLTSQL_RUN_REAL_INTEGRATION=1`, every test in this directory is
+skipped. The opt-in flag prevents an ordinary local or CI run from making
+authenticated provider calls.
 
-### Git Bash / MSYS2
-```bash
-export JVLINK_SERVICE_KEY="YOUR_SERVICE_KEY_HERE"
-```
+## Covered paths
 
-### Permanent Setup (Windows)
-1. Open "Environment Variables" in System Properties
-2. Add new User Variable:
-   - Name: `JVLINK_SERVICE_KEY`
-   - Value: Your JV-Link service key
+- `test_jvlink_connection`: constructs the production fetcher and initializes
+  JV-Link.
+- `test_fetch_small_data_sample`: reads and parses a bounded RACE sample.
+- `test_full_workflow_with_real_data`: fetches RACE data through
+  `BatchProcessor`, stores it in a temporary SQLite database, and requires
+  non-empty `NL_RA` and `NL_SE` readback.
+- `test_parser_with_real_data_formats`: checks required record headers in a
+  bounded real sample.
+- error tests cover invalid and future date requests.
 
-## Running Tests
+The test currently selects a recent date. If that date has no JRA meeting, the
+release harness must choose a bounded known meeting date rather than accepting
+a no-data result as green.
 
-### Run all integration tests
-```bash
-pytest tests/integration/ -v -s
-```
+## Evidence and safety
 
-### Run specific test
-```bash
-pytest tests/integration/test_jvlink_real.py::TestJVLinkRealDataFetching::test_full_workflow_with_real_data -v -s
-```
-
-### Run without service key (tests will be skipped)
-```bash
-pytest tests/integration/test_jvlink_real.py -v
-```
-
-## Test Coverage
-
-### test_jvlink_real.py
-
-**TestJVLinkRealDataFetching**
-- `test_jvlink_connection` - Verifies JV-Link initialization
-- `test_fetch_small_data_sample` - Fetches small sample of real data
-- `test_full_workflow_with_real_data` - Complete workflow: Fetch → Parse → Import → Verify
-- `test_parser_with_real_data_formats` - Verifies parser field coverage
-
-**TestJVLinkErrorHandling**
-- `test_invalid_date_range` - Tests error handling for invalid dates
-- `test_future_date_handling` - Tests fetching future dates (should return no data)
-
-## What Gets Tested
-
-1. **JV-Link Connection**: Verify COM object initialization
-2. **Data Fetching**: Fetch real race data from JRA-VAN
-3. **Data Parsing**: Parse fixed-length JV-Data format
-4. **Database Import**: Import parsed data to SQLite
-5. **Data Verification**: Verify imported data integrity
-6. **Error Handling**: Test invalid inputs and edge cases
-
-## Expected Output
-
-When running tests with a valid service key, you should see:
-
-```
-=== Fetching RACE data for 20241107 ===
-
---- Fetcher Statistics ---
-Records fetched: 100
-Records parsed:  100
-Records failed:  0
-
---- Record Types Found ---
-HR: 20 records
-RA: 15 records
-SE: 65 records
-
---- Sample Record (Type: RA) ---
-headRecordSpec: RA
-headDataKubun: 1
-headMakeDate: 20241107
-idYear: 2024
-idMonthDay: 1107
-idJyoCD: 05
-idKaiji: 05
-idNichiji: 02
-idRaceNum: 01
-RaceName: 新馬
-... (truncated)
-
-=== Full Workflow Integration Test ===
-Date range: 20241107 - 20241107
-
-Processing data...
-
---- Processing Statistics ---
-Records fetched:  150
-Records parsed:   150
-Records imported: 150
-Records failed:   0
-Batches processed: 3
-
---- Database Verification ---
-NL_RA_RACE records: 15
-NL_SE_RACE_UMA records: 120
-NL_HR_PAY records: 15
-
---- Sample Race Record ---
-Year: 2024
-Race Number: 01
-Race Name: 新馬
-Distance: 1200
-Track Code: 05
-
-Total records in DB: 150
-
-✓ Full workflow test PASSED
-```
-
-## Notes
-
-- Tests use data from 7 days ago to ensure availability
-- Tests fetch limited records (50-100) for quick execution
-- All tests skip gracefully if `JVLINK_SERVICE_KEY` is not set
-- Database operations use temporary SQLite file (auto-cleaned)
-- Tests verify both successful operations and error handling
-
-## Troubleshooting
-
-### "JVLINK_SERVICE_KEY not set - skipping integration tests"
-- Set the environment variable as described above
-
-### "JV-Link initialization failed"
-- Verify JV-Link is installed
-- Check Windows Registry for JV-Link COM registration
-- Run: `python -c "import win32com.client; print(win32com.client.Dispatch('JVDTLab.JVLink'))"`
-
-### "No records were fetched"
-- Check internet connection
-- Verify JRA-VAN subscription is active
-- Try different date range (data may not be available for all dates)
-- Check JV-Link service status
-
-### "Failed to import data"
-- Check database permissions
-- Verify disk space available
-- Check temp directory write access
+- Record the exact 40-character candidate SHA and sanitized counts/status.
+- Do not print the service key, raw record payload, provider filename, race
+  identity, local account/path, or runtime identity.
+- Always observe `JVClose`; abort if another collector owns the runtime.
+- A cached record, synthetic fixture, or result from another SHA does not prove
+  fresh acquisition.
+- Use a temporary database and verify inserted rows with SQL before cleanup.

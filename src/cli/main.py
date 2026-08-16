@@ -135,7 +135,8 @@ def cli(ctx, config, verbose):
     """JRVLTSQL - JRA-VAN Link To SQL
 
     JRA-VAN DataLabの競馬データをSQLite/PostgreSQLに
-    リアルタイムインポートするツール（32-bit / 64-bit JV-Link対応）
+    リアルタイムインポートするツール
+    （リリース検証済み: 32-bit JV-Link。64-bit 実行経路は未検証）
 
     \b
     使用例:

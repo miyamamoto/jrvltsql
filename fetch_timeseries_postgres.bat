@@ -30,15 +30,28 @@ if not exist "config\config.yaml" (
     exit /b 1
 )
 
-where jltsql >nul 2>&1
-if %errorlevel% equ 0 (
-    set "JLTSQL=jltsql"
+if defined PYTHON (
+    set "JLTSQL="%PYTHON%" -m src.cli.main"
+) else if exist "venv32\Scripts\jltsql.exe" (
+    set "JLTSQL=venv32\Scripts\jltsql.exe"
+) else if exist "venv32\Scripts\python.exe" (
+    set "JLTSQL=venv32\Scripts\python.exe -m src.cli.main"
 ) else if exist ".venv\Scripts\jltsql.exe" (
     set "JLTSQL=.venv\Scripts\jltsql.exe"
 ) else if exist ".venv\Scripts\python.exe" (
     set "JLTSQL=.venv\Scripts\python.exe -m src.cli.main"
 ) else (
-    set "JLTSQL=python -m src.cli.main"
+    py -3.12-32 --version >nul 2>&1
+    if !errorlevel!==0 (
+        set "JLTSQL=py -3.12-32 -m src.cli.main"
+    ) else (
+        py -3.12 --version >nul 2>&1
+        if !errorlevel!==0 (
+            set "JLTSQL=py -3.12 -m src.cli.main"
+        ) else (
+            set "JLTSQL=python -m src.cli.main"
+        )
+    )
 )
 
 echo Command: %JLTSQL% realtime odds-timeseries --from %FROM_DATE% --to %TO_DATE% --db postgresql
