@@ -178,9 +178,26 @@ _YS_KEY_COLUMNS = ("Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji")
 _TK_CHILD_STORAGE_TABLES = frozenset({"NL_TK", "TOKU"})
 _TK_KEY_COLUMNS = ("Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum")
 _TK_ROWS_KEY = "_tk_registered_horse_rows"
+_HY_STORAGE_TABLES = frozenset({"NL_HY", "BAMEIORIGIN"})
 _ORDERED_MASTER_STORAGE_TABLES = (
     _RC_STORAGE_TABLES | _YS_STORAGE_TABLES | _TK_CHILD_STORAGE_TABLES
 )
+
+
+def verify_hy_storage_schema(database: BaseDatabase, table_name: str) -> bool:
+    """Fail closed unless HY storage has the official fields and KettoNum key."""
+    if table_name not in _HY_STORAGE_TABLES:
+        return False
+
+    from src.database.migration import verify_table_schema
+    from src.database.schema import SCHEMAS
+    from src.database.schema_jravan import JRAVAN_SCHEMAS
+
+    schema_sql = SCHEMAS.get(table_name) or JRAVAN_SCHEMAS.get(table_name)
+    if schema_sql is None:
+        raise SchemaMigrationError(f"HY storage schema is undefined: {table_name}")
+    verify_table_schema(database, table_name, schema_sql)
+    return True
 
 
 def verify_rc_storage_schema(database: BaseDatabase, table_name: str) -> bool:
@@ -634,6 +651,7 @@ _OFFICIAL_ERASE_KEY_COLUMNS = {
     "O5": _MINING_RACE_KEY_COLUMNS,
     "O6": _MINING_RACE_KEY_COLUMNS,
     "WF": ("Year", "MonthDay"),
+    "HY": ("KettoNum",),
 }
 
 _OFFICIAL_ERASE_STORAGE_TABLES = {
@@ -649,6 +667,7 @@ _OFFICIAL_ERASE_STORAGE_TABLES = {
     "O5": {"NL_O5", "RT_O5", "ODDS_SANREN_HEAD"},
     "O6": {"NL_O6", "RT_O6", "ODDS_SANRENTAN_HEAD"},
     "WF": {"NL_WF", "RT_WF", "WIN5"},
+    "HY": {"NL_HY", "BAMEIORIGIN"},
 }
 
 _STANDARD_ODDS_RACE_KEY_COLUMNS = _MINING_RACE_KEY_COLUMNS
@@ -1617,10 +1636,10 @@ def _is_standard_odds_record_erase(record: dict, table_name: str) -> bool:
 
 
 def _is_official_record_erase(record: dict, table_name: str) -> bool:
-    """Return whether a cancellation-capable physical record requests erase."""
+    """Return whether an official physical record requests keyed erasure."""
     record_type = _record_type_from_record(record)
     return (
-        record_type in CANCELLATION_STATE_RECORD_TYPES
+        record_type in _OFFICIAL_ERASE_KEY_COLUMNS
         and table_name in _OFFICIAL_ERASE_STORAGE_TABLES[record_type]
         and resolve_record_data_kubun(record) == "0"
     )
@@ -2402,6 +2421,7 @@ class DataImporter:
         self._batches_processed = 0
         self._jravan_tables_ready = not use_jravan_schema
         self._verified_mining_native_tables: set[str] = set()
+        self._verified_hy_tables: set[str] = set()
         self._verified_rc_tables: set[str] = set()
         self._verified_ys_tables: set[str] = set()
         self._verified_tk_header_tables: dict[str, str] = {}
@@ -2647,6 +2667,10 @@ class DataImporter:
                     )
                     self._records_failed += 1
                     continue
+
+                if table_name not in self._verified_hy_tables:
+                    if verify_hy_storage_schema(self.database, table_name):
+                        self._verified_hy_tables.add(table_name)
 
                 if table_name not in self._verified_mining_native_tables:
                     if verify_mining_native_schema(self.database, record, table_name):
@@ -3141,6 +3165,9 @@ class DataImporter:
             return False
 
         try:
+            if table_name not in self._verified_hy_tables:
+                if verify_hy_storage_schema(self.database, table_name):
+                    self._verified_hy_tables.add(table_name)
             if table_name not in self._verified_rc_tables:
                 if verify_rc_storage_schema(self.database, table_name):
                     self._verified_rc_tables.add(table_name)

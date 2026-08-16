@@ -53,6 +53,8 @@ class HYParser:
 
             # 2. データ区分 (位置:3, 長さ:1)
             result["DataKubun"] = self.decode_field(data[2:3])
+            if result["DataKubun"] not in {"0", "1"}:
+                raise ValueError("HY DataKubun must be 0 or 1")
 
             # 3. データ作成年月日 (位置:4, 長さ:8)
             result["MakeDate"] = self.decode_field(data[3:11])

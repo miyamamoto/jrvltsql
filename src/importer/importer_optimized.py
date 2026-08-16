@@ -49,6 +49,7 @@ from src.importer.importer import (
     resolve_standard_storage_table_name,
     resolve_standard_table_name,
     verify_ch_coupled_table,
+    verify_hy_storage_schema,
     verify_ks_coupled_table,
     verify_mining_native_schema,
     verify_rc_storage_schema,
@@ -89,6 +90,7 @@ class OptimizedDataImporter:
         self._batches_processed = 0
         self._jravan_tables_ready = not use_jravan_schema
         self._verified_mining_native_tables: set[str] = set()
+        self._verified_hy_tables: set[str] = set()
         self._verified_rc_tables: set[str] = set()
         self._verified_ys_tables: set[str] = set()
         self._verified_tk_header_tables: dict[str, str] = {}
@@ -292,6 +294,10 @@ class OptimizedDataImporter:
                     )
                     self._records_failed += 1
                     continue
+
+                if table_name not in self._verified_hy_tables:
+                    if verify_hy_storage_schema(self.database, table_name):
+                        self._verified_hy_tables.add(table_name)
 
                 if table_name not in self._verified_rc_tables:
                     if verify_rc_storage_schema(self.database, table_name):
