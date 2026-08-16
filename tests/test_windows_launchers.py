@@ -42,7 +42,7 @@ def test_quickstart_accepts_explicit_python_path_with_parentheses(tmp_path):
     python_dir.mkdir(parents=True)
     wrapper = python_dir / "python.cmd"
     wrapper.write_text(
-        f'@echo off\r\n"{sys.executable}" %*\r\n',
+        "@echo off\r\necho PAREN_PATH_SELECTED\r\nexit /b 0\r\n",
         encoding="utf-8",
     )
 
@@ -52,7 +52,7 @@ def test_quickstart_accepts_explicit_python_path_with_parentheses(tmp_path):
     result = _run_batch(ROOT / "quickstart.bat", "--yes", "--help", env=env, cwd=ROOT)
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert str(wrapper) in result.stdout
+    assert "PAREN_PATH_SELECTED" in result.stdout
 
 
 def test_quickstart_rejects_compound_python_override():

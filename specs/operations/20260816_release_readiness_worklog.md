@@ -39,6 +39,13 @@
   and sdist exclude it, all deleted audit pages, and other non-release evidence.
 - Confirm obsolete PRs #173 and #174 are fully superseded before closing them;
   never merge their stale heads.
+- Immediately before release, refresh every still-open pull request and compare
+  its exact head diff against the latest `master`. Classify each as fully
+  reflected, partially reflected, or still actionable. For a superseded pull
+  request, leave a courteous evidence-based message thanking the contribution
+  and naming the replacement PR/commit/test coverage before closing it. Do not
+  close a pull request with a useful unreflected change; move that change into
+  its own tested iteration first.
 - Run the proportional local suite, strict documentation build, distribution
   build/content gate, disclosure scan, and exact-SHA GitHub review/check gate
   for every code/documentation iteration.
@@ -187,6 +194,15 @@
   billing exception and not launcher evidence. The job now clears global
   addopts for its isolated three-test selection; it must execute all three and
   finish green on the replacement exact SHA before merge.
+- The second Windows job on candidate
+  `0e9361fc8fb5e2a0249f467ec86a8d6cfe0dc546` collected and executed all three
+  tests. Invalid compound override rejection and PATH CLI precedence passed.
+  The parenthesized-path case failed because its test-only nested batch wrapper
+  re-parsed the escaped comparison operator in Python's `-c` argument and
+  returned failure before the launcher assignment under test. The fixture now
+  uses an argument-independent success stub with a selection marker. This keeps
+  the test focused on cmd.exe path selection/execution without treating a stub
+  as SDK or acquisition evidence; all three must pass in the next run.
 
 ## Audit iteration: fixed-record envelope
 
