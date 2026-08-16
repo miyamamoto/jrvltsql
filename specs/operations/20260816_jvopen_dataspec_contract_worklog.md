@@ -165,8 +165,39 @@
   were inspected and all describe record types inside `RACE` or JVRTOpen
   streams rather than standalone JVOpen selectors.
 
+## Pre-final candidate evidence
+
+- Implementation commit/full SHA:
+  `70e490ce47ab9fa14adb0c4df40883f4c60de8a4`. A fresh fetch confirmed
+  `origin/master` remained the iteration base
+  `8fc0d7c3a3e10bfcd3c589cca7ec4707573c5c16`.
+- Repository-wide isolated suite on that SHA: **2334 passed, 67 skipped,
+  6 subtests passed**. The only warnings were three pre-existing
+  `PytestReturnNotNoneWarning` instances in `tests/test_time_series.py`.
+- The exact GitHub Actions test selection with coverage on that SHA:
+  **890 passed, 2 skipped, 3 subtests passed**; no failures.
+- Python 3.12 built a real wheel and sdist. The fail-closed distribution
+  checker passed both artifacts, confirming tracked `specs/` and removed
+  crawler-audit documents are absent. Strict MkDocs, fatal flake8, diff check,
+  and clean worktree checks passed. The first build command was excluded
+  because the host Python lacked the optional `build` module; rerunning through
+  an isolated Python 3.12 build environment succeeded without changing project
+  dependencies.
+- A bounded authenticated acquisition smoke staged this exact committed source
+  and verified its `src/jvlink/constants.py` hash before the call. Under the
+  acquisition service's non-blocking lock, standalone `O1` was rejected before
+  transmission; `RACE` then opened successfully, yielded a real byte-count-
+  consistent record, the exact candidate parser parsed it, and explicit
+  `JVClose` succeeded. No credentials, payload, record/race identity, filename,
+  machine identity, or environment value was printed or stored.
+- The first harness launch was excluded because the disposable source directory
+  was not writable and logger setup stopped before provider initialization.
+  After correcting only disposable-directory ownership, the bounded smoke
+  passed. Disposable source/archive files were removed; the service lock was
+  free afterward and the development acquisition environment remained healthy.
+
 ## Next safe command
 
-- Run strict documentation build and remaining contract searches, inspect the
-  complete diff once more, commit the implementation/worklog, then freeze the
-  candidate for the necessary full local suite and GitHub review gate.
+- Commit this evidence-only worklog update, repeat the required tests and
+  acquisition smoke on the resulting final full SHA, then push/open one PR and
+  run the single GitHub-native review/final gate.
