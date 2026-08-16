@@ -122,3 +122,33 @@ def test_timeseries_fetch_uses_path_installed_cli_before_global_python(tmp_path)
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert "PATH_JLTSQL_SELECTED" in result.stdout
+
+
+def test_daily_sync_preserves_password_without_command_line_exposure(tmp_path):
+    """PostgreSQL passwords must survive cmd metacharacters via the environment."""
+    checkout = tmp_path / "checkout"
+    (checkout / "scripts").mkdir(parents=True)
+    batch = checkout / "daily_sync.bat"
+    batch.write_bytes((ROOT / "daily_sync.bat").read_bytes())
+    (checkout / "scripts" / "quickstart.py").write_text(
+        "import os\n"
+        "import sys\n"
+        "preserved = (\n"
+        "    os.environ.get('PGPASSWORD')\n"
+        "    == os.environ.get('EXPECTED_PASSWORD')\n"
+        ")\n"
+        'print(f"PASSWORD_PRESERVED={preserved}")\n'
+        'print(f"PASSWORD_ON_COMMAND_LINE={\'--pg-password\' in sys.argv}")\n',
+        encoding="utf-8",
+    )
+
+    synthetic_password = "p@ss!word&caret^percent%done"
+    env = os.environ.copy()
+    env["PYTHON"] = sys.executable
+    env["POSTGRES_PASSWORD"] = synthetic_password
+    env["EXPECTED_PASSWORD"] = synthetic_password
+    result = _run_batch(batch, "--days-back", "0", env=env, cwd=checkout)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "PASSWORD_PRESERVED=True" in result.stdout
+    assert "PASSWORD_ON_COMMAND_LINE=False" in result.stdout

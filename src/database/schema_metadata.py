@@ -1129,32 +1129,13 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
         "indexes": ["競馬場コード"]
     },
 
-    "NL_SK": {
-        "table_name": "NL_SK",
-        "record_type": "SK",
-        "description": "馬3代血統詳細情報",
-        "purpose": "競走馬の3代血統（父母・祖父母・曽祖父母）詳細を格納",
-        "columns": [
-            {"name": "レコード種別ID", "type": "TEXT", "description": "レコード種別識別子（'SK'）", "example": "SK", "nullable": False},
-            {"name": "血統登録番号", "type": "TEXT", "description": "馬の血統登録番号", "example": "2020123456", "nullable": False},
-            {"name": "父馬繁殖登録番号", "type": "TEXT", "description": "父馬の繁殖登録番号", "example": "1234567890", "nullable": True},
-            {"name": "母馬繁殖登録番号", "type": "TEXT", "description": "母馬の繁殖登録番号", "example": "0987654321", "nullable": True},
-            {"name": "父父繁殖登録番号", "type": "TEXT", "description": "父父（父の父）繁殖登録番号", "example": "1111111111", "nullable": True},
-            {"name": "父母繁殖登録番号", "type": "TEXT", "description": "父母（父の母）繁殖登録番号", "example": "2222222222", "nullable": True},
-            {"name": "母父繁殖登録番号", "type": "TEXT", "description": "母父（母の父）繁殖登録番号", "example": "3333333333", "nullable": True},
-            {"name": "母母繁殖登録番号", "type": "TEXT", "description": "母母（母の母）繁殖登録番号", "example": "4444444444", "nullable": True},
-            {"name": "父父父繁殖登録番号", "type": "TEXT", "description": "父父父（父の父の父）繁殖登録番号", "example": "5555555555", "nullable": True},
-            {"name": "父父母繁殖登録番号", "type": "TEXT", "description": "父父母（父の父の母）繁殖登録番号", "example": "6666666666", "nullable": True},
-            {"name": "父母父繁殖登録番号", "type": "TEXT", "description": "父母父（父の母の父）繁殖登録番号", "example": "7777777777", "nullable": True},
-            {"name": "父母母繁殖登録番号", "type": "TEXT", "description": "父母母（父の母の母）繁殖登録番号", "example": "8888888888", "nullable": True},
-            {"name": "母父父繁殖登録番号", "type": "TEXT", "description": "母父父（母の父の父）繁殖登録番号", "example": "9999999999", "nullable": True},
-            {"name": "母父母繁殖登録番号", "type": "TEXT", "description": "母父母（母の父の母）繁殖登録番号", "example": "1010101010", "nullable": True},
-            {"name": "母母父繁殖登録番号", "type": "TEXT", "description": "母母父（母の母の父）繁殖登録番号", "example": "1212121212", "nullable": True},
-            {"name": "母母母繁殖登録番号", "type": "TEXT", "description": "母母母（母の母の母）繁殖登録番号", "example": "1313131313", "nullable": True}
-        ],
-        "primary_key": ["血統登録番号"],
-        "indexes": ["血統登録番号", "父馬繁殖登録番号", "母馬繁殖登録番号"]
-    },
+    "NL_SK": _schema_backed_metadata(
+        "NL_SK",
+        record_type="SK",
+        description="馬3代血統詳細情報",
+        purpose="競走馬の3代血統（父母・祖父母・曽祖父母）詳細を格納",
+        indexes=["KettoNum", "FNum", "MNum"],
+    ),
 
     "NL_TK_RACE": _schema_backed_metadata(
         "NL_TK_RACE",

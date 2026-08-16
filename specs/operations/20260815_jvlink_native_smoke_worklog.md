@@ -153,9 +153,10 @@
   possible. Prefer a supported health/API/test entry point or an isolated
   disposable execution path that reuses identity safely.
 - Do not count Linux fixed-signature mocks as the real smoke.
-- The exact full SHA of the Python code and the exact image/container identity
-  must be recorded with the result. A result from an older checkout is not
-  evidence for PR #163.
+- The exact full SHA of the Python code must be recorded with the public result.
+  Runtime image/container identity, when operationally required, belongs only
+  in access-restricted operator evidence and must not be copied into this public
+  worklog. A result from an older checkout is not evidence for PR #163.
 - Bound the requested data interval and record count. Always attempt JVClose;
   abort on an existing open/writer operation, identity conflict, or any sign
   that the smoke would interfere with collection.

@@ -260,6 +260,28 @@
   regression also supplies an invalid active environment and requires a clear
   fail-loud result without fallback; its intermediate exact-SHA run must be red
   before implementing the validator.
+- Windows Actions run `31936387348` supplied that missing red evidence on full
+  SHA `e2630c6dc26338f3ee94533401c33d79961afd1f`: the three earlier launcher
+  runtime checks stayed green, while the new invalid-active-environment check
+  failed its clear-message assertion after the malformed executable reached a
+  generic exit-code path. The Linux job independently failed the two new local
+  password/metadata contracts, and lint stayed green.
+- The grouped repair now gives every active-environment, repository-local, and
+  generic launcher fallback an actual Python 3.12-or-later probe; an invalid
+  active environment fails loudly instead of falling through. Exact-version
+  3.12 launcher selectors remain ahead of generic fallbacks. The PostgreSQL
+  password is copied with delayed expansion disabled, inherited as
+  `PGPASSWORD`, and omitted from process arguments. A Windows runtime test uses
+  a synthetic password containing cmd metacharacters and verifies preservation
+  without printing it. `NL_SK` metadata is now generated from the executable
+  schema, so all physical columns, types, and the primary key match. The same
+  repair also restricts workflow permissions, disables checkout credential
+  persistence, corrects public-evidence wording and quoted worklog commands,
+  and removes two redundant test f-string prefixes.
+- Post-repair local focused evidence is 120 passed with 9 expected skips for
+  the SK parser/storage, metadata, quickstart, and Windows launcher suites.
+  The five Windows runtime checks, full Linux workflow suite, distribution
+  build, and lint/type jobs remain mandatory on the final pushed SHA.
 
 ## Audit iteration: fixed-record envelope
 

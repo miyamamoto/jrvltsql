@@ -41,19 +41,34 @@ if defined PYTHON (
     goto :run
 )
 
-if defined VIRTUAL_ENV if exist "%VIRTUAL_ENV%\Scripts\python.exe" (
+if defined VIRTUAL_ENV (
+    if not exist "%VIRTUAL_ENV%\Scripts\python.exe" (
+        echo ERROR: VIRTUAL_ENV must point to Python 3.12 or later.
+        exit /b 1
+    )
+    "%VIRTUAL_ENV%\Scripts\python.exe" -c "import sys; raise SystemExit(sys.version_info < (3, 12))" >nul 2>&1
+    if !errorlevel! neq 0 (
+        echo ERROR: VIRTUAL_ENV must point to Python 3.12 or later.
+        exit /b 1
+    )
     set "PYTHON_CMD="!VIRTUAL_ENV!\Scripts\python.exe""
     goto :run
 )
 
 if exist "%~dp0venv32\Scripts\python.exe" (
-    set "PYTHON_CMD="%~dp0venv32\Scripts\python.exe""
-    goto :run
+    "%~dp0venv32\Scripts\python.exe" -c "import sys; raise SystemExit(sys.version_info < (3, 12))" >nul 2>&1
+    if !errorlevel!==0 (
+        set "PYTHON_CMD="%~dp0venv32\Scripts\python.exe""
+        goto :run
+    )
 )
 
 if exist "%~dp0.venv\Scripts\python.exe" (
-    set "PYTHON_CMD="%~dp0.venv\Scripts\python.exe""
-    goto :run
+    "%~dp0.venv\Scripts\python.exe" -c "import sys; raise SystemExit(sys.version_info < (3, 12))" >nul 2>&1
+    if !errorlevel!==0 (
+        set "PYTHON_CMD="%~dp0.venv\Scripts\python.exe""
+        goto :run
+    )
 )
 
 py -3.12-32 --version >nul 2>&1
@@ -68,14 +83,14 @@ if !errorlevel!==0 (
     goto :run
 )
 
-py -3 --version >nul 2>&1
+py -3 -c "import sys; raise SystemExit(sys.version_info < (3, 12))" >nul 2>&1
 if !errorlevel!==0 (
     set "PYTHON_CMD=py -3"
     goto :run
 )
 
 REM Fallback: python in PATH
-python --version >nul 2>&1
+python -c "import sys; raise SystemExit(sys.version_info < (3, 12))" >nul 2>&1
 if !errorlevel!==0 (
     set "PYTHON_CMD=python"
     goto :run

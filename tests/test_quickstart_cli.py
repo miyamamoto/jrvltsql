@@ -313,6 +313,9 @@ class TestQuickstartBatchRoles:
             text = launcher.read_text(encoding="utf-8")
             assert "PYTHON must be a full path to python.exe" in text, launcher.name
             assert "if defined VIRTUAL_ENV" in text, launcher.name
+            assert (
+                "VIRTUAL_ENV must point to Python 3.12 or later" in text
+            ), launcher.name
             assert 'set "PYTHON_CMD=%PYTHON%"' not in text, launcher.name
             assert "sys.version_info ^<" not in text, launcher.name
             assert "sys.version_info < (3, 12)" in text, launcher.name
@@ -448,7 +451,7 @@ class TestQuickstartBatchRoles:
         assert "--timeseries-to-date" in text
         assert "-DbType postgresql" in text
 
-    def test_daily_sync_quotes_postgresql_password(self):
+    def test_daily_sync_transports_postgresql_password_via_environment(self):
         batch = Path(__file__).resolve().parents[1] / "daily_sync.bat"
         text = batch.read_text(encoding="utf-8")
 

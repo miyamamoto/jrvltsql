@@ -6,12 +6,17 @@ on:
   pull_request:
     branches: [ master, main, develop ]
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
 
     - name: Set up Python 3.12
       uses: actions/setup-python@v5
@@ -62,6 +67,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
 
     - name: Set up 32-bit Python 3.12
       uses: actions/setup-python@v5
@@ -82,6 +89,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
 
     - name: Set up Python 3.12
       uses: actions/setup-python@v5
@@ -103,6 +112,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
 
     - name: Set up Python 3.12
       uses: actions/setup-python@v5

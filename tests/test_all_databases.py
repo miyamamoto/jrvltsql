@@ -51,7 +51,7 @@ class DatabaseTester:
             if self.db_type == 'sqlite':
                 database = SQLiteDatabase(self.db_config)
             elif self.db_type == 'duckdb':
-                print(f"\n✗ DuckDBはサポート対象外です")
+                print("\n✗ DuckDBはサポート対象外です")
                 self.results['errors'].append("DuckDB is outside the supported database matrix")
                 return False
             elif self.db_type == 'postgresql':
@@ -112,7 +112,7 @@ class DatabaseTester:
             if self.db_type == 'sqlite':
                 database = SQLiteDatabase(self.db_config)
             elif self.db_type == 'duckdb':
-                print(f"\n✗ DuckDBはサポート対象外です")
+                print("\n✗ DuckDBはサポート対象外です")
                 self.results['errors'].append("DuckDB is outside the supported database matrix")
                 return False
             elif self.db_type == 'postgresql':
