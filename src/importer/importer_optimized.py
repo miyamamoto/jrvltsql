@@ -19,6 +19,7 @@ from src.importer.importer import (
     _RC_STORAGE_TABLES,
     _STANDARD_ODDS_CONFIG_BY_OWNER,
     _STANDARD_VOTE_CONFIG_BY_OWNER,
+    _STRICT_NONADDITIVE_STANDARD_TABLES,
     _TK_CHILD_STORAGE_TABLES,
     _YS_STORAGE_TABLES,
     _ck_child_tables,
@@ -52,6 +53,7 @@ from src.importer.importer import (
     replace_mining_native_snapshot,
     resolve_standard_storage_table_name,
     resolve_standard_table_name,
+    verify_bt_storage_schema,
     verify_ch_coupled_table,
     verify_ck_coupled_tables,
     verify_hy_storage_schema,
@@ -96,6 +98,7 @@ class OptimizedDataImporter:
         self._jravan_tables_ready = not use_jravan_schema
         self._verified_mining_native_tables: set[str] = set()
         self._verified_hy_tables: set[str] = set()
+        self._verified_bt_tables: set[str] = set()
         self._verified_ck_child_tables: dict[str, tuple[str, str]] = {}
         self._verified_rc_tables: set[str] = set()
         self._verified_ys_tables: set[str] = set()
@@ -164,7 +167,13 @@ class OptimizedDataImporter:
             standard_name = resolve_standard_storage_table_name(native_name)
             schema_sql = JRAVAN_SCHEMAS.get(standard_name)
             if schema_sql and self.database.table_exists(standard_name):
-                migrate_table_if_needed(self.database, standard_name, schema_sql, commit=commit)
+                if standard_name not in _STRICT_NONADDITIVE_STANDARD_TABLES:
+                    migrate_table_if_needed(
+                        self.database,
+                        standard_name,
+                        schema_sql,
+                        commit=commit,
+                    )
                 # Ordered masters are verified by their dedicated writers. Their
                 # manual key migrations must not block unrelated imports.
                 if standard_name not in _ORDERED_MASTER_STORAGE_TABLES:
@@ -304,6 +313,9 @@ class OptimizedDataImporter:
                 if table_name not in self._verified_hy_tables:
                     if verify_hy_storage_schema(self.database, table_name):
                         self._verified_hy_tables.add(table_name)
+                if table_name not in self._verified_bt_tables:
+                    if verify_bt_storage_schema(self.database, table_name):
+                        self._verified_bt_tables.add(table_name)
 
                 if table_name not in self._verified_rc_tables:
                     if verify_rc_storage_schema(self.database, table_name):

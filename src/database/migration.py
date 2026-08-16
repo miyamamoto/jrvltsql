@@ -223,6 +223,16 @@ def _definition_type(column_definition: str) -> str:
     return tokens[1]
 
 
+def _bounded_text_capacity(declared_type: str) -> Optional[int]:
+    """Return a declared CHAR/VARCHAR limit, or None for unbounded text."""
+    normalized = re.sub(r"\s+", " ", declared_type.strip().upper())
+    match = re.fullmatch(
+        r"(?:CHAR|CHARACTER|VARCHAR|CHARACTER VARYING)\s*\(\s*(\d+)\s*\)",
+        normalized,
+    )
+    return int(match.group(1)) if match else None
+
+
 def _get_existing_column_types(db: BaseDatabase, table_name: str) -> Dict[str, str]:
     """Return actual declared types keyed by lower-cased column name."""
     if db.get_db_type() == "postgresql":
@@ -459,6 +469,20 @@ def verify_table_schema(db: BaseDatabase, table_name: str, schema_sql: str) -> N
         and existing_types.get(column)
         and not _is_lossless_text_type(existing_types[column])
     )
+    expected_capacities = {
+        column.lower(): capacity
+        for column, definition in expected_definitions.items()
+        if (capacity := _bounded_text_capacity(_definition_type(definition))) is not None
+    }
+    insufficient_capacities = sorted(
+        f"{column} existing={existing_types[column]} minimum={minimum}"
+        for column, minimum in expected_capacities.items()
+        if column in existing_lower
+        and existing_types.get(column)
+        and _is_lossless_text_type(existing_types[column])
+        and (actual := _bounded_text_capacity(existing_types[column])) is not None
+        and actual < minimum
+    )
 
     problems = []
     if missing_columns:
@@ -469,6 +493,8 @@ def verify_table_schema(db: BaseDatabase, table_name: str, schema_sql: str) -> N
         problems.append(f"unknown column types={unknown_text_types}")
     if incompatible_text_types:
         problems.append(f"incompatible column types={incompatible_text_types}")
+    if insufficient_capacities:
+        problems.append(f"insufficient column capacities={insufficient_capacities}")
     if problems:
         raise SchemaMigrationError(
             f"Schema verification failed for {table_name}: " + "; ".join(problems)

@@ -716,8 +716,11 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             RecordSpec                     CHAR(2)             ,  -- レコード種別ID
             DataKubun                      CHAR(1)             ,  -- データ区分
             MakeDate                       DATE                ,  -- YYYYMMDD形式の日付
+            HansyokuNum                    VARCHAR(10)         ,  -- 繁殖登録番号
             KeitoId                        VARCHAR(30)         ,  -- 文字列(30)
-            KeitoName                      VARCHAR(36)           -- 文字列(36)
+            KeitoName                      VARCHAR(36)         ,  -- 文字列(36)
+            KeitoEx                        VARCHAR(6800)       ,  -- 系統説明
+            PRIMARY KEY (HansyokuNum)
         )
     """,
     "KISYU": KISYU_SCHEMA,

@@ -38,6 +38,17 @@ def resolve_standard_table_name(database: BaseDatabase, native_table_name: str) 
             "canonical CHOKYO_DETAIL parent/child contract is available"
         )
     if (
+        native_table_name == "NL_BT"
+        and database.is_connected()
+        and database.table_exists("BLOOD")
+        and not database.table_exists(standard_name)
+    ):
+        raise SchemaMigrationError(
+            "Legacy standard table BLOOD exists but canonical KEITO does not. "
+            "Automatic BT import is refused; rebuild the standard table as KEITO "
+            "and reimport current 6,889-byte source records."
+        )
+    if (
         native_table_name == "NL_SK"
         and database.is_connected()
         and database.table_exists("HANSYOKU_UMA")
@@ -184,9 +195,27 @@ _TK_CHILD_STORAGE_TABLES = frozenset({"NL_TK", "TOKU"})
 _TK_KEY_COLUMNS = ("Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum")
 _TK_ROWS_KEY = "_tk_registered_horse_rows"
 _HY_STORAGE_TABLES = frozenset({"NL_HY", "BAMEIORIGIN"})
+_BT_STORAGE_TABLES = frozenset({"NL_BT", "KEITO"})
+_STRICT_NONADDITIVE_STANDARD_TABLES = frozenset({"KEITO"})
 _ORDERED_MASTER_STORAGE_TABLES = (
     _RC_STORAGE_TABLES | _YS_STORAGE_TABLES | _TK_CHILD_STORAGE_TABLES
 )
+
+
+def verify_bt_storage_schema(database: BaseDatabase, table_name: str) -> bool:
+    """Fail closed unless BT storage preserves every current field and key."""
+    if table_name not in _BT_STORAGE_TABLES:
+        return False
+
+    from src.database.migration import verify_table_schema
+    from src.database.schema import SCHEMAS
+    from src.database.schema_jravan import JRAVAN_SCHEMAS
+
+    schema_sql = SCHEMAS.get(table_name) or JRAVAN_SCHEMAS.get(table_name)
+    if schema_sql is None:
+        raise SchemaMigrationError(f"BT storage schema is undefined: {table_name}")
+    verify_table_schema(database, table_name, schema_sql)
+    return True
 
 
 def verify_hy_storage_schema(database: BaseDatabase, table_name: str) -> bool:
@@ -657,6 +686,7 @@ _OFFICIAL_ERASE_KEY_COLUMNS = {
     "O6": _MINING_RACE_KEY_COLUMNS,
     "WF": ("Year", "MonthDay"),
     "HY": ("KettoNum",),
+    "BT": ("HansyokuNum",),
 }
 
 _OFFICIAL_ERASE_STORAGE_TABLES = {
@@ -673,6 +703,7 @@ _OFFICIAL_ERASE_STORAGE_TABLES = {
     "O6": {"NL_O6", "RT_O6", "ODDS_SANRENTAN_HEAD"},
     "WF": {"NL_WF", "RT_WF", "WIN5"},
     "HY": {"NL_HY", "BAMEIORIGIN"},
+    "BT": {"NL_BT", "KEITO"},
 }
 
 _STANDARD_ODDS_RACE_KEY_COLUMNS = _MINING_RACE_KEY_COLUMNS
@@ -3276,6 +3307,7 @@ class DataImporter:
         self._jravan_tables_ready = not use_jravan_schema
         self._verified_mining_native_tables: set[str] = set()
         self._verified_hy_tables: set[str] = set()
+        self._verified_bt_tables: set[str] = set()
         self._verified_ck_child_tables: dict[str, tuple[str, str]] = {}
         self._verified_rc_tables: set[str] = set()
         self._verified_ys_tables: set[str] = set()
@@ -3329,7 +3361,7 @@ class DataImporter:
             "WH": "NL_WH",  # 馬体重情報
             "TM": "NL_TM",  # 対戦型データマイニング予想
             "TK": "NL_TK",  # 追切マスター
-            "BT": "NL_BT",  # 調教Bタイム
+            "BT": "NL_BT",  # 系統情報
             "DM": "NL_DM",  # データマスター
             # RT_ tables (速報データ)
             "RT_RA": "RT_RA",  # レース詳細（速報）
@@ -3369,7 +3401,13 @@ class DataImporter:
             standard_name = self._get_table_name_for_native(table_name)
             schema_sql = JRAVAN_SCHEMAS.get(standard_name)
             if schema_sql and self.database.table_exists(standard_name):
-                migrate_table_if_needed(self.database, standard_name, schema_sql, commit=commit)
+                if standard_name not in _STRICT_NONADDITIVE_STANDARD_TABLES:
+                    migrate_table_if_needed(
+                        self.database,
+                        standard_name,
+                        schema_sql,
+                        commit=commit,
+                    )
                 # Ordered masters have deliberately non-automatic key migrations.
                 # Verify them only when a matching row is about to be written so
                 # an obsolete unused table cannot block unrelated imports.
@@ -3526,6 +3564,9 @@ class DataImporter:
                 if table_name not in self._verified_hy_tables:
                     if verify_hy_storage_schema(self.database, table_name):
                         self._verified_hy_tables.add(table_name)
+                if table_name not in self._verified_bt_tables:
+                    if verify_bt_storage_schema(self.database, table_name):
+                        self._verified_bt_tables.add(table_name)
 
                 if table_name not in self._verified_mining_native_tables:
                     if verify_mining_native_schema(self.database, record, table_name):
@@ -4068,6 +4109,9 @@ class DataImporter:
             if table_name not in self._verified_hy_tables:
                 if verify_hy_storage_schema(self.database, table_name):
                     self._verified_hy_tables.add(table_name)
+            if table_name not in self._verified_bt_tables:
+                if verify_bt_storage_schema(self.database, table_name):
+                    self._verified_bt_tables.add(table_name)
             if table_name not in self._verified_rc_tables:
                 if verify_rc_storage_schema(self.database, table_name):
                     self._verified_rc_tables.add(table_name)
