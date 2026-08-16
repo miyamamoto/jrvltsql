@@ -29,8 +29,9 @@ class TestCLIBasic(unittest.TestCase):
         self.assertIn('monitor', result.output)
 
     def test_version_command(self):
-        """Test version command."""
-        result = self.runner.invoke(cli, ['version'])
+        """Version is available before a configuration file exists."""
+        with patch("src.cli.main.Path.exists", return_value=False):
+            result = self.runner.invoke(cli, ['version'])
         self.assertEqual(result.exit_code, 0)
         self.assertIn('JLTSQL version', result.output)
         self.assertTrue(
@@ -39,8 +40,9 @@ class TestCLIBasic(unittest.TestCase):
         )
 
     def test_status_command(self):
-        """Test status command."""
-        result = self.runner.invoke(cli, ['status'])
+        """Status is available before a configuration file exists."""
+        with patch("src.cli.main.Path.exists", return_value=False):
+            result = self.runner.invoke(cli, ['status'])
         self.assertEqual(result.exit_code, 0)
         self.assertIn('JLTSQL Status', result.output)
         self.assertIn('Version', result.output)

@@ -635,13 +635,31 @@
   was removed. The expanded negative/positive gate test passes 4 tests, the
   repository self-check reports `TEST GATE PASS`, and the enlarged fatal lint
   scope reports zero findings.
+- PR #193 was opened and marked ready at candidate
+  `86d6e96346b8d00a70894f1aac60e499e3d151bf`. GitHub run `31947867380`
+  executed rather than encountering a Billing failure. Lint and the 32-bit
+  Windows launcher contract passed, but the Linux test job failed after
+  running the suite: 2 failed, 2,261 passed, 79 skipped, 14 deselected, and 15
+  subtests. The failures were `version` and `status`, both returning exit 1.
+  Distribution steps correctly did not run after the real test failure, so the
+  candidate was not considered mergeable.
+- The failure was independently reproduced as a clean-install contract rather
+  than attributed to coverage. A clean GitHub checkout has no
+  `config/config.yaml`, while the local development checkout did. The CLI group
+  allowed only `init` before configuration, so read-only `version` and `status`
+  were unusable in a fresh installation; the previous workflow allowlist had
+  never collected `test_cli.py`. Existing tests were first fixed to force the
+  no-config state and produced the required red result of 2 failed. The CLI now
+  permits `init`, `version`, and `status` without configuration while retaining
+  the configuration gate for data-mutating commands. The focused basic/init
+  CLI selection then passed 5 tests with coverage enabled. This is a production
+  bootstrap repair exposed by the truthful whole-tree CI, not a test waiver.
 
 ## Next safe action
 
-- Commit the aggregated validator/tool repair, run the affected gate, fatal
-  lint, workflow parse, and deterministic suite as justified by the gate-wide
-  impact, then push and open the PR. Use the PR candidate full SHA for final
-  evidence and check GitHub Actions/review/thread state once. Do not treat this
-  iteration as release-ready: the compact official oracle and the known HY,
-  CK, standard-schema, metadata, obsolete-route, and strict fresh E2E blockers
-  remain separate required iterations.
+- Commit and push the no-config CLI repair, run the affected CLI/gate/fatal
+  checks on its exact SHA, then wait for the automatically rerun whole-tree
+  GitHub workflow. Aggregate PR review findings once, resolve every thread, and
+  merge only if all executed mandatory jobs pass. The compact official oracle
+  and known HY, CK, standard-schema, metadata, obsolete-route, and strict fresh
+  E2E blockers remain separate required iterations after this PR.

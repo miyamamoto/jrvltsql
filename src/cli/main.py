@@ -72,6 +72,7 @@ FETCH_NOTE_DATE_FIELDS = (
     "対応する日付を持たないレコードは JV-Link 取得時に除外されず、"
     "その取得範囲は完全キャッシュとして記録されません。"
 )
+CONFIG_OPTIONAL_COMMANDS = frozenset({"init", "status", "version"})
 
 
 def _reject_retired_data_spec(data_spec: str) -> None:
@@ -158,8 +159,8 @@ def cli(ctx, config, verbose):
         config_path = project_root / "config" / "config.yaml"
 
         if not config_path.exists():
-            # Config not found, use default for init command
-            if ctx.invoked_subcommand != "init":
+            # Read-only bootstrap commands must work before initialization.
+            if ctx.invoked_subcommand not in CONFIG_OPTIONAL_COMMANDS:
                 console.print(
                     "[red]Error:[/red] Configuration file not found. "
                     "Run 'jltsql init' first.",
