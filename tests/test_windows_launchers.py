@@ -7,6 +7,7 @@ must not be used as SDK architecture or provider-acquisition evidence.
 import os
 import subprocess
 import sys
+import venv
 from pathlib import Path
 
 import pytest
@@ -38,21 +39,26 @@ def _run_batch(
 
 def test_quickstart_accepts_explicit_python_path_with_parentheses(tmp_path):
     """A typical 32-bit installation path must not close an IF block early."""
-    python_dir = tmp_path / "Program Files (x86)" / "Python312-32"
-    python_dir.mkdir(parents=True)
-    wrapper = python_dir / "python.cmd"
-    wrapper.write_text(
-        "@echo off\r\necho PAREN_PATH_SELECTED\r\nexit /b 0\r\n",
+    checkout = tmp_path / "checkout"
+    (checkout / "scripts").mkdir(parents=True)
+    batch = checkout / "quickstart.bat"
+    batch.write_bytes((ROOT / "quickstart.bat").read_bytes())
+    (checkout / "scripts" / "quickstart.py").write_text(
+        'print("REAL_PYTHON_SELECTED")\n',
         encoding="utf-8",
     )
 
+    python_dir = tmp_path / "Program Files (x86)" / "Python312-32"
+    venv.EnvBuilder(with_pip=False).create(python_dir)
+    interpreter = python_dir / "Scripts" / "python.exe"
+
     env = os.environ.copy()
-    env["PYTHON"] = str(wrapper)
+    env["PYTHON"] = str(interpreter)
     env["JLTSQL_SKIP_SCHEDULER_PROMPT"] = "1"
-    result = _run_batch(ROOT / "quickstart.bat", "--yes", "--help", env=env, cwd=ROOT)
+    result = _run_batch(batch, "--yes", "--help", env=env, cwd=checkout)
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "PAREN_PATH_SELECTED" in result.stdout
+    assert "REAL_PYTHON_SELECTED" in result.stdout
 
 
 def test_quickstart_rejects_compound_python_override():

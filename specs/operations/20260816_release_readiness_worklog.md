@@ -173,13 +173,11 @@
   unquoted PostgreSQL password argument.
 - Resumed the same Claude Code Fable session
   `bd9ea27f-29c0-4d9e-b829-419498a41712` for the grouped review fix, preserving
-  the original model/reasoning context. Its post-implementation read-only
-  review found two additional cmd.exe parsing blockers: early expansion of a
-  parenthesized interpreter path inside an IF block, and a password quoting
-  form that exposed command metacharacters. Two focused tests failed on the
-  intermediate implementation before both paths were changed to delayed
-  expansion. The adjacent host/port/database/user arguments were quoted in the
-  same already-open command construction.
+  the original model/reasoning context. Its first post-implementation pass
+  raised a parenthesized-path hypothesis and found a password quoting form that
+  exposed command metacharacters. The command assignment and PostgreSQL
+  arguments were hardened, but the path hypothesis remained unproved until a
+  native cmd.exe test could distinguish real Python execution from a shim.
 - Green evidence after the grouped repair: all 15 launcher static contracts
   pass; the broader quickstart plus Windows-runtime selection reports 51
   passed and 3 expected non-Windows skips; workflow YAML parses; and
@@ -197,12 +195,27 @@
 - The second Windows job on candidate
   `0e9361fc8fb5e2a0249f467ec86a8d6cfe0dc546` collected and executed all three
   tests. Invalid compound override rejection and PATH CLI precedence passed.
-  The parenthesized-path case failed because its test-only nested batch wrapper
-  re-parsed the escaped comparison operator in Python's `-c` argument and
-  returned failure before the launcher assignment under test. The fixture now
-  uses an argument-independent success stub with a selection marker. This keeps
-  the test focused on cmd.exe path selection/execution without treating a stub
-  as SDK or acquisition evidence; all three must pass in the next run.
+  The parenthesized-path case failed while using a nested forwarding wrapper.
+  That run alone could not distinguish wrapper re-parsing from a launcher
+  defect, so it was not accepted as evidence.
+- The third Windows job on candidate
+  `8cac150318683b145da1d9564292a22374b210b3` replaced that wrapper with an
+  argument-independent success stub and still failed at the launcher's version
+  check. The stub was still a contract-external `.cmd` rather than a path to
+  `python.exe`, so that run proved the gate was red but not why.
+- A further read-only review in the same Fable session refuted the percent-path
+  explanation from the observed control flow and found the actual shared
+  defect: all ten batch Python-version probes pass `^<` inside a quoted Python
+  `-c` program. In cmd.exe the caret remains part of that quoted argument, so a
+  real Python receives invalid syntax and exits nonzero. Seven probes were
+  introduced or made fail-loud in this PR; three existing installer probes
+  also made automatic discovery or virtual-environment reuse fail. The runtime
+  regression now creates a real Windows virtual environment under a path with
+  spaces and parentheses, points `PYTHON` to its `python.exe`, and executes a
+  minimal copied quickstart script. The next intermediate Windows run must
+  demonstrate this real-interpreter regression is red before all ten probes
+  are repaired together; the final exact SHA must then pass all three runtime
+  tests.
 
 ## Audit iteration: fixed-record envelope
 
