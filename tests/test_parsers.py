@@ -73,27 +73,16 @@ class TestIndividualParsers:
         return ParserFactory()
 
     @pytest.fixture
-    def sample_data(self):
+    def sample_data(self, parser_factory):
         """各レコードタイプのサンプルデータを返すフィクスチャ"""
-        # 各レコードタイプに対する最小限のサンプルバイト列
-        # RecordSpec(2) + DataKubun(1) + MakeDate(8) + その他のフィールドを0で埋める
+        # Every parser receives its exact declared physical length and CRLF.
+        # Domain-specific master/array fields are populated below where a
+        # blank official envelope is not itself a valid positive fixture.
         samples = {}
 
-        # サンプル生成に使うレコード長。一部のlegacy parserは短い入力を許容するため、
-        # 全値が公式の現行物理長を表すわけではない。厳密長を検査するparserだけは、
-        # そのparserが対応する現行物理長と一致させる。
-        record_lengths = {
-            'AV': 78, 'BN': 477, 'BR': 545, 'BT': 415, 'CC': 71,
-            'CH': 3862, 'CK': 232, 'CS': 208, 'DM': 303,
-            'H1': 28955, 'H6': 102890, 'HC': 60, 'HN': 251, 'HR': 719, 'HS': 200, 'HY': 123,
-            'JC': 252, 'JG': 251, 'KS': 4173,
-            'O1': 962, 'O2': 2042, 'O3': 2654, 'O4': 4031, 'O5': 12293, 'O6': 83285,
-            'RA': 1272, 'RC': 501, 'SE': 555, 'SK': 208, 'TC': 71, 'TK': 21657, 'TM': 141,
-            'UM': 1609, 'WC': 72, 'WE': 195, 'WF': 7215, 'WH': 847, 'YS': 382,
-        }
-
         for record_type in ALL_RECORD_TYPES:
-            length = record_lengths.get(record_type, 100)
+            parser = parser_factory.get_parser(record_type)
+            length = parser.RECORD_LENGTH
             # RecordSpec(2) + DataKubun(1) + MakeDate(8) = 11バイト + 残りをスペースで埋める
             data = record_type.encode('cp932')  # RecordSpec (2 bytes)
             data += b'1'  # DataKubun (1 byte)
@@ -101,11 +90,7 @@ class TestIndividualParsers:
             # 残りのフィールドをスペースで埋める
             remaining = length - len(data)
             data += b' ' * remaining
-            # 固定長＋終端CRLFを強制するパーサーは末尾を CRLF にする
-            if record_type in (
-                "BN", "BR", "CH", "DM", "HN", "KS", "RA", "RC", "SE", "SK", "TK", "TM", "UM", "WH", "YS"
-            ):
-                data = data[:-2] + b"\r\n"
+            data = data[:-2] + b"\r\n"
             if record_type == "DM":
                 mutable = bytearray(data)
                 mutable[11:15] = b"2024"
@@ -480,8 +465,7 @@ class TestParserRobustness:
         data += b'1'
         data += b'20240601'
         data += b' ' * (parser.RECORD_LENGTH - len(data))
-        if record_type in ("BN", "BR", "CH", "RA", "SE", "UM"):
-            data = data[:-2] + b"\r\n"
+        data = data[:-2] + b"\r\n"
 
         assert len(data) == parser.RECORD_LENGTH
 
@@ -490,8 +474,8 @@ class TestParserRobustness:
         assert result['RecordSpec'] == record_type
 
     @pytest.mark.parametrize("record_type", ['RA', 'SE', 'HR'])
-    def test_parser_handles_extra_length(self, parser_factory, record_type):
-        """長すぎるデータを処理できることを確認"""
+    def test_parser_rejects_extra_length(self, parser_factory, record_type):
+        """Trailing bytes cannot be accepted as an official fixed record."""
         parser = parser_factory.get_parser(record_type)
 
         # 長すぎるデータを作成
@@ -500,13 +484,8 @@ class TestParserRobustness:
         data += b'20240601'
         data += b' ' * (parser.RECORD_LENGTH + 100)
 
-        # Strict fixed-width parsers reject trailing bytes; legacy parsers remain lenient.
         result = parser.parse(data)
-        if record_type in ("RA", "SE"):
-            assert result is None
-        else:
-            assert result is not None
-            assert result['RecordSpec'] == record_type
+        assert result is None
 
 
 class TestAllParsersComprehensive:

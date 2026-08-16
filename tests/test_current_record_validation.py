@@ -53,6 +53,24 @@ CURRENT_LENGTHS = {
 DOMAIN_PAYLOAD_REQUIRED = {"DM", "KS", "TK", "TM", "WH"}
 
 
+def test_declared_current_lengths_match_every_factory_parser():
+    """The independent official-length matrix cannot drift from dispatch."""
+
+    factory = ParserFactory()
+    assert set(CURRENT_LENGTHS) == set(factory.supported_types())
+
+    for record_type, expected_lengths in CURRENT_LENGTHS.items():
+        parser = factory.get_parser(record_type)
+        if record_type in {"H1", "H6"}:
+            parser_lengths = (
+                parser.RECORD_LENGTH_FLAT,
+                parser.RECORD_LENGTH,
+            )
+        else:
+            parser_lengths = (parser.RECORD_LENGTH,)
+        assert parser_lengths == expected_lengths, record_type
+
+
 def _record(record_type: str, length: int) -> bytes:
     record = bytearray(b" " * length)
     record[0:2] = record_type.encode("ascii")

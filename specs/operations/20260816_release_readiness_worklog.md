@@ -285,6 +285,16 @@
 
 ## Audit iteration: fixed-record envelope
 
+- Continuation started after PR #191 merged as
+  `a04733e640c67ad5d9c27860a6253c16c9fce850`. The current dedicated worktree
+  is `$WORKSPACE/20260816_jrvltsql_fixed_record`, branch
+  `agent/fixed-record-envelope-20260816`, based on that exact `origin/master`.
+  Only the fixed-record implementation/test diff was transferred from the old
+  audit worktree; its first current-base commit is
+  `3c958876e9761b9650948f5811c9aca009ef5e07`.
+- This is a fail-closed validator change, so the planned independent coding
+  review uses Claude Code `--model fable` in a new session for this worktree
+  and iteration. The session ID will be recorded when that review starts.
 - Audited all 38 current record IDs against their current physical lengths,
   record identifiers, CP932 decoding, and CRLF terminators. Several custom
   parsers and inherited fixed-field parsers accepted adjacent or truncated
@@ -299,13 +309,31 @@
   H1/H6 accept only their exact full official physical record and their exact
   repository compatibility-row shape; no intermediate, empty, short, or
   oversized shape is accepted.
-- Green evidence on the uncommitted aggregate candidate:
+- Historical green evidence on the pre-rebase aggregate candidate, retained
+  only as development evidence and not as a gate for the current SHA:
   - official record/parser/storage/metadata selection: 1,167 passed,
     47 skipped;
   - current/retired data-spec matrix and cancellation-state storage:
     278 passed, 20 skipped;
   - CI syntax/undefined-name selection: zero findings;
   - `git diff --check`: clean.
+- The first full current-base suite on implementation commit
+  `3c958876e9761b9650948f5811c9aca009ef5e07` was deliberately treated as a
+  gate and failed: 73 failed, 2,375 passed, 90 skipped. Most failures exposed
+  an older broad parser fixture that supplied approximate lengths or omitted
+  CRLF while still expecting success; one old robustness assertion explicitly
+  expected oversized HR input to parse. Those expectations contradicted the
+  new physical-envelope contract. The two CLI failures did not reproduce in
+  isolation or with their preceding module and were not attributed to this
+  change without evidence.
+- Updated that existing fixture to derive each positive sample from the
+  parser's current declared physical length, terminate every fixed record with
+  CRLF, and keep only the already-required domain payload population. The
+  oversized HR expectation now rejects trailing bytes like RA and SE. The
+  focused parser/envelope selection passed 482 tests, then the complete suite
+  passed 2,448 tests with 90 environment-specific skips, 15 subtests, and only
+  three pre-existing pytest return-value warnings. The previously observed CLI
+  failures were green in the complete rerun.
 - A separate static pass found an obsolete `RT_RC` route that is not part of
   the official current realtime record list. Real jockey changes use the
   current `JC` route; the stale route is incompatible with normal `RC` parser
@@ -314,11 +342,11 @@
 
 ## Next safe action
 
-- Complete PR #191 at its final exact SHA with proportional local tests, strict
-  docs, disclosure/distribution checks, aggregated review findings, unresolved
-  threads zero, green Linux and Windows checks, and a clean worktree. Merge it before
-  rebasing the fixed-record envelope iteration onto the resulting
-  `origin/master`. Then repair the fail-open real-data E2E harness and remove
-  the obsolete realtime route as separate red-first iterations. Stop before
-  version changes or authenticated acquisition until all audit iterations are
-  merged.
+- Run the fixed-record focused and compatibility suites on the current-base
+  candidate, reconcile every declared length with current parser constants,
+  then perform the independent Fable review. Create and merge a dedicated PR
+  only after exact-SHA checks, all actionable findings, unresolved threads
+  zero, and clean worktree are complete. Then repair the fail-open real-data
+  E2E harness and remove the obsolete realtime route as separate red-first
+  iterations. Stop before version changes or authenticated acquisition until
+  all audit iterations are merged.
