@@ -55,6 +55,7 @@ from src.importer.importer import (
     resolve_standard_storage_table_name,
     resolve_standard_table_name,
     validate_jg_record,
+    validate_wc_record,
     verify_bt_storage_schema,
     verify_ch_coupled_table,
     verify_ck_coupled_tables,
@@ -64,6 +65,7 @@ from src.importer.importer import (
     verify_mining_native_schema,
     verify_rc_storage_schema,
     verify_tk_coupled_tables,
+    verify_wc_storage_schema,
     verify_ys_storage_schema,
 )
 from src.utils.logger import get_logger
@@ -103,6 +105,7 @@ class OptimizedDataImporter:
         self._verified_hy_tables: set[str] = set()
         self._verified_bt_tables: set[str] = set()
         self._verified_jg_tables: set[str] = set()
+        self._verified_wc_tables: set[str] = set()
         self._verified_ck_child_tables: dict[str, tuple[str, str]] = {}
         self._verified_rc_tables: set[str] = set()
         self._verified_ys_tables: set[str] = set()
@@ -327,6 +330,10 @@ class OptimizedDataImporter:
                     if verify_jg_storage_schema(self.database, table_name):
                         self._verified_jg_tables.add(table_name)
                 validate_jg_record(record, table_name)
+                if table_name not in self._verified_wc_tables:
+                    if verify_wc_storage_schema(self.database, table_name):
+                        self._verified_wc_tables.add(table_name)
+                validate_wc_record(record, table_name)
 
                 if table_name not in self._verified_rc_tables:
                     if verify_rc_storage_schema(self.database, table_name):

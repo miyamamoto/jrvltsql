@@ -155,6 +155,17 @@
       "provenance_required": false,
       "reason": "Ver.4.1.1 only appended the initial value 0 for item 10 KettoNum. The 80-byte layout introduced in Ver.4.1.0 is unchanged, so no distinct pre-change byte layout is documented or recorded.",
       "source": "JV-Data4901.xlsx:変更履歴:110"
+    },
+    {
+      "record_type": "WC",
+      "announced_date": "2022-02-22",
+      "official_spec_version": "4.7.0.1",
+      "length_unchanged": true,
+      "layout_unchanged": true,
+      "change_kind": "availability_documentation_clarification",
+      "provenance_required": false,
+      "reason": "The specification added availability and measured-distance notes for Miho/Ritto woodchip training without changing the 105-byte layout.",
+      "source": "JV-Data4901.xlsx:変更履歴:56;特記事項:237-240"
     }
   ]
 }

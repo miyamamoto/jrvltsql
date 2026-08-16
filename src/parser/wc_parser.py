@@ -1,24 +1,93 @@
-"""Parser for WC record - JRA-VAN Standard compliant.
+"""Parser for the official current 105-byte WC woodchip-training record.
 
-This parser uses JRA-VAN standard field names and type conversions.
-Auto-generated from jv_data_formats.json.
+The layout is pinned to JV-Data 4.9.0.1 and SDK 5.0.0 ``JV_WC_WOOD``.
+JV-Data 4.7.0.1 added availability notes but did not change this layout.
 """
 
-from typing import List
-
 from src.parser.base import BaseParser, FieldDef
+from src.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class WCParser(BaseParser):
-    """Parser for WC record with JRA-VAN standard schema.
-
-    Uses English/Romanized field names matching JRA-VAN standard database.
-    """
+    """Parse every field and reject malformed current WC physical records."""
 
     record_type = "WC"
     RECORD_LENGTH = 105
+    DATA_KUBUN_VALUES = frozenset({"0", "1"})
+    TRESEN_KUBUN_VALUES = frozenset({"0", "1"})
+    COURSE_VALUES = frozenset({"0", "1", "2", "3", "4"})
+    BABA_MAWARI_VALUES = frozenset({"0", "1"})
+    KEY_FIXED_FIELDS = (
+        ("MakeDate", 8),
+        ("ChokyoDate", 8),
+        ("ChokyoTime", 4),
+        ("KettoNum", 10),
+    )
+    TIME_FIXED_FIELDS = (
+        ("HaronTime10Total", 4),
+        ("LapTime_2000M_1800M", 3),
+        ("HaronTime9Total", 4),
+        ("LapTime_1800M_1600M", 3),
+        ("HaronTime8Total", 4),
+        ("LapTime_1600M_1400M", 3),
+        ("HaronTime7Total", 4),
+        ("LapTime_1400M_1200M", 3),
+        ("HaronTime6Total", 4),
+        ("LapTime_1200M_1000M", 3),
+        ("HaronTime5Total", 4),
+        ("LapTime_1000M_800M", 3),
+        ("HaronTime4Total", 4),
+        ("LapTime_800M_600M", 3),
+        ("HaronTime3Total", 4),
+        ("LapTime_600M_400M", 3),
+        ("HaronTime2Total", 4),
+        ("LapTime_400M_200M", 3),
+        ("LapTime_200M_0M", 3),
+    )
 
-    def _define_fields(self) -> List[FieldDef]:
+    @staticmethod
+    def _require_ascii_digits(name: str, value: object, width: int) -> None:
+        if (
+            not isinstance(value, str)
+            or len(value) != width
+            or not value.isascii()
+            or not value.isdigit()
+        ):
+            raise ValueError(f"WC {name} must be exactly {width} ASCII digits")
+
+    def parse(self, record: bytes) -> dict[str, str] | None:
+        """Return a validated current WC row, or ``None`` for invalid input."""
+        try:
+            result = super().parse(record)
+            # CRLF is a structural field. BaseParser strips it to None after the
+            # fixed-record validator has already proved the exact bytes.
+            result["RecordDelimiter"] = ""
+            data_kubun = result["DataKubun"]
+            if data_kubun not in self.DATA_KUBUN_VALUES:
+                raise ValueError("WC DataKubun must be 0 or 1")
+            for name, width in self.KEY_FIXED_FIELDS:
+                self._require_ascii_digits(name, result[name], width)
+            if result["TresenKubun"] not in self.TRESEN_KUBUN_VALUES:
+                raise ValueError("WC TresenKubun must be 0 or 1")
+
+            # A status-0 row is an exact-key delete instruction. The provider
+            # does not require its unused body to be blank, so do not interpret
+            # or reject that body beyond the physical CP932/CRLF boundary.
+            if data_kubun == "1":
+                if result["Course"] not in self.COURSE_VALUES:
+                    raise ValueError("WC Course must be in 0..4")
+                if result["BabaMawari"] not in self.BABA_MAWARI_VALUES:
+                    raise ValueError("WC BabaMawari must be 0 or 1")
+                for name, width in self.TIME_FIXED_FIELDS:
+                    self._require_ascii_digits(name, result[name], width)
+            return result
+        except Exception as error:
+            logger.error(f"WC record parse failed: {error}")
+            return None
+
+    def _define_fields(self) -> list[FieldDef]:
         """Define field positions with JRA-VAN standard names and types.
 
         Returns:
@@ -27,7 +96,7 @@ class WCParser(BaseParser):
         return [
             FieldDef("RecordSpec", 0, 2, description="レコード種別ID"),
             FieldDef("DataKubun", 2, 1, description="データ区分"),
-            FieldDef("MakeDate", 3, 8, convert_type="DATE", description="データ作成年月日"),
+            FieldDef("MakeDate", 3, 8, description="データ作成年月日"),
             FieldDef("TresenKubun", 11, 1, description="トレセン区分"),
             FieldDef("ChokyoDate", 12, 8, description="調教年月日"),
             FieldDef("ChokyoTime", 20, 4, description="調教時刻"),

@@ -82,7 +82,7 @@ Scratch/Exclusion Tables:
     NL_AV, RT_AV: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
 
 Workout/Training Tables:
-    NL_WC: PRIMARY KEY (ChokyoDate, ChokyoTime, KettoNum, Course)
+    NL_WC: PRIMARY KEY (TresenKubun, ChokyoDate, ChokyoTime, KettoNum)
 
 Horse Name Table:
     NL_HY: PRIMARY KEY (KettoNum)
@@ -1464,7 +1464,7 @@ SCHEMAS = {
             LapTime_400M_200M REAL,
             LapTime_200M_0M REAL,
             RecordDelimiter TEXT,
-            PRIMARY KEY (ChokyoDate, ChokyoTime, KettoNum, Course)
+            PRIMARY KEY (TresenKubun, ChokyoDate, ChokyoTime, KettoNum)
         )
     """,
 

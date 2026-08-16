@@ -161,6 +161,28 @@ _STANDARD_FIELD_ALIASES = {
         "SyussoKubun": "ShussoKubun",
         "JyogaiStateKubun": "JogaiJotaiKubun",
     },
+    "WOOD": {
+        "BabaMawari": "BabaAround",
+        "HaronTime10Total": "HaronTime10",
+        "LapTime_2000M_1800M": "LapTime10",
+        "HaronTime9Total": "HaronTime9",
+        "LapTime_1800M_1600M": "LapTime9",
+        "HaronTime8Total": "HaronTime8",
+        "LapTime_1600M_1400M": "LapTime8",
+        "HaronTime7Total": "HaronTime7",
+        "LapTime_1400M_1200M": "LapTime7",
+        "HaronTime6Total": "HaronTime6",
+        "LapTime_1200M_1000M": "LapTime6",
+        "HaronTime5Total": "HaronTime5",
+        "LapTime_1000M_800M": "LapTime5",
+        "HaronTime4Total": "HaronTime4",
+        "LapTime_800M_600M": "LapTime4",
+        "HaronTime3Total": "HaronTime3",
+        "LapTime_600M_400M": "LapTime3",
+        "HaronTime2Total": "HaronTime2",
+        "LapTime_400M_200M": "LapTime2",
+        "LapTime_200M_0M": "LapTime1",
+    },
     "TOKU_RACE": {
         "RaceRyakusyo10": "Ryakusyo10",
         "RaceRyakusyo6": "Ryakusyo6",
@@ -223,7 +245,9 @@ _JG_KEY_COLUMNS = (
     "KettoNum",
     "Num",
 )
-_STRICT_NONADDITIVE_STANDARD_TABLES = frozenset({"KEITO", "JOGAIBA"})
+_WC_STORAGE_TABLES = frozenset({"NL_WC", "WOOD"})
+_WC_KEY_COLUMNS = ("TresenKubun", "ChokyoDate", "ChokyoTime", "KettoNum")
+_STRICT_NONADDITIVE_STANDARD_TABLES = frozenset({"KEITO", "JOGAIBA", "WOOD"})
 _LEGACY_STANDARD_PREFLIGHT_NATIVE_TABLES = (
     "NL_BT",
     "NL_JG",
@@ -358,6 +382,89 @@ def validate_jg_record(record: dict, table_name: str) -> bool:
         raise SchemaMigrationError(
             f"JG record JyogaiStateKubun has unsupported code: {jyogai!r}"
         )
+    return True
+
+
+def verify_wc_storage_schema(database: BaseDatabase, table_name: str) -> bool:
+    """Fail closed unless WC storage preserves every field and official key."""
+    if table_name not in _WC_STORAGE_TABLES:
+        return False
+
+    from src.database.migration import verify_table_schema
+    from src.database.schema import SCHEMAS
+    from src.database.schema_jravan import JRAVAN_SCHEMAS
+
+    schema_sql = SCHEMAS.get(table_name) or JRAVAN_SCHEMAS.get(table_name)
+    if schema_sql is None:
+        raise SchemaMigrationError(f"WC storage schema is undefined: {table_name}")
+    verify_table_schema(database, table_name, schema_sql)
+    return True
+
+
+def validate_wc_record(record: dict, table_name: str) -> bool:
+    """Revalidate a caller-built WC row before any insert, update, or delete."""
+    if table_name not in _WC_STORAGE_TABLES:
+        return False
+    if _record_type_from_record(record) != "WC":
+        raise SchemaMigrationError(f"{table_name} received a non-WC record")
+
+    from src.parser.wc_parser import WCParser
+
+    if record.get("DataKubun") in (None, "") and record.get("headDataKubun") in (
+        None,
+        "",
+    ):
+        raise SchemaMigrationError("WC DataKubun is required")
+    try:
+        data_kubun = resolve_record_data_kubun(record)
+    except ValueError as error:
+        raise SchemaMigrationError(str(error)) from error
+    if data_kubun not in WCParser.DATA_KUBUN_VALUES:
+        raise SchemaMigrationError(f"WC record has unsupported DataKubun: {data_kubun!r}")
+
+    aliases = _STANDARD_FIELD_ALIASES.get(table_name, {})
+    conflicts = [
+        (native_name, standard_name)
+        for native_name, standard_name in aliases.items()
+        if native_name in record
+        and standard_name in record
+        and record[native_name] != record[standard_name]
+    ]
+    if conflicts:
+        raise SchemaMigrationError(f"conflicting WC alias values: {conflicts}")
+
+    def value_for(native_name: str):
+        if native_name in record:
+            return record[native_name]
+        return record.get(aliases.get(native_name, native_name))
+
+    def require_digits(name: str, width: int) -> None:
+        value = value_for(name)
+        if (
+            not isinstance(value, str)
+            or len(value) != width
+            or not value.isascii()
+            or not value.isdigit()
+        ):
+            raise SchemaMigrationError(
+                f"WC record {name} must be exactly {width} ASCII digits"
+            )
+
+    for field_name, width in WCParser.KEY_FIXED_FIELDS:
+        require_digits(field_name, width)
+    if value_for("TresenKubun") not in WCParser.TRESEN_KUBUN_VALUES:
+        raise SchemaMigrationError("WC record TresenKubun must be 0 or 1")
+
+    # DataKubun=0 is a keyed command; the provider does not define a blank-body
+    # requirement. Status 1 owns the payload and therefore validates all codes
+    # and every fixed-width timing value.
+    if data_kubun == "1":
+        if value_for("Course") not in WCParser.COURSE_VALUES:
+            raise SchemaMigrationError("WC record Course must be in 0..4")
+        if value_for("BabaMawari") not in WCParser.BABA_MAWARI_VALUES:
+            raise SchemaMigrationError("WC record BabaMawari must be 0 or 1")
+        for field_name, width in WCParser.TIME_FIXED_FIELDS:
+            require_digits(field_name, width)
     return True
 
 
@@ -877,6 +984,7 @@ _OFFICIAL_ERASE_KEY_COLUMNS = {
     "HY": ("KettoNum",),
     "BT": ("HansyokuNum",),
     "JG": _JG_KEY_COLUMNS,
+    "WC": _WC_KEY_COLUMNS,
 }
 
 _OFFICIAL_ERASE_STORAGE_TABLES = {
@@ -895,6 +1003,7 @@ _OFFICIAL_ERASE_STORAGE_TABLES = {
     "HY": {"NL_HY", "BAMEIORIGIN"},
     "BT": {"NL_BT", "KEITO"},
     "JG": {"NL_JG", "JOGAIBA"},
+    "WC": {"NL_WC", "WOOD"},
 }
 
 _STANDARD_ODDS_RACE_KEY_COLUMNS = _MINING_RACE_KEY_COLUMNS
@@ -3509,6 +3618,7 @@ class DataImporter:
         self._verified_hy_tables: set[str] = set()
         self._verified_bt_tables: set[str] = set()
         self._verified_jg_tables: set[str] = set()
+        self._verified_wc_tables: set[str] = set()
         self._verified_ck_child_tables: dict[str, tuple[str, str]] = {}
         self._verified_rc_tables: set[str] = set()
         self._verified_ys_tables: set[str] = set()
@@ -3775,6 +3885,10 @@ class DataImporter:
                     if verify_jg_storage_schema(self.database, table_name):
                         self._verified_jg_tables.add(table_name)
                 validate_jg_record(record, table_name)
+                if table_name not in self._verified_wc_tables:
+                    if verify_wc_storage_schema(self.database, table_name):
+                        self._verified_wc_tables.add(table_name)
+                validate_wc_record(record, table_name)
 
                 if table_name not in self._verified_mining_native_tables:
                     if verify_mining_native_schema(self.database, record, table_name):
@@ -4324,6 +4438,10 @@ class DataImporter:
                 if verify_jg_storage_schema(self.database, table_name):
                     self._verified_jg_tables.add(table_name)
             validate_jg_record(record, table_name)
+            if table_name not in self._verified_wc_tables:
+                if verify_wc_storage_schema(self.database, table_name):
+                    self._verified_wc_tables.add(table_name)
+            validate_wc_record(record, table_name)
             if table_name not in self._verified_rc_tables:
                 if verify_rc_storage_schema(self.database, table_name):
                     self._verified_rc_tables.add(table_name)

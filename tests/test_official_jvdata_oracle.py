@@ -25,7 +25,7 @@ OFFICIAL_MANIFEST_CONTRACT_SHA256 = (
     "f35859d252fd20e4d7e38ee8d0a224deae87a62bae9db1995ed897bdccef6c45"
 )
 OFFICIAL_HISTORY_CONTRACT_SHA256 = (
-    "9f275d4c35714464cfd8737bd14fae08cf473388a725a31507f52ceb99ce4a80"
+    "aee4f1e36d5f8cedfc2c61f53c8a8eb8f131387010e0e9070360dbeceed9ee90"
 )
 
 
@@ -721,7 +721,7 @@ def test_official_hy_and_ck_sentinels_cannot_follow_current_implementation_drift
 def _assert_history_cardinality(history):
     assert len(history["sources"]) == 2
     assert len(history["physical_length_changes"]) == 10
-    assert len(history["same_length_semantic_changes"]) == 2
+    assert len(history["same_length_semantic_changes"]) == 3
 
 
 def _assert_history_truth_contract(history):
@@ -790,6 +790,18 @@ def _assert_history_truth_contract(history):
     assert jg_change["provenance_required"] is False
     assert jg_change["source"] == "JV-Data4901.xlsx:変更履歴:110"
 
+    # Ver.4.7.0.1 documented when Miho/Ritto WC data became available and the
+    # measured distances. It did not introduce another 105-byte generation.
+    wc_change = history["same_length_semantic_changes"][2]
+    assert wc_change["record_type"] == "WC"
+    assert wc_change["official_spec_version"] == "4.7.0.1"
+    assert wc_change["announced_date"] == "2022-02-22"
+    assert wc_change["length_unchanged"] is True
+    assert wc_change["layout_unchanged"] is True
+    assert wc_change["change_kind"] == "availability_documentation_clarification"
+    assert wc_change["provenance_required"] is False
+    assert wc_change["source"] == "JV-Data4901.xlsx:変更履歴:56;特記事項:237-240"
+
 
 def test_official_layout_history_is_provenanced_and_continuous_to_current():
     history = json.loads(HISTORY_PATH.read_text(encoding="utf-8"))
@@ -839,6 +851,8 @@ def test_official_layout_history_is_provenanced_and_continuous_to_current():
         (("same_length_semantic_changes", 1, "layout_unchanged"), False),
         (("same_length_semantic_changes", 1, "provenance_required"), True),
         (("same_length_semantic_changes", 1, "source"), "wrong:999"),
+        (("same_length_semantic_changes", 2, "layout_unchanged"), False),
+        (("same_length_semantic_changes", 2, "source"), "wrong:999"),
     ),
 )
 def test_history_truth_contract_rejects_content_and_provenance_drift(path, value):
@@ -854,7 +868,7 @@ def test_history_truth_contract_rejects_content_and_provenance_drift(path, value
     (
         ("sources", 2),
         ("physical_length_changes", 10),
-        ("same_length_semantic_changes", 2),
+        ("same_length_semantic_changes", 3),
     ),
 )
 def test_history_contract_rejects_duplicate_entries(collection, expected_count):

@@ -155,6 +155,19 @@ class TestIndividualParsers:
                 mutable[76:77] = b"1"
                 mutable[77:78] = b"0"
                 data = bytes(mutable)
+            if record_type == "WC":
+                # WC has a four-part fixed-width key, code domains, and 19
+                # numeric timing fields; blanks are not a positive fixture.
+                mutable = bytearray(data)
+                mutable[11:12] = b"0"
+                mutable[12:20] = b"20240601"
+                mutable[20:24] = b"0630"
+                mutable[24:34] = b"2020000001"
+                mutable[34:35] = b"0"
+                mutable[35:36] = b"0"
+                mutable[36:37] = b"0"
+                mutable[37:103] = b"0" * 66
+                data = bytes(mutable)
             if record_type == "TK":
                 mutable = bytearray(data)
                 mutable[11:15] = b"2024"

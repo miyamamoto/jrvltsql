@@ -210,6 +210,40 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             LapTime1                       DECIMAL(4,1)          -- ラップタイム1(秒)
         )
     """,
+    "WOOD": """
+        CREATE TABLE IF NOT EXISTS WOOD (
+            RecordSpec                     CHAR(2)             ,  -- レコード種別ID
+            DataKubun                      CHAR(1)             ,  -- 0:削除 1:初期値
+            MakeDate                       DATE                ,  -- データ作成年月日
+            TresenKubun                    CHAR(1)             ,  -- 0:美浦 1:栗東
+            ChokyoDate                     VARCHAR(8)          ,  -- 調教年月日
+            ChokyoTime                     VARCHAR(4)          ,  -- 調教時刻
+            KettoNum                       VARCHAR(10)         ,  -- 血統登録番号
+            Course                         CHAR(1)             ,  -- 0:A 1:B 2:C 3:D 4:E
+            BabaAround                     CHAR(1)             ,  -- 0:右 1:左
+            reserved                       CHAR(1)             ,  -- 予備
+            HaronTime10                    DECIMAL(4,1)        ,
+            LapTime10                      DECIMAL(3,1)        ,
+            HaronTime9                     DECIMAL(4,1)        ,
+            LapTime9                       DECIMAL(3,1)        ,
+            HaronTime8                     DECIMAL(4,1)        ,
+            LapTime8                       DECIMAL(3,1)        ,
+            HaronTime7                     DECIMAL(4,1)        ,
+            LapTime7                       DECIMAL(3,1)        ,
+            HaronTime6                     DECIMAL(4,1)        ,
+            LapTime6                       DECIMAL(3,1)        ,
+            HaronTime5                     DECIMAL(4,1)        ,
+            LapTime5                       DECIMAL(3,1)        ,
+            HaronTime4                     DECIMAL(4,1)        ,
+            LapTime4                       DECIMAL(3,1)        ,
+            HaronTime3                     DECIMAL(4,1)        ,
+            LapTime3                       DECIMAL(3,1)        ,
+            HaronTime2                     DECIMAL(4,1)        ,
+            LapTime2                       DECIMAL(3,1)        ,
+            LapTime1                       DECIMAL(3,1)        ,
+            PRIMARY KEY (TresenKubun, ChokyoDate, ChokyoTime, KettoNum)
+        )
+    """,
     "HANSYOKU": """
         CREATE TABLE IF NOT EXISTS HANSYOKU (
             RecordSpec                     CHAR(2)             ,  -- レコード種別ID

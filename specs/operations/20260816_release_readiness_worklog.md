@@ -1865,3 +1865,123 @@
   evidence, carry the reviewed production verdict forward, confirm the final
   Actions/head/thread gate once, then squash-merge PR #199. STOP on any
   non-worklog delta, failed executed job, actionable review, or head mismatch.
+- PR [#199](https://github.com/miyamamoto/jrvltsql/pull/199) passed its final
+  gate on exact head `9ab32b05a34a47c258e8b2c5bc18a0449897ab7d`.
+  GitHub Actions run `31973856450` completed `test`, `lint`, and
+  `windows-batch-syntax` successfully, with only the intentionally conditional
+  `performance-test` skipped. Thread-aware GraphQL returned zero unresolved
+  threads, the PR was `MERGEABLE` / `CLEAN`, and independent Codex
+  carry-forward review returned P0/P1/P2=0. The iteration was squash-merged as
+  `b4369f74d2ba236c8b33dbb1e45882ffa7c9aa0f`; the merged worktree and local
+  branch were removed. This is an iteration merge, not a repository release.
+- WC official-storage iteration started from current `origin/master` full SHA
+  `b4369f74d2ba236c8b33dbb1e45882ffa7c9aa0f`. Repository:
+  `miyamamoto/jrvltsql`; dedicated worktree:
+  `/home/keiba/scratch/20260817_jrvltsql_wc_standard`; branch:
+  `agent/wc-standard-storage-20260817`. Minimal scope is WC only: reconcile the
+  current 105-byte official/SDK layout, the historical 4.7.0.1 key correction,
+  native `NL_WC` and canonical `WOOD` ownership, status/delete semantics,
+  migration fail-closed behavior, tests, public support documentation, and the
+  official-history oracle. JG is already merged; WF remains a separate later
+  iteration. Dependency order remains jrvltsql specification/storage fixes,
+  final repository audit plus fresh provider acquisition/storage and release,
+  then jrvltsql-nar alignment/release, then jvlink-mcp-server alignment/release.
+  STOP if official sources do not establish the WC key/history, if the
+  canonical owner cannot losslessly store all fields, if a legacy mismatch is
+  mutated before rejection, or if a current PR already owns the same scope.
+- Implementation is assigned to Claude Code `2.1.233` with `--model fable`,
+  session `08bd10b4-8b1b-4e04-97df-2a55addde642`. Fable is selected because WC
+  changes an official-key/schema validator and ordered delete behavior in both
+  importers, where a partial repair can silently overwrite or erase the wrong
+  training record. The session must first preserve grouped red-first evidence
+  on this exact base, and any repair review in this worktree must resume the
+  same session. Codex remains responsible for official-source reconciliation,
+  test execution, independent critical review, GitHub gates, and merge.
+- Claude Code session `08bd10b4-8b1b-4e04-97df-2a55addde642` stopped before
+  reading or editing the candidate because its account session limit had been
+  reached (`resets 08:40 Asia/Tokyo`). The CLI also printed local permission-
+  rule syntax warnings, but no tool action or repository change occurred.
+  Per the operator-approved fallback, Codex will implement the same aggregate
+  red-first contract rather than waiting idle; Claude output is not counted as
+  review or implementation evidence for this iteration. Current dirty state is
+  still this worklog entry only. Next safe action: add the grouped WC contract,
+  run it on unchanged production code, and record the red result before any
+  source/schema change. STOP if the red probe does not expose the known key,
+  deletion, standard-owner, or validator gaps.
+- The grouped WC regression contract was added before any production/schema
+  change and executed on exact code base
+  `b4369f74d2ba236c8b33dbb1e45882ffa7c9aa0f` with
+  `python3 -m pytest -q tests/test_wc_official_contract.py --no-cov
+  --basetemp=/home/keiba/scratch/20260817_wc_red_pytest`. It produced the
+  required red evidence: `42 failed, 1 passed, 1 PostgreSQL opt-in skip`.
+  Failures independently exposed the generic parser raising or accepting
+  corrupt fields, DATE/delimiter representation drift, the wrong native key,
+  missing canonical `WOOD` schema, missing 4.7.0.1 documentation-history
+  entry, collapse across training centres, Course-driven duplication, status-0
+  tombstones, absent caller-dictionary validation, obsolete-schema mutation,
+  and single-record divergence. The sole green was the official delete body
+  remaining readable with its complete four-part key, proving the test fixture
+  itself can express the provider contract. Next safe action: implement the
+  bounded WC parser/storage/importer/history repair, then rerun this same
+  contract. STOP if a new rejector makes the official all-nine sentinel or a
+  nonblank status-0 body fail.
+- The bounded WC repair is implemented without touching another record type's
+  storage contract. `WCParser` now validates the exact 105-byte/type/CP932/CRLF
+  envelope, explicit status 0/1, four fixed-width key values, current code
+  domains, and all 19 status-1 timing fields while accepting official zero and
+  all-nine sentinels. Native `NL_WC` now uses the official four-part key;
+  canonical `WOOD` stores the SDK field names losslessly. Both importers and
+  the single-record path share a schema verifier and caller-dictionary
+  validator, reject native/canonical alias conflicts, and apply status 0 as an
+  exact provider-ordered delete. Existing wrong-key tables are rejected rather
+  than migrated. The 4.7.0.1 ledger entry is explicitly documentation-only,
+  and public support docs distinguish the project canonical table name from a
+  provider-prescribed SQL DDL.
+- Community evidence was rechecked rather than inferred from current data.
+  JRA-VAN software support explicitly confirms the four recommended WC key
+  fields and reports no observed same-key BabaAround variant in [topic
+  99](https://developer.jra-van.jp/t/topic/99). Staff also confirms that all-nine
+  lap/total values are provider-valid overflow measurement sentinels, not a
+  parse error, in [topic 367](https://developer.jra-van.jp/t/topic/367). A 2023
+  report of malformed course/hill/WC data was acknowledged and re-provided by
+  support in [topic 237](https://developer.jra-van.jp/t/topic/237); this supports
+  fail-closed field validation and reacquisition, not accepting malformed
+  values or changing the documented key. These links and the official workbook
+  rows are independent sources for the test contract.
+- The original grouped contract is now green: `43 passed, 1 PostgreSQL opt-in
+  skip`. Its first affected selection exposed four old generic fixture
+  failures: the shared length test and parser sample used blank WC keys and
+  payload despite the current official domain. Those fixtures were corrected
+  (or delegated to the dedicated official-contract positive) rather than
+  weakening the parser; the affected parser/schema/importer/oracle selection
+  then completed `763 passed, 1 skip`. A disposable PostgreSQL 16 container
+  completed the expanded contract `44 passed`, covering both importers,
+  native/canonical create/update/delete, the two-centre collision direction,
+  Course non-key updates, and wrong-key schema rejection with catalog and rows
+  unchanged. One initial PostgreSQL assertion failed only because unquoted
+  identifiers are returned lowercase; the query now uses an explicit lowercase
+  alias and the production path was unchanged. The disposable container was
+  stopped and removed. Next safe action: inspect the aggregate diff, run the
+  official/static/document gates and CI-equivalent full suite, then freeze one
+  candidate for independent exact-SHA review. STOP on any non-WC behavior
+  regression, ledger hash drift, PostgreSQL schema mutation, or stale container.
+- Pre-candidate gates are complete under Python 3.12.11. The CI-equivalent
+  suite completed `2553 passed, 109 skipped, 14 deselected, 15 subtests passed`
+  with coverage. The same interpreter and a fresh PostgreSQL 16 container
+  repeated the WC contract `44 passed`; the container was stopped and removed.
+  `TEST GATE PASS`, `OFFICIAL ORACLE PASS`, full fatal flake8, Black/Ruff for
+  the new WC parser/contract, compileall, `git diff --check`, and strict MkDocs
+  all pass. Fresh
+  sdist and wheel for package version 1.6.10 built successfully and the two-
+  artifact distribution-content gate passed, including exclusion of tracked
+  `specs/` from release artifacts. Setuptools emitted only its pre-existing
+  future license-metadata deprecation. The pinned official workbook hashes were
+  rechecked as `23bafd375f704acbdd696b5032ac1619f17d47e882587d6e7954b610527a8234`
+  (4.9.0.1) and
+  `6a567f10b601115eca350571f36d27d9d28bd2d3835ea72b5bc057711155d4a7`
+  (4.8.0.2). Changed scope is the WC parser, native/canonical schemas, shared
+  importer plus optimized wiring, WC tests and corrected generic fixtures,
+  official-history fixture/oracle, data-support docs, and this worklog. Next
+  safe action: commit one candidate, confirm exact SHA/clean state, then request
+  one independent Codex critical review of that immutable SHA. STOP on any
+  worktree drift, failed exact-SHA replay, or data-integrity finding.

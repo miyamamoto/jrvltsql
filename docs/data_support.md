@@ -54,7 +54,7 @@ jrvltsql は JRA / 中央競馬専用です。NAR / 地方競馬はこのリポ�
 | `BLDN` | `BLOD` | 血統情報 | `HN`, `SK`, `BT` | `NL_HN`, `NL_SK`, `NL_BT` | はい | いいえ | はい | 旧名 `BLOD` は受け付けません（下記参照）。 |
 | `MING` | - | データマイニング予想 | `DM`, `TM` | `NL_DM`, `NL_TM` | はい | いいえ | はい | full quickstart に含めています。 |
 | `SLOP` | - | 坂路調教関連 | `HC` | `NL_HC` | はい | いいえ | はい | standard / full quickstart に含めています。 |
-| `WOOD` | - | ウッドチップ調教関連 | `WC` | `NL_WC` | はい | いいえ | はい | standard / full quickstart に含めています。 |
+| `WOOD` | - | ウッドチップ調教関連 | `WC` | `NL_WC`（native）、`WOOD`（標準名モード） | はい | いいえ | はい | 現行105バイトを全項目保存します。公式キーはトレセン区分・調教年月日・調教時刻・血統登録番号の4項目で、`0` は同じキーの削除です。standard / full quickstart に含めています。 |
 | `YSCH` | - | 開催スケジュール | `YS` | `NL_YS` | はい | いいえ | はい | 開催カレンダー保守に使います。 |
 | `HOSN` | `HOSE` | 競走馬市場取引価格 | `HS` | `NL_HS` | はい | いいえ | はい | 旧名 `HOSE` は受け付けません（下記参照）。 |
 | `HOYU` | - | 馬名の意味由来 | `HY` | `NL_HY` | はい | いいえ | はい | standard / full quickstart に含めています。 |
@@ -179,6 +179,17 @@ jrvltsql は現在、以下 38 種類の JRA レコード種別に対してパ�
 対応済みの速報系レコードは `RT_*` にも保存できます。公式時系列オッズは
 `TS_O1` / `TS_O2`、開催週速報オッズは `TS_SOKUHO_O1`〜`TS_SOKUHO_O6`
 に保存します。
+
+`WC`はJV-Data 4.9.0.1とSDK 5.0.0の105バイト配置を使用し、10ハロンから
+1ハロンまでの合計・ラップを保存します。4.7.0.1で追記されたのは美浦・栗東の
+提供開始時期と計測距離の説明であり、別の物理レイアウトではありません。
+`Course`（コース）や馬場周りは公式キーではありません。旧版jrvltsqlが作成した
+`Course`入り・トレセン区分なしの主キーは自動修復せず、取込前に拒否します。
+`WOOD`はデータ種別名とSDK構造に対応させたjrvltsqlの標準名モード上の
+canonical table名であり、提供元がSQL DDLやテーブル名を規定しているという意味ではありません。
+4項目キーは[JRA-VANソフトサポートの回答](https://developer.jra-van.jp/t/topic/99)とも一致します。
+タイムが全桁9のデータは規定内として配信されるため、欠損へ置換せず数値sentinelとして保存します
+（[スタッフ回答](https://developer.jra-van.jp/t/topic/367)）。
 
 `KS`は公式4173バイトを1物理レコードとして扱い、nativeでは`NL_KS`と
 `NL_KS_SEISEKI`、JRA-VAN標準名モードでは`KISYU`と`KISYU_SEISEKI`へ
