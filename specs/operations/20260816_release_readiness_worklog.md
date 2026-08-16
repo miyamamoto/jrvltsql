@@ -600,14 +600,48 @@
   module. This was a test-expectation repair caused by the intentional CI
   selection change, not a production-code failure. A final whole-tree run is
   still required on the committed candidate full SHA.
+- On clean exact SHA `9b601e6adb3aa4ecb70bbd57f245b706cd8c61ad`, the
+  fail-closed self-check and fatal flake8 passed, followed by the whole
+  deterministic tree: 2,263 passed, 79 explicit environment skips, 14 slow
+  deselections, and 15 subtests, with zero warning or test failures. The
+  wheel/sdist build and distribution-content gate also passed for both
+  artifacts. This evidence predates the final validator hardening below and
+  remains code-identical except for that gate/test/tool scope follow-up.
+- Claude Code 2.1.233 resumed the same Fable session
+  `b63e9497-10e4-45d0-bf19-3f369dc6332d` with `--model fable --effort high`
+  and independently reviewed clean exact SHA
+  `9b601e6adb3aa4ecb70bbd57f245b706cd8c61ad` read-only. It reproduced the
+  prior red and current whole-tree green, confirmed collection without dotenv,
+  verified that opted-in PostgreSQL failures no longer skip, checked moved and
+  deleted test coverage, fixture provenance, docs, and distribution scope, and
+  returned `NEEDS_CHANGES` for two iteration-local defects. The validator did
+  not reject conditional/advisory pytest jobs or steps, warning-policy
+  overrides, selection/status-masking arguments, or unapproved ignores. The
+  moved manual database tool also retained one now-undefined `load_dotenv()`
+  call outside the fatal lint scope. Known HY/CK/schema/metadata/E2E findings
+  were again classified as downstream rather than silently waived.
+- Codex independently found the same main-gate conditional/advisory and
+  warning-override bypasses before receiving the Fable response. Findings were
+  aggregated once. The existing negative gate test was expanded before the
+  implementation; against the reviewed implementation it produced the
+  required red result of 1 failed and 3 passed, listing every newly expected
+  refusal code. The paired valid workflow remained green.
+- The grouped hardening now rejects `if` or any non-false
+  `continue-on-error` on required test/lint jobs and test/self-check/fatal-lint
+  steps, requires the exact global warning-error policy, rejects warning
+  suppression, partial selection, collect-only, unapproved ignore/deselect,
+  and shell status masking in the pytest command, and requires fatal lint to
+  cover `src`, `tests`, `scripts`, and `tools`. The undefined manual-tool call
+  was removed. The expanded negative/positive gate test passes 4 tests, the
+  repository self-check reports `TEST GATE PASS`, and the enlarged fatal lint
+  scope reports zero findings.
 
 ## Next safe action
 
-- Run fatal lint, distribution, and final whole-tree tests; commit the grouped
-  implementation and bind those checks to its full SHA. Resume Claude Code
-  Fable session `b63e9497-10e4-45d0-bf19-3f369dc6332d` exactly once for a
-  read-only critical review of that clean candidate. Aggregate and repair only
-  actionable iteration-local findings, then open the PR. Stop rather than
-  treating the result as release-ready: the compact official oracle and the
-  known HY, CK, standard-schema, metadata, obsolete-route, and strict fresh E2E
-  blockers remain separate required iterations.
+- Commit the aggregated validator/tool repair, run the affected gate, fatal
+  lint, workflow parse, and deterministic suite as justified by the gate-wide
+  impact, then push and open the PR. Use the PR candidate full SHA for final
+  evidence and check GitHub Actions/review/thread state once. Do not treat this
+  iteration as release-ready: the compact official oracle and the known HY,
+  CK, standard-schema, metadata, obsolete-route, and strict fresh E2E blockers
+  remain separate required iterations.

@@ -27,7 +27,7 @@ def _good_workflow():
                 "steps": [
                     {
                         "name": "Fatal lint",
-                        "run": "flake8 src tests --select=E9,F63,F7,F82",
+                        "run": "flake8 src tests scripts tools --select=E9,F63,F7,F82",
                     },
                     {
                         "name": "Advisory style",
@@ -42,26 +42,64 @@ def _good_workflow():
 
 def test_validator_rejects_every_fail_open_branch():
     workflow = _good_workflow()
+    workflow["jobs"]["test"].update(
+        {"continue-on-error": True, "if": "${{ false }}"}
+    )
     workflow["jobs"]["test"]["steps"] = [
-        {"name": "Run tests", "run": "pytest tests/test_parsers.py"}
+        {
+            "name": "Validate test gate",
+            "run": "python scripts/validate_test_gate.py",
+            "if": "${{ false }}",
+        },
+        {
+            "name": "Run tests",
+            "run": (
+                "pytest tests/test_parsers.py -W ignore -p no:warnings "
+                "-k smoke --collect-only --ignore=tests/other "
+                "--deselect=tests/test_parser.py::test_parse | true"
+            ),
+            "continue-on-error": "${{ true }}",
+            "if": "${{ false }}",
+        },
     ]
+    workflow["jobs"]["lint"].update(
+        {"continue-on-error": "${{ true }}", "if": False}
+    )
     workflow["jobs"]["lint"]["steps"] = [
         {
             "name": "Lint",
             "run": "flake8 src tests --select=E9,F63,F7,F82 --exit-zero",
             "continue-on-error": True,
+            "if": False,
         }
     ]
 
-    assert set(validate_test_gate(workflow, {})) == {
+    pyproject = {
+        "tool": {
+            "pytest": {
+                "ini_options": {"filterwarnings": ["error", "ignore"]},
+            }
+        }
+    }
+
+    assert set(validate_test_gate(workflow, pyproject)) == {
         "ci-check-step-missing-or-advisory",
+        "test-job-conditional-or-advisory",
+        "lint-job-conditional-or-advisory",
         "pytest-explicit-test-whitelist",
         "pytest-full-tree-missing",
         "pytest-live-integration-not-excluded",
         "pytest-slow-tests-not-excluded",
-        "pytest-return-warning-not-error",
+        "pytest-step-conditional-or-advisory",
+        "pytest-warning-policy-not-strict",
+        "pytest-warning-suppression",
+        "pytest-selection-bypass",
+        "pytest-unapproved-ignore",
+        "pytest-shell-status-masking",
         "fatal-flake8-is-advisory",
+        "fatal-flake8-is-conditional",
         "fatal-flake8-mixed-with-advisory",
+        "fatal-flake8-scope-incomplete",
     }
 
 
