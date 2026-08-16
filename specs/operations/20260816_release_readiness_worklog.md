@@ -1083,10 +1083,17 @@
 - Local mechanical gates passed: `scripts/validate_test_gate.py` (`TEST GATE
   PASS`), fatal flake8 E9/F63/F7/F82 (`0`), Ruff and Black for the new contract,
   and `git diff --check`.
-- Current state is still an uncommitted candidate derived from full base SHA
-  `3a0b108cfca22d9c2741aed96942178f4d475f90`; these results must be rerun or
-  bound to the committed full candidate SHA before merge. Next safe action:
-  review the complete diff, commit the grouped HY iteration, push one PR, then
-  run the single exact-SHA final gate and resolve all review threads before
-  merge. STOP if the committed diff differs from the tested implementation or
-  any exact-SHA gate fails.
+- Implementation commit full SHA
+  `02484d516376ed7469d744ee64c8cab484905612` was created from full base SHA
+  `3a0b108cfca22d9c2741aed96942178f4d475f90`. Its exact-SHA verification passed:
+  the affected selection produced `336 passed, 1 skipped in 2.70s`; the
+  explicitly enabled disposable PostgreSQL path produced `17 passed in 0.53s`;
+  the test gate, fatal flake8, new-test Ruff/Black, and committed-diff check all
+  passed. The exact-SHA PostgreSQL container and test schema were removed.
+- This worklog evidence update is intentionally documentation-only, so its own
+  resulting commit cannot self-record its SHA. The final candidate full SHA and
+  any GitHub checks/review evidence will be recorded in the PR, as required by
+  the no-self-reference rule. Next safe action: commit this evidence-only
+  update, push one PR, then run the single final gate on the resulting PR head
+  and resolve all review threads before merge. STOP if the implementation diff
+  changes, the final exact-SHA gate fails, or the worktree is not clean.
