@@ -8,9 +8,9 @@
   3. パース → SQLite DB 格納
   4. SQL クエリで件数・値の妥当性検証
 
-実行方法 (A6 上で VNC/RDP 経由):
-  cd C:\\Users\\mitsu\\work\\jrvltsql
-  C:\\Users\\mitsu\\AppData\\Local\\Programs\\Python\\Python312-32\\python.exe tests\\e2e\\e2e_jra_smoke.py
+実行方法 (GUI セッションのある Windows 実機上):
+  cd <jrvltsql checkout>
+  py -3.12-32 tests\\e2e\\e2e_jra_smoke.py
 """
 
 import io

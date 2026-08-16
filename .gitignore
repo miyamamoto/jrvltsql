@@ -214,6 +214,7 @@ scripts/apply_*.py
 scripts/benchmark_*.py
 scripts/check_*.py
 !scripts/check_data_quality.py
+!scripts/check_distribution_contents.py
 scripts/comprehensive_*.py
 scripts/fetch_all_*.sh
 scripts/final_*.py
@@ -255,5 +256,5 @@ setup_dll_surrogate.bat
 uv.lock
 .pytest-tmp/
 
-# Codex automatic backups (a6 ops machine)
+# Codex automatic backups (local operations environment)
 .codex_backups/

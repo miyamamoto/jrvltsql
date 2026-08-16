@@ -15,7 +15,7 @@
 - Base / initial HEAD / `origin/master` full SHA:
   `fc5d4fb08533021b5fbc83e39a499e92ef8929b6`
 - Previous iteration: PR #165 merged as
-  `fc5d4fb08533021b5fbc83e39a499e92ef8929b6` after exact-source Wine runtime
+  `fc5d4fb08533021b5fbc83e39a499e92ef8929b6` after exact-source bridge runtime
   validation; its worktree and local branch were removed.
 - Reviewer: Codex. Claude Code and external coding agents are not used.
 

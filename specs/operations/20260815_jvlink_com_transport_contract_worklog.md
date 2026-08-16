@@ -123,8 +123,7 @@
   positive JVOpen (`1 failed`). Each corresponding focused rerun passed after
   the implementation change.
 - The assumed mandatory bridge RT `readcount` was then checked against the
-  actual companion runtime. Read-only inspection of
-  `miyamamoto/jrvltsql-wine-runtime` `origin/main` full SHA
+  authorized companion runtime. Read-only inspection at full SHA
   `be759ee5bdccd06dccb61f1c63f9799f136c0a39` proved that its valid
   `JVRTOpen=-1` envelope omits `readcount`. A compatibility test for this exact
   response, positive JVRTOpen rejection, and negative expected download count
@@ -154,8 +153,8 @@
   endless reread of the same corrupt file. The two-code negative test first
   produced `2 failed` because no exception was raised, then `2 passed` after
   the no-recovery branch was made fail-closed.
-- Companion-runtime compatibility review found that
-  `jrvltsql-wine-runtime@be759ee5bdccd06dccb61f1c63f9799f136c0a39`
+- Companion-runtime compatibility review at
+  `be759ee5bdccd06dccb61f1c63f9799f136c0a39` found that the runtime
   acknowledges close as `{"status":"ok"}` without the official native Long
   result code. A direct compatibility test produced `1 failed` against the
   strict candidate. The bridge now accepts only this successful legacy
@@ -245,10 +244,10 @@
 
 ## Windows/JV-Link smoke status
 
-- Read-only host inspection on 2026-08-15 found Linux x86_64, no `wine`, no
-  `wine32`, no `powershell.exe`, no JV/JRA/WINE integration environment marker,
-  and no real JVLinkBridge executable. Located `.exe` files were zero-purpose
-  pytest fixtures under `.pytest-tmp`.
+- Read-only host inspection on 2026-08-15 found Linux x86_64, no compatible
+  authenticated bridge runtime, no `powershell.exe`, and no real JVLinkBridge
+  executable. Located `.exe` files were zero-purpose pytest fixtures under
+  `.pytest-tmp`.
 - `tests/integration/test_jvlink_real.py` is opt-in through
   `JLTSQL_RUN_REAL_INTEGRATION=1` and explicitly requires an authenticated
   Windows JV-Link host. This host cannot meet that precondition.

@@ -46,7 +46,7 @@ def test_distribution_gate_accepts_clean_wheel_and_sdist(tmp_path: Path) -> None
         ("sdist", "jltsql-0/docs/crawler_audit_04_se_layout.md"),
     ),
 )
-def test_distribution_gate_rejects_private_or_superseded_content(
+def test_distribution_gate_rejects_nondistributable_content(
     tmp_path: Path,
     artifact: str,
     member: str,

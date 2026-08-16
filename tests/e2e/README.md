@@ -2,14 +2,14 @@
 
 ## 概要
 
-このディレクトリには、A6 (Windows) 上で **実際の COM API** を使って実行する End-to-End テストが含まれます。
+このディレクトリには、Windows 実機上で **実際の COM API** を使って実行する End-to-End テストが含まれます。
 CI では実行できません。COM API（JV-Link）が必要なため、GUI コンテキストのある Windows 環境で手動実行します。
 
 ## 前提条件
 
 | 項目 | 要件 |
 |------|------|
-| OS | Windows (A6: 192.168.0.250) |
+| OS | Windows 10 / 11 |
 | Python | 32-bit Python 3.12 (`py -3.12-32` or an explicit `PYTHON` environment variable) |
 | JV-Link | インストール済み、サービスキー設定済み |
 | 実行方法 | **RDP/VNC でログインし、コマンドプロンプトから実行**（SSH不可） |
@@ -25,16 +25,12 @@ CI では実行できません。COM API（JV-Link）が必要なため、GUI �
 
 ## 実行手順
 
-### 1. A6 に VNC/RDP で接続
-
-```
-VNC: 192.168.0.250:5900 (pass: vnc123)
-```
+### 1. Windows 実機へ GUI セッションで接続
 
 ### 2. コマンドプロンプトを開く
 
 ```cmd
-cd %USERPROFILE%\work\jrvltsql
+cd <jrvltsql checkout>
 ```
 
 ### 3. JRA スモークテスト実行

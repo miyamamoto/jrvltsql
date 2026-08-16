@@ -16,7 +16,7 @@ Everything merged since v1.6.9: PR #149, #150, #151, #152, and #153.
   measurements; neither is derived from the other. The `_raw` contract and the
   shape of yielded records are unchanged, so cache replay is unaffected.
 - Self-repairs `JVRead` `-402` (a zero-byte corrupt file) at the official error
-  boundary rather than by guessing physical Wine cache paths. Only the exact
+  boundary rather than by guessing physical bridge-cache paths. Only the exact
   filename returned by `JVRead` is deleted through `JVFiledelete`; the same
   `JVOpen` context is reopened, re-download completion, file count, and
   `last_file_timestamp` are all required to match, and the already-emitted
@@ -88,7 +88,7 @@ Everything merged since v1.6.9: PR #149, #150, #151, #152, and #153.
 - Preserves best-effort dual-mode availability by excluding an unavailable
   secondary mirror from migration while still validating connected mirrors.
 
-- Treats Wine bridge subscription responses as normal optional-spec skips in
+- Treats external bridge subscription responses as normal optional-spec skips in
   the non-interactive daily collector path.
 - Prevents an unsubscribed 0B14 or 0B51 feed from aborting collection of other
   configured feeds.
@@ -96,4 +96,4 @@ Everything merged since v1.6.9: PR #149, #150, #151, #152, and #153.
 ## Upgrade Notes
 
 - This is a compatible reliability patch for v1.6.3 data layouts.
-- Docker/Wine runtime changes are not part of this repository release.
+- External collector runtime changes are not part of this repository release.

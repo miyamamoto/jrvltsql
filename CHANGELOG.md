@@ -110,15 +110,15 @@
 
 ### Fixed
 
-- 非対話 `daily_update.py` でも Wine bridge の未購読例外を正常な spec スキップとして扱い、0B14/0B51 など任意購読 feed が未契約でも他 feed の収集を継続するよう修正
+- 非対話 `daily_update.py` でも外部 bridge の未購読例外を正常な spec スキップとして扱い、0B14/0B51 など任意購読 feed が未契約でも他 feed の収集を継続するよう修正
 
 ## [1.6.3] - 2026-07-15
 
 ### Fixed
 
-- Wine bridge の `JVLinkBridgeError` を未購読・busy の正常なリトライ判定に含め、任意 spec の未購読で同一 polling cycle の正常データを rollback しないよう修正
+- 外部 bridge の `JVLinkBridgeError` を未購読・busy の正常なリトライ判定に含め、任意 spec の未購読で同一 polling cycle の正常データを rollback しないよう修正
 - JVRead の回復可能エラーも不完全取得として追跡し、欠損した 0B14 応答で既存の開催変更 snapshot を置換しないよう修正
-- Wine bridge 初期化失敗時に realtime monitor の health を停止状態へ更新するよう修正
+- 外部 bridge 初期化失敗時に realtime monitor の health を停止状態へ更新するよう修正
 
 ## [1.6.2] - 2026-07-15
 
@@ -144,7 +144,7 @@
 
 ### Notes
 
-- 公開リリースには Docker/Wine ランタイム変更を含めていません
+- 公開リリースには外部 collector ランタイム変更を含めていません
 - `NL_WF` / `RT_WF` に公式WF形式の列を追加する additive migration を含みます
 
 ## [1.6.0] - 2026-06-16
@@ -172,7 +172,7 @@
 
 ### Changed
 
-- a6 運用設定を upstream 化し、`.codex_backups/` を `.gitignore` に追加
+- 運用環境固有のバックアップ除外設定を `.gitignore` に追加
 - 公開ドキュメントを日本語表記へ統一
 - README と MkDocs ホームを、初回導線・目的別コマンド・重要なデータ区分が一目で分かる構成へ整理
 - `quickstart.bat --yes --include-timeseries` の既定取得範囲をドキュメントに明記

@@ -6,9 +6,9 @@ COM API のエラーハンドリングを実データで検証:
   1. 未来日のデータ取得（0件で正常終了すべき）
   2. JV-Link 連続初期化（リソースリーク確認）
 
-実行方法 (A6 上で VNC/RDP 経由):
-  cd C:\\Users\\mitsu\\work\\jrvltsql
-  C:\\Users\\mitsu\\AppData\\Local\\Programs\\Python\\Python312-32\\python.exe tests\\e2e\\e2e_error_recovery.py
+実行方法 (GUI セッションのある Windows 実機上):
+  cd <jrvltsql checkout>
+  py -3.12-32 tests\\e2e\\e2e_error_recovery.py
 """
 
 import io

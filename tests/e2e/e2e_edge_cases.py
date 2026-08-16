@@ -12,12 +12,9 @@ keiba.db に格納済みの実データに対して、異常レースやエッ�
   (D) 災害期間のデータ (2011年3月 東日本大震災)
   (E) NULL値・ゼロ値の検証
 
-実行方法 (A6 上):
-  cd C:\\Users\\mitsu\\work\\jrvltsql
+実行方法 (Windows 実機上):
+  cd <jrvltsql checkout>
   python tests\\e2e\\e2e_edge_cases.py
-
-  または SSH 経由:
-  ssh mitsu@192.168.0.250 "cd C:\\Users\\mitsu\\work\\jrvltsql && python tests\\e2e\\e2e_edge_cases.py"
 """
 
 import io

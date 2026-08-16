@@ -5,7 +5,7 @@
 - Started: 2026-08-15 JST
 - Objective: diagnose the authenticated `JVOpen(RACE)` 120-second timeout,
   re-audit the merged public client against current and legacy official JV-Link
-  contracts plus the deployed Wine runtime, implement only proven gaps, run
+  contracts plus the deployed bridge runtime, implement only proven gaps, run
   focused and real-environment tests, obtain strict Codex review, and merge a
   complete PR.
 - Minimum scope: JV-Link process launch and JSON transport, `JVInit`, `JVOpen`,
@@ -34,7 +34,7 @@
   `JVInit -> JVRTOpen(0B30) -> JVRead(962 bytes) -> JVClose` path and the
   `JVOpen(MING)=-1 -> JVClose=0` obligation. Successful-data
   `JVOpen(RACE) -> JVStatus -> JVRead` remained unproven because both the exact
-  merge-SHA harness and deployed Wine-aware client timed out at 120 seconds.
+  merge-SHA harness and deployed runtime-aware client timed out at 120 seconds.
 
 ## Official and community recheck
 
@@ -65,9 +65,9 @@
 
 ## Reproduction and root cause
 
-- The public `src/jvlink/bridge.py` launched a Windows `.exe` directly and had
-  no Wine command/environment path. The deployed collector client had a
-  separate Wine-aware implementation, but its dialog watcher matched only
+- The public `src/jvlink/bridge.py` launched its configured executable directly
+  and had no environment-specific launcher path. The deployed collector client
+  had a separate launcher implementation, but its dialog watcher matched only
   `JRA-VANからのお知らせ` and activated the default button with `Return`.
 - Under the development collector's non-blocking service lock, the deployed
   bridge reproduced `JVInit=0` followed by no `JVOpen(RACE)` response. During
@@ -88,14 +88,13 @@
 
 - Before changing production code, six focused tests were added and run
   against base SHA `1fbcb09c049b4fa0ad09c350cc74dd2093a855cb`:
-  `pytest -q tests/unit/test_jvlink_bridge.py -k 'environment_override or
-  builds_a_wine_command or fails_closed_when_wine_is_missing or
-  known_update_dialog or wine_preamble or timeout_aborts' --no-cov`.
+  the focused bridge-runtime launch, missing-runtime, known-dialog, preamble,
+  and timeout-abort selection.
 - Result: **6 failed**. The failures showed that the environment bridge path
-  was ignored, no Wine command/fail-closed check existed, no safe dialog
-  rejection existed, Wine preamble/BOM output was rejected, and a response
+  was ignored, no launcher fail-closed check existed, no safe dialog
+  rejection existed, runtime preamble/BOM output was rejected, and a response
   timeout left the stuck process running.
-- A paired normal case was retained or added for every changed boundary: Wine
+- A paired normal case was retained or added for every changed boundary: runtime
   present/missing, known dialog/default-disabled watcher, valid JSON after
   runtime preamble, normal response/timeout abort.
 - Strict Codex boundary review then identified five additional fail-closed
@@ -109,13 +108,14 @@
 ## Implementation and current validation
 
 - `src/jvlink/bridge.py` now discovers the bridge through the deployed
-  environment contract, launches it through Wine on non-Windows platforms,
-  passes the existing Wine prefix/architecture contract, drains stderr to a
-  temporary file, tolerates non-JSON Wine preamble plus UTF-8 BOM, and aborts a
+  environment contract, launches it through the configured compatibility
+  runtime on non-Windows platforms, passes the existing runtime contract,
+  drains stderr to a temporary file, tolerates a non-JSON runtime preamble plus
+  UTF-8 BOM, and aborts a
   process when the response stream is timed out or no longer trustworthy.
-- The Wine watcher uses exact known title patterns and sends only `Escape`.
-  It does not press the affirmative default button. It is limited to Wine with
-  an X display and `xdotool`, and can be disabled with
+- The dialog watcher uses exact known title patterns and sends only `Escape`.
+  It does not press the affirmative default button. It is limited to compatible
+  non-interactive bridge sessions and can be disabled with
   `JVLINK_AUTO_CLOSE_DIALOGS=0`.
 - Focused unit and official transport-contract validation passed:
   `pytest -q tests/unit/test_jvlink_bridge.py
@@ -160,7 +160,7 @@
   title-only X11 scope; non-finite watcher interval; timeout/broken-pipe process
   leakage; missing `JVInit` result-code acceptance.
 - P2: public Windows support remains the primary documented user contract;
-  the separately required Wine provisioning boundary and opt-out setting are
+  the separately required bridge-runtime provisioning boundary and opt-out setting are
   now documented without exposing deployment secrets.
 - Residual compatibility note: the deployed native bridge still acknowledges
   `JVClose` without its official Long result field. The already-merged client
@@ -179,15 +179,14 @@
   because the post-publication reviews found concrete boundary defects.
 - Codex/CodeRabbit independently found that using `select.select()` on a
   `TextIOWrapper` could report a false timeout when `readline()` had already
-  buffered the JSON line behind a non-JSON Wine preamble. Copilot/CodeRabbit
+  buffered the JSON line behind a non-JSON runtime preamble. Copilot/CodeRabbit
   also found that an explicitly configured missing bridge silently fell back,
-  directories were accepted as executables, and the Wine error incorrectly
+  directories were accepted as executables, and the runtime error incorrectly
   named only Linux even though the branch is all non-Windows platforms.
   Duplicate findings were clustered into one repair batch; none was dismissed
   because the reviewer or automation source was optional.
 - Before production repair, the focused selection
-  `pytest -q tests/unit/test_jvlink_bridge.py -k 'explicit_bridge_override or
-  consumes_buffered_json or fails_closed_when_wine_is_missing' --no-cov`
+  the focused explicit-override, buffered-JSON, and missing-runtime selection
   failed **4 tests**: both missing/directory environment overrides fell
   through, the second buffered line timed out, and the message lacked the
   non-Windows contract. A separate direct-constructor directory test was then
@@ -246,10 +245,10 @@
   identity, race keys, filenames, or record payloads.
 - Use the development collector's own non-blocking service lock for every
   authenticated call; do not overlap a scheduled collection.
-- Do not restart the collector, mutate Wine/JV-Link identity, perform setup
+- Do not restart the collector, mutate bridge/JV-Link identity, perform setup
   downloads, or request an unbounded historical interval merely to obtain a
   passing result.
-- Distinguish exact public-repository code, a test-only Wine launcher adapter,
+- Distinguish exact public-repository code, a test-only launcher adapter,
   the separately deployed runtime client, and the native bridge binary.
 - A timeout, missing response, unreadable value, or cleanup failure is not a
   pass. Any new or changed validator must first be shown failing on the

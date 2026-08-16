@@ -4,10 +4,10 @@
 
 ```
 ┌─────────────────────────────────────────────────┐
-│  Layer 3: E2E テスト (実機 A6, COM API 必須)    │  手動実行
+│  Layer 3: E2E テスト (Windows 実機, COM API 必須)│  手動実行
 │  tests/e2e/                                      │  VNC/RDP 経由
 ├─────────────────────────────────────────────────┤
-│  Layer 2: 統合テスト (実機 A6, COM API 必須)    │  手動実行
+│  Layer 2: 統合テスト (Windows 実機, COM API 必須)│  手動実行
 │  tests/integration/                              │  pytest 形式
 ├─────────────────────────────────────────────────┤
 │  Layer 1: ユニットテスト (モック/フィクスチャ)   │  CI (GitHub Actions)
@@ -50,20 +50,20 @@
 - macOS/Linux/Windows で実行可
 - GitHub Actions で自動実行
 
-## Layer 2: 統合テスト（A6 手動実行）
+## Layer 2: 統合テスト（Windows 実機で手動実行）
 
 | テストファイル | 対象 |
 |---------------|------|
 | `integration/test_jvlink_real.py` | JV-Link 実接続・取得・パース・格納 |
 
-**実行方法:** A6 上で `pytest tests/integration/ -v -s`
+**実行方法:** Windows 実機上で `pytest tests/integration/ -v -s`
 
 **特徴:**
 - 実際の COM API を使用
 - pytest 形式（`-s` でリアルタイム出力必須）
 - `JVLINK_SERVICE_KEY` 環境変数が必要
 
-## Layer 3: E2E テスト（A6 手動実行）
+## Layer 3: E2E テスト（Windows 実機で手動実行）
 
 | テストファイル | 対象 |
 |---------------|------|
@@ -73,7 +73,7 @@
 | `e2e/e2e_edge_cases.py` | 異常レース・エッジケース（中止/取消/少頭数/災害期間/NULL値） |
 | `e2e/e2e_edge_cases.py` | 異常レース検証（既存DB読取専用、COM API不要） |
 
-**実行方法:** A6 上で VNC/RDP 経由、スタンドアロン Python スクリプト
+**実行方法:** GUI セッションのある Windows 実機上でスタンドアロン Python スクリプト
 
 **特徴:**
 - pytest 不要（スタンドアロン実行可能）
@@ -83,7 +83,7 @@
 
 ## CI vs 手動テスト
 
-| テスト | CI (GitHub Actions) | A6 手動 |
+| テスト | CI (GitHub Actions) | Windows 実機 |
 |--------|:-------------------:|:-------:|
 | Layer 1: ユニットテスト | ✅ | ✅ |
 | Layer 2: 統合テスト | ❌ (COM API 必須) | ✅ |
@@ -159,5 +159,5 @@ COM API は不要（DB 読み取りのみ）。
 
 1. **NARテーブル追加**: 現在 `keiba.db` に NAR テーブル (NN_*) が無い → NAR E2E で確認
 2. **データスナップショット**: E2E テスト結果の件数を記録し、回帰検知
-3. **自動化検討**: A6 上でタスクスケジューラ + バッチファイルによる定期実行
+3. **自動化検討**: Windows タスクスケジューラ + バッチファイルによる定期実行
 4. **既存DBクエリテスト**: `keiba.db` (1.4GB, JRA 131テーブル) に対するクエリ正当性テスト追加

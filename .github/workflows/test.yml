@@ -37,10 +37,16 @@ jobs:
           tests/test_historical_cache_failures.py \
           tests/test_batch_processor.py \
           tests/test_time_series.py \
+          tests/test_distribution_contents.py \
           tests/test_retired_data_specs.py \
           tests/test_jvlink_transport_contract.py \
           tests/unit/test_jvlink_bridge.py \
           -v --cov=src --cov-report=xml --cov-report=term
+
+    - name: Verify distribution contents
+      run: |
+        python -m build --outdir "$RUNNER_TEMP/jltsql-dist"
+        python scripts/check_distribution_contents.py "$RUNNER_TEMP"/jltsql-dist/*
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4

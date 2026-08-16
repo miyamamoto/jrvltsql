@@ -183,9 +183,8 @@
   column remains non-NULL through both importers and native/standard schemas.
 - CRLF is classified as a framing delimiter: exact validation is mandatory,
   but storing control bytes as a database business value is not required.
-- The stale public `docs/crawler_audit_02_ra_extended_layout.md` remains a
-  release-only blocker and is already scheduled for deletion in the separate
-  user-requested public documentation cleanup iteration.
+- The stale public layout note was scheduled for deletion in the separate
+  maintainer-requested public documentation cleanup iteration.
 
 ## Review-repair validation
 

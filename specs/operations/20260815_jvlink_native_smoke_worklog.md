@@ -6,7 +6,7 @@
 - Objective: execute a real authenticated JV-Link transport smoke for the code
   merged by PR #163, covering the real-data call chain from `JVInit` through
   `JVOpen`, `JVStatus`, `JVRead`, and `JVClose` rather than mocks.
-- Minimum scope: discover an existing authorized Windows/Wine JV-Link runtime,
+- Minimum scope: discover an existing authorized JV-Link runtime,
   prove the exact code SHA under test, run a bounded read-only/small-date smoke,
   record sanitized exit status and counts, and publish the evidence in a
   documentation-only PR.
@@ -25,8 +25,8 @@
 - `python3 scripts/system_status.py --json --skip-remote --sections git` was
   run from KPS before discovery. It confirmed the KPS status command was
   available and read-only; this test targets the separate jrvltsql repository.
-- The host is Linux x86_64 and has no host `wine`, `wine32`, or
-  `powershell.exe` command.
+- The host is Linux x86_64 and has no directly usable authenticated bridge
+  runtime or `powershell.exe` command.
 - Docker discovery found a healthy development JRA collector container named
   `kps_ingestion_dev_jra_collector`. Its full container ID was
   `3cdf0dc062fe02f26e41c7601357af2afe00a2d7eede39c307bf9028131977da`,
@@ -59,10 +59,10 @@
     `bd5dc3a5eca74f6d66e38b34f279536c844e25199d39595f251cd7c08a71eb6c`
   - `src/fetcher/historical.py`:
     `8a1763ebf7fea3ac76ec8d803de74fac4980284475f5e0b180d12c0916152111`
-- The public repository bridge launches its Windows executable directly. The
-  Linux collector requires `wine JVLinkBridge.exe`, so a test-only subclass
-  overrode `_start_process` solely to supply that launcher and the existing
-  Wine prefix environment. `jv_init`, `jv_open`, `jv_rt_open`,
+- The public repository bridge launches its configured executable directly.
+  The collector requires an environment-specific launcher, so a test-only
+  subclass overrode `_start_process` solely to supply that launcher.
+  `jv_init`, `jv_open`, `jv_rt_open`,
   `wait_for_download`, `jv_read`, `jv_close`, protocol validation, and state
   tracking remained the exact merge-SHA implementation. This is valid
   evidence for those protocol methods, but not for native Windows process
@@ -107,8 +107,8 @@
 - `JVOpen(RACE, 20260815000000, option=2)` and a bounded fallback
   `JVOpen(RACE, 20260808000000, option=1)` each initialized successfully but
   ended in `JVLinkBridgeError` before an open response was received.
-- The same option-2 call was repeated with the collector image's deployed,
-  Wine-aware bridge client rather than merge-SHA Python. It also returned a
+- The same option-2 call was repeated with the collector image's deployed
+  bridge client rather than merge-SHA Python. It also returned a
   classified `Bridge response timeout (120s)` after `JVInit=0`.
 - Result: **NOT PROVEN**, not a merge-SHA regression finding. The reproduced
   timeout in the separately deployed client shows that this environment
@@ -123,7 +123,7 @@
 - After the calls, no `JVLinkBridge` or `JVLinkAgent` process remained, the
   service lock was available, and the development collector remained healthy.
 - The exact disposable container copy `/tmp/jrvltsql-smoke-2dad8a5` was
-  removed after validating its resolved path. No collector restart, Wine
+  removed after validating its resolved path. No collector restart, bridge
   identity change, registry edit, database write by the test harness, or
   production mutation was performed.
 - Repository source files are unchanged. This iteration changes only this

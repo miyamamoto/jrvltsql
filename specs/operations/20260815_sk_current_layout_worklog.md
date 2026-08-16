@@ -175,11 +175,8 @@
 
 - After this SK iteration is merged, start a separate latest-master worktree
   and PR for the user's public-documentation cleanup request.
-- Remove references to the specified internal collector identifier and to the
-  private runtime implementation, delete `docs/crawler_audit_01_mining_spec.md`,
-  `docs/crawler_audit_02_ra_extended_layout.md`,
-  `docs/crawler_audit_03_we_realtime_spec.md`, and
-  `docs/crawler_audit_04_se_layout.md`, then audit all tracked references so no
+- Remove references to private deployment details and delete the four
+  superseded crawler-layout pages, then audit all tracked references so no
   broken links or equivalent disclosures remain.
 - Keep the tracked `specs/` directory as the repository's audit and handoff
   record. It is intentionally absent from both wheel and sdist distributions;

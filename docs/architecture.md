@@ -15,32 +15,28 @@ NAR / 地方競馬はこのリポジトリの対象外です。
 
 ## 開発と配備
 
-このリポジトリの開発正本は Linux 開発環境の Git worktree です。a6 は
-Windows 実行・検証・収集用の配備先として扱い、a6 上で直接開発した差分を
-正本にしません。変更は開発環境でブランチ化し、テスト後に GitHub へ push
-し、a6 はそのブランチまたは main を取り込んで動作確認します。
+このリポジトリの開発正本は GitHub と Git worktree です。Windows の実行・
+検証・収集環境で直接作った差分を正本にせず、変更は開発用 worktree で
+ブランチ化し、テスト後に GitHub へ push してから対象環境へ配備します。
 
 運用の保存先は PostgreSQL を優先します。`daily_sync.bat` の既定は
 `--db postgresql` で、収集した通常データは PostgreSQL に直接保存します。
 SQLite は単体検証や PostgreSQL がない環境のフォールバックです。
 
-### Wine bridge を使う配備
+### 外部 bridge を使う配備
 
-公開 CLI の利用要件は Windows 10 / 11 ですが、`JVLinkBridge` クライアントは
-コンテナ化した collector から native Win32 bridge を Wine で起動する経路も
-持ちます。この経路では `JVLINK_BRIDGE_EXE` で bridge の Unix 側パス、
-必要に応じて `JVLINK_WINE`、`JVLINK_WINEPREFIX`、`JVLINK_WINEARCH` を指定します。
-Wine、JV-Link、X display の導入とサービスキー登録は配備環境の責務です。
+公開 CLI の利用要件は Windows 10 / 11 です。`JVLinkBridge` クライアントを
+外部 collector から利用する場合は `JVLINK_BRIDGE_EXE` で実行可能な bridge を
+指定します。bridge、JV-Link、GUI セッションの準備とサービスキー登録は配備
+環境の責務です。
 
 JV-Link は `JVOpen` / `JVRTOpen` 中にお知らせや DataLab 更新確認を表示し、
-headless 実行を停止させる場合があります。X display と `xdotool` がある Wine
-環境では、クライアントは既知のダイアログだけを `Escape` で拒否します。
-更新を承諾する `Return` は送りません。この監視を無効にする場合は
+非対話実行を停止させる場合があります。クライアントは既知のダイアログだけを
+安全側へ拒否し、更新を承諾する入力は送りません。この監視を無効にする場合は
 `JVLINK_AUTO_CLOSE_DIALOGS=0`、監視間隔を変える場合は
-`JVLINK_DIALOG_WATCH_INTERVAL_SECONDS` を指定します。監視間隔の既定値は0.5秒、
-最小値は0.1秒で、非数・無限値・解釈不能値は安全側の既定値0.5秒に戻します。
-未知のダイアログ、応答timeout、読めない bridge 応答は成功扱いせず、timeout
-時は状態不明の bridge process を終了します。
+`JVLINK_DIALOG_WATCH_INTERVAL_SECONDS` を指定します。未知のダイアログ、応答
+timeout、読めない bridge 応答は成功扱いせず、timeout 時は状態不明の bridge
+process を終了します。
 
 ## 主要コンポーネント
 

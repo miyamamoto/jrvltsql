@@ -37,6 +37,7 @@ dependencies = [
 postgres = ["psycopg[binary]"]
 s3 = ["boto3>=1.26", "cryptography>=41.0"]
 dev = [
+    "build>=1.2",
     "pytest>=7.4",
     "pytest-cov>=4.1",
     "pytest-benchmark>=4.0",

@@ -5,7 +5,7 @@
 Reads parsed field values from keiba.db, places them back at their byte positions
 to reconstruct raw records suitable for parser testing.
 
-Usage (on A6):
+Usage (on a Windows execution environment):
     venv32\\Scripts\\python.exe scripts/extract_fixtures_from_db.py --db data/keiba.db --output tests/fixtures/jra
 """
 
