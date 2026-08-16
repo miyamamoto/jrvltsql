@@ -2060,3 +2060,17 @@
   unchanged, and request one final carry-forward review rather than restarting
   the full review loop. STOP on a non-test/non-worklog delta, false-green
   mutation probe, failed PostgreSQL path, or unresolved reviewer finding.
+- Final Codex carry-forward review of exact clean candidate
+  `b9a1335579652fd56b0a8d837692fc2485b61517` returned GREEN with
+  `P0=0 / P1=0 / P2=0`. It confirmed that the delta from the reviewed
+  production parent is only the official-contract test and this tracked
+  worklog; directly recomputed all 30 parser/alias/SDK tuples; exercised the
+  offset-drift negative; and independently passed WC focused `51 passed, 1
+  skip`, the broader WC/metadata/current-validation selection `182 passed, 5
+  skipped`, and fresh PostgreSQL 16 `52 passed`. SHA and worktree stayed clean
+  and the review container was removed. Next safe action: commit this
+  worklog-only verdict, verify the carry-forward delta, push the branch, open a
+  scoped PR with the exact candidate and red-first evidence, request the one
+  configured GitHub-native review, and aggregate Actions/threads once. STOP on
+  any production delta after the GREEN parent, remote-head mismatch, executed
+  CI failure, or actionable unresolved review.
