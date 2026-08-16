@@ -1650,3 +1650,19 @@
   skipped`; and disposable PostgreSQL 16 passed all `42` BT tests, including
   ordinary and ordered-master catalog equality after rejection for both
   importer paths. The disposable database was removed.
+- Final clean code candidate `ffd5f3acbe4df171a01c64d6b1ed787c8abb4907`
+  passed the complete local suite (`2,472 passed, 113 skipped, 15 subtests
+  passed`) and a fresh disposable PostgreSQL 16 BT contract (`42 passed`).
+  Test-gate validation, fatal/new-test lint, compileall, strict MkDocs,
+  wheel/sdist build, distribution-content exclusion, public-document scan,
+  retired-document absence, `git diff --check`, generated-artifact cleanup,
+  container cleanup, and clean-tree checks all passed.
+- The final independent Codex follow-up review of that exact SHA returned GREEN
+  with no P0/P1/P2 finding. It independently confirmed the ordered-master
+  rejection across both importers, both commit modes, single-record import,
+  legacy-key-only no-op behavior, dedicated-writer rejection, and the combined
+  legacy-key plus narrow-type case without schema or BT-row mutation. The final
+  worklog-only descendant is recorded in PR metadata instead of creating a
+  self-referential commit loop. Next safe action: push that clean descendant,
+  open the BT PR, request the one-time GitHub auxiliary review, and merge only
+  after all exact-head checks succeed and unresolved threads are zero.
