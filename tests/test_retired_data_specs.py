@@ -50,6 +50,23 @@ LEGACY_COMPATIBILITY_CONSTANTS = (
     DATA_SPEC_SNAP,
     DATA_SPEC_HOSE,
 )
+CURRENT_JVOPEN_BY_OPTION = {
+    1: {
+        "TOKU", "RACE", "SLOP", "WOOD", "YSCH", "HOYU", "COMM", "MING",
+        "DIFN", "BLDN", "SNPN", "HOSN",
+    },
+    2: {"TOKU", "RACE", "TCVN", "RCVN", "SNPN"},
+    3: {
+        "TOKU", "RACE", "SLOP", "WOOD", "YSCH", "HOYU", "COMM", "MING",
+        "DIFN", "BLDN", "SNPN", "HOSN",
+    },
+    4: {
+        "TOKU", "RACE", "SLOP", "WOOD", "YSCH", "HOYU", "COMM", "MING",
+        "DIFN", "BLDN", "SNPN", "HOSN",
+    },
+}
+INVALID_JVOPEN_REQUESTS = ("O1", "RACEDIFF")
+VALID_JVOPEN_REQUESTS = REPLACEMENT_OPTIONS + (("RACEDIFN", 1), ("RACESNPN", 2))
 
 
 class TestRetiredDataSpecTable:
@@ -69,7 +86,7 @@ class TestRetiredDataSpecTable:
             "RCOV": "RCVN",
         }
 
-    @pytest.mark.parametrize("data_spec", RETIRED)
+    @pytest.mark.parametrize("data_spec", RETIRED + ("DIFFRACE", "RACEDIFF"))
     def test_retired_specs_are_recognized(self, data_spec):
         assert is_retired_data_spec(data_spec) is True
 
@@ -91,6 +108,12 @@ class TestRetiredDataSpecTable:
 
 
 class TestJVOpenCombinations:
+    def test_allowlist_is_the_current_official_dataspec_matrix(self):
+        assert {
+            option: set(data_specs)
+            for option, data_specs in JVOPEN_VALID_COMBINATIONS.items()
+        } == CURRENT_JVOPEN_BY_OPTION
+
     @pytest.mark.parametrize("option", sorted(JVOPEN_VALID_COMBINATIONS))
     def test_no_option_accepts_a_retired_spec(self, option):
         accepted = set(JVOPEN_VALID_COMBINATIONS[option])
@@ -113,6 +136,13 @@ class TestJVOpenCombinations:
     @pytest.mark.parametrize("option", (1, 2, 3, 4))
     def test_race_still_passes_on_every_option(self, option):
         assert is_valid_jvopen_combination("RACE", option) is True
+
+    @pytest.mark.parametrize(
+        "data_spec,option",
+        (("RACEDIFN", 1), ("RACESNPN", 2), ("RACEDIFN", 3), ("RACEDIFN", 4)),
+    )
+    def test_concatenated_current_dataspecs_are_valid(self, data_spec, option):
+        assert is_valid_jvopen_combination(data_spec, option) is True
 
 
 class TestRejectionMessage:
@@ -176,6 +206,16 @@ class TestFetcherRejectsBeforeReachingJVLink:
 
         assert data_spec in str(excinfo.value)
         assert RETIRED_DATA_SPECS[data_spec] in str(excinfo.value)
+        fetcher.jvlink.jv_init.assert_not_called()
+        fetcher.jvlink.jv_open.assert_not_called()
+
+    @pytest.mark.parametrize("data_spec", INVALID_JVOPEN_REQUESTS)
+    def test_fetch_rejects_invalid_or_mixed_requests_before_jvlink(self, data_spec):
+        fetcher = self._fetcher()
+
+        with pytest.raises(ValueError):
+            list(fetcher.fetch(data_spec, "20240101", "20241231", option=1))
+
         fetcher.jvlink.jv_init.assert_not_called()
         fetcher.jvlink.jv_open.assert_not_called()
 
@@ -272,7 +312,17 @@ class TestWrapperRejectsBeforeCOM:
         wrapper._jvlink.JVOpen.assert_not_called()
         assert wrapper.is_open() is False
 
-    @pytest.mark.parametrize("data_spec,option", REPLACEMENT_OPTIONS)
+    @pytest.mark.parametrize("data_spec", INVALID_JVOPEN_REQUESTS)
+    def test_jv_open_rejects_invalid_or_mixed_requests_before_com(self, data_spec):
+        wrapper = self._wrapper()
+
+        with pytest.raises(ValueError):
+            wrapper.jv_open(data_spec, "20240101000000", option=1)
+
+        wrapper._jvlink.JVOpen.assert_not_called()
+        assert wrapper.is_open() is False
+
+    @pytest.mark.parametrize("data_spec,option", VALID_JVOPEN_REQUESTS)
     def test_jv_open_still_reaches_com_for_the_replacement(self, data_spec, option):
         wrapper = self._wrapper()
 
@@ -318,7 +368,17 @@ class TestBridgeRejectsBeforeTransmission:
         bridge._send_command.assert_not_called()
         assert bridge.is_open() is False
 
-    @pytest.mark.parametrize("data_spec,option", REPLACEMENT_OPTIONS)
+    @pytest.mark.parametrize("data_spec", INVALID_JVOPEN_REQUESTS)
+    def test_jv_open_rejects_invalid_or_mixed_requests_before_transmission(self, data_spec):
+        bridge = self._bridge()
+
+        with pytest.raises(ValueError):
+            bridge.jv_open(data_spec, "20240101000000", option=1)
+
+        bridge._send_command.assert_not_called()
+        assert bridge.is_open() is False
+
+    @pytest.mark.parametrize("data_spec,option", VALID_JVOPEN_REQUESTS)
     def test_jv_open_still_transmits_for_the_replacement(self, data_spec, option):
         bridge = self._bridge()
 

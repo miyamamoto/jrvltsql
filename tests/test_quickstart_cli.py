@@ -403,6 +403,28 @@ class TestQuickstartUpdateSpecs:
             }
         ]
 
+    def test_progress_fetch_rejects_record_type_before_database(self, tmp_path, monkeypatch):
+        """O1 is a RACE record ID, not a standalone JVOpen dataspec."""
+        from scripts.quickstart import QuickstartRunner
+
+        runner = QuickstartRunner(
+            {
+                "db_path": str(tmp_path / "quickstart.db"),
+                "from_date": "20260101",
+                "to_date": "20260102",
+            }
+        )
+        monkeypatch.setattr(
+            runner,
+            "_create_database",
+            lambda: pytest.fail("database setup must not run for an invalid dataspec"),
+        )
+
+        status, details = runner._fetch_single_spec_with_progress("O1", option=1)
+
+        assert status == "skipped"
+        assert details["error_type"] == "invalid_option"
+
 
 class TestAnalyzeErrorJVInitCodes:
     """_analyze_error must classify JVInit/JVOpen error codes per the official
