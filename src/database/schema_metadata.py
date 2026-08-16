@@ -82,7 +82,10 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
             {
                 "name": "データ区分",
                 "type": "TEXT",
-                "description": "データ区分（1=通常、2=訂正、3=削除、9=レコード削除）",
+                "description": (
+                    "レース詳細のデータ区分（1～7=提供段階、A=地方、B=海外、"
+                    "9=レース中止、0=提供ミス等による該当レコード削除）"
+                ),
                 "example": "1",
                 "nullable": False
             },

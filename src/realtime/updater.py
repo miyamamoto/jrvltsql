@@ -8,13 +8,18 @@ from typing import Dict, List, Optional, Union
 
 from src.database.base import BaseDatabase
 from src.database.schema_types import get_table_primary_key_columns
+from src.importer.importer import (
+    CANCELLATION_STATE_RECORD_TYPES,
+    clean_record_metadata,
+    resolve_record_data_kubun,
+)
 from src.jvlink.constants import (
-    DATA_KUBUN_NEW,
-    DATA_KUBUN_UPDATE,
     DATA_KUBUN_DELETE,
+    DATA_KUBUN_ERASE,
+    DATA_KUBUN_NEW,
     DATA_KUBUN_REFRESH,
     DATA_KUBUN_REREGISTER,
-    DATA_KUBUN_ERASE,
+    DATA_KUBUN_UPDATE,
 )
 from src.parser.factory import ParserFactory
 from src.utils.logger import get_logger
@@ -342,7 +347,46 @@ class RealtimeUpdater:
         grouped: dict[str, list[Dict]] = {}
         errors = 0
         batch_collected_at = self._current_collected_at() if timeseries else None
+        validated_records: list[Dict] = []
+        ordered_mutation_required = False
+
         for record in records:
+            try:
+                data_kubun = resolve_record_data_kubun(record)
+            except ValueError as exc:
+                logger.warning(f"Skipping record with conflicting DataKubun aliases: {exc}")
+                errors += 1
+                continue
+            record_type = record.get("RecordSpec")
+            if data_kubun == DATA_KUBUN_ERASE or (
+                data_kubun == DATA_KUBUN_DELETE
+                and record_type not in CANCELLATION_STATE_RECORD_TYPES
+            ):
+                ordered_mutation_required = True
+            validated_records.append(record)
+
+        if ordered_mutation_required:
+            results = [
+                self._process_single_record(record, timeseries=timeseries)
+                for record in validated_records
+            ]
+            successful, rejected = summarize_update_result(results)
+            tables = sorted(
+                {
+                    item["table"]
+                    for item in successful
+                    if item.get("table")
+                }
+            )
+            return {
+                "operation": "batch_insert",
+                "success": errors + rejected == 0,
+                "inserted": len(successful),
+                "errors": errors + rejected,
+                "tables": tables,
+            }
+
+        for record in validated_records:
             if timeseries and batch_collected_at:
                 record.setdefault("CollectedAt", batch_collected_at)
             record_type = record.get("RecordSpec")
@@ -492,21 +536,26 @@ class RealtimeUpdater:
                 if verify_mining_native_schema(self.database, parsed_data, table_name):
                     self._verified_mining_native_tables.add(table_name)
 
-            # headDataKubun is an explicit mutation instruction. RA/SE/WF use
-            # record-level DataKubun for domain state (including finalized 7
-            # and cancelled 9). Only 0 is an erase instruction for these rows.
-            explicit_operation = parsed_data.get("headDataKubun")
-            if explicit_operation:
-                head_data_kubun = explicit_operation
-            elif (
-                record_type in {"RA", "SE", "WF"}
-                and parsed_data.get("DataKubun") != DATA_KUBUN_ERASE
+            # DataKubun is record-specific domain state. The legacy flattened
+            # name headDataKubun is the same header field, not a second command.
+            # For cancellation-capable records, 9 must remain queryable and
+            # only the official 0 value requests physical erase.
+            record_data_kubun = resolve_record_data_kubun(parsed_data)
+            if (
+                record_type in CANCELLATION_STATE_RECORD_TYPES
+                and record_data_kubun not in {
+                    DATA_KUBUN_ERASE,
+                    DATA_KUBUN_NEW,
+                    DATA_KUBUN_UPDATE,
+                    DATA_KUBUN_REREGISTER,
+                    DATA_KUBUN_REFRESH,
+                }
             ):
                 head_data_kubun = DATA_KUBUN_NEW
             else:
-                head_data_kubun = parsed_data.get("DataKubun") or DATA_KUBUN_NEW
+                head_data_kubun = record_data_kubun
 
-            # Process based on headDataKubun
+            # Process the resolved record-specific DataKubun.
             # Note: Per-record debug logging removed to reduce verbosity
             if head_data_kubun == DATA_KUBUN_NEW:
                 return self._handle_new_record(table_name, parsed_data)
@@ -521,9 +570,12 @@ class RealtimeUpdater:
                 # ERASE(0) is treated same as DELETE
                 return self._handle_delete_record(table_name, parsed_data)
             else:
-                logger.warning(f"Unknown headDataKubun: {head_data_kubun}")
+                logger.warning(f"Unknown DataKubun: {head_data_kubun}")
                 return None
 
+        except ValueError as e:
+            logger.error(f"Rejected realtime record: {e}")
+            raise
         except Exception as e:
             logger.error(f"Error processing single record: {e}", exc_info=True)
             raise
@@ -538,7 +590,7 @@ class RealtimeUpdater:
         """
         from src.importer.importer import convert_record_types
 
-        clean_data = {k: v for k, v in data.items() if not k.startswith("_")}
+        clean_data = clean_record_metadata(data)
         if table_name.startswith("TS_"):
             clean_data.setdefault("CollectedAt", self._current_collected_at())
         if table_name in {"TS_O1", "TS_SOKUHO_O1"}:
@@ -732,8 +784,12 @@ class RealtimeUpdater:
     @staticmethod
     def _expanded_record_delete_keys(table_name: str, data: Dict) -> list:
         """Return record-level delete keys for expanded array tables."""
-        data_kubun = data.get("headDataKubun") or data.get("DataKubun")
-        if data_kubun not in {DATA_KUBUN_DELETE, DATA_KUBUN_ERASE}:
+        data_kubun = resolve_record_data_kubun(data)
+        record_type = data.get("RecordSpec")
+        if data_kubun != DATA_KUBUN_ERASE and not (
+            data_kubun == DATA_KUBUN_DELETE
+            and record_type not in CANCELLATION_STATE_RECORD_TYPES
+        ):
             return []
 
         base_keys = ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum"]

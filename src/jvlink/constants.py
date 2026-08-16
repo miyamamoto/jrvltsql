@@ -531,8 +531,12 @@ DATA_KUBUN_NEW = "1"  # 新規
 DATA_KUBUN_UPDATE = "2"  # 変更
 DATA_KUBUN_REREGISTER = "3"  # 再登録
 DATA_KUBUN_REFRESH = "4"  # 更新
-DATA_KUBUN_DELETE = "9"  # 抹消
-DATA_KUBUN_ERASE = "0"  # 削除
+# Legacy public names. JV-Data assigns record-specific domain meanings to 9
+# (for example race cancellation or master-data deregistration); it is not a
+# universal physical-delete command. Value 0 is the explicit erroneous-record
+# erase for record families that define it.
+DATA_KUBUN_DELETE = "9"
+DATA_KUBUN_ERASE = "0"
 
 # JVOpen Options
 # IMPORTANT: Option values start from 1, NOT 0

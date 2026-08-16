@@ -594,6 +594,113 @@ def _record_type_from_record(record: dict) -> Any:
     return record.get("レコード種別ID") or record.get("RecordSpec") or record.get("headRecordSpec")
 
 
+CANCELLATION_STATE_RECORD_TYPES = frozenset(
+    {"RA", "SE", "HR", "H1", "H6", "O1", "O2", "O3", "O4", "O5", "O6", "WF"}
+)
+
+_OFFICIAL_ERASE_KEY_COLUMNS = {
+    "RA": _MINING_RACE_KEY_COLUMNS,
+    "SE": (*_MINING_RACE_KEY_COLUMNS, "Umaban"),
+    "HR": _MINING_RACE_KEY_COLUMNS,
+    # One physical H1/H6/O1-O6 record expands into multiple child rows.
+    "H1": _MINING_RACE_KEY_COLUMNS,
+    "H6": _MINING_RACE_KEY_COLUMNS,
+    "O1": _MINING_RACE_KEY_COLUMNS,
+    "O2": _MINING_RACE_KEY_COLUMNS,
+    "O3": _MINING_RACE_KEY_COLUMNS,
+    "O4": _MINING_RACE_KEY_COLUMNS,
+    "O5": _MINING_RACE_KEY_COLUMNS,
+    "O6": _MINING_RACE_KEY_COLUMNS,
+    "WF": ("Year", "MonthDay"),
+}
+
+_OFFICIAL_ERASE_STORAGE_TABLES = {
+    "RA": {"NL_RA", "RT_RA", "RACE"},
+    "SE": {"NL_SE", "RT_SE", "UMA_RACE"},
+    "HR": {"NL_HR", "RT_HR", "HARAI"},
+    "H1": {"NL_H1", "RT_H1", "HYO_TANPUKU"},
+    "H6": {"NL_H6", "RT_H6", "HYO_SANRENTAN"},
+    "O1": {"NL_O1", "RT_O1", "ODDS_TANPUKU"},
+    "O2": {"NL_O2", "RT_O2", "ODDS_UMAREN"},
+    "O3": {"NL_O3", "RT_O3", "ODDS_WIDE"},
+    "O4": {"NL_O4", "RT_O4", "ODDS_UMATAN"},
+    "O5": {"NL_O5", "RT_O5", "ODDS_SANRENPUKU"},
+    "O6": {"NL_O6", "RT_O6", "ODDS_SANRENTAN"},
+    "WF": {"NL_WF", "RT_WF", "WIN5"},
+}
+
+
+def resolve_record_data_kubun(record: dict) -> str:
+    """Resolve current and legacy names for the same JV-Data header field."""
+    current = record.get("DataKubun")
+    legacy = record.get("headDataKubun")
+    current = None if current in (None, "") else str(current)
+    legacy = None if legacy in (None, "") else str(legacy)
+    if current is not None and legacy is not None and current != legacy:
+        raise ValueError(
+            "record has conflicting DataKubun and headDataKubun values: "
+            f"{current!r} != {legacy!r}"
+        )
+    return current or legacy or "1"
+
+
+def clean_record_metadata(record: dict) -> dict:
+    """Drop parser metadata and normalize legacy JV-Data header aliases."""
+    metadata_fields = {
+        "headRecordSpec",
+        "レコード種別ID",
+        "_raw_data",
+        "_parse_errors",
+        "RecordDelimiter",
+        "RecordSeparator",
+    }
+    cleaned = {
+        key: value
+        for key, value in record.items()
+        if key not in metadata_fields and not key.startswith("_")
+    }
+    if record.get("DataKubun") not in (None, "") or record.get("headDataKubun") not in (
+        None,
+        "",
+    ):
+        cleaned["DataKubun"] = resolve_record_data_kubun(record)
+    cleaned.pop("headDataKubun", None)
+    return cleaned
+
+
+def _is_official_record_erase(record: dict, table_name: str) -> bool:
+    """Return whether a cancellation-capable physical record requests erase."""
+    record_type = _record_type_from_record(record)
+    return (
+        record_type in CANCELLATION_STATE_RECORD_TYPES
+        and table_name in _OFFICIAL_ERASE_STORAGE_TABLES[record_type]
+        and resolve_record_data_kubun(record) == "0"
+    )
+
+
+def _delete_official_record(database: BaseDatabase, record: dict, table_name: str) -> int:
+    """Apply DataKubun=0 at the physical-record boundary after key validation."""
+    record_type = _record_type_from_record(record)
+    if not _is_official_record_erase(record, table_name):
+        raise ValueError(f"{table_name} is not erase storage for record {record_type!r}")
+
+    key_columns = _OFFICIAL_ERASE_KEY_COLUMNS[record_type]
+    converted = convert_record_types(record, table_name)
+    # Some legacy standard schemas omit type metadata for an otherwise valid
+    # race key. Preserve the raw key only for those columns.
+    key_values = {
+        column: converted.get(column, record.get(column))
+        for column in key_columns
+    }
+    missing = [column for column, value in key_values.items() if value in (None, "")]
+    if missing:
+        raise ValueError(f"{record_type} record erase has incomplete key: {missing}")
+
+    where = " AND ".join(f"{column} = ?" for column in key_columns)
+    values = tuple(key_values[column] for column in key_columns)
+    return database.execute(f"DELETE FROM {table_name} WHERE {where}", values)
+
+
 def _mining_storage_config(record: dict, table_name: str) -> tuple[str, dict[str, Any]] | None:
     """Return the DM/TM storage contract that owns this parsed record and table."""
     record_type = _record_type_from_record(record)
@@ -1493,19 +1600,7 @@ class DataImporter:
         Returns:
             Cleaned record without metadata fields
         """
-        # Fields used for routing/metadata that shouldn't be in database tables
-        metadata_fields = {
-            "headRecordSpec",
-            "レコード種別ID",
-            "_raw_data",
-            "_parse_errors",
-            "RecordDelimiter",
-            "RecordSeparator",
-        }
-
-        return {
-            k: v for k, v in record.items() if k not in metadata_fields and not k.startswith("_")
-        }
+        return clean_record_metadata(record)
 
     def _record_for_table(self, record: dict, table_name: str) -> dict:
         """Return the parser representation required by the target schema."""
@@ -1600,6 +1695,19 @@ class DataImporter:
                 if table_name not in self._verified_mining_native_tables:
                     if verify_mining_native_schema(self.database, record, table_name):
                         self._verified_mining_native_tables.add(table_name)
+
+                if _is_official_record_erase(record, table_name):
+                    pending = batch_buffers.setdefault(table_name, [])
+                    if pending:
+                        self._flush_batch(table_name, pending, auto_commit)
+                        batch_buffers[table_name] = []
+                    _delete_official_record(self.database, record, table_name)
+                    self._records_imported += 1
+                    self._batches_processed += 1
+                    if auto_commit:
+                        self.database.commit()
+                    last_expanded_record_fingerprint = None
+                    continue
 
                 if _is_mining_race_delete(record, table_name):
                     pending = batch_buffers.setdefault(table_name, [])
@@ -2024,6 +2132,13 @@ class DataImporter:
             if table_name not in self._verified_mining_native_tables:
                 if verify_mining_native_schema(self.database, record, table_name):
                     self._verified_mining_native_tables.add(table_name)
+            if _is_official_record_erase(record, table_name):
+                _delete_official_record(self.database, record, table_name)
+                self._records_imported += 1
+                self._batches_processed += 1
+                if auto_commit:
+                    self.database.commit()
+                return True
             if _is_mining_race_delete(record, table_name):
                 _delete_mining_race_rows(self.database, record, table_name)
                 self._records_imported += 1

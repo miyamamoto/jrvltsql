@@ -10,8 +10,10 @@ from uuid import uuid4
 import pytest
 
 from src.database.schema import SCHEMAS
+from src.database.schema_jravan import JRAVAN_SCHEMAS
 from src.database.sqlite_handler import SQLiteDatabase
 from src.importer.importer import DataImporter
+from src.importer.importer_optimized import OptimizedDataImporter
 from src.parser.av_parser import AVParser
 from src.parser.o1_parser import O1Parser
 from src.parser.o2_parser import O2Parser
@@ -50,6 +52,13 @@ def _make_o1_record(data_kubun: str = "4") -> bytes:
     return raw
 
 
+def _make_o1_erase_record() -> bytes:
+    header = _odds_header("O1", data_kubun="0") + b"0000"
+    raw = header + b" " * (O1Parser.RECORD_LENGTH - len(header) - 2) + b"\r\n"
+    assert len(raw) == O1Parser.RECORD_LENGTH
+    return raw
+
+
 def _make_empty_o2_record() -> bytes:
     raw = _odds_header("O2") + b"7" + b"0" * (153 * 13) + b"00000000999\r\n"
     assert len(raw) == O2Parser.RECORD_LENGTH
@@ -84,6 +93,12 @@ def _flatten(parsed):
 def _create_tables(db, table_names):
     for table_name in table_names:
         db.execute(SCHEMAS[table_name])
+    db.commit()
+
+
+def _create_jravan_tables(db, table_names):
+    for table_name in table_names:
+        db.execute(JRAVAN_SCHEMAS[table_name])
     db.commit()
 
 
@@ -196,6 +211,152 @@ def test_sqlite_realtime_delete_removes_expanded_o1_record(sqlite_db):
     assert result["success"] is True
     count = sqlite_db.fetch_one("SELECT COUNT(*) AS cnt FROM RT_O1")
     assert count["cnt"] == 0
+
+
+def _assert_realtime_batch_retains_cancellation_then_applies_zero_erase(db):
+    _create_tables(db, ["RT_O1"])
+    updater = RealtimeUpdater(db)
+
+    initial = _flatten(O1Parser().parse(_make_o1_record(data_kubun="4")))
+    erase = _flatten(O1Parser().parse(_make_o1_erase_record()))
+    cancelled = _flatten(O1Parser().parse(_make_o1_record(data_kubun="9")))
+    result = updater.process_parsed_records_batch([*initial, *erase, *cancelled])
+    assert result["success"] is True
+    assert result["inserted"] == 9
+    statuses = db.fetch_all("SELECT DISTINCT DataKubun AS status FROM RT_O1")
+    assert statuses == [{"status": "9"}]
+
+    result = updater.process_parsed_records_batch(erase)
+    assert result["success"] is True
+    count = db.fetch_one("SELECT COUNT(*) AS cnt FROM RT_O1")
+    assert count["cnt"] == 0
+
+
+def test_sqlite_realtime_batch_retains_cancellation_then_applies_zero_erase(sqlite_db):
+    _assert_realtime_batch_retains_cancellation_then_applies_zero_erase(sqlite_db)
+
+
+def _assert_historical_importer_retains_cancellation_then_applies_zero_erase(
+    db,
+    importer_class,
+):
+    _create_tables(db, ["NL_RA", "NL_O1"])
+    importer = importer_class(db, batch_size=100)
+    race_key = {
+        "RecordSpec": "RA",
+        "MakeDate": "20260419",
+        "Year": "2026",
+        "MonthDay": "0419",
+        "JyoCD": "06",
+        "Kaiji": "03",
+        "Nichiji": "08",
+        "RaceNum": "11",
+    }
+
+    stats = importer.import_records(
+        iter(
+            [
+                {**race_key, "DataKubun": "1"},
+                {**race_key, "DataKubun": "0"},
+                {**race_key, "headDataKubun": "9"},
+            ]
+        )
+    )
+    assert stats["records_imported"] == 3
+    assert stats["records_failed"] == 0
+    assert stats["batches_processed"] == 3
+    race = db.fetch_one("SELECT DataKubun AS status FROM NL_RA")
+    assert race == {"status": "9"}
+
+    initial_odds = _flatten(O1Parser().parse(_make_o1_record(data_kubun="4")))
+    erase = _flatten(O1Parser().parse(_make_o1_erase_record()))
+    cancelled_odds = _flatten(O1Parser().parse(_make_o1_record(data_kubun="9")))
+    stats = importer.import_records(iter([*initial_odds, *erase, *cancelled_odds]))
+    assert stats["records_imported"] == 9
+    assert stats["records_failed"] == 0
+    assert stats["batches_processed"] == 3
+    statuses = db.fetch_all("SELECT DISTINCT DataKubun AS status FROM NL_O1")
+    assert statuses == [{"status": "9"}]
+
+    stats = importer.import_records(
+        iter([{**race_key, "headDataKubun": "0"}, *erase])
+    )
+    assert stats["records_imported"] == 2
+    assert stats["records_failed"] == 0
+    assert db.fetch_one("SELECT COUNT(*) AS cnt FROM NL_RA")["cnt"] == 0
+    assert db.fetch_one("SELECT COUNT(*) AS cnt FROM NL_O1")["cnt"] == 0
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_sqlite_historical_importers_retain_cancellation_then_apply_zero_erase(
+    sqlite_db,
+    importer_class,
+):
+    _assert_historical_importer_retains_cancellation_then_applies_zero_erase(
+        sqlite_db,
+        importer_class,
+    )
+
+
+def test_postgresql_realtime_batch_retains_cancellation_then_applies_zero_erase(
+    postgresql_db,
+):
+    _assert_realtime_batch_retains_cancellation_then_applies_zero_erase(postgresql_db)
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_postgresql_historical_importers_retain_cancellation_then_apply_zero_erase(
+    postgresql_db,
+    importer_class,
+):
+    _assert_historical_importer_retains_cancellation_then_applies_zero_erase(
+        postgresql_db,
+        importer_class,
+    )
+
+
+def _assert_standard_race_retains_legacy_cancellation_then_applies_current_erase(
+    db,
+    importer_class,
+):
+    _create_jravan_tables(db, ["RACE"])
+    importer = importer_class(db, use_jravan_schema=True)
+    race_key = {
+        "RecordSpec": "RA",
+        "MakeDate": "20260419",
+        "Year": "2026",
+        "MonthDay": "0419",
+        "JyoCD": "06",
+        "Kaiji": "03",
+        "Nichiji": "08",
+        "RaceNum": "11",
+    }
+
+    stats = importer.import_records(iter([{**race_key, "headDataKubun": "9"}]))
+    assert stats["records_imported"] == 1
+    assert stats["records_failed"] == 0
+    assert db.fetch_one("SELECT DataKubun AS status FROM RACE") == {"status": "9"}
+
+    stats = importer.import_records(iter([{**race_key, "DataKubun": "0"}]))
+    assert stats["records_imported"] == 1
+    assert stats["records_failed"] == 0
+    assert db.fetch_one("SELECT COUNT(*) AS cnt FROM RACE")["cnt"] == 0
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_sqlite_standard_race_cancellation_and_erase(sqlite_db, importer_class):
+    _assert_standard_race_retains_legacy_cancellation_then_applies_current_erase(
+        sqlite_db,
+        importer_class,
+    )
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_postgresql_standard_race_cancellation_and_erase(postgresql_db, importer_class):
+    _assert_standard_race_retains_legacy_cancellation_then_applies_current_erase(
+        postgresql_db,
+        importer_class,
+    )
 
 
 def test_sqlite_importer_stores_official_av_record(sqlite_db):

@@ -19,13 +19,16 @@ from src.importer.importer import (
     _TK_CHILD_STORAGE_TABLES,
     _YS_STORAGE_TABLES,
     _delete_mining_race_rows,
+    _delete_official_record,
     _expanded_record_fingerprint,
     _is_mining_race_delete,
     _is_mining_snapshot_follower,
+    _is_official_record_erase,
     _mining_native_snapshot_rows,
     _record_type_from_record,
     apply_rc_batch,
     apply_ys_batch,
+    clean_record_metadata,
     insert_ch_coupled_batch,
     insert_ks_coupled_batch,
     insert_tk_coupled_batch,
@@ -192,19 +195,7 @@ class OptimizedDataImporter:
 
     @staticmethod
     def _clean_record(record: dict) -> dict:
-        metadata_fields = {
-            "headRecordSpec",
-            "レコード種別ID",
-            "_raw_data",
-            "_parse_errors",
-            "RecordDelimiter",
-            "RecordSeparator",
-        }
-        return {
-            key: value
-            for key, value in record.items()
-            if key not in metadata_fields and not key.startswith("_")
-        }
+        return clean_record_metadata(record)
 
     @classmethod
     def _record_for_table(cls, record: dict, table_name: str) -> dict:
@@ -298,6 +289,23 @@ class OptimizedDataImporter:
                 if table_name not in self._verified_mining_native_tables:
                     if verify_mining_native_schema(self.database, record, table_name):
                         self._verified_mining_native_tables.add(table_name)
+
+                if _is_official_record_erase(record, table_name):
+                    pending = batch_buffers.setdefault(table_name, [])
+                    if pending:
+                        self._flush_batch_optimized(
+                            table_name,
+                            pending,
+                            commit_batch=auto_commit,
+                        )
+                        batch_buffers[table_name] = []
+                    _delete_official_record(self.database, record, table_name)
+                    self._records_imported += 1
+                    self._batches_processed += 1
+                    if auto_commit:
+                        self.database.commit()
+                    last_expanded_record_fingerprint = None
+                    continue
 
                 if _is_mining_race_delete(record, table_name):
                     pending = batch_buffers.setdefault(table_name, [])

@@ -2,25 +2,25 @@
 # -*- coding: utf-8 -*-
 """Tests for realtime data fetching and monitoring."""
 
-import unittest
-from unittest.mock import Mock, MagicMock, patch, call, ANY
 import threading
 import time
+import unittest
+from unittest.mock import ANY, MagicMock, Mock, call, patch
 
 import pytest
 
 from src.fetcher.base import FetcherError
 from src.fetcher.realtime import RealtimeFetcher, materialize_complete_records
-from src.services.realtime_monitor import RealtimeMonitor, MonitorStatus
-from src.realtime.updater import RealtimeUpdater, summarize_update_result
 from src.jvlink.constants import (
-    JV_RT_SUCCESS,
-    JV_READ_SUCCESS,
-    DATA_KUBUN_NEW,
-    DATA_KUBUN_UPDATE,
     DATA_KUBUN_DELETE,
     DATA_KUBUN_ERASE,
+    DATA_KUBUN_NEW,
+    DATA_KUBUN_UPDATE,
+    JV_READ_SUCCESS,
+    JV_RT_SUCCESS,
 )
+from src.realtime.updater import RealtimeUpdater, summarize_update_result
+from src.services.realtime_monitor import MonitorStatus, RealtimeMonitor
 
 
 class TestRealtimeFetcher(unittest.TestCase):
@@ -763,7 +763,7 @@ class TestRealtimeUpdater(unittest.TestCase):
 
     @patch('src.realtime.updater.ParserFactory')
     def test_process_record_delete(self, mock_factory_class):
-        """Test processing delete record (headDataKubun=9)."""
+        """Legacy headDataKubun=9 keeps the official cancelled-race state."""
         # Setup mock parser
         mock_parser = MagicMock()
         mock_parser.parse.return_value = {
@@ -787,16 +787,18 @@ class TestRealtimeUpdater(unittest.TestCase):
         # Process record
         result = updater.process_record("RA20240101...")
 
-        # Verify result
+        # The legacy flattened field name has the same record-specific meaning
+        # as current DataKubun; 9 is not a physical-delete instruction for RA.
         self.assertIsNotNone(result)
-        self.assertEqual(result["operation"], "delete")
+        self.assertEqual(result["operation"], "insert")
         self.assertEqual(result["table"], "RT_RA")
         self.assertTrue(result["success"])
 
-        # Verify database execute was called for DELETE
-        self.mock_db.execute.assert_called_once()
-        call_args = self.mock_db.execute.call_args
-        self.assertIn("DELETE FROM RT_RA", call_args[0][0])
+        self.mock_db.insert.assert_called_once()
+        inserted = self.mock_db.insert.call_args.args[1]
+        self.assertEqual(inserted["DataKubun"], DATA_KUBUN_DELETE)
+        self.assertNotIn("headDataKubun", inserted)
+        self.mock_db.execute.assert_not_called()
 
     def test_record_data_kubun_zero_physically_deletes(self):
         updater = RealtimeUpdater(self.mock_db)
@@ -1197,9 +1199,22 @@ class TestRealtimeUpdater(unittest.TestCase):
     def test_cancellation_status_is_upserted_for_realtime_state_records(self):
         updater = RealtimeUpdater(self.mock_db)
 
-        for record_type in ("RA", "SE", "WF"):
+        for record_type in (
+            "RA", "SE", "HR", "H1", "H6",
+            "O1", "O2", "O3", "O4", "O5", "O6", "WF",
+        ):
             with self.subTest(record_type=record_type):
                 self.mock_db.reset_mock()
+                expanded_keys = {
+                    "H1": {"BetType": "Tansyo", "Kumi": "01"},
+                    "H6": {"SanrentanKumi": "010203"},
+                    "O1": {"Kumi": "00"},
+                    "O2": {"Kumi": "0102"},
+                    "O3": {"Kumi": "0102"},
+                    "O4": {"Kumi": "0102"},
+                    "O5": {"Kumi": "010203"},
+                    "O6": {"Kumi": "010203"},
+                }.get(record_type, {})
                 result = updater.process_parsed_record(
                     {
                         "RecordSpec": record_type,
@@ -1211,6 +1226,7 @@ class TestRealtimeUpdater(unittest.TestCase):
                         "Nichiji": "1",
                         "RaceNum": "1",
                         "Umaban": "1",
+                        **expanded_keys,
                     }
                 )
 
@@ -1219,25 +1235,25 @@ class TestRealtimeUpdater(unittest.TestCase):
                 self.mock_db.insert.assert_called_once()
                 self.mock_db.execute.assert_not_called()
 
-    def test_data_kubun_9_deletes_non_state_expanded_records(self):
+    def test_conflicting_current_and_legacy_data_kubun_is_rejected(self):
         updater = RealtimeUpdater(self.mock_db)
 
-        result = updater.process_parsed_record(
-            {
-                "RecordSpec": "O1",
-                "DataKubun": DATA_KUBUN_DELETE,
-                "Year": "2026",
-                "MonthDay": "0715",
-                "JyoCD": "05",
-                "Kaiji": "1",
-                "Nichiji": "1",
-                "RaceNum": "1",
-            }
-        )
+        with self.assertRaisesRegex(ValueError, "conflicting DataKubun"):
+            updater.process_parsed_record(
+                {
+                    "RecordSpec": "RA",
+                    "DataKubun": DATA_KUBUN_DELETE,
+                    "headDataKubun": DATA_KUBUN_ERASE,
+                    "Year": "2026",
+                    "MonthDay": "0715",
+                    "JyoCD": "05",
+                    "Kaiji": "1",
+                    "Nichiji": "1",
+                    "RaceNum": "1",
+                }
+            )
 
-        self.assertEqual(result["operation"], "delete")
-        self.assertTrue(result["success"])
-        self.mock_db.execute.assert_called_once()
+        self.mock_db.execute.assert_not_called()
         self.mock_db.insert.assert_not_called()
 
     def test_finalized_ra_data_kubun_is_stored_as_state(self):
