@@ -474,11 +474,62 @@
 
 ## Next safe action
 
-- Run the focused envelope/parser/workflow checks for the grouped PR #192
-  follow-up, commit and push once, and bind replacement checks to the resulting
-  full SHA. Reply to and resolve both review threads with exact evidence. Merge
-  only when required checks are green, unresolved threads are zero, and the
-  worktree is clean. Start the test-truth and compact official-oracle work from
-  the latest merged `origin/master`; stop before version changes or
-  authenticated acquisition until all release-blocking audit iterations are
-  merged.
+- The grouped PR #192 follow-up was committed and pushed as exact candidate
+  `5390272ffade21b350d0466cce429c194f0df98a`. Local focused evidence was 511
+  passed; the workflow-equivalent selection was 1,049 passed, 2 skipped, 3
+  known warnings, and 12 subtests. GitHub run `31945371164` bound to the same
+  SHA completed Linux tests, distribution content verification, the Windows
+  launcher job, and lint successfully; the performance job had zero executed
+  steps and was the expected non-master skip. All review findings were either
+  repaired or independently refuted with evidence, unresolved threads were
+  zero, and the worktree was clean. PR #192 was squash-merged as
+  `89ef8f68d5d854c0e17d7540a7b8fafc91511714` on 2026-08-16. The merged and
+  red-reproduction worktrees were then removed.
+
+## Audit iteration: test-truth gate
+
+- Objective: make the deterministic test suite and GitHub workflow fail closed
+  before adding the compact official oracle. The minimum scope is test
+  collection, warning/error policy, fatal lint wiring, truthful fixture
+  provenance, and removal or isolation of manual live scripts that currently
+  masquerade as pytest gates. Production parser/schema/import behavior is out
+  of scope for this iteration.
+- Repository: `miyamamoto/jrvltsql`. Dedicated worktree:
+  `$WORKSPACE/20260816_jrvltsql_test_truth`. Branch:
+  `agent/test-truth-gate-20260816`. Base and initial HEAD:
+  `89ef8f68d5d854c0e17d7540a7b8fafc91511714`, fetched from current
+  `origin/master`. The worktree was clean at start. Production/release remains
+  v1.6.10; no version, tag, package publication, or provider acquisition is in
+  this iteration.
+- Dependency order: merge this test-truth PR first; start the compact official
+  38-record oracle from its merge SHA; then repair HY, CK, standard schema
+  routing, obsolete routes, metadata, and real-data E2E in independent
+  iterations. Do not interpret a green test-truth PR as release readiness.
+- Existing red evidence to preserve:
+  - warning-strict deterministic-suite audit: 3 failed because pytest test
+    functions return booleans instead of using assertions/skips;
+  - the workflow executes a hand-selected subset and omits most official
+    contract files;
+  - fatal flake8 and mypy are both placed behind step-level
+    `continue-on-error`, so a real fatal lint failure can be reported as a
+    successful job;
+  - reconstructed database-row fixtures are described as real provider bytes,
+    and several manual Windows/live scripts catch failures or return booleans;
+  - the standalone E2E harness is invalid and remains excluded until its own
+    fail-closed iteration.
+- Claude Code 2.1.233 will use `--model fable --effort high` in session
+  `b63e9497-10e4-45d0-bf19-3f369dc6332d`. Fable is selected because changing
+  a release gate can create false-green results and because collection,
+  environment boundaries, fixtures, and CI ordering interact. The initial
+  turn is read-only critical audit; implementation review will resume the same
+  session for this worktree and iteration.
+
+## Next safe action
+
+- Commit this start-state handoff, then run the recorded Fable session and an
+  independent Codex audit against the clean start SHA. Aggregate findings
+  before changes. For every new or changed gate, first add a minimal negative
+  fixture and prove it fails on the pre-repair implementation, paired with a
+  green control. Stop if the proposed scope requires production parser/schema
+  changes, provider credentials, or the invalid real-data E2E harness; those
+  belong to later iterations.
