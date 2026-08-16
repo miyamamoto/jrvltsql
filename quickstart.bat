@@ -23,48 +23,60 @@ if not "%~1"=="" (
     )
 )
 
-REM Prefer repo-local interpreters first so Windows collectors can run
-REM without relying on global PATH state.
-if exist "%~dp0venv32\Scripts\python.exe" (
-    set "PYTHON=%~dp0venv32\Scripts\python.exe"
+set "PYTHON_CMD="
+
+REM An explicit interpreter lets existing 32-bit installations keep using
+REM their matching JV-Link while new 64-bit installations use x64.
+if defined PYTHON (
+    set "PYTHON_CMD="%PYTHON%""
     goto :run
 )
 
 if exist "%~dp0.venv\Scripts\python.exe" (
-    set "PYTHON=%~dp0.venv\Scripts\python.exe"
+    set "PYTHON_CMD="%~dp0.venv\Scripts\python.exe""
     goto :run
 )
 
-REM First try: explicit PYTHON environment variable
-if defined PYTHON (
+if exist "%~dp0venv32\Scripts\python.exe" (
+    set "PYTHON_CMD="%~dp0venv32\Scripts\python.exe""
     goto :run
 )
 
-REM Prefer regular py launcher; JLTSQL now supports bridge-based JRA access
-REM and no longer requires a global 32-bit Python install.
-py --version >nul 2>&1
+py -3.12 --version >nul 2>&1
 if !errorlevel!==0 (
-    set "PYTHON=py"
+    set "PYTHON_CMD=py -3.12"
+    goto :run
+)
+
+py -3.12-32 --version >nul 2>&1
+if !errorlevel!==0 (
+    set "PYTHON_CMD=py -3.12-32"
+    goto :run
+)
+
+py -3 --version >nul 2>&1
+if !errorlevel!==0 (
+    set "PYTHON_CMD=py -3"
     goto :run
 )
 
 REM Fallback: python in PATH
 python --version >nul 2>&1
 if !errorlevel!==0 (
-    set "PYTHON=python"
+    set "PYTHON_CMD=python"
     goto :run
 )
 
 REM No Python found
 echo ERROR: Python not found
-echo Please install Python 3.10+ or create venv32/.venv in this repository.
+echo Please install Python 3.12+ with the same bitness as JV-Link.
 echo Download: https://www.python.org/downloads/
 pause
 exit /b 1
 
 :run
-echo Using Python: %PYTHON%
-"%PYTHON%" scripts/quickstart.py %*
+echo Using Python: %PYTHON_CMD%
+%PYTHON_CMD% scripts/quickstart.py %*
 set SCRIPT_EXIT_CODE=!errorlevel!
 goto :check_result
 

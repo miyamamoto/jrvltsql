@@ -9,7 +9,7 @@
   version bump, release, or live provider acquisition is included in this
   implementation iteration.
 - Repository: `miyamamoto/jrvltsql`
-- Worktree: `/home/keiba/scratch/20260816_jrvltsql_tk_layout`
+- Worktree: `$WORKSPACE/20260816_jrvltsql_tk_layout`
 - Branch: `agent/tk-current-layout-20260816`
 - Base/full SHA: `b62ba13be49c07e034acab1b5a5b483e10eb365a`
 - Previous dependent merge: PR #184, YS official-layout merge
@@ -105,7 +105,7 @@
 
 - Added `tests/test_tk_official_contract.py` before production changes. The
   pre-implementation command
-  `python3 -m pytest -q -o addopts='' --basetemp=/home/keiba/scratch/pytest_tk_red tests/test_tk_official_contract.py`
+  `python3 -m pytest -q -o addopts='' --basetemp=$WORKSPACE/pytest_tk_red tests/test_tk_official_contract.py`
   completed with `25 failed, 2 passed, 2 skipped`. Representative red evidence
   was `assert TKParser.RECORD_LENGTH == 21657` (`727 == 21657`); the remaining
   failures covered strict rejection, normalized schemas/mapping, coupled

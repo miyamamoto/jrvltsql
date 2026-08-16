@@ -7,7 +7,20 @@
 
 ## [Unreleased]
 
-現時点で未リリースの変更はありません。
+### Changed
+
+- JV-Link SDK 5.0.0 の公式 64-bit 版に対応し、インストーラ、quickstart、
+  日次同期、時系列取得を Python 3.12 の 32-bit / 64-bit 両方から起動可能に変更。
+  Python と JV-Link の bit 数は一致させ、既存の 32-bit 構成も継続利用可能
+- Python の実行要件を `pyproject.toml` と一致する 3.12 以上へ統一
+- 公式 64-bit 版と競合し得る旧レジストリ回避ツールを削除
+
+### Fixed
+
+- JV-Link COM class 未登録時に「64-bit は非対応」と誤案内していた診断を修正し、
+  実行中 Python と同じ bit 数の JV-Link を案内
+- `NL_SK` の公開メタデータに欠けていた曽祖父母8頭の繁殖登録番号を追加し、
+  parser が保持する3代14頭分の血統番号と一致
 
 ## [1.6.10] - 2026-08-11
 

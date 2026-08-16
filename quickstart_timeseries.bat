@@ -103,8 +103,12 @@ echo.
 
 set "PYTHON_CMD="
 if defined PYTHON set "PYTHON_CMD=%PYTHON%"
-if not defined PYTHON_CMD if exist "%~dp0venv32\Scripts\python.exe" set "PYTHON_CMD="%~dp0venv32\Scripts\python.exe""
 if not defined PYTHON_CMD if exist "%~dp0.venv\Scripts\python.exe" set "PYTHON_CMD="%~dp0.venv\Scripts\python.exe""
+if not defined PYTHON_CMD if exist "%~dp0venv32\Scripts\python.exe" set "PYTHON_CMD="%~dp0venv32\Scripts\python.exe""
+if not defined PYTHON_CMD (
+    py -3.12 --version >nul 2>&1
+    if !errorlevel!==0 set "PYTHON_CMD=py -3.12"
+)
 if not defined PYTHON_CMD (
     py -3.12-32 --version >nul 2>&1
     if !errorlevel!==0 set "PYTHON_CMD=py -3.12-32"
@@ -123,7 +127,7 @@ if not defined PYTHON_CMD (
 )
 if not defined PYTHON_CMD (
     echo [ERROR] Python not found.
-    echo Please install Python 3.10+ or create venv32/.venv in this repository.
+    echo Please install Python 3.12+ with the same bitness as JV-Link.
     exit /b 1
 )
 

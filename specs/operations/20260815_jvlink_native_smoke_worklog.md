@@ -11,13 +11,13 @@
   record sanitized exit status and counts, and publish the evidence in a
   documentation-only PR.
 - Repository: `miyamamoto/jrvltsql`
-- Worktree: `/home/keiba/scratch/20260815_jrvltsql_native_smoke`
+- Worktree: `$WORKSPACE/20260815_jrvltsql_native_smoke`
 - Branch: `agent/jvlink-native-smoke-20260815`
 - Base / initial HEAD / `origin/master` full SHA:
   `2dad8a5b34e15a06f1e65931b8a1918532c560d1`
 - Related release: `v1.6.10`; PR #163 is merged but unreleased.
-- Dependency: merged PR #163 and the separately deployed JV-Link runtime or
-  collector image used for the authenticated smoke.
+- Dependency: merged PR #163 and a separately provisioned, authorized
+  non-production JV-Link runtime used for the authenticated smoke.
 - Reviewer: Codex. No Claude review is used for this iteration.
 
 ## Initial state
@@ -27,30 +27,20 @@
   available and read-only; this test targets the separate jrvltsql repository.
 - The host is Linux x86_64 and has no directly usable authenticated bridge
   runtime or `powershell.exe` command.
-- Docker discovery found a healthy development JRA collector container named
-  `kps_ingestion_dev_jra_collector`. Its full container ID was
-  `3cdf0dc062fe02f26e41c7601357af2afe00a2d7eede39c307bf9028131977da`,
-  image ID was
-  `sha256:efa297ab5fcf189362694a2578b0dc95b64953d67c31db55a859b89d2d5951fd`,
-  configured image reference was
-  `kps-jra-collector:e984d68f01b30418b0fb0c775da69fd9aa03e9f1`, and
-  Docker health was `healthy`.
-- The authenticated native bridge SHA-256 was
-  `5f577e809bf1431f2cd379366d51f71797b826e0ace7e61d9f038d4402c84316`.
-  Secret environment values, registry contents, and record payloads were not
-  printed.
-- The collector serializes work with `/tmp/jra_collector_service.lock`. Every
-  authenticated test below ran as UID/GID `1001:1001` under a non-blocking
-  `flock` on that same path. An already active scheduled collection was
-  observed during discovery, so the smoke stopped and waited until the lock
-  became available instead of overlapping it.
+- Read-only discovery found a healthy authorized development runtime. Its
+  machine, container, image, binary, account, and filesystem identities are
+  intentionally omitted from this public record. Secret environment values,
+  registry contents, and record payloads were not printed.
+- Every authenticated test used the runtime's existing non-blocking
+  coordination mechanism and unprivileged identity. An active scheduled
+  collection was observed during discovery, so the smoke stopped and waited
+  rather than overlapping it. The coordination path and identity are omitted.
 
 ## Exact-code staging
 
 - The full worktree at merge SHA
-  `2dad8a5b34e15a06f1e65931b8a1918532c560d1` was copied to the isolated
-  container path `/tmp/jrvltsql-smoke-2dad8a5`. The source hashes used for the
-  smoke were:
+  `2dad8a5b34e15a06f1e65931b8a1918532c560d1` was copied to a disposable,
+  isolated staging directory. The public source hashes used for the smoke were:
   - `src/jvlink/bridge.py`:
     `ae6a9df9fd7386af9c866194a8f45e2873e4c2068b6afea34fe818e61f63d836`
   - `src/jvlink/wrapper.py`:
@@ -72,9 +62,8 @@
 
 ### Real record path: pass
 
-- Command summary: while holding the collector service lock, select one
-  existing 2026-08-15 JRA race identity internally from the collector's raw
-  PostgreSQL store, then run
+- Command summary: while holding the runtime coordination guard, select one
+  existing 2026-08-15 JRA race identity internally, then run
   `JVInit -> JVRTOpen(0B30) -> JVRead -> JVClose` through the exact merge-SHA
   protocol methods. The race key and returned record bytes were not printed.
 - Sanitized observation:
@@ -107,8 +96,8 @@
 - `JVOpen(RACE, 20260815000000, option=2)` and a bounded fallback
   `JVOpen(RACE, 20260808000000, option=1)` each initialized successfully but
   ended in `JVLinkBridgeError` before an open response was received.
-- The same option-2 call was repeated with the collector image's deployed
-  bridge client rather than merge-SHA Python. It also returned a
+- The same option-2 call was repeated with the separately deployed bridge
+  client rather than merge-SHA Python. It also returned a
   classified `Bridge response timeout (120s)` after `JVInit=0`.
 - Result: **NOT PROVEN**, not a merge-SHA regression finding. The reproduced
   timeout in the separately deployed client shows that this environment
@@ -120,10 +109,10 @@
 
 ## Cleanup and final state
 
-- After the calls, no `JVLinkBridge` or `JVLinkAgent` process remained, the
-  service lock was available, and the development collector remained healthy.
-- The exact disposable container copy `/tmp/jrvltsql-smoke-2dad8a5` was
-  removed after validating its resolved path. No collector restart, bridge
+- After the calls, no bridge or agent process remained, the coordination guard
+  was available, and the development runtime remained healthy.
+- The disposable staged copy was removed after validating its resolved path.
+  No runtime restart, bridge
   identity change, registry edit, database write by the test harness, or
   production mutation was performed.
 - Repository source files are unchanged. This iteration changes only this
@@ -158,8 +147,8 @@
 ## Safety and evidence rules
 
 - Do not print credentials, service keys, registry contents, connection
-  strings, or secret environment values. Environment inspection is limited to
-  variable names and sanitized availability flags.
+  strings, secret environment values, or private runtime identity. Environment
+  inspection is limited to variable names and sanitized availability flags.
 - Do not stop/restart or mutate the running collector merely to make the test
   possible. Prefer a supported health/API/test entry point or an isolated
   disposable execution path that reuses identity safely.
@@ -179,7 +168,7 @@ zero, and clean worktree before merging the documentation-only iteration. A
 later follow-up may retry the remaining successful-data historical gate
 (`JVOpen`, `JVStatus`, `JVRead`, and `JVClose`) on an authorized native
 Windows/JV-Link host, or first diagnose the reproducible deployed-client
-`JVOpen(RACE)` timeout without changing the machine identity. Do not reuse the
+`JVOpen(RACE)` timeout without changing the runtime identity. Do not reuse the
 real-time pass as proof of the unverified historical-download path.
 
 ## STOP conditions
@@ -188,7 +177,7 @@ real-time pass as proof of the unverified historical-download path.
   collecting, owns a writer lock/open JV-Link stream, or cannot isolate the
   smoke safely.
 - Stop if the executable/image/code SHA cannot be identified exactly.
-- Stop on any request for a secret value, license/machine identity mutation,
+- Stop on any request for a secret value or license/runtime identity mutation,
   collector restart, or unbounded historical download.
 - Stop before claiming success unless at least one real record is read and
   JVClose is observed without error.

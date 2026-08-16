@@ -10,8 +10,8 @@ CI では実行できません。COM API（JV-Link）が必要なため、GUI �
 | 項目 | 要件 |
 |------|------|
 | OS | Windows 10 / 11 |
-| Python | 32-bit Python 3.12 (`py -3.12-32` or an explicit `PYTHON` environment variable) |
-| JV-Link | インストール済み、サービスキー設定済み |
+| Python | Python 3.12 以上（JV-Link と同じ bit 数） |
+| JV-Link | 32-bit または 64-bit 版をインストール済み、サービスキー設定済み |
 | 実行方法 | **RDP/VNC でログインし、コマンドプロンプトから実行**（SSH不可） |
 
 ## テストスクリプト一覧
@@ -19,7 +19,6 @@ CI では実行できません。COM API（JV-Link）が必要なため、GUI �
 | スクリプト | 内容 | 所要時間目安 |
 |-----------|------|-------------|
 | `e2e_jra_smoke.py` | JRA: 1日分データ取得→パース→DB格納→SQLクエリ検証 | 2-5分 |
-| `e2e_nar_smoke.py` | NAR: 1日分データ取得→パース→DB格納→SQLクエリ検証 | 2-5分 |
 | `e2e_error_recovery.py` | エラーリカバリ（-502等）の動作確認 | 1-3分 |
 | `e2e_edge_cases.py` | 異常レース検証（中止、取消、除外、少頭数、震災期間等） | 1分 |
 
@@ -36,25 +35,22 @@ cd <jrvltsql checkout>
 ### 3. JRA スモークテスト実行
 
 ```cmd
-py -3.12-32 tests\e2e\e2e_jra_smoke.py 2>&1 | tee data\e2e_jra_result.txt
+py -3.12 tests\e2e\e2e_jra_smoke.py 2>&1 | tee data\e2e_jra_result.txt
 ```
 
-### 4. NAR スモークテスト実行
+既存の 32-bit 版 JV-Link を使う場合は、上の `py -3.12` を
+`py -3.12-32` に置き換えます。
+
+### 4. エラーリカバリテスト実行
 
 ```cmd
-py -3.12-32 tests\e2e\e2e_nar_smoke.py 2>&1 | tee data\e2e_nar_result.txt
+py -3.12 tests\e2e\e2e_error_recovery.py 2>&1 | tee data\e2e_error_result.txt
 ```
 
-### 5. エラーリカバリテスト実行
+### 5. 異常レース・エッジケース検証（既存DB使用）
 
 ```cmd
-py -3.12-32 tests\e2e\e2e_error_recovery.py 2>&1 | tee data\e2e_error_result.txt
-```
-
-### 6. 異常レース・エッジケース検証（既存DB使用）
-
-```cmd
-py -3.12-32 tests\e2e\e2e_edge_cases.py 2>&1 | tee data\e2e_edge_result.txt
+py -3.12 tests\e2e\e2e_edge_cases.py 2>&1 | tee data\e2e_edge_result.txt
 ```
 
 > **注意:** このテストは既存の `data/keiba.db` を **読み取り専用** で使用します。COM API は不要なので SSH からも実行可能です。

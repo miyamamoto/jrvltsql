@@ -65,11 +65,76 @@
   by merged PRs #175 through #183. Exact file/behavior coverage and base drift
   must be checked before they are closed.
 
+## Audit iteration: public contract and SDK 5.0.0
+
+- Re-fetched `origin/master`; the audit base remains
+  `3a2c892649b8e9ec85113a7b0122e7e4d637443b`.
+- Rechecked the official SDK index, the SDK 5.0.0 announcement, and developer
+  community reports concerning installation coexistence. SDK 5.0.0 adds an
+  x64 JV-Link while retaining x86. The published JV-Data/JV-Link reference
+  documents remain version 4.9.0.1, and the official announcement states that
+  their data and interface contracts did not change in SDK 5.0.0.
+- Updated installation and quickstart entry points to require Python 3.12 or
+  later and to select an interpreter whose bitness matches the installed
+  JV-Link. The ordinary Python 3.12 launcher is preferred for a new setup; the
+  explicit 32-bit launcher and an existing legacy virtual environment remain
+  supported for upgrades.
+- Removed two obsolete registry/launcher workaround files. Updated the
+  class-not-registered diagnosis to recommend the matching JV-Link
+  architecture rather than declaring one Python architecture unsupported.
+- Sanitized tracked historical worklogs so public audit evidence uses
+  `$WORKSPACE` and generic runtime roles instead of maintainer-local paths or
+  private runtime provenance. A filename/count-only disclosure scan found no
+  remaining prohibited value in tracked Markdown.
+- Added the eight missing great-grandparent entries to `NL_SK` metadata, so
+  all fourteen official lineage slots described by the parser/schema are also
+  described to metadata consumers.
+- Red-first evidence before implementation:
+  - the matching-bitness diagnostic plus lineage metadata selection failed
+    three tests;
+  - the installer/launcher architecture selection failed two tests.
+- Focused green evidence after implementation: the same five tests pass.
+- PR #173 remains open but conflicting; its RC/KS/CH parser/schema changes are
+  superseded by merged official-layout PRs. PR #174 now differs from current
+  master only in `src/database/schema_metadata.py`; its one residual useful
+  change is independently implemented here with the fourteen-slot regression
+  test. Neither stale head is safe to merge.
+
+## Audit iteration: fixed-record envelope
+
+- Audited all 38 current record IDs against their current physical lengths,
+  record identifiers, CP932 decoding, and CRLF terminators. Several custom
+  parsers and inherited fixed-field parsers accepted adjacent or truncated
+  input and could return a partial row.
+- Red-first evidence before the shared gate: all 46 malformed cases selected
+  across 23 initially weak record types passed through far enough to fail the
+  new expectations. Expanding the matrix to every current type exposed four
+  additional genuine wrong-type acceptances; five apparent failures were
+  correctly classified as invalid blank domain payloads rather than envelope
+  defects.
+- Added a shared fixed-record validator and applied it to every current parser.
+  H1/H6 accept only their exact full official physical record and their exact
+  repository compatibility-row shape; no intermediate, empty, short, or
+  oversized shape is accepted.
+- Green evidence on the uncommitted aggregate candidate:
+  - official record/parser/storage/metadata selection: 1,167 passed,
+    47 skipped;
+  - current/retired data-spec matrix and cancellation-state storage:
+    278 passed, 20 skipped;
+  - CI syntax/undefined-name selection: zero findings;
+  - `git diff --check`: clean.
+- A separate static pass found an obsolete `RT_RC` route that is not part of
+  the official current realtime record list. Real jockey changes use the
+  current `JC` route; the stale route is incompatible with normal `RC` parser
+  dispatch. It will be removed with a dedicated red-first regression after the
+  two already-developed iterations are split and merged.
+
 ## Next safe action
 
-- Inventory tracked public text using sanitized filename/count output, run the
-  existing distribution checker against freshly built artifacts, compare open
-  PR #173/#174 patches with the merged replacements, and enumerate any final
-  implementation/specification contradiction. Stop before version changes or
-  authenticated acquisition until this audit is complete and merged.
-
+- Split the aggregate worktree into two logical commits/PRs: public
+  SDK/documentation/metadata first, then fixed-record envelope validation.
+  Run proportional tests, strict docs, disclosure and distribution checks on
+  each exact candidate SHA. Merge each only with green checks, aggregated
+  review findings, unresolved threads zero, and a clean worktree. Then remove
+  the obsolete realtime route in a third focused iteration. Stop before version
+  changes or authenticated acquisition until all audit iterations are merged.

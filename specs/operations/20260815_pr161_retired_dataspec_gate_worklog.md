@@ -12,7 +12,7 @@
   tests, plus this worklog. Operational name replacements already present in
   the PR are reviewed but not broadened without a concrete defect.
 - Repository: `miyamamoto/jrvltsql`
-- Worktree: `/home/keiba/scratch/20260815_jrvltsql_pr161_fix`
+- Worktree: `$WORKSPACE/20260815_jrvltsql_pr161_fix`
 - Branch: `claude/reject-legacy-dataspecs-225` (cross-repository PR branch in
   `hayato1980/jrvltsql`)
 - PR: https://github.com/miyamamoto/jrvltsql/pull/161

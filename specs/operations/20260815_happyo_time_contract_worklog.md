@@ -10,7 +10,7 @@
   focused SQLite/PostgreSQL regression tests, migration guidance, and directly
   affected documentation.
 - Repository: `miyamamoto/jrvltsql`
-- Worktree: `/home/keiba/scratch/20260815_jrvltsql_happyo_time`
+- Worktree: `$WORKSPACE/20260815_jrvltsql_happyo_time`
 - Branch: `agent/happyo-time-contract-20260815`
 - Base / initial HEAD / `origin/master` full SHA:
   `d0b4ad32c0b2ebd01405269375906783e7a99e74`

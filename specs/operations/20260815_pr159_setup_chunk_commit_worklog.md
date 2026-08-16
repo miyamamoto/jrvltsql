@@ -5,7 +5,7 @@
 - Objective: make option 4 chunk commits fail closed when fetch/parse rejects a record, while preserving already completed chunks.
 - Minimal scope: `src/importer/batch.py`, the existing focused batch-processor tests, and this worklog.
 - Repository: `miyamamoto/jrvltsql`
-- Worktree: `/home/keiba/scratch/20260815_jrvltsql_pr159_fix`
+- Worktree: `$WORKSPACE/20260815_jrvltsql_pr159_fix`
 - Branch: `upstream-pr-setup-commit-interval` (cross-repository PR branch in `hayato1980/jrvltsql`)
 - PR: https://github.com/miyamamoto/jrvltsql/pull/159
 - Base branch: `master`

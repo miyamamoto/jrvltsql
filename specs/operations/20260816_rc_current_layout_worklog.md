@@ -10,7 +10,7 @@
   support documentation, and audit evidence. No TK/YS or release change is in
   this iteration.
 - Repository: `miyamamoto/jrvltsql`
-- Worktree: `/home/keiba/scratch/20260816_jrvltsql_rc_layout`
+- Worktree: `$WORKSPACE/20260816_jrvltsql_rc_layout`
 - Branch: `agent/rc-current-layout-20260816`
 - Base/full SHA: `79833980f8a7f0cc09c2a308a50a512091e5565b`
 - Previous dependent merge: PR #182, KS official-layout merge
@@ -76,7 +76,7 @@
 
 - Before changing production code, added `tests/test_rc_official_contract.py`
   and ran it with Python 3.12:
-  `.venv/bin/python -m pytest -q --no-cov --basetemp=/home/keiba/scratch/20260816_jrvltsql_rc_layout_pytest_red tests/test_rc_official_contract.py`.
+  `.venv/bin/python -m pytest -q --no-cov --basetemp=$WORKSPACE/20260816_jrvltsql_rc_layout_pytest_red tests/test_rc_official_contract.py`.
 - Result: **20 failed**. Representative failures were
   `assert RCParser.RECORD_LENGTH == 501` (`241 == 501`), all malformed-boundary
   cases being accepted, missing `SyubetuCD`/holder-3 schema columns, and

@@ -13,7 +13,7 @@
   and the smallest directly affected fetcher paths.
 - Repository: `miyamamoto/jrvltsql`
 - Worktree:
-  `/home/keiba/scratch/20260815_jrvltsql_jvopen_runtime_gap`
+  `$WORKSPACE/20260815_jrvltsql_jvopen_runtime_gap`
 - Branch: `agent/jvopen-runtime-gap-20260815`
 - Base / initial HEAD / `origin/master` full SHA:
   `1fbcb09c049b4fa0ad09c350cc74dd2093a855cb`
@@ -69,13 +69,12 @@
   and had no environment-specific launcher path. The deployed collector client
   had a separate launcher implementation, but its dialog watcher matched only
   `JRA-VANからのお知らせ` and activated the default button with `Return`.
-- Under the development collector's non-blocking service lock, the deployed
+- Under the authorized runtime's non-blocking coordination guard, the deployed
   bridge reproduced `JVInit=0` followed by no `JVOpen(RACE)` response. During
-  the blocked COM invocation, an X11 window owned by `JVLinkBridge.exe` was
-  observed with exact title `JRA-VAN DataLab.`, geometry `476x120`, and a
-  prompt asking whether to download the new version. Its default focused
-  button was affirmative. No secret, record payload, filename, race key, or
-  registry value was captured or retained.
+  the blocked invocation, a known update dialog owned by the bridge process was
+  observed with an affirmative default action. Private runtime/window identity,
+  secret, record payload, filename, race key, and registry values were not
+  captured or retained.
 - The first bounded diagnostic intentionally timed out after 45 seconds and
   cleaned up. A second call installed a test-only exact-title watcher that
   sent `Escape`, not `Return`. It rejected one prompt, after which the same
@@ -98,7 +97,7 @@
   present/missing, known dialog/default-disabled watcher, valid JSON after
   runtime preamble, normal response/timeout abort.
 - Strict Codex boundary review then identified five additional fail-closed
-  requirements before candidate freeze: scope X11 operations to the bridge PID,
+  requirements before candidate freeze: scope dialog operations to the bridge PID,
   reject non-finite watcher intervals, require the official `JVInit` result
   code, close the temporary stderr stream on abort, and abort after a broken
   stdin pipe. Eight focused cases covering those branches were run before the
@@ -122,15 +121,15 @@
   tests/test_jvlink_transport_contract.py --no-cov` -> **84 passed**.
 - The exact modified public `src/` tree (bridge content SHA-256
   `c8ab955195deacb668a285eca3c810c5907f254771440d80b14b92260ea700a6`)
-  was staged in the running development collector and executed as UID/GID
-  `1001:1001` under its non-blocking service lock. Sanitized result:
+  was staged in the authorized development runtime under its existing
+  unprivileged identity and non-blocking coordination guard. Sanitized result:
   `JVInit=0`; one known update prompt rejected; `JVOpen=0`, `readcount=30`,
   `downloadcount=29`; `JVStatus=29`; first `JVRead=80` with an 80-byte payload;
   legacy runtime `JVClose` acknowledgement accepted as `0`; total about 2.2
   seconds.
-- After the smoke, the lock was available, no bridge/agent process remained,
-  the collector was healthy, and disposable staged source plus the diagnostic
-  screenshot were deleted.
+- After the smoke, the coordination guard was available, no bridge/agent
+  process remained, the runtime was healthy, and all disposable staged source
+  and diagnostic artifacts were deleted.
 - A second exact modified-source smoke after PID scoping and strict `JVInit`
   validation used bridge content SHA-256
   `f5f0ca40692eeaf71ce1ed27fcac88945909222c8e3395e3bcee99e41f84c032`.
@@ -157,7 +156,7 @@
 - P0: none. This change does not alter race data contents, parser offsets,
   labels, odds timing, or model inputs.
 - P1 findings found and fixed in one batch: unsafe default-button activation;
-  title-only X11 scope; non-finite watcher interval; timeout/broken-pipe process
+  title-only dialog scope; non-finite watcher interval; timeout/broken-pipe process
   leakage; missing `JVInit` result-code acceptance.
 - P2: public Windows support remains the primary documented user contract;
   the separately required bridge-runtime provisioning boundary and opt-out setting are
@@ -213,13 +212,13 @@
 ## Exact repair-candidate authenticated smoke
 
 - A first staging attempt added the disposable source directory only through
-  `PYTHONPATH` while leaving the container working directory at `/app`. Python
-  correctly prioritized the current directory and imported the older deployed
-  client. That excluded run reproduced the old client's 120-second `JVOpen`
-  timeout. A diagnostic retry found one exact-title update dialog whose X11 PID
-  matched the bridge PID; a production-equivalent `Escape` action immediately
-  released `JVOpen`. The old deployed method then rejected a keyword supported
-  by the candidate, which further proved the import was not the candidate.
+  `PYTHONPATH` while leaving the process in the deployed source directory.
+  Python correctly prioritized the current directory and imported the older
+  deployed client. That excluded run reproduced the old client's 120-second
+  `JVOpen` timeout. A diagnostic retry found one known update dialog owned by
+  the bridge process; a production-equivalent rejection immediately released
+  `JVOpen`. The old deployed method then rejected a keyword supported by the
+  candidate, which further proved the import was not the candidate.
   This was a test-harness binding failure and is not candidate evidence.
 - The harness was corrected by setting the container working directory to the
   disposable exact-source root and by hashing the file resolved through
@@ -227,15 +226,16 @@
   bridge SHA-256 was
   `d57d1cb89f8fd329191d9596199cce9dbffb7c747384915b978b10a3f7507610`,
   matching repair commit `df7f9a3a64b5cd8ef4bd34da1c6e0934867d8f1e`.
-- Under UID/GID `1001:1001` and the development collector's non-blocking
-  service lock, the corrected exact-source smoke completed in about 0.92
+- Under the authorized runtime's existing unprivileged identity and
+  non-blocking coordination guard, the corrected exact-source smoke completed
+  in about 0.92
   seconds: `JVInit=0`; `JVOpen=0`, read count 30, download count 0;
   download/status-ready true; first `JVRead=80` with an 80-byte payload; and
   `JVClose=0`. The zero download count is expected from the populated local
   cache and does not replace the earlier same-implementation positive-count
   `JVStatus=29` evidence.
 - The disposable staged source was deleted. No bridge/agent process remained,
-  the service lock was available, and the development collector stayed
+  the coordination guard was available, and the development runtime stayed
   healthy. No service key, environment value, record payload, race key,
   filename, or registry content was emitted.
 
@@ -243,7 +243,7 @@
 
 - Never expose service keys, database URLs, registry contents, machine
   identity, race keys, filenames, or record payloads.
-- Use the development collector's own non-blocking service lock for every
+- Use the authorized runtime's own non-blocking coordination guard for every
   authenticated call; do not overlap a scheduled collection.
 - Do not restart the collector, mutate bridge/JV-Link identity, perform setup
   downloads, or request an unbounded historical interval merely to obtain a
@@ -263,8 +263,9 @@ merge only after the final gate is green.
 
 ## STOP conditions
 
-- Stop authenticated calls if the service lock is busy, the target is not the
-  development collector, or another bridge/agent owns the stream.
+- Stop authenticated calls if the coordination guard is busy, the target is
+  not the authorized non-production runtime, or another bridge/agent owns the
+  stream.
 - Stop implementation if the suspected gap is not supported by official
   documentation, current runtime behavior, a reproducible test, or a narrowly
   justified compatibility contract.

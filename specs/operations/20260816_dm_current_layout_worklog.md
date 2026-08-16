@@ -16,7 +16,7 @@
 
 - Repository: `miyamamoto/jrvltsql`
 - Dedicated worktree:
-  `/home/keiba/scratch/20260816_jrvltsql_dm_layout`
+  `$WORKSPACE/20260816_jrvltsql_dm_layout`
 - Branch: `agent/dm-current-layout-20260816`
 - Base and initial HEAD:
   `7d360f34f6590100ab816af99474344b69295450`

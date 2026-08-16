@@ -6,7 +6,7 @@
     Installs JLTSQL with all dependencies.
     Usage: irm https://raw.githubusercontent.com/miyamamoto/jrvltsql/master/install.ps1 | iex
 .NOTES
-    Requires: Windows, 32-bit Python 3.12, Git
+    Requires: Windows, Python 3.12 or later, Git
 #>
 
 $ErrorActionPreference = "Stop"
@@ -16,7 +16,6 @@ $ProgressPreference = "SilentlyContinue"  # Speed up Invoke-WebRequest
 $REPO_URL = "https://github.com/miyamamoto/jrvltsql.git"
 $INSTALL_DIR = "$env:USERPROFILE\jrvltsql"
 $PYTHON_VERSION = "3.12"
-$PYTHON_DOWNLOAD_URL = "https://www.python.org/ftp/python/3.12.8/python-3.12.8.exe"
 
 # --- Helper Functions ---
 function Write-Step {
@@ -52,66 +51,48 @@ function Write-Banner {
 # --- Main ---
 Write-Banner
 
-# Step 1: Check 32-bit Python
-Write-Step "Step 1/7: Checking 32-bit Python $PYTHON_VERSION..."
+# Step 1: Check Python
+Write-Step "Step 1/7: Checking Python $PYTHON_VERSION or later..."
 
-$python32 = $null
-$pythonCmd = $null
+$pythonCommand = $null
+$pythonArguments = @()
+$pythonDisplay = $null
+$pythonBits = $null
 
-# Try py launcher with 32-bit flag
-try {
-    $ver = & py "-$PYTHON_VERSION-32" --version 2>&1
-    if ($LASTEXITCODE -eq 0 -and $ver -match "Python 3\.12") {
-        $python32 = "py -$PYTHON_VERSION-32"
-        $pythonCmd = @("py", "-$PYTHON_VERSION-32")
-        Write-Ok "Found: $ver (py launcher)"
-    }
-} catch {}
+$candidates = @()
+if ($env:PYTHON) {
+    $candidates += @{ Command = $env:PYTHON; Arguments = @(); Display = $env:PYTHON }
+}
+$candidates += @(
+    @{ Command = "py"; Arguments = @("-$PYTHON_VERSION"); Display = "py -$PYTHON_VERSION" },
+    @{ Command = "py"; Arguments = @("-$PYTHON_VERSION-32"); Display = "py -$PYTHON_VERSION-32" },
+    @{ Command = "py"; Arguments = @("-3"); Display = "py -3" },
+    @{ Command = "python"; Arguments = @(); Display = "python" }
+)
 
-# Try common install paths
-if (-not $python32) {
-    $paths = @(
-        "$env:LOCALAPPDATA\Programs\Python\Python312-32\python.exe",
-        "C:\Python312-32\python.exe",
-        "C:\Python312\python.exe"
-    )
-    foreach ($p in $paths) {
-        if (Test-Path $p) {
-            # Verify it's 32-bit
-            $archCheck = & $p -c "import struct; print(struct.calcsize('P') * 8)" 2>&1
-            if ($archCheck -eq "32") {
-                $python32 = $p
-                $pythonCmd = @($p)
-                $ver = & $p --version 2>&1
-                Write-Ok "Found: $ver at $p"
-                break
-            }
+foreach ($candidate in $candidates) {
+    try {
+        $candidateArgs = $candidate.Arguments
+        $supported = & $candidate.Command @candidateArgs -c "import sys; print(int(sys.version_info >= (3, 12)))" 2>$null
+        if ($LASTEXITCODE -eq 0 -and $supported -eq "1") {
+            $pythonCommand = $candidate.Command
+            $pythonArguments = $candidateArgs
+            $pythonDisplay = $candidate.Display
+            $pythonBits = & $pythonCommand @pythonArguments -c "import struct; print(struct.calcsize('P') * 8)"
+            $ver = & $pythonCommand @pythonArguments --version 2>&1
+            Write-Ok "Found: $ver ($pythonBits-bit; $pythonDisplay)"
+            break
         }
-    }
+    } catch {}
 }
 
-if (-not $python32) {
-    Write-Fail "32-bit Python $PYTHON_VERSION not found."
+if (-not $pythonCommand) {
+    Write-Fail "Python $PYTHON_VERSION or later not found."
     Write-Host ""
-    Write-Host "  Please install Python $PYTHON_VERSION (32-bit):" -ForegroundColor Yellow
+    Write-Host "  Install Python with the same bitness as JV-Link:" -ForegroundColor Yellow
     Write-Host "    1. Download from: https://www.python.org/downloads/" -ForegroundColor White
-    Write-Host "       Direct link: $PYTHON_DOWNLOAD_URL" -ForegroundColor DarkGray
-    Write-Host "    2. Choose 'Windows installer (32-bit)'" -ForegroundColor White
-    Write-Host "    3. Check 'Add Python to PATH' during install" -ForegroundColor White
-    Write-Host "    4. Re-run this installer" -ForegroundColor White
-    Write-Host ""
-
-    $download = Read-Host "  Download Python now? (y/N)"
-    if ($download -eq "y" -or $download -eq "Y") {
-        Write-Step "Downloading Python $PYTHON_VERSION (32-bit)..."
-        $installer = "$env:TEMP\python-3.12-32bit.exe"
-        Invoke-WebRequest -Uri $PYTHON_DOWNLOAD_URL -OutFile $installer
-        Write-Ok "Downloaded to $installer"
-        Write-Host "  Starting installer... Please select '32-bit' and check 'Add to PATH'." -ForegroundColor Yellow
-        Start-Process -FilePath $installer -Wait
-        Write-Host ""
-        Write-Warn "Please restart this installer after Python installation completes."
-    }
+    Write-Host "    2. Check 'Add Python to PATH' during install" -ForegroundColor White
+    Write-Host "    3. Re-run this installer" -ForegroundColor White
     exit 1
 }
 
@@ -156,23 +137,29 @@ if (Test-Path "$INSTALL_DIR\.git") {
 }
 
 # Step 4: Create virtual environment
-Write-Step "Step 4/7: Creating virtual environment (32-bit)..."
+Write-Step "Step 4/7: Creating virtual environment..."
 
-$venvDir = "$INSTALL_DIR\venv32"
+$venvDir = "$INSTALL_DIR\.venv"
+if (Test-Path "$INSTALL_DIR\.venv\Scripts\python.exe") {
+    $venvDir = "$INSTALL_DIR\.venv"
+} elseif (Test-Path "$INSTALL_DIR\venv32\Scripts\python.exe") {
+    # Preserve upgrades from releases that created venv32.
+    $venvDir = "$INSTALL_DIR\venv32"
+}
 
-if (Test-Path "$venvDir\Scripts\python.exe") {
-    # Verify existing venv is 32-bit
-    $archCheck = & "$venvDir\Scripts\python.exe" -c "import struct; print(struct.calcsize('P') * 8)" 2>&1
-    if ($archCheck -eq "32") {
-        Write-Ok "Virtual environment exists (32-bit verified)"
+$venvPython = "$venvDir\Scripts\python.exe"
+if (Test-Path $venvPython) {
+    & $venvPython -c "import sys; raise SystemExit(sys.version_info < (3, 12))" 2>$null
+    if ($LASTEXITCODE -eq 0) {
+        Write-Ok "Compatible virtual environment exists"
     } else {
-        Write-Warn "Existing venv is not 32-bit, recreating..."
+        Write-Warn "Existing venv uses unsupported Python; recreating..."
         Remove-Item -Recurse -Force $venvDir
-        & @pythonCmd -m venv $venvDir
-        Write-Ok "Virtual environment created (32-bit)"
     }
-} else {
-    & @pythonCmd -m venv $venvDir
+}
+
+if (-not (Test-Path $venvPython)) {
+    & $pythonCommand @pythonArguments -m venv $venvDir
     if ($LASTEXITCODE -ne 0) {
         Write-Fail "Failed to create virtual environment"
         exit 1
@@ -252,7 +239,7 @@ Write-Host "    Installation Complete!" -ForegroundColor Green
 Write-Host "  ============================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "  Install directory: $INSTALL_DIR" -ForegroundColor White
-Write-Host "  Python (32-bit):   $python32" -ForegroundColor White
+Write-Host "  Python:            $pythonDisplay ($pythonBits-bit)" -ForegroundColor White
 Write-Host ""
 Write-Host "  Next steps:" -ForegroundColor Yellow
 Write-Host "    1. Restart your terminal (PATH update)" -ForegroundColor White

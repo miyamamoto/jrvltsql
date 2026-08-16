@@ -11,7 +11,7 @@ Tests performance characteristics under various loads:
 
 Note: These are benchmark tests that may take longer to run.
 Use pytest -m "not slow" to skip them in CI/CD.
-DuckDB is not supported (32-bit Python required for JV-Link).
+DuckDB is outside this project's supported database matrix.
 """
 
 import os
@@ -211,13 +211,13 @@ class TestQueryPerformance(PerformanceTestBase):
 
 @pytest.mark.slow
 class TestDatabaseComparison(PerformanceTestBase):
-    """Test database performance (SQLite only, DuckDB not supported on 32-bit)."""
+    """Test database performance for the supported SQLite backend."""
 
     def setUp(self):
         """Set up test database."""
         self.temp_dir = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
 
-        # SQLite only (DuckDB not supported on 32-bit Python)
+        # SQLite is the supported local backend.
         sqlite_path = Path(self.temp_dir.name) / 'sqlite.db'
         self.database = SQLiteDatabase({'path': str(sqlite_path)})
         self.database.connect()

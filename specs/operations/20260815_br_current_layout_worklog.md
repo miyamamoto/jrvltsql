@@ -10,7 +10,7 @@
   fixtures, red-first byte/storage contracts, official-version decision,
   canonical compatibility audit, exact-SHA Codex review, PR, and merge.
 - Repository: `miyamamoto/jrvltsql`
-- Worktree: `/home/keiba/scratch/20260815_jrvltsql_br_layout`
+- Worktree: `$WORKSPACE/20260815_jrvltsql_br_layout`
 - Branch: `agent/br-current-layout-20260815`
 - Base / initial HEAD: `19954206bc8f282f535e505a44b2f81023bbfd96`
   (merged `master`, PR #177).

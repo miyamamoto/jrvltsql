@@ -10,7 +10,7 @@
   importer mappings, exact current-layout acceptance, old-layout rejection,
   gap-free byte-offset tests, migration guidance, and compatibility audit.
 - Repository: `miyamamoto/jrvltsql`
-- Worktree: `/home/keiba/scratch/20260815_jrvltsql_sk_layout`
+- Worktree: `$WORKSPACE/20260815_jrvltsql_sk_layout`
 - Branch: `agent/sk-current-layout-20260815`
 - Base / initial HEAD / `origin/master` full SHA:
   `6dc55078dba33a7f4582d67e816276c25be2700e`

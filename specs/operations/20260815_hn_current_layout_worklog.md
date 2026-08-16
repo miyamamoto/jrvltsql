@@ -11,7 +11,7 @@
   a gap-free CP932 byte sentinel, exact-layout rejection, migration guidance,
   and directly affected compatibility documentation.
 - Repository: `miyamamoto/jrvltsql`
-- Worktree: `/home/keiba/scratch/20260815_jrvltsql_hn_layout`
+- Worktree: `$WORKSPACE/20260815_jrvltsql_hn_layout`
 - Branch: `agent/hn-current-layout-20260815`
 - Base / initial HEAD / `origin/master` full SHA:
   `8b6e803843bf885054c582fc72d4d58dc39efce5`

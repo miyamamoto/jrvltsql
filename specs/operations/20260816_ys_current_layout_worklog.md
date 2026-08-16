@@ -8,7 +8,7 @@
   importer behavior, fixtures/tests, and the tracked compatibility audit. No TK
   or release/publication change is included in this iteration.
 - Repository: `miyamamoto/jrvltsql`
-- Worktree: `/home/keiba/scratch/20260816_jrvltsql_ys_layout`
+- Worktree: `$WORKSPACE/20260816_jrvltsql_ys_layout`
 - Branch: `agent/ys-current-layout-20260816`
 - Base/full SHA: `609f9c4ee3571857367781f4cc8d7e3630a0e9e0`
 - Previous dependent merge: PR #183, RC official-layout merge
@@ -83,7 +83,7 @@
   statuses 1/2/3/9, exact-key status 0 deletion, pre-mutation validation,
   provider-order batching, obsolete storage, and optional PostgreSQL behavior.
 - Red-first command against the pre-implementation production code:
-  `python3 -m pytest -q --no-cov --basetemp=/home/keiba/scratch/20260816_jrvltsql_ys_red tests/test_ys_official_contract.py`.
+  `python3 -m pytest -q --no-cov --basetemp=$WORKSPACE/20260816_jrvltsql_ys_red tests/test_ys_official_contract.py`.
   Result: `29 failed, 2 skipped`; representative failures were `146 != 382`,
   accepted invalid boundaries, missing guidance 2/3 schema fields, missing
   standard primary key, unsupported status not rejected, valid rows committed
@@ -100,7 +100,7 @@
   position-compatible 144-byte prefix is padded into a 382-byte current record.
   Production parsing accepts no legacy length.
 - Focused green command after implementation:
-  `python3 -m pytest -q --no-cov --basetemp=/home/keiba/scratch/20260816_jrvltsql_ys_green2 tests/test_ys_official_contract.py`.
+  `python3 -m pytest -q --no-cov --basetemp=$WORKSPACE/20260816_jrvltsql_ys_green2 tests/test_ys_official_contract.py`.
   Result: `29 passed, 2 skipped`.
 - Broader affected-surface command across parser, fixture, schema, and importer
   suites: `809 passed, 3 skipped` using system Python 3.10.12. Formal candidate

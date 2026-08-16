@@ -18,7 +18,7 @@ if errorlevel 1 (
 
 %PYTHON% --version >nul 2>&1
 if errorlevel 1 (
-    echo [ERROR] Python not found. Install Python 3.10+ and try again.
+    echo [ERROR] Python not found. Install Python 3.12+ and try again.
     pause
     exit /b 1
 )

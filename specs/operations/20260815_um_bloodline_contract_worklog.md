@@ -11,7 +11,7 @@
   focused byte-level regression tests, migration/reimport guidance if stored
   rows are affected, and directly affected documentation.
 - Repository: `miyamamoto/jrvltsql`
-- Worktree: `/home/keiba/scratch/20260815_jrvltsql_um_bloodline`
+- Worktree: `$WORKSPACE/20260815_jrvltsql_um_bloodline`
 - Branch: `agent/um-bloodline-contract-20260815`
 - Base / initial HEAD / `origin/master` full SHA:
   `dec167b10426aa74284a4d3a1745638af98c2b96`

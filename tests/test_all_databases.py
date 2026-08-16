@@ -51,8 +51,8 @@ class DatabaseTester:
             if self.db_type == 'sqlite':
                 database = SQLiteDatabase(self.db_config)
             elif self.db_type == 'duckdb':
-                print(f"\n✗ DuckDBは非対応です（32-bit Python環境のため）")
-                self.results['errors'].append("DuckDB not supported in 32-bit Python")
+                print(f"\n✗ DuckDBはサポート対象外です")
+                self.results['errors'].append("DuckDB is outside the supported database matrix")
                 return False
             elif self.db_type == 'postgresql':
                 database = PostgreSQLDatabase(self.db_config)
@@ -112,8 +112,8 @@ class DatabaseTester:
             if self.db_type == 'sqlite':
                 database = SQLiteDatabase(self.db_config)
             elif self.db_type == 'duckdb':
-                print(f"\n✗ DuckDBは非対応です（32-bit Python環境のため）")
-                self.results['errors'].append("DuckDB not supported in 32-bit Python")
+                print(f"\n✗ DuckDBはサポート対象外です")
+                self.results['errors'].append("DuckDB is outside the supported database matrix")
                 return False
             elif self.db_type == 'postgresql':
                 database = PostgreSQLDatabase(self.db_config)
@@ -236,11 +236,11 @@ def main():
     }
 
     # 2. DuckDBテスト（非対応）
-    print("\n\n2/3: DuckDB テスト - スキップ（32-bit Python非対応）")
+    print("\n\n2/3: DuckDB テスト - スキップ（サポート対象外）")
     all_results['duckdb'] = {
         'schema': False,
         'import': False,
-        'results': {'error': 'DuckDB not supported in 32-bit Python'}
+        'results': {'error': 'DuckDB is outside the supported database matrix'}
     }
 
     # 3. PostgreSQLテスト

@@ -9,7 +9,7 @@
   worklog. Existing schema/layout changes in the PR are reviewed but are not
   broadened unless a concrete defect is found.
 - Repository: `miyamamoto/jrvltsql`
-- Worktree: `/home/keiba/scratch/20260815_jrvltsql_pr160_fix`
+- Worktree: `$WORKSPACE/20260815_jrvltsql_pr160_fix`
 - Branch: `claude/um-parser-jvdata-4901-layout` (cross-repository PR branch in
   `hayato1980/jrvltsql`)
 - PR: https://github.com/miyamamoto/jrvltsql/pull/160

@@ -12,7 +12,7 @@
   rejection, compatibility audit reconciliation, focused/full tests, Codex
   review, PR, and merge.
 - Repository: `miyamamoto/jrvltsql`
-- Worktree: `/home/keiba/scratch/20260815_jrvltsql_ra_layout`
+- Worktree: `$WORKSPACE/20260815_jrvltsql_ra_layout`
 - Branch: `agent/ra-current-layout-20260815`
 - Base / initial HEAD / `origin/master` full SHA:
   `ff62d65c07b1026e7ea7606b1d6329dbd9768199`

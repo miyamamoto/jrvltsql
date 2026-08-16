@@ -12,7 +12,7 @@ Schema Status:
 
 Note: The schema has been fully implemented with proper SQL syntax.
 All 78 tables should create successfully across all database backends.
-DuckDB is not supported (32-bit Python required for JV-Link, DuckDB doesn't support 32-bit).
+DuckDB is outside this project's supported database matrix.
 """
 
 import os

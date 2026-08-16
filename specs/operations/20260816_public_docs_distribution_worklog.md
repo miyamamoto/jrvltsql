@@ -11,7 +11,7 @@
   and release-artifact inspection. No version bump, publication, or provider
   acquisition is included in this iteration.
 - Repository: `miyamamoto/jrvltsql`
-- Worktree: `/home/keiba/scratch/20260816_jrvltsql_docs_distribution`
+- Worktree: `$WORKSPACE/20260816_jrvltsql_docs_distribution`
 - Branch: `agent/docs-distribution-hygiene-20260816`
 - Base/full SHA: `3fbd5272a3375e3422f47335bc4a98f98c9f6e2b`
 - Dependency: PR #185 merged as the same base SHA.
@@ -53,7 +53,7 @@
   explicit negative fixtures for tracked specifications and superseded audit
   pages in either archive format.
 - The pre-implementation command
-  `python3 -m pytest -q -o addopts='' --basetemp=/home/keiba/scratch/pytest_distribution_red tests/test_distribution_contents.py`
+  `python3 -m pytest -q -o addopts='' --basetemp=$WORKSPACE/pytest_distribution_red tests/test_distribution_contents.py`
   failed during collection with
   `ModuleNotFoundError: No module named 'scripts.check_distribution_contents'`.
   This proves the new release gate is absent before implementation; the test

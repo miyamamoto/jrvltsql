@@ -8,7 +8,13 @@
 JRVLTSQL は Windows + JRA-VAN DataLab / JV-Link を前提にした JRA 用ツールです。
 地方競馬は対象外です。
 
-Python は 3.10 以上で動作します。JV-Link COM を直接使う環境では 32-bit Python を推奨します。
+Python は 3.12 以上が必要です。Python と JV-Link の bit 数を合わせてください。
+JV-Link SDK 5.0.0 以降は 32-bit 版と 64-bit 版の両方が提供されています。
+既存の 32-bit 版 JV-Link を継続利用する場合は 32-bit Python、64-bit 版を
+利用する場合は 64-bit Python を使います。
+
+- [公式SDKダウンロード案内](https://developer.jra-van.jp/t/topic/45)
+- [SDK 5.0.0の変更内容](https://developer.jra-van.jp/t/topic/959)
 
 インストール:
 

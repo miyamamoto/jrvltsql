@@ -261,6 +261,41 @@ class TestQuickstartFailureAggregation:
 class TestQuickstartBatchRoles:
     """Test Windows batch role separation."""
 
+    def test_launchers_prefer_python_312_without_forcing_one_bitness(self):
+        root = Path(__file__).resolve().parents[1]
+        launchers = [
+            root / "quickstart.bat",
+            root / "quickstart_timeseries.bat",
+            root / "quickstart_postgres_timeseries.bat",
+            root / "daily_sync.bat",
+        ]
+
+        for launcher in launchers:
+            text = launcher.read_text(encoding="utf-8")
+            assert "py -3.12 --version" in text, launcher.name
+            assert "py -3.12-32 --version" in text, launcher.name
+            assert text.index("py -3.12 --version") < text.index(
+                "py -3.12-32 --version"
+            ), launcher.name
+            assert "64-bit Python may not support JV-Link" not in text
+            assert "Python 3.10+" not in text
+
+    def test_installers_accept_matching_32_or_64_bit_python(self):
+        root = Path(__file__).resolve().parents[1]
+        batch = (root / "install.bat").read_text(encoding="utf-8")
+        powershell = (root / "install.ps1").read_text(encoding="utf-8")
+
+        assert "Checking Python 3.12" in batch
+        assert batch.index("py -3.12 --version") < batch.index(
+            "py -3.12-32 --version"
+        )
+        assert "Checking 32-bit Python" not in batch
+        assert "32-bit Python 3.12 not found" not in batch
+
+        assert "Checking Python $PYTHON_VERSION" in powershell
+        assert "Checking 32-bit Python" not in powershell
+        assert "32-bit Python $PYTHON_VERSION not found" not in powershell
+
     def test_quickstart_does_not_chain_postgresql_timeseries(self):
         batch = Path(__file__).resolve().parents[1] / "quickstart.bat"
         text = batch.read_text(encoding="utf-8")

@@ -9,7 +9,7 @@
   compatibility fixtures/tests, public support documentation, and this audit
   evidence. No unrelated partial format is changed in this iteration.
 - Repository: `miyamamoto/jrvltsql`
-- Worktree: `/home/keiba/scratch/20260816_jrvltsql_ks_layout`
+- Worktree: `$WORKSPACE/20260816_jrvltsql_ks_layout`
 - Branch: `agent/ks-current-layout-20260816`
 - Base/full SHA: `888e3cb4d572320512da6da4854c5cc6b66bb37d`
 - Previous dependent merge: PR #181, TM official-layout merge
@@ -59,7 +59,7 @@
 ## Red-first evidence
 
 - Added `tests/test_ks_official_contract.py` before production changes and ran
-  `python3 -m pytest tests/test_ks_official_contract.py --basetemp=/home/keiba/scratch/pytest_ks_red --no-cov -q`.
+  `python3 -m pytest tests/test_ks_official_contract.py --basetemp=$WORKSPACE/pytest_ks_red --no-cov -q`.
   Result on unchanged production code: `23 failed, 1 passed, 2 skipped`.
   Concrete failures included `KSParser.RECORD_LENGTH == 772`, acceptance of the
   old 772-byte/truncated/corrupt inputs, missing normalized result storage,

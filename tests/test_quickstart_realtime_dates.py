@@ -7,10 +7,16 @@ JVWatchEvent のイベントキー専用 0B16 が含まれないことを保証�
 """
 
 import inspect
+import struct
+import sys
 from datetime import datetime, timedelta
+from types import ModuleType
+
+import pytest
 
 from scripts.quickstart import (
     QuickstartRunner,
+    _check_jvlink_service_key,
     _is_historical_no_data_error,
     _is_realtime_no_data_error,
     _is_subscription_error,
@@ -20,6 +26,37 @@ from scripts.quickstart import (
 
 def _runner() -> QuickstartRunner:
     return QuickstartRunner({})
+
+
+@pytest.mark.parametrize(
+    ("pointer_bytes", "required", "forbidden"),
+    [
+        (8, "64-bit版JV-Link", "JV-Linkは32-bit DLL"),
+        (4, "32-bit版JV-Link", "64-bit版JV-Link"),
+    ],
+)
+def test_class_not_registered_recommends_matching_jvlink_bitness(
+    monkeypatch, pointer_bytes, required, forbidden
+):
+    """The setup diagnosis must support both official SDK architectures."""
+
+    client = ModuleType("win32com.client")
+
+    def dispatch(_progid):
+        raise RuntimeError("Class not registered")
+
+    client.Dispatch = dispatch
+    win32com = ModuleType("win32com")
+    win32com.client = client
+    monkeypatch.setitem(sys.modules, "win32com", win32com)
+    monkeypatch.setitem(sys.modules, "win32com.client", client)
+    monkeypatch.setattr(struct, "calcsize", lambda _format: pointer_bytes)
+
+    valid, message = _check_jvlink_service_key()
+
+    assert valid is False
+    assert required in message
+    assert forbidden not in message
 
 
 def test_recent_race_dates_covers_every_day_not_only_weekends():

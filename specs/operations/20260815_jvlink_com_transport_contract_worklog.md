@@ -20,7 +20,7 @@
   fixture provenance. Those remain separate follow-up iterations documented in
   PR #162.
 - Repository: `miyamamoto/jrvltsql`
-- Worktree: `/home/keiba/scratch/20260815_jrvltsql_com_transport`
+- Worktree: `$WORKSPACE/20260815_jrvltsql_com_transport`
 - Branch: `agent/jvlink-com-transport-contract-20260815`
 - Base / initial HEAD / `origin/master` full SHA:
   `c1fc891a5d17ff2982901867f4c4b6dc4af98464`

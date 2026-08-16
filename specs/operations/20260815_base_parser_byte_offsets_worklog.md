@@ -10,7 +10,7 @@
   generic field extraction path, the smallest regression fixtures/tests, and
   directly affected parser documentation.
 - Repository: `miyamamoto/jrvltsql`
-- Worktree: `/home/keiba/scratch/20260815_jrvltsql_base_parser_bytes`
+- Worktree: `$WORKSPACE/20260815_jrvltsql_base_parser_bytes`
 - Branch: `agent/base-parser-byte-offset-20260815`
 - Base / initial HEAD / `origin/master` full SHA:
   `fc5d4fb08533021b5fbc83e39a499e92ef8929b6`

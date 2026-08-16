@@ -13,7 +13,7 @@
   layout transitions. Community posts are corroboration, never a replacement
   for an official contract.
 - Repository: `miyamamoto/jrvltsql`
-- Worktree: `/home/keiba/scratch/20260815_jrvltsql_official_spec_audit`
+- Worktree: `$WORKSPACE/20260815_jrvltsql_official_spec_audit`
 - Branch: `codex/jvdata-official-spec-audit-20260815`
 - Base / initial HEAD / `origin/master`:
   `d6f8f70e4976e053f636dc1d136a3214fa6996ad`
@@ -60,7 +60,7 @@
   section-level verification and must not be inferred from the table alone.
 - Downloaded the current official JV-Data/JV-Link documents and the immediately
   preceding JV-Data 4.8.0.2 PDF/XLSX into
-  `/home/keiba/scratch/20260815_jvdata_official_materials/`. Relevant SHA-256
+  `$WORKSPACE/20260815_jvdata_official_materials/`. Relevant SHA-256
   values are:
   - `JV-Data4901.xlsx`:
     `23bafd375f704acbdd696b5032ac1619f17d47e882587d6e7954b610527a8234`

@@ -11,7 +11,7 @@
   schema requires it, fixtures, red-first byte/storage contracts,
   exact-full-SHA Codex review, PR, and merge.
 - Repository: `miyamamoto/jrvltsql`
-- Worktree: `/home/keiba/scratch/20260815_jrvltsql_ch_layout`
+- Worktree: `$WORKSPACE/20260815_jrvltsql_ch_layout`
 - Branch: `agent/ch-current-layout-20260815`
 - Base / initial HEAD: `e54991eb02f5fbee8c4e561bf1f54adb9be255ac`
   (merged `master`, PR #178).

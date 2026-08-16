@@ -10,9 +10,13 @@ Windows 向けツールです。NAR / 地方競馬は対象外です。
 | 項目 | 要件 |
 | --- | --- |
 | OS | Windows 10 / 11 |
-| Python | Python 3.10 以上。JV-Link COM を直接使う環境では 32-bit Python を推奨します。 |
+| Python | Python 3.12 以上。Python と同じ bit 数の JV-Link を使用します。 |
 | 契約 | JRA-VAN DataLab + サービスキー |
 | PostgreSQL | PostgreSQL 運用時のみ必要 |
+
+JV-Link SDK 5.0.0 以降は 32-bit 版と 64-bit 版の両方を利用できます。
+既存の 32-bit 版を継続利用する場合は 32-bit Python、64-bit 版を利用する場合は
+64-bit Python を組み合わせてください。
 
 PowerShell でインストールします。
 

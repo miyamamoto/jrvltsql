@@ -11,7 +11,7 @@
   fixtures, red-first contracts, official-version boundary, compatibility audit,
   exact-SHA Codex review, PR, and merge.
 - Repository: `miyamamoto/jrvltsql`
-- Worktree: `/home/keiba/scratch/20260815_jrvltsql_bn_layout`
+- Worktree: `$WORKSPACE/20260815_jrvltsql_bn_layout`
 - Branch: `agent/bn-current-layout-20260815`
 - Base / initial HEAD: `05bc415713d8995559debbccc2cb5d520d99b4a9`
   (merged `master`, PR #176)
@@ -41,9 +41,9 @@
 ## Evidence sources
 
 - Official JV-Data 4.8.0.2 and 4.9.0.1 workbooks/PDFs preserved under
-  `/home/keiba/scratch/20260815_jvdata_official_materials/`.
+  `$WORKSPACE/20260815_jvdata_official_materials/`.
 - Official SDK 5.0.0 32/64-bit documentation preserved under
-  `/home/keiba/scratch/20260808_jravan_official_audit/`.
+  `$WORKSPACE/20260808_jravan_official_audit/`.
 - Current `master`, repository tests/fixtures, compatibility audit, and PR #174
   are compared independently; repository or PR claims are not treated as the
   official source.

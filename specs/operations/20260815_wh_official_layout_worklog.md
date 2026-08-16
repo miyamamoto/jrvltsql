@@ -11,7 +11,7 @@
   and primary-key routing, directly affected metadata/index/docs, and explicit
   operator guidance for the incompatible old physical schema.
 - Repository: `miyamamoto/jrvltsql`
-- Worktree: `/home/keiba/scratch/20260815_jrvltsql_wh_layout`
+- Worktree: `$WORKSPACE/20260815_jrvltsql_wh_layout`
 - Branch: `agent/wh-official-layout-20260815`
 - Base / initial HEAD / `origin/master` full SHA:
   `56acaaf9498742b74f9c7cf86325611c96a34b50`

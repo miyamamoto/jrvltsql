@@ -1,22 +1,17 @@
-# JRVLTSQL v2.0.0 Test Suite
+# JRVLTSQL Test Suite
 
 ## Overview
 
 Comprehensive test suite for the JRVLTSQL project covering all parsers, database operations, and end-to-end workflows.
 
-### Test Statistics
-
-- **Total Tests**: 415+
-  - **Unit Tests** (test_parsers.py): 404 tests
-  - **Integration Tests** (test_integration.py): 11 tests
-- **Parser Coverage**: All 38 JRA data format parsers
-- **Integration Coverage**: Database operations, transactions, type conversions, error handling
+The suite covers parser contracts, database operations, transactions, type
+conversions, error handling, and Windows execution-path configuration.
 
 ## Running Tests
 
 ### Prerequisites
 
-- Python 3.10+
+- Python 3.12+
 - pytest and dependencies installed:
   ```bash
   pip install -r requirements-dev.txt
@@ -63,11 +58,11 @@ Coverage report will be generated in `htmlcov/index.html`.
 
 ### 1. Parser Unit Tests (test_parsers.py)
 
-**404 comprehensive tests** covering all 38 parser types with consistent validation.
+Parser tests cover the supported JRA-VAN record contracts with consistent validation.
 
 #### Test Coverage per Parser
 
-Each of the 38 parsers is tested for:
+Each supported parser is tested for:
 
 1. **Basic Functionality** (3 tests per parser)
    - Parser instance creation

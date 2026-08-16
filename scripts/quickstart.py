@@ -26,7 +26,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 
 # Set COM threading model to Apartment Threaded (STA)
 # This MUST be set before any other COM/win32com imports or usage
-# Required for 64-bit Python to communicate with 32-bit JV-Link (ActiveX/GUI)
+# JV-Link COM automation requires an STA thread.
 try:
     sys.coinit_flags = 2
 except AttributeError:
@@ -370,8 +370,9 @@ def _check_jvlink_service_key() -> tuple[bool, str]:
         (is_valid, message): サービスキーが有効かどうかとメッセージ
     """
     import struct
+
     is_64bit = struct.calcsize("P") * 8 == 64
-    
+
     try:
         import win32com.client
         jvlink = win32com.client.Dispatch("JVDTLab.JVLink")
@@ -399,19 +400,26 @@ def _check_jvlink_service_key() -> tuple[bool, str]:
             return False, f"JV-Link初期化エラー (code: {result})"
     except Exception as e:
         error_msg = str(e).lower()
-        # 64-bit Python + 32-bit DLL の問題を検出
-        if is_64bit and ("class not registered" in error_msg or 
-                         "クラスが登録されていません" in error_msg or
-                         "-2147221164" in error_msg):
+        class_not_registered = (
+            "class not registered" in error_msg
+            or "クラスが登録されていません" in error_msg
+            or "-2147221164" in error_msg
+        )
+        if class_not_registered:
+            if is_64bit:
+                return False, (
+                    "JV-Link検出不可 (64-bit Python使用中)\n"
+                    "    → Pythonと同じ64-bit版JV-Linkをインストール・登録してください"
+                    "（64-bit版はSDK 5.0.0以降）\n"
+                    "    → 既存の32-bit版JV-Linkを使う場合は32-bit Pythonを使用してください"
+                )
             return False, (
-                "JV-Link検出不可 (64-bit Python使用中)\n"
-                "    → JV-Linkは32-bit DLLのため、32-bit Pythonが必要です\n"
-                "    → py -3.12-32 でインストール: python.org から Windows installer (32-bit) をダウンロード"
+                "JV-Link検出不可 (32-bit Python使用中)\n"
+                "    → Pythonと同じ32-bit版JV-Linkをインストール・登録してください"
             )
-        elif "no module named 'win32com'" in error_msg:
+        if "no module named 'win32com'" in error_msg:
             return False, "pywin32未インストール: pip install pywin32"
-        else:
-            return False, f"JV-Link未インストールまたはアクセス不可: {e}"
+        return False, f"JV-Link未インストールまたはアクセス不可: {e}"
 
 
 
@@ -2071,10 +2079,10 @@ class QuickstartRunner:
 
         # Python バージョン
         python_version = sys.version_info
-        if python_version >= (3, 10):
+        if python_version >= (3, 12):
             checks.append(("Python", f"{python_version.major}.{python_version.minor}", True))
         else:
-            checks.append(("Python", f"{python_version.major}.{python_version.minor} (要3.10+)", False))
+            checks.append(("Python", f"{python_version.major}.{python_version.minor} (要3.12+)", False))
             has_error = True
 
         # OS
@@ -2741,10 +2749,10 @@ class QuickstartRunner:
         has_error = False
 
         v = sys.version_info
-        if v >= (3, 10):
+        if v >= (3, 12):
             print(f"  [OK] Python {v.major}.{v.minor}")
         else:
-            print(f"  [NG] Python {v.major}.{v.minor} (3.10以上が必要)")
+            print(f"  [NG] Python {v.major}.{v.minor} (3.12以上が必要)")
             has_error = True
 
         if sys.platform == "win32":

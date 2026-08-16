@@ -42,42 +42,35 @@ echo Includes:   normal data + official TS_O1/TS_O2 time-series odds
 echo.
 
 set "SCRIPT_EXIT_CODE=0"
-
-if defined PYTHON (
-    echo Using PYTHON environment variable: %PYTHON%
-    "%PYTHON%" scripts/quickstart.py --mode update --yes --db-type postgresql --pg-host "%POSTGRES_HOST%" --pg-port "%POSTGRES_PORT%" --pg-database "%POSTGRES_DATABASE%" --pg-user "%POSTGRES_USER%" --pg-password "%POSTGRES_PASSWORD%" --from-date "%FROM_DATE%" --to-date "%TO_DATE%" --include-timeseries --timeseries-from-date "%FROM_DATE%" --timeseries-to-date "%TO_DATE%"
-    set "SCRIPT_EXIT_CODE=!errorlevel!"
-    goto :check_result
+set "PYTHON_CMD="
+if defined PYTHON set "PYTHON_CMD="%PYTHON%""
+if not defined PYTHON_CMD if exist "%~dp0.venv\Scripts\python.exe" set "PYTHON_CMD="%~dp0.venv\Scripts\python.exe""
+if not defined PYTHON_CMD if exist "%~dp0venv32\Scripts\python.exe" set "PYTHON_CMD="%~dp0venv32\Scripts\python.exe""
+if not defined PYTHON_CMD (
+    py -3.12 --version >nul 2>&1
+    if !errorlevel!==0 set "PYTHON_CMD=py -3.12"
+)
+if not defined PYTHON_CMD (
+    py -3.12-32 --version >nul 2>&1
+    if !errorlevel!==0 set "PYTHON_CMD=py -3.12-32"
+)
+if not defined PYTHON_CMD (
+    py -3 --version >nul 2>&1
+    if !errorlevel!==0 set "PYTHON_CMD=py -3"
+)
+if not defined PYTHON_CMD (
+    python --version >nul 2>&1
+    if !errorlevel!==0 set "PYTHON_CMD=python"
+)
+if not defined PYTHON_CMD (
+    echo ERROR: Python not found
+    echo Please install Python 3.12+ with the same bitness as JV-Link.
+    exit /b 1
 )
 
-py -3.12-32 --version >nul 2>&1
-if !errorlevel!==0 (
-    echo Using: Python 3.12 ^(32-bit^)
-    py -3.12-32 scripts/quickstart.py --mode update --yes --db-type postgresql --pg-host "%POSTGRES_HOST%" --pg-port "%POSTGRES_PORT%" --pg-database "%POSTGRES_DATABASE%" --pg-user "%POSTGRES_USER%" --pg-password "%POSTGRES_PASSWORD%" --from-date "%FROM_DATE%" --to-date "%TO_DATE%" --include-timeseries --timeseries-from-date "%FROM_DATE%" --timeseries-to-date "%TO_DATE%"
-    set "SCRIPT_EXIT_CODE=!errorlevel!"
-    goto :check_result
-)
-
-py -32 --version >nul 2>&1
-if !errorlevel!==0 (
-    echo Using: Python ^(32-bit^)
-    py -32 scripts/quickstart.py --mode update --yes --db-type postgresql --pg-host "%POSTGRES_HOST%" --pg-port "%POSTGRES_PORT%" --pg-database "%POSTGRES_DATABASE%" --pg-user "%POSTGRES_USER%" --pg-password "%POSTGRES_PASSWORD%" --from-date "%FROM_DATE%" --to-date "%TO_DATE%" --include-timeseries --timeseries-from-date "%FROM_DATE%" --timeseries-to-date "%TO_DATE%"
-    set "SCRIPT_EXIT_CODE=!errorlevel!"
-    goto :check_result
-)
-
-python --version >nul 2>&1
-if !errorlevel!==0 (
-    echo Using: Python ^(PATH^)
-    echo [WARNING] 64-bit Python may not support JV-Link COM API
-    python scripts/quickstart.py --mode update --yes --db-type postgresql --pg-host "%POSTGRES_HOST%" --pg-port "%POSTGRES_PORT%" --pg-database "%POSTGRES_DATABASE%" --pg-user "%POSTGRES_USER%" --pg-password "%POSTGRES_PASSWORD%" --from-date "%FROM_DATE%" --to-date "%TO_DATE%" --include-timeseries --timeseries-from-date "%FROM_DATE%" --timeseries-to-date "%TO_DATE%"
-    set "SCRIPT_EXIT_CODE=!errorlevel!"
-    goto :check_result
-)
-
-echo ERROR: Python not found
-echo Please install Python 3.12 (32-bit) for JV-Link COM API support.
-exit /b 1
+echo Using Python: %PYTHON_CMD%
+%PYTHON_CMD% scripts/quickstart.py --mode update --yes --db-type postgresql --pg-host "%POSTGRES_HOST%" --pg-port "%POSTGRES_PORT%" --pg-database "%POSTGRES_DATABASE%" --pg-user "%POSTGRES_USER%" --pg-password "%POSTGRES_PASSWORD%" --from-date "%FROM_DATE%" --to-date "%TO_DATE%" --include-timeseries --timeseries-from-date "%FROM_DATE%" --timeseries-to-date "%TO_DATE%"
+set "SCRIPT_EXIT_CODE=!errorlevel!"
 
 :check_result
 echo.
