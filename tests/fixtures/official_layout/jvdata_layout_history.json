@@ -1,0 +1,141 @@
+{
+  "ledger_schema_version": 1,
+  "sources": [
+    {
+      "artifact": "JV-Data4802.xlsx",
+      "jvdata_version": "4.8.0.2",
+      "sha256": "6a567f10b601115eca350571f36d27d9d28bd2d3835ea72b5bc057711155d4a7"
+    },
+    {
+      "artifact": "JV-Data4901.xlsx",
+      "jvdata_version": "4.9.0.1",
+      "sha256": "23bafd375f704acbdd696b5032ac1619f17d47e882587d6e7954b610527a8234"
+    }
+  ],
+  "physical_length_changes": [
+    {
+      "record_type": "SE",
+      "effective_date": "2003-04-22",
+      "official_spec_version": "1.0.1-beta",
+      "before_length": 547,
+      "after_length": 555,
+      "source": "JV-Data4901.xlsx:変更履歴:331"
+    },
+    {
+      "record_type": "BR",
+      "effective_date": "2003-06-03",
+      "official_spec_version": "1.0.5-beta",
+      "before_length": 467,
+      "after_length": 537,
+      "source": "JV-Data4901.xlsx:変更履歴:317"
+    },
+    {
+      "record_type": "BN",
+      "effective_date": "2003-06-03",
+      "official_spec_version": "1.0.5-beta",
+      "before_length": 413,
+      "after_length": 477,
+      "source": "JV-Data4901.xlsx:変更履歴:319"
+    },
+    {
+      "record_type": "UM",
+      "effective_date": "2023-08-08",
+      "official_spec_version": "4.9.0",
+      "before_length": 1577,
+      "after_length": 1609,
+      "source": "JV-Data4901.xlsx:変更履歴:38"
+    },
+    {
+      "record_type": "BR",
+      "effective_date": "2023-08-08",
+      "official_spec_version": "4.9.0",
+      "before_length": 537,
+      "after_length": 545,
+      "source": "JV-Data4901.xlsx:変更履歴:39"
+    },
+    {
+      "record_type": "HN",
+      "effective_date": "2023-08-08",
+      "official_spec_version": "4.9.0",
+      "before_length": 245,
+      "after_length": 251,
+      "source": "JV-Data4901.xlsx:変更履歴:40"
+    },
+    {
+      "record_type": "SK",
+      "effective_date": "2023-08-08",
+      "official_spec_version": "4.9.0",
+      "before_length": 178,
+      "after_length": 208,
+      "source": "JV-Data4901.xlsx:変更履歴:41"
+    },
+    {
+      "record_type": "CK",
+      "effective_date": "2023-08-08",
+      "official_spec_version": "4.9.0",
+      "before_length": 6864,
+      "after_length": 6870,
+      "source": "JV-Data4901.xlsx:変更履歴:42"
+    },
+    {
+      "record_type": "HS",
+      "effective_date": "2023-08-08",
+      "official_spec_version": "4.9.0",
+      "before_length": 196,
+      "after_length": 200,
+      "source": "JV-Data4901.xlsx:変更履歴:43"
+    },
+    {
+      "record_type": "BT",
+      "effective_date": "2023-08-08",
+      "official_spec_version": "4.9.0",
+      "before_length": 6887,
+      "after_length": 6889,
+      "source": "JV-Data4901.xlsx:変更履歴:44"
+    }
+  ],
+  "record_type_changes": [
+    {
+      "effective_date": "2003-04-22",
+      "before_record_type": "PR",
+      "after_record_type": "BR",
+      "official_spec_version": "1.0.1-beta"
+    }
+  ],
+  "same_length_semantic_changes": [
+    {
+      "record_type": "UM",
+      "announced_date": "2006-03-09",
+      "effective_date": "2006-06-06",
+      "official_spec_version": "2.1.4",
+      "length_unchanged": true,
+      "before_fields": [
+        {
+          "name": "BameiEng",
+          "start": 119,
+          "width": 80
+        }
+      ],
+      "current_fields": [
+        {
+          "name": "BameiEng",
+          "start": 119,
+          "width": 60
+        },
+        {
+          "name": "ZaikyuFlag",
+          "start": 179,
+          "width": 1
+        },
+        {
+          "name": "Reserved",
+          "start": 180,
+          "width": 19
+        }
+      ],
+      "provenance_required": true,
+      "reason": "Record length alone cannot distinguish the pre-change physical generation from the current field semantics.",
+      "source": "JV-Data4901.xlsx:変更履歴:184-187"
+    }
+  ]
+}

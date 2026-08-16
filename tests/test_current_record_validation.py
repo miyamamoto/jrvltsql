@@ -1,51 +1,28 @@
 """Fail-closed gates for current JV-Data fixed-length records."""
 
+import json
+from pathlib import Path
+
 import pytest
 
 from src.parser.base import validate_fixed_record
 from src.parser.factory import ParserFactory
 
-
+OFFICIAL_LAYOUT_ROOT = Path(__file__).parent / "fixtures" / "official_layout"
+CURRENT_LAYOUT = json.loads(
+    (OFFICIAL_LAYOUT_ROOT / "jvdata_sdk500_manifest.json").read_text(encoding="utf-8")
+)
+LAYOUT_HISTORY = json.loads(
+    (OFFICIAL_LAYOUT_ROOT / "jvdata_layout_history.json").read_text(encoding="utf-8")
+)
 CURRENT_LENGTHS = {
-    "AV": (78,),
-    "BN": (477,),
-    "BR": (545,),
-    "BT": (6889,),
-    "CC": (50,),
-    "CH": (3862,),
-    "CK": (6870,),
-    "CS": (6829,),
-    "DM": (303,),
-    "HR": (719,),
-    "H1": (28955,),
-    "H6": (102890,),
-    "HC": (60,),
-    "HN": (251,),
-    "HS": (200,),
-    "HY": (123,),
-    "JC": (161,),
-    "JG": (80,),
-    "KS": (4173,),
-    "O1": (962,),
-    "O2": (2042,),
-    "O3": (2654,),
-    "O4": (4031,),
-    "O5": (12293,),
-    "O6": (83285,),
-    "RA": (1272,),
-    "RC": (501,),
-    "SE": (555,),
-    "SK": (208,),
-    "TC": (45,),
-    "TK": (21657,),
-    "TM": (141,),
-    "UM": (1609,),
-    "WC": (105,),
-    "WE": (42,),
-    "WF": (7215,),
-    "WH": (847,),
-    "YS": (382,),
+    record_type: (contract["length"],)
+    for record_type, contract in CURRENT_LAYOUT["root_records"].items()
 }
+PREVIOUS_OFFICIAL_LENGTHS = tuple(
+    (change["record_type"], change["before_length"])
+    for change in LAYOUT_HISTORY["physical_length_changes"]
+)
 
 # These parsers also require populated domain-specific arrays or master fields.
 # Their valid payloads are covered by dedicated official-contract tests; this
@@ -157,17 +134,9 @@ def test_provider_parser_rejects_repository_only_flattened_vote_records(
 
 @pytest.mark.parametrize(
     ("record_type", "previous_official_length"),
-    (
-        ("UM", 1577),
-        ("BR", 537),
-        ("HN", 245),
-        ("SK", 178),
-        ("CK", 6864),
-        ("HS", 196),
-        ("BT", 6887),
-    ),
+    PREVIOUS_OFFICIAL_LENGTHS,
 )
-def test_provider_parser_rejects_4802_lengths_changed_in_4901(
+def test_provider_parser_rejects_every_ledgered_previous_physical_length(
     record_type,
     previous_official_length,
 ):

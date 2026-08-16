@@ -1,0 +1,6291 @@
+{
+  "manifest_schema_version": 1,
+  "source": {
+    "artifact": "JRA-VAN Data Lab SDK 5.0.0 Python JV-Data structures",
+    "jvdata_version": "4.9.0.1",
+    "sha256": "8994f985fce846f1b4fcbc3ddf2a5c6394c586a458478346891222b3b61e4ee3"
+  },
+  "structures": {
+    "YMD": {
+      "width": 8,
+      "fields": [
+        {
+          "name": "Year",
+          "kind": "scalar",
+          "start": 1,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "Month",
+          "kind": "scalar",
+          "start": 5,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "Day",
+          "kind": "scalar",
+          "start": 7,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 3
+    },
+    "HMS": {
+      "width": 6,
+      "fields": [
+        {
+          "name": "Hour",
+          "kind": "scalar",
+          "start": 1,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "Minute",
+          "kind": "scalar",
+          "start": 3,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "Second",
+          "kind": "scalar",
+          "start": 5,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 3
+    },
+    "HM": {
+      "width": 4,
+      "fields": [
+        {
+          "name": "Hour",
+          "kind": "scalar",
+          "start": 1,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "Minute",
+          "kind": "scalar",
+          "start": 3,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 2
+    },
+    "MDHM": {
+      "width": 8,
+      "fields": [
+        {
+          "name": "Month",
+          "kind": "scalar",
+          "start": 1,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "Day",
+          "kind": "scalar",
+          "start": 3,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "Hour",
+          "kind": "scalar",
+          "start": 5,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "Minute",
+          "kind": "scalar",
+          "start": 7,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 4
+    },
+    "RECORD_ID": {
+      "width": 11,
+      "fields": [
+        {
+          "name": "RecordSpec",
+          "kind": "scalar",
+          "start": 1,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "DataKubun",
+          "kind": "scalar",
+          "start": 3,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "MakeDate",
+          "kind": "nested",
+          "start": 4,
+          "width": 8,
+          "struct": "YMD"
+        }
+      ],
+      "expanded_leaf_count": 5
+    },
+    "RACE_ID": {
+      "width": 16,
+      "fields": [
+        {
+          "name": "Year",
+          "kind": "scalar",
+          "start": 1,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "MonthDay",
+          "kind": "scalar",
+          "start": 5,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "JyoCD",
+          "kind": "scalar",
+          "start": 9,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "Kaiji",
+          "kind": "scalar",
+          "start": 11,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "Nichiji",
+          "kind": "scalar",
+          "start": 13,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "RaceNum",
+          "kind": "scalar",
+          "start": 15,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 6
+    },
+    "RACE_ID2": {
+      "width": 14,
+      "fields": [
+        {
+          "name": "Year",
+          "kind": "scalar",
+          "start": 1,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "MonthDay",
+          "kind": "scalar",
+          "start": 5,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "JyoCD",
+          "kind": "scalar",
+          "start": 9,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "Kaiji",
+          "kind": "scalar",
+          "start": 11,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "Nichiji",
+          "kind": "scalar",
+          "start": 13,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 5
+    },
+    "SEI_RUIKEI_INFO": {
+      "width": 60,
+      "fields": [
+        {
+          "name": "SetYear",
+          "kind": "scalar",
+          "start": 1,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "HonSyokinTotal",
+          "kind": "scalar",
+          "start": 5,
+          "width": 10,
+          "decoder": "text"
+        },
+        {
+          "name": "FukaSyokin",
+          "kind": "scalar",
+          "start": 15,
+          "width": 10,
+          "decoder": "text"
+        },
+        {
+          "name": "ChakuKaisu",
+          "kind": "repeat",
+          "start": 25,
+          "width": 6,
+          "stride": 6,
+          "count": 6,
+          "element_kind": "scalar",
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 9
+    },
+    "SAIKIN_JYUSYO_INFO": {
+      "width": 163,
+      "fields": [
+        {
+          "name": "SaikinJyusyoid",
+          "kind": "nested",
+          "start": 1,
+          "width": 16,
+          "struct": "RACE_ID"
+        },
+        {
+          "name": "Hondai",
+          "kind": "scalar",
+          "start": 17,
+          "width": 60,
+          "decoder": "text"
+        },
+        {
+          "name": "Ryakusyo10",
+          "kind": "scalar",
+          "start": 77,
+          "width": 20,
+          "decoder": "text"
+        },
+        {
+          "name": "Ryakusyo6",
+          "kind": "scalar",
+          "start": 97,
+          "width": 12,
+          "decoder": "text"
+        },
+        {
+          "name": "Ryakusyo3",
+          "kind": "scalar",
+          "start": 109,
+          "width": 6,
+          "decoder": "text"
+        },
+        {
+          "name": "GradeCD",
+          "kind": "scalar",
+          "start": 115,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "SyussoTosu",
+          "kind": "scalar",
+          "start": 116,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "KettoNum",
+          "kind": "scalar",
+          "start": 118,
+          "width": 10,
+          "decoder": "text"
+        },
+        {
+          "name": "Bamei",
+          "kind": "scalar",
+          "start": 128,
+          "width": 36,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 14
+    },
+    "HON_ZEN_RUIKEISEI_INFO": {
+      "width": 1052,
+      "fields": [
+        {
+          "name": "SetYear",
+          "kind": "scalar",
+          "start": 1,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "HonSyokinHeichi",
+          "kind": "scalar",
+          "start": 5,
+          "width": 10,
+          "decoder": "text"
+        },
+        {
+          "name": "HonSyokinSyogai",
+          "kind": "scalar",
+          "start": 15,
+          "width": 10,
+          "decoder": "text"
+        },
+        {
+          "name": "FukaSyokinHeichi",
+          "kind": "scalar",
+          "start": 25,
+          "width": 10,
+          "decoder": "text"
+        },
+        {
+          "name": "FukaSyokinSyogai",
+          "kind": "scalar",
+          "start": 35,
+          "width": 10,
+          "decoder": "text"
+        },
+        {
+          "name": "ChakuKaisuHeichi",
+          "kind": "nested",
+          "start": 45,
+          "width": 36,
+          "struct": "CHAKUKAISU6_INFO"
+        },
+        {
+          "name": "ChakuKaisuSyogai",
+          "kind": "nested",
+          "start": 81,
+          "width": 36,
+          "struct": "CHAKUKAISU6_INFO"
+        },
+        {
+          "name": "ChakuKaisuJyo",
+          "kind": "repeat",
+          "start": 117,
+          "width": 36,
+          "stride": 36,
+          "count": 20,
+          "element_kind": "nested",
+          "struct": "CHAKUKAISU6_INFO"
+        },
+        {
+          "name": "ChakuKaisuKyori",
+          "kind": "repeat",
+          "start": 837,
+          "width": 36,
+          "stride": 36,
+          "count": 6,
+          "element_kind": "nested",
+          "struct": "CHAKUKAISU6_INFO"
+        }
+      ],
+      "expanded_leaf_count": 173
+    },
+    "RACE_INFO": {
+      "width": 587,
+      "fields": [
+        {
+          "name": "YoubiCD",
+          "kind": "scalar",
+          "start": 1,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "TokuNum",
+          "kind": "scalar",
+          "start": 2,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "Hondai",
+          "kind": "scalar",
+          "start": 6,
+          "width": 60,
+          "decoder": "text"
+        },
+        {
+          "name": "Fukudai",
+          "kind": "scalar",
+          "start": 66,
+          "width": 60,
+          "decoder": "text"
+        },
+        {
+          "name": "Kakko",
+          "kind": "scalar",
+          "start": 126,
+          "width": 60,
+          "decoder": "text"
+        },
+        {
+          "name": "HondaiEng",
+          "kind": "scalar",
+          "start": 186,
+          "width": 120,
+          "decoder": "text"
+        },
+        {
+          "name": "FukudaiEng",
+          "kind": "scalar",
+          "start": 306,
+          "width": 120,
+          "decoder": "text"
+        },
+        {
+          "name": "KakkoEng",
+          "kind": "scalar",
+          "start": 426,
+          "width": 120,
+          "decoder": "text"
+        },
+        {
+          "name": "Ryakusyo10",
+          "kind": "scalar",
+          "start": 546,
+          "width": 20,
+          "decoder": "text"
+        },
+        {
+          "name": "Ryakusyo6",
+          "kind": "scalar",
+          "start": 566,
+          "width": 12,
+          "decoder": "text"
+        },
+        {
+          "name": "Ryakusyo3",
+          "kind": "scalar",
+          "start": 578,
+          "width": 6,
+          "decoder": "text"
+        },
+        {
+          "name": "Kubun",
+          "kind": "scalar",
+          "start": 584,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "Nkai",
+          "kind": "scalar",
+          "start": 585,
+          "width": 3,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 13
+    },
+    "TENKO_BABA_INFO": {
+      "width": 3,
+      "fields": [
+        {
+          "name": "TenkoCD",
+          "kind": "scalar",
+          "start": 1,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "SibaBabaCD",
+          "kind": "scalar",
+          "start": 2,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "DirtBabaCD",
+          "kind": "scalar",
+          "start": 3,
+          "width": 1,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 3
+    },
+    "CHAKUKAISU3_INFO": {
+      "width": 18,
+      "fields": [
+        {
+          "name": "ChakuKaisu",
+          "kind": "repeat",
+          "start": 1,
+          "width": 3,
+          "stride": 3,
+          "count": 6,
+          "element_kind": "scalar",
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 6
+    },
+    "CHAKUKAISU4_INFO": {
+      "width": 24,
+      "fields": [
+        {
+          "name": "ChakuKaisu",
+          "kind": "repeat",
+          "start": 1,
+          "width": 4,
+          "stride": 4,
+          "count": 6,
+          "element_kind": "scalar",
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 6
+    },
+    "CHAKUKAISU5_INFO": {
+      "width": 30,
+      "fields": [
+        {
+          "name": "ChakuKaisu",
+          "kind": "repeat",
+          "start": 1,
+          "width": 5,
+          "stride": 5,
+          "count": 6,
+          "element_kind": "scalar",
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 6
+    },
+    "CHAKUKAISU6_INFO": {
+      "width": 36,
+      "fields": [
+        {
+          "name": "ChakuKaisu",
+          "kind": "repeat",
+          "start": 1,
+          "width": 6,
+          "stride": 6,
+          "count": 6,
+          "element_kind": "scalar",
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 6
+    },
+    "RACE_JYOKEN": {
+      "width": 21,
+      "fields": [
+        {
+          "name": "SyubetuCD",
+          "kind": "scalar",
+          "start": 1,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "KigoCD",
+          "kind": "scalar",
+          "start": 3,
+          "width": 3,
+          "decoder": "text"
+        },
+        {
+          "name": "JyuryoCD",
+          "kind": "scalar",
+          "start": 6,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "JyokenCD",
+          "kind": "repeat",
+          "start": 7,
+          "width": 3,
+          "stride": 3,
+          "count": 5,
+          "element_kind": "scalar",
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 8
+    },
+    "TOKUUMA_INFO": {
+      "width": 70,
+      "fields": [
+        {
+          "name": "Num",
+          "kind": "scalar",
+          "start": 1,
+          "width": 3,
+          "decoder": "text"
+        },
+        {
+          "name": "KettoNum",
+          "kind": "scalar",
+          "start": 4,
+          "width": 10,
+          "decoder": "text"
+        },
+        {
+          "name": "Bamei",
+          "kind": "scalar",
+          "start": 14,
+          "width": 36,
+          "decoder": "text"
+        },
+        {
+          "name": "UmaKigoCD",
+          "kind": "scalar",
+          "start": 50,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "SexCD",
+          "kind": "scalar",
+          "start": 52,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "TozaiCD",
+          "kind": "scalar",
+          "start": 53,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "ChokyosiCode",
+          "kind": "scalar",
+          "start": 54,
+          "width": 5,
+          "decoder": "text"
+        },
+        {
+          "name": "ChokyosiRyakusyo",
+          "kind": "scalar",
+          "start": 59,
+          "width": 8,
+          "decoder": "text"
+        },
+        {
+          "name": "Futan",
+          "kind": "scalar",
+          "start": 67,
+          "width": 3,
+          "decoder": "text"
+        },
+        {
+          "name": "Koryu",
+          "kind": "scalar",
+          "start": 70,
+          "width": 1,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 10
+    },
+    "JV_TK_TOKUUMA": {
+      "width": 21657,
+      "fields": [
+        {
+          "name": "head",
+          "kind": "nested",
+          "start": 1,
+          "width": 11,
+          "struct": "RECORD_ID"
+        },
+        {
+          "name": "id",
+          "kind": "nested",
+          "start": 12,
+          "width": 16,
+          "struct": "RACE_ID"
+        },
+        {
+          "name": "RaceInfo",
+          "kind": "nested",
+          "start": 28,
+          "width": 587,
+          "struct": "RACE_INFO"
+        },
+        {
+          "name": "GradeCD",
+          "kind": "scalar",
+          "start": 615,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "JyokenInfo",
+          "kind": "nested",
+          "start": 616,
+          "width": 21,
+          "struct": "RACE_JYOKEN"
+        },
+        {
+          "name": "Kyori",
+          "kind": "scalar",
+          "start": 637,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "TrackCD",
+          "kind": "scalar",
+          "start": 641,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "CourseKubunCD",
+          "kind": "scalar",
+          "start": 643,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "HandiDate",
+          "kind": "nested",
+          "start": 645,
+          "width": 8,
+          "struct": "YMD"
+        },
+        {
+          "name": "TorokuTosu",
+          "kind": "scalar",
+          "start": 653,
+          "width": 3,
+          "decoder": "text"
+        },
+        {
+          "name": "TokuUmaInfo",
+          "kind": "repeat",
+          "start": 656,
+          "width": 70,
+          "stride": 70,
+          "count": 300,
+          "element_kind": "nested",
+          "struct": "TOKUUMA_INFO"
+        },
+        {
+          "name": "crlf",
+          "kind": "scalar",
+          "start": 21656,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 3041
+    },
+    "CORNER_INFO": {
+      "width": 72,
+      "fields": [
+        {
+          "name": "Corner",
+          "kind": "scalar",
+          "start": 1,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "Syukaisu",
+          "kind": "scalar",
+          "start": 2,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "Jyuni",
+          "kind": "scalar",
+          "start": 3,
+          "width": 70,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 3
+    },
+    "JV_RA_RACE": {
+      "width": 1272,
+      "fields": [
+        {
+          "name": "head",
+          "kind": "nested",
+          "start": 1,
+          "width": 11,
+          "struct": "RECORD_ID"
+        },
+        {
+          "name": "id",
+          "kind": "nested",
+          "start": 12,
+          "width": 16,
+          "struct": "RACE_ID"
+        },
+        {
+          "name": "RaceInfo",
+          "kind": "nested",
+          "start": 28,
+          "width": 587,
+          "struct": "RACE_INFO"
+        },
+        {
+          "name": "GradeCD",
+          "kind": "scalar",
+          "start": 615,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "GradeCDBefore",
+          "kind": "scalar",
+          "start": 616,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "JyokenInfo",
+          "kind": "nested",
+          "start": 617,
+          "width": 21,
+          "struct": "RACE_JYOKEN"
+        },
+        {
+          "name": "JyokenName",
+          "kind": "scalar",
+          "start": 638,
+          "width": 60,
+          "decoder": "text"
+        },
+        {
+          "name": "Kyori",
+          "kind": "scalar",
+          "start": 698,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "KyoriBefore",
+          "kind": "scalar",
+          "start": 702,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "TrackCD",
+          "kind": "scalar",
+          "start": 706,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "TrackCDBefore",
+          "kind": "scalar",
+          "start": 708,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "CourseKubunCD",
+          "kind": "scalar",
+          "start": 710,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "CourseKubunCDBefore",
+          "kind": "scalar",
+          "start": 712,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "Honsyokin",
+          "kind": "repeat",
+          "start": 714,
+          "width": 8,
+          "stride": 8,
+          "count": 7,
+          "element_kind": "scalar",
+          "decoder": "text"
+        },
+        {
+          "name": "HonsyokinBefore",
+          "kind": "repeat",
+          "start": 770,
+          "width": 8,
+          "stride": 8,
+          "count": 5,
+          "element_kind": "scalar",
+          "decoder": "text"
+        },
+        {
+          "name": "Fukasyokin",
+          "kind": "repeat",
+          "start": 810,
+          "width": 8,
+          "stride": 8,
+          "count": 5,
+          "element_kind": "scalar",
+          "decoder": "text"
+        },
+        {
+          "name": "FukasyokinBefore",
+          "kind": "repeat",
+          "start": 850,
+          "width": 8,
+          "stride": 8,
+          "count": 3,
+          "element_kind": "scalar",
+          "decoder": "text"
+        },
+        {
+          "name": "HassoTime",
+          "kind": "scalar",
+          "start": 874,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "HassoTimeBefore",
+          "kind": "scalar",
+          "start": 878,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "TorokuTosu",
+          "kind": "scalar",
+          "start": 882,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "SyussoTosu",
+          "kind": "scalar",
+          "start": 884,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "NyusenTosu",
+          "kind": "scalar",
+          "start": 886,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "TenkoBaba",
+          "kind": "nested",
+          "start": 888,
+          "width": 3,
+          "struct": "TENKO_BABA_INFO"
+        },
+        {
+          "name": "LapTime",
+          "kind": "repeat",
+          "start": 891,
+          "width": 3,
+          "stride": 3,
+          "count": 25,
+          "element_kind": "scalar",
+          "decoder": "text"
+        },
+        {
+          "name": "SyogaiMileTime",
+          "kind": "scalar",
+          "start": 966,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "HaronTimeS3",
+          "kind": "scalar",
+          "start": 970,
+          "width": 3,
+          "decoder": "text"
+        },
+        {
+          "name": "HaronTimeS4",
+          "kind": "scalar",
+          "start": 973,
+          "width": 3,
+          "decoder": "text"
+        },
+        {
+          "name": "HaronTimeL3",
+          "kind": "scalar",
+          "start": 976,
+          "width": 3,
+          "decoder": "text"
+        },
+        {
+          "name": "HaronTimeL4",
+          "kind": "scalar",
+          "start": 979,
+          "width": 3,
+          "decoder": "text"
+        },
+        {
+          "name": "CornerInfo",
+          "kind": "repeat",
+          "start": 982,
+          "width": 72,
+          "stride": 72,
+          "count": 4,
+          "element_kind": "nested",
+          "struct": "CORNER_INFO"
+        },
+        {
+          "name": "RecordUpKubun",
+          "kind": "scalar",
+          "start": 1270,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "crlf",
+          "kind": "scalar",
+          "start": 1271,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 113
+    },
+    "CHAKUUMA_INFO": {
+      "width": 46,
+      "fields": [
+        {
+          "name": "KettoNum",
+          "kind": "scalar",
+          "start": 1,
+          "width": 10,
+          "decoder": "text"
+        },
+        {
+          "name": "Bamei",
+          "kind": "scalar",
+          "start": 11,
+          "width": 36,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 2
+    },
+    "JV_SE_RACE_UMA": {
+      "width": 555,
+      "fields": [
+        {
+          "name": "head",
+          "kind": "nested",
+          "start": 1,
+          "width": 11,
+          "struct": "RECORD_ID"
+        },
+        {
+          "name": "id",
+          "kind": "nested",
+          "start": 12,
+          "width": 16,
+          "struct": "RACE_ID"
+        },
+        {
+          "name": "Wakuban",
+          "kind": "scalar",
+          "start": 28,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "Umaban",
+          "kind": "scalar",
+          "start": 29,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "KettoNum",
+          "kind": "scalar",
+          "start": 31,
+          "width": 10,
+          "decoder": "text"
+        },
+        {
+          "name": "Bamei",
+          "kind": "scalar",
+          "start": 41,
+          "width": 36,
+          "decoder": "text"
+        },
+        {
+          "name": "UmaKigoCD",
+          "kind": "scalar",
+          "start": 77,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "SexCD",
+          "kind": "scalar",
+          "start": 79,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "HinsyuCD",
+          "kind": "scalar",
+          "start": 80,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "KeiroCD",
+          "kind": "scalar",
+          "start": 81,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "Barei",
+          "kind": "scalar",
+          "start": 83,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "TozaiCD",
+          "kind": "scalar",
+          "start": 85,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "ChokyosiCode",
+          "kind": "scalar",
+          "start": 86,
+          "width": 5,
+          "decoder": "text"
+        },
+        {
+          "name": "ChokyosiRyakusyo",
+          "kind": "scalar",
+          "start": 91,
+          "width": 8,
+          "decoder": "text"
+        },
+        {
+          "name": "BanusiCode",
+          "kind": "scalar",
+          "start": 99,
+          "width": 6,
+          "decoder": "text"
+        },
+        {
+          "name": "BanusiName",
+          "kind": "scalar",
+          "start": 105,
+          "width": 64,
+          "decoder": "text"
+        },
+        {
+          "name": "Fukusyoku",
+          "kind": "scalar",
+          "start": 169,
+          "width": 60,
+          "decoder": "text"
+        },
+        {
+          "name": "reserved1",
+          "kind": "scalar",
+          "start": 229,
+          "width": 60,
+          "decoder": "text"
+        },
+        {
+          "name": "Futan",
+          "kind": "scalar",
+          "start": 289,
+          "width": 3,
+          "decoder": "text"
+        },
+        {
+          "name": "FutanBefore",
+          "kind": "scalar",
+          "start": 292,
+          "width": 3,
+          "decoder": "text"
+        },
+        {
+          "name": "Blinker",
+          "kind": "scalar",
+          "start": 295,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "reserved2",
+          "kind": "scalar",
+          "start": 296,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "KisyuCode",
+          "kind": "scalar",
+          "start": 297,
+          "width": 5,
+          "decoder": "text"
+        },
+        {
+          "name": "KisyuCodeBefore",
+          "kind": "scalar",
+          "start": 302,
+          "width": 5,
+          "decoder": "text"
+        },
+        {
+          "name": "KisyuRyakusyo",
+          "kind": "scalar",
+          "start": 307,
+          "width": 8,
+          "decoder": "text"
+        },
+        {
+          "name": "KisyuRyakusyoBefore",
+          "kind": "scalar",
+          "start": 315,
+          "width": 8,
+          "decoder": "text"
+        },
+        {
+          "name": "MinaraiCD",
+          "kind": "scalar",
+          "start": 323,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "MinaraiCDBefore",
+          "kind": "scalar",
+          "start": 324,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "BaTaijyu",
+          "kind": "scalar",
+          "start": 325,
+          "width": 3,
+          "decoder": "text"
+        },
+        {
+          "name": "ZogenFugo",
+          "kind": "scalar",
+          "start": 328,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "ZogenSa",
+          "kind": "scalar",
+          "start": 329,
+          "width": 3,
+          "decoder": "text"
+        },
+        {
+          "name": "IJyoCD",
+          "kind": "scalar",
+          "start": 332,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "NyusenJyuni",
+          "kind": "scalar",
+          "start": 333,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "KakuteiJyuni",
+          "kind": "scalar",
+          "start": 335,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "DochakuKubun",
+          "kind": "scalar",
+          "start": 337,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "DochakuTosu",
+          "kind": "scalar",
+          "start": 338,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "Time",
+          "kind": "scalar",
+          "start": 339,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "ChakusaCD",
+          "kind": "scalar",
+          "start": 343,
+          "width": 3,
+          "decoder": "text"
+        },
+        {
+          "name": "ChakusaCDP",
+          "kind": "scalar",
+          "start": 346,
+          "width": 3,
+          "decoder": "text"
+        },
+        {
+          "name": "ChakusaCDPP",
+          "kind": "scalar",
+          "start": 349,
+          "width": 3,
+          "decoder": "text"
+        },
+        {
+          "name": "Jyuni1c",
+          "kind": "scalar",
+          "start": 352,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "Jyuni2c",
+          "kind": "scalar",
+          "start": 354,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "Jyuni3c",
+          "kind": "scalar",
+          "start": 356,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "Jyuni4c",
+          "kind": "scalar",
+          "start": 358,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "Odds",
+          "kind": "scalar",
+          "start": 360,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "Ninki",
+          "kind": "scalar",
+          "start": 364,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "Honsyokin",
+          "kind": "scalar",
+          "start": 366,
+          "width": 8,
+          "decoder": "text"
+        },
+        {
+          "name": "Fukasyokin",
+          "kind": "scalar",
+          "start": 374,
+          "width": 8,
+          "decoder": "text"
+        },
+        {
+          "name": "reserved3",
+          "kind": "scalar",
+          "start": 382,
+          "width": 3,
+          "decoder": "text"
+        },
+        {
+          "name": "reserved4",
+          "kind": "scalar",
+          "start": 385,
+          "width": 3,
+          "decoder": "text"
+        },
+        {
+          "name": "HaronTimeL4",
+          "kind": "scalar",
+          "start": 388,
+          "width": 3,
+          "decoder": "text"
+        },
+        {
+          "name": "HaronTimeL3",
+          "kind": "scalar",
+          "start": 391,
+          "width": 3,
+          "decoder": "text"
+        },
+        {
+          "name": "ChakuUmaInfo",
+          "kind": "repeat",
+          "start": 394,
+          "width": 46,
+          "stride": 46,
+          "count": 3,
+          "element_kind": "nested",
+          "struct": "CHAKUUMA_INFO"
+        },
+        {
+          "name": "TimeDiff",
+          "kind": "scalar",
+          "start": 532,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "RecordUpKubun",
+          "kind": "scalar",
+          "start": 536,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "DMKubun",
+          "kind": "scalar",
+          "start": 537,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "DMTime",
+          "kind": "scalar",
+          "start": 538,
+          "width": 5,
+          "decoder": "text"
+        },
+        {
+          "name": "DMGosaP",
+          "kind": "scalar",
+          "start": 543,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "DMGosaM",
+          "kind": "scalar",
+          "start": 547,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "DMJyuni",
+          "kind": "scalar",
+          "start": 551,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "KyakusituKubun",
+          "kind": "scalar",
+          "start": 553,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "crlf",
+          "kind": "scalar",
+          "start": 554,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 76
+    },
+    "PAY_INFO1": {
+      "width": 13,
+      "fields": [
+        {
+          "name": "Umaban",
+          "kind": "scalar",
+          "start": 1,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "Pay",
+          "kind": "scalar",
+          "start": 3,
+          "width": 9,
+          "decoder": "text"
+        },
+        {
+          "name": "Ninki",
+          "kind": "scalar",
+          "start": 12,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 3
+    },
+    "PAY_INFO2": {
+      "width": 16,
+      "fields": [
+        {
+          "name": "Kumi",
+          "kind": "scalar",
+          "start": 1,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "Pay",
+          "kind": "scalar",
+          "start": 5,
+          "width": 9,
+          "decoder": "text"
+        },
+        {
+          "name": "Ninki",
+          "kind": "scalar",
+          "start": 14,
+          "width": 3,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 3
+    },
+    "PAY_INFO3": {
+      "width": 18,
+      "fields": [
+        {
+          "name": "Kumi",
+          "kind": "scalar",
+          "start": 1,
+          "width": 6,
+          "decoder": "text"
+        },
+        {
+          "name": "Pay",
+          "kind": "scalar",
+          "start": 7,
+          "width": 9,
+          "decoder": "text"
+        },
+        {
+          "name": "Ninki",
+          "kind": "scalar",
+          "start": 16,
+          "width": 3,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 3
+    },
+    "PAY_INFO4": {
+      "width": 19,
+      "fields": [
+        {
+          "name": "Kumi",
+          "kind": "scalar",
+          "start": 1,
+          "width": 6,
+          "decoder": "text"
+        },
+        {
+          "name": "Pay",
+          "kind": "scalar",
+          "start": 7,
+          "width": 9,
+          "decoder": "text"
+        },
+        {
+          "name": "Ninki",
+          "kind": "scalar",
+          "start": 16,
+          "width": 4,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 3
+    },
+    "JV_HR_PAY": {
+      "width": 719,
+      "fields": [
+        {
+          "name": "head",
+          "kind": "nested",
+          "start": 1,
+          "width": 11,
+          "struct": "RECORD_ID"
+        },
+        {
+          "name": "id",
+          "kind": "nested",
+          "start": 12,
+          "width": 16,
+          "struct": "RACE_ID"
+        },
+        {
+          "name": "TorokuTosu",
+          "kind": "scalar",
+          "start": 28,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "SyussoTosu",
+          "kind": "scalar",
+          "start": 30,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "FuseirituFlag",
+          "kind": "repeat",
+          "start": 32,
+          "width": 1,
+          "stride": 1,
+          "count": 9,
+          "element_kind": "scalar",
+          "decoder": "text"
+        },
+        {
+          "name": "TokubaraiFlag",
+          "kind": "repeat",
+          "start": 41,
+          "width": 1,
+          "stride": 1,
+          "count": 9,
+          "element_kind": "scalar",
+          "decoder": "text"
+        },
+        {
+          "name": "HenkanFlag",
+          "kind": "repeat",
+          "start": 50,
+          "width": 1,
+          "stride": 1,
+          "count": 9,
+          "element_kind": "scalar",
+          "decoder": "text"
+        },
+        {
+          "name": "HenkanUma",
+          "kind": "repeat",
+          "start": 59,
+          "width": 1,
+          "stride": 1,
+          "count": 28,
+          "element_kind": "scalar",
+          "decoder": "text"
+        },
+        {
+          "name": "HenkanWaku",
+          "kind": "repeat",
+          "start": 87,
+          "width": 1,
+          "stride": 1,
+          "count": 8,
+          "element_kind": "scalar",
+          "decoder": "text"
+        },
+        {
+          "name": "HenkanDoWaku",
+          "kind": "repeat",
+          "start": 95,
+          "width": 1,
+          "stride": 1,
+          "count": 8,
+          "element_kind": "scalar",
+          "decoder": "text"
+        },
+        {
+          "name": "PayTansyo",
+          "kind": "repeat",
+          "start": 103,
+          "width": 13,
+          "stride": 13,
+          "count": 3,
+          "element_kind": "nested",
+          "struct": "PAY_INFO1"
+        },
+        {
+          "name": "PayFukusyo",
+          "kind": "repeat",
+          "start": 142,
+          "width": 13,
+          "stride": 13,
+          "count": 5,
+          "element_kind": "nested",
+          "struct": "PAY_INFO1"
+        },
+        {
+          "name": "PayWakuren",
+          "kind": "repeat",
+          "start": 207,
+          "width": 13,
+          "stride": 13,
+          "count": 3,
+          "element_kind": "nested",
+          "struct": "PAY_INFO1"
+        },
+        {
+          "name": "PayUmaren",
+          "kind": "repeat",
+          "start": 246,
+          "width": 16,
+          "stride": 16,
+          "count": 3,
+          "element_kind": "nested",
+          "struct": "PAY_INFO2"
+        },
+        {
+          "name": "PayWide",
+          "kind": "repeat",
+          "start": 294,
+          "width": 16,
+          "stride": 16,
+          "count": 7,
+          "element_kind": "nested",
+          "struct": "PAY_INFO2"
+        },
+        {
+          "name": "PayReserved1",
+          "kind": "repeat",
+          "start": 406,
+          "width": 16,
+          "stride": 16,
+          "count": 3,
+          "element_kind": "nested",
+          "struct": "PAY_INFO2"
+        },
+        {
+          "name": "PayUmatan",
+          "kind": "repeat",
+          "start": 454,
+          "width": 16,
+          "stride": 16,
+          "count": 6,
+          "element_kind": "nested",
+          "struct": "PAY_INFO2"
+        },
+        {
+          "name": "PaySanrenpuku",
+          "kind": "repeat",
+          "start": 550,
+          "width": 18,
+          "stride": 18,
+          "count": 3,
+          "element_kind": "nested",
+          "struct": "PAY_INFO3"
+        },
+        {
+          "name": "PaySanrentan",
+          "kind": "repeat",
+          "start": 604,
+          "width": 19,
+          "stride": 19,
+          "count": 6,
+          "element_kind": "nested",
+          "struct": "PAY_INFO4"
+        },
+        {
+          "name": "crlf",
+          "kind": "scalar",
+          "start": 718,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 202
+    },
+    "HYO_INFO1": {
+      "width": 15,
+      "fields": [
+        {
+          "name": "Umaban",
+          "kind": "scalar",
+          "start": 1,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "Hyo",
+          "kind": "scalar",
+          "start": 3,
+          "width": 11,
+          "decoder": "text"
+        },
+        {
+          "name": "Ninki",
+          "kind": "scalar",
+          "start": 14,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 3
+    },
+    "HYO_INFO2": {
+      "width": 18,
+      "fields": [
+        {
+          "name": "Kumi",
+          "kind": "scalar",
+          "start": 1,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "Hyo",
+          "kind": "scalar",
+          "start": 5,
+          "width": 11,
+          "decoder": "text"
+        },
+        {
+          "name": "Ninki",
+          "kind": "scalar",
+          "start": 16,
+          "width": 3,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 3
+    },
+    "HYO_INFO3": {
+      "width": 20,
+      "fields": [
+        {
+          "name": "Kumi",
+          "kind": "scalar",
+          "start": 1,
+          "width": 6,
+          "decoder": "text"
+        },
+        {
+          "name": "Hyo",
+          "kind": "scalar",
+          "start": 7,
+          "width": 11,
+          "decoder": "text"
+        },
+        {
+          "name": "Ninki",
+          "kind": "scalar",
+          "start": 18,
+          "width": 3,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 3
+    },
+    "HYO_INFO4": {
+      "width": 21,
+      "fields": [
+        {
+          "name": "Kumi",
+          "kind": "scalar",
+          "start": 1,
+          "width": 6,
+          "decoder": "text"
+        },
+        {
+          "name": "Hyo",
+          "kind": "scalar",
+          "start": 7,
+          "width": 11,
+          "decoder": "text"
+        },
+        {
+          "name": "Ninki",
+          "kind": "scalar",
+          "start": 18,
+          "width": 4,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 3
+    },
+    "JV_H1_HYOSU_ZENKAKE": {
+      "width": 28955,
+      "fields": [
+        {
+          "name": "head",
+          "kind": "nested",
+          "start": 1,
+          "width": 11,
+          "struct": "RECORD_ID"
+        },
+        {
+          "name": "id",
+          "kind": "nested",
+          "start": 12,
+          "width": 16,
+          "struct": "RACE_ID"
+        },
+        {
+          "name": "TorokuTosu",
+          "kind": "scalar",
+          "start": 28,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "SyussoTosu",
+          "kind": "scalar",
+          "start": 30,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "HatubaiFlag",
+          "kind": "repeat",
+          "start": 32,
+          "width": 1,
+          "stride": 1,
+          "count": 7,
+          "element_kind": "scalar",
+          "decoder": "text"
+        },
+        {
+          "name": "FukuChakuBaraiKey",
+          "kind": "scalar",
+          "start": 39,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "HenkanUma",
+          "kind": "repeat",
+          "start": 40,
+          "width": 1,
+          "stride": 1,
+          "count": 28,
+          "element_kind": "scalar",
+          "decoder": "text"
+        },
+        {
+          "name": "HenkanWaku",
+          "kind": "repeat",
+          "start": 68,
+          "width": 1,
+          "stride": 1,
+          "count": 8,
+          "element_kind": "scalar",
+          "decoder": "text"
+        },
+        {
+          "name": "HenkanDoWaku",
+          "kind": "repeat",
+          "start": 76,
+          "width": 1,
+          "stride": 1,
+          "count": 8,
+          "element_kind": "scalar",
+          "decoder": "text"
+        },
+        {
+          "name": "HyoTansyo",
+          "kind": "repeat",
+          "start": 84,
+          "width": 15,
+          "stride": 15,
+          "count": 28,
+          "element_kind": "nested",
+          "struct": "HYO_INFO1"
+        },
+        {
+          "name": "HyoFukusyo",
+          "kind": "repeat",
+          "start": 504,
+          "width": 15,
+          "stride": 15,
+          "count": 28,
+          "element_kind": "nested",
+          "struct": "HYO_INFO1"
+        },
+        {
+          "name": "HyoWakuren",
+          "kind": "repeat",
+          "start": 924,
+          "width": 15,
+          "stride": 15,
+          "count": 36,
+          "element_kind": "nested",
+          "struct": "HYO_INFO1"
+        },
+        {
+          "name": "HyoUmaren",
+          "kind": "repeat",
+          "start": 1464,
+          "width": 18,
+          "stride": 18,
+          "count": 153,
+          "element_kind": "nested",
+          "struct": "HYO_INFO2"
+        },
+        {
+          "name": "HyoWide",
+          "kind": "repeat",
+          "start": 4218,
+          "width": 18,
+          "stride": 18,
+          "count": 153,
+          "element_kind": "nested",
+          "struct": "HYO_INFO2"
+        },
+        {
+          "name": "HyoUmatan",
+          "kind": "repeat",
+          "start": 6972,
+          "width": 18,
+          "stride": 18,
+          "count": 306,
+          "element_kind": "nested",
+          "struct": "HYO_INFO2"
+        },
+        {
+          "name": "HyoSanrenpuku",
+          "kind": "repeat",
+          "start": 12480,
+          "width": 20,
+          "stride": 20,
+          "count": 816,
+          "element_kind": "nested",
+          "struct": "HYO_INFO3"
+        },
+        {
+          "name": "HyoTotal",
+          "kind": "repeat",
+          "start": 28800,
+          "width": 11,
+          "stride": 11,
+          "count": 14,
+          "element_kind": "scalar",
+          "decoder": "text"
+        },
+        {
+          "name": "crlf",
+          "kind": "scalar",
+          "start": 28954,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 4640
+    },
+    "JV_H6_HYOSU_SANRENTAN": {
+      "width": 102890,
+      "fields": [
+        {
+          "name": "head",
+          "kind": "nested",
+          "start": 1,
+          "width": 11,
+          "struct": "RECORD_ID"
+        },
+        {
+          "name": "id",
+          "kind": "nested",
+          "start": 12,
+          "width": 16,
+          "struct": "RACE_ID"
+        },
+        {
+          "name": "TorokuTosu",
+          "kind": "scalar",
+          "start": 28,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "SyussoTosu",
+          "kind": "scalar",
+          "start": 30,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "HatubaiFlag",
+          "kind": "scalar",
+          "start": 32,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "HenkanUma",
+          "kind": "repeat",
+          "start": 33,
+          "width": 1,
+          "stride": 1,
+          "count": 18,
+          "element_kind": "scalar",
+          "decoder": "text"
+        },
+        {
+          "name": "HyoSanrentan",
+          "kind": "repeat",
+          "start": 51,
+          "width": 21,
+          "stride": 21,
+          "count": 4896,
+          "element_kind": "nested",
+          "struct": "HYO_INFO4"
+        },
+        {
+          "name": "HyoTotal",
+          "kind": "repeat",
+          "start": 102867,
+          "width": 11,
+          "stride": 11,
+          "count": 2,
+          "element_kind": "scalar",
+          "decoder": "text"
+        },
+        {
+          "name": "crlf",
+          "kind": "scalar",
+          "start": 102889,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 14723
+    },
+    "ODDS_TANSYO_INFO": {
+      "width": 8,
+      "fields": [
+        {
+          "name": "Umaban",
+          "kind": "scalar",
+          "start": 1,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "Odds",
+          "kind": "scalar",
+          "start": 3,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "Ninki",
+          "kind": "scalar",
+          "start": 7,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 3
+    },
+    "ODDS_FUKUSYO_INFO": {
+      "width": 12,
+      "fields": [
+        {
+          "name": "Umaban",
+          "kind": "scalar",
+          "start": 1,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "OddsLow",
+          "kind": "scalar",
+          "start": 3,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "OddsHigh",
+          "kind": "scalar",
+          "start": 7,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "Ninki",
+          "kind": "scalar",
+          "start": 11,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 4
+    },
+    "ODDS_WAKUREN_INFO": {
+      "width": 9,
+      "fields": [
+        {
+          "name": "Kumi",
+          "kind": "scalar",
+          "start": 1,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "Odds",
+          "kind": "scalar",
+          "start": 3,
+          "width": 5,
+          "decoder": "text"
+        },
+        {
+          "name": "Ninki",
+          "kind": "scalar",
+          "start": 8,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 3
+    },
+    "JV_O1_ODDS_TANFUKUWAKU": {
+      "width": 962,
+      "fields": [
+        {
+          "name": "head",
+          "kind": "nested",
+          "start": 1,
+          "width": 11,
+          "struct": "RECORD_ID"
+        },
+        {
+          "name": "id",
+          "kind": "nested",
+          "start": 12,
+          "width": 16,
+          "struct": "RACE_ID"
+        },
+        {
+          "name": "HappyoTime",
+          "kind": "nested",
+          "start": 28,
+          "width": 8,
+          "struct": "MDHM"
+        },
+        {
+          "name": "TorokuTosu",
+          "kind": "scalar",
+          "start": 36,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "SyussoTosu",
+          "kind": "scalar",
+          "start": 38,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "TansyoFlag",
+          "kind": "scalar",
+          "start": 40,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "FukusyoFlag",
+          "kind": "scalar",
+          "start": 41,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "WakurenFlag",
+          "kind": "scalar",
+          "start": 42,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "FukuChakuBaraiKey",
+          "kind": "scalar",
+          "start": 43,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "OddsTansyoInfo",
+          "kind": "repeat",
+          "start": 44,
+          "width": 8,
+          "stride": 8,
+          "count": 28,
+          "element_kind": "nested",
+          "struct": "ODDS_TANSYO_INFO"
+        },
+        {
+          "name": "OddsFukusyoInfo",
+          "kind": "repeat",
+          "start": 268,
+          "width": 12,
+          "stride": 12,
+          "count": 28,
+          "element_kind": "nested",
+          "struct": "ODDS_FUKUSYO_INFO"
+        },
+        {
+          "name": "OddsWakurenInfo",
+          "kind": "repeat",
+          "start": 604,
+          "width": 9,
+          "stride": 9,
+          "count": 36,
+          "element_kind": "nested",
+          "struct": "ODDS_WAKUREN_INFO"
+        },
+        {
+          "name": "TotalHyosuTansyo",
+          "kind": "scalar",
+          "start": 928,
+          "width": 11,
+          "decoder": "text"
+        },
+        {
+          "name": "TotalHyosuFukusyo",
+          "kind": "scalar",
+          "start": 939,
+          "width": 11,
+          "decoder": "text"
+        },
+        {
+          "name": "TotalHyosuWakuren",
+          "kind": "scalar",
+          "start": 950,
+          "width": 11,
+          "decoder": "text"
+        },
+        {
+          "name": "crlf",
+          "kind": "scalar",
+          "start": 961,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 329
+    },
+    "ODDS_UMAREN_INFO": {
+      "width": 13,
+      "fields": [
+        {
+          "name": "Kumi",
+          "kind": "scalar",
+          "start": 1,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "Odds",
+          "kind": "scalar",
+          "start": 5,
+          "width": 6,
+          "decoder": "text"
+        },
+        {
+          "name": "Ninki",
+          "kind": "scalar",
+          "start": 11,
+          "width": 3,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 3
+    },
+    "JV_O2_ODDS_UMAREN": {
+      "width": 2042,
+      "fields": [
+        {
+          "name": "head",
+          "kind": "nested",
+          "start": 1,
+          "width": 11,
+          "struct": "RECORD_ID"
+        },
+        {
+          "name": "id",
+          "kind": "nested",
+          "start": 12,
+          "width": 16,
+          "struct": "RACE_ID"
+        },
+        {
+          "name": "HappyoTime",
+          "kind": "nested",
+          "start": 28,
+          "width": 8,
+          "struct": "MDHM"
+        },
+        {
+          "name": "TorokuTosu",
+          "kind": "scalar",
+          "start": 36,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "SyussoTosu",
+          "kind": "scalar",
+          "start": 38,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "UmarenFlag",
+          "kind": "scalar",
+          "start": 40,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "OddsUmarenInfo",
+          "kind": "repeat",
+          "start": 41,
+          "width": 13,
+          "stride": 13,
+          "count": 153,
+          "element_kind": "nested",
+          "struct": "ODDS_UMAREN_INFO"
+        },
+        {
+          "name": "TotalHyosuUmaren",
+          "kind": "scalar",
+          "start": 2030,
+          "width": 11,
+          "decoder": "text"
+        },
+        {
+          "name": "crlf",
+          "kind": "scalar",
+          "start": 2041,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 479
+    },
+    "ODDS_WIDE_INFO": {
+      "width": 17,
+      "fields": [
+        {
+          "name": "Kumi",
+          "kind": "scalar",
+          "start": 1,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "OddsLow",
+          "kind": "scalar",
+          "start": 5,
+          "width": 5,
+          "decoder": "text"
+        },
+        {
+          "name": "OddsHigh",
+          "kind": "scalar",
+          "start": 10,
+          "width": 5,
+          "decoder": "text"
+        },
+        {
+          "name": "Ninki",
+          "kind": "scalar",
+          "start": 15,
+          "width": 3,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 4
+    },
+    "JV_O3_ODDS_WIDE": {
+      "width": 2654,
+      "fields": [
+        {
+          "name": "head",
+          "kind": "nested",
+          "start": 1,
+          "width": 11,
+          "struct": "RECORD_ID"
+        },
+        {
+          "name": "id",
+          "kind": "nested",
+          "start": 12,
+          "width": 16,
+          "struct": "RACE_ID"
+        },
+        {
+          "name": "HappyoTime",
+          "kind": "nested",
+          "start": 28,
+          "width": 8,
+          "struct": "MDHM"
+        },
+        {
+          "name": "TorokuTosu",
+          "kind": "scalar",
+          "start": 36,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "SyussoTosu",
+          "kind": "scalar",
+          "start": 38,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "WideFlag",
+          "kind": "scalar",
+          "start": 40,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "OddsWideInfo",
+          "kind": "repeat",
+          "start": 41,
+          "width": 17,
+          "stride": 17,
+          "count": 153,
+          "element_kind": "nested",
+          "struct": "ODDS_WIDE_INFO"
+        },
+        {
+          "name": "TotalHyosuWide",
+          "kind": "scalar",
+          "start": 2642,
+          "width": 11,
+          "decoder": "text"
+        },
+        {
+          "name": "crlf",
+          "kind": "scalar",
+          "start": 2653,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 632
+    },
+    "ODDS_UMATAN_INFO": {
+      "width": 13,
+      "fields": [
+        {
+          "name": "Kumi",
+          "kind": "scalar",
+          "start": 1,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "Odds",
+          "kind": "scalar",
+          "start": 5,
+          "width": 6,
+          "decoder": "text"
+        },
+        {
+          "name": "Ninki",
+          "kind": "scalar",
+          "start": 11,
+          "width": 3,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 3
+    },
+    "JV_O4_ODDS_UMATAN": {
+      "width": 4031,
+      "fields": [
+        {
+          "name": "head",
+          "kind": "nested",
+          "start": 1,
+          "width": 11,
+          "struct": "RECORD_ID"
+        },
+        {
+          "name": "id",
+          "kind": "nested",
+          "start": 12,
+          "width": 16,
+          "struct": "RACE_ID"
+        },
+        {
+          "name": "HappyoTime",
+          "kind": "nested",
+          "start": 28,
+          "width": 8,
+          "struct": "MDHM"
+        },
+        {
+          "name": "TorokuTosu",
+          "kind": "scalar",
+          "start": 36,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "SyussoTosu",
+          "kind": "scalar",
+          "start": 38,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "UmatanFlag",
+          "kind": "scalar",
+          "start": 40,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "OddsUmatanInfo",
+          "kind": "repeat",
+          "start": 41,
+          "width": 13,
+          "stride": 13,
+          "count": 306,
+          "element_kind": "nested",
+          "struct": "ODDS_UMATAN_INFO"
+        },
+        {
+          "name": "TotalHyosuUmatan",
+          "kind": "scalar",
+          "start": 4019,
+          "width": 11,
+          "decoder": "text"
+        },
+        {
+          "name": "crlf",
+          "kind": "scalar",
+          "start": 4030,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 938
+    },
+    "ODDS_SANREN_INFO": {
+      "width": 15,
+      "fields": [
+        {
+          "name": "Kumi",
+          "kind": "scalar",
+          "start": 1,
+          "width": 6,
+          "decoder": "text"
+        },
+        {
+          "name": "Odds",
+          "kind": "scalar",
+          "start": 7,
+          "width": 6,
+          "decoder": "text"
+        },
+        {
+          "name": "Ninki",
+          "kind": "scalar",
+          "start": 13,
+          "width": 3,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 3
+    },
+    "JV_O5_ODDS_SANREN": {
+      "width": 12293,
+      "fields": [
+        {
+          "name": "head",
+          "kind": "nested",
+          "start": 1,
+          "width": 11,
+          "struct": "RECORD_ID"
+        },
+        {
+          "name": "id",
+          "kind": "nested",
+          "start": 12,
+          "width": 16,
+          "struct": "RACE_ID"
+        },
+        {
+          "name": "HappyoTime",
+          "kind": "nested",
+          "start": 28,
+          "width": 8,
+          "struct": "MDHM"
+        },
+        {
+          "name": "TorokuTosu",
+          "kind": "scalar",
+          "start": 36,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "SyussoTosu",
+          "kind": "scalar",
+          "start": 38,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "SanrenpukuFlag",
+          "kind": "scalar",
+          "start": 40,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "OddsSanrenInfo",
+          "kind": "repeat",
+          "start": 41,
+          "width": 15,
+          "stride": 15,
+          "count": 816,
+          "element_kind": "nested",
+          "struct": "ODDS_SANREN_INFO"
+        },
+        {
+          "name": "TotalHyosuSanrenpuku",
+          "kind": "scalar",
+          "start": 12281,
+          "width": 11,
+          "decoder": "text"
+        },
+        {
+          "name": "crlf",
+          "kind": "scalar",
+          "start": 12292,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 2468
+    },
+    "ODDS_SANRENTAN_INFO": {
+      "width": 17,
+      "fields": [
+        {
+          "name": "Kumi",
+          "kind": "scalar",
+          "start": 1,
+          "width": 6,
+          "decoder": "text"
+        },
+        {
+          "name": "Odds",
+          "kind": "scalar",
+          "start": 7,
+          "width": 7,
+          "decoder": "text"
+        },
+        {
+          "name": "Ninki",
+          "kind": "scalar",
+          "start": 14,
+          "width": 4,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 3
+    },
+    "JV_O6_ODDS_SANRENTAN": {
+      "width": 83285,
+      "fields": [
+        {
+          "name": "head",
+          "kind": "nested",
+          "start": 1,
+          "width": 11,
+          "struct": "RECORD_ID"
+        },
+        {
+          "name": "id",
+          "kind": "nested",
+          "start": 12,
+          "width": 16,
+          "struct": "RACE_ID"
+        },
+        {
+          "name": "HappyoTime",
+          "kind": "nested",
+          "start": 28,
+          "width": 8,
+          "struct": "MDHM"
+        },
+        {
+          "name": "TorokuTosu",
+          "kind": "scalar",
+          "start": 36,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "SyussoTosu",
+          "kind": "scalar",
+          "start": 38,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "SanrentanFlag",
+          "kind": "scalar",
+          "start": 40,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "OddsSanrentanInfo",
+          "kind": "repeat",
+          "start": 41,
+          "width": 17,
+          "stride": 17,
+          "count": 4896,
+          "element_kind": "nested",
+          "struct": "ODDS_SANRENTAN_INFO"
+        },
+        {
+          "name": "TotalHyosuSanrentan",
+          "kind": "scalar",
+          "start": 83273,
+          "width": 11,
+          "decoder": "text"
+        },
+        {
+          "name": "crlf",
+          "kind": "scalar",
+          "start": 83284,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 14708
+    },
+    "KETTO3_INFO": {
+      "width": 46,
+      "fields": [
+        {
+          "name": "HansyokuNum",
+          "kind": "scalar",
+          "start": 1,
+          "width": 10,
+          "decoder": "text"
+        },
+        {
+          "name": "Bamei",
+          "kind": "scalar",
+          "start": 11,
+          "width": 36,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 2
+    },
+    "JV_UM_UMA": {
+      "width": 1609,
+      "fields": [
+        {
+          "name": "head",
+          "kind": "nested",
+          "start": 1,
+          "width": 11,
+          "struct": "RECORD_ID"
+        },
+        {
+          "name": "KettoNum",
+          "kind": "scalar",
+          "start": 12,
+          "width": 10,
+          "decoder": "text"
+        },
+        {
+          "name": "DelKubun",
+          "kind": "scalar",
+          "start": 22,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "RegDate",
+          "kind": "nested",
+          "start": 23,
+          "width": 8,
+          "struct": "YMD"
+        },
+        {
+          "name": "DelDate",
+          "kind": "nested",
+          "start": 31,
+          "width": 8,
+          "struct": "YMD"
+        },
+        {
+          "name": "BirthDate",
+          "kind": "nested",
+          "start": 39,
+          "width": 8,
+          "struct": "YMD"
+        },
+        {
+          "name": "Bamei",
+          "kind": "scalar",
+          "start": 47,
+          "width": 36,
+          "decoder": "text"
+        },
+        {
+          "name": "BameiKana",
+          "kind": "scalar",
+          "start": 83,
+          "width": 36,
+          "decoder": "text"
+        },
+        {
+          "name": "BameiEng",
+          "kind": "scalar",
+          "start": 119,
+          "width": 60,
+          "decoder": "text"
+        },
+        {
+          "name": "ZaikyuFlag",
+          "kind": "scalar",
+          "start": 179,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "Reserved",
+          "kind": "scalar",
+          "start": 180,
+          "width": 19,
+          "decoder": "text"
+        },
+        {
+          "name": "UmaKigoCD",
+          "kind": "scalar",
+          "start": 199,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "SexCD",
+          "kind": "scalar",
+          "start": 201,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "HinsyuCD",
+          "kind": "scalar",
+          "start": 202,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "KeiroCD",
+          "kind": "scalar",
+          "start": 203,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "Ketto3Info",
+          "kind": "repeat",
+          "start": 205,
+          "width": 46,
+          "stride": 46,
+          "count": 14,
+          "element_kind": "nested",
+          "struct": "KETTO3_INFO"
+        },
+        {
+          "name": "TozaiCD",
+          "kind": "scalar",
+          "start": 849,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "ChokyosiCode",
+          "kind": "scalar",
+          "start": 850,
+          "width": 5,
+          "decoder": "text"
+        },
+        {
+          "name": "ChokyosiRyakusyo",
+          "kind": "scalar",
+          "start": 855,
+          "width": 8,
+          "decoder": "text"
+        },
+        {
+          "name": "Syotai",
+          "kind": "scalar",
+          "start": 863,
+          "width": 20,
+          "decoder": "text"
+        },
+        {
+          "name": "BreederCode",
+          "kind": "scalar",
+          "start": 883,
+          "width": 8,
+          "decoder": "text"
+        },
+        {
+          "name": "BreederName",
+          "kind": "scalar",
+          "start": 891,
+          "width": 72,
+          "decoder": "text"
+        },
+        {
+          "name": "SanchiName",
+          "kind": "scalar",
+          "start": 963,
+          "width": 20,
+          "decoder": "text"
+        },
+        {
+          "name": "BanusiCode",
+          "kind": "scalar",
+          "start": 983,
+          "width": 6,
+          "decoder": "text"
+        },
+        {
+          "name": "BanusiName",
+          "kind": "scalar",
+          "start": 989,
+          "width": 64,
+          "decoder": "text"
+        },
+        {
+          "name": "RuikeiHonsyoHeiti",
+          "kind": "scalar",
+          "start": 1053,
+          "width": 9,
+          "decoder": "text"
+        },
+        {
+          "name": "RuikeiHonsyoSyogai",
+          "kind": "scalar",
+          "start": 1062,
+          "width": 9,
+          "decoder": "text"
+        },
+        {
+          "name": "RuikeiFukaHeichi",
+          "kind": "scalar",
+          "start": 1071,
+          "width": 9,
+          "decoder": "text"
+        },
+        {
+          "name": "RuikeiFukaSyogai",
+          "kind": "scalar",
+          "start": 1080,
+          "width": 9,
+          "decoder": "text"
+        },
+        {
+          "name": "RuikeiSyutokuHeichi",
+          "kind": "scalar",
+          "start": 1089,
+          "width": 9,
+          "decoder": "text"
+        },
+        {
+          "name": "RuikeiSyutokuSyogai",
+          "kind": "scalar",
+          "start": 1098,
+          "width": 9,
+          "decoder": "text"
+        },
+        {
+          "name": "ChakuSogo",
+          "kind": "nested",
+          "start": 1107,
+          "width": 18,
+          "struct": "CHAKUKAISU3_INFO"
+        },
+        {
+          "name": "ChakuChuo",
+          "kind": "nested",
+          "start": 1125,
+          "width": 18,
+          "struct": "CHAKUKAISU3_INFO"
+        },
+        {
+          "name": "ChakuKaisuBa",
+          "kind": "repeat",
+          "start": 1143,
+          "width": 18,
+          "stride": 18,
+          "count": 7,
+          "element_kind": "nested",
+          "struct": "CHAKUKAISU3_INFO"
+        },
+        {
+          "name": "ChakuKaisuJyotai",
+          "kind": "repeat",
+          "start": 1269,
+          "width": 18,
+          "stride": 18,
+          "count": 12,
+          "element_kind": "nested",
+          "struct": "CHAKUKAISU3_INFO"
+        },
+        {
+          "name": "ChakuKaisuKyori",
+          "kind": "repeat",
+          "start": 1485,
+          "width": 18,
+          "stride": 18,
+          "count": 6,
+          "element_kind": "nested",
+          "struct": "CHAKUKAISU3_INFO"
+        },
+        {
+          "name": "Kyakusitu",
+          "kind": "repeat",
+          "start": 1593,
+          "width": 3,
+          "stride": 3,
+          "count": 4,
+          "element_kind": "scalar",
+          "decoder": "text"
+        },
+        {
+          "name": "RaceCount",
+          "kind": "scalar",
+          "start": 1605,
+          "width": 3,
+          "decoder": "text"
+        },
+        {
+          "name": "crlf",
+          "kind": "scalar",
+          "start": 1608,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 236
+    },
+    "HATUKIJYO_INFO": {
+      "width": 67,
+      "fields": [
+        {
+          "name": "Hatukijyoid",
+          "kind": "nested",
+          "start": 1,
+          "width": 16,
+          "struct": "RACE_ID"
+        },
+        {
+          "name": "SyussoTosu",
+          "kind": "scalar",
+          "start": 17,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "KettoNum",
+          "kind": "scalar",
+          "start": 19,
+          "width": 10,
+          "decoder": "text"
+        },
+        {
+          "name": "Bamei",
+          "kind": "scalar",
+          "start": 29,
+          "width": 36,
+          "decoder": "text"
+        },
+        {
+          "name": "KakuteiJyuni",
+          "kind": "scalar",
+          "start": 65,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "IJyoCD",
+          "kind": "scalar",
+          "start": 67,
+          "width": 1,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 11
+    },
+    "HATUSYORI_INFO": {
+      "width": 64,
+      "fields": [
+        {
+          "name": "Hatusyoriid",
+          "kind": "nested",
+          "start": 1,
+          "width": 16,
+          "struct": "RACE_ID"
+        },
+        {
+          "name": "SyussoTosu",
+          "kind": "scalar",
+          "start": 17,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "KettoNum",
+          "kind": "scalar",
+          "start": 19,
+          "width": 10,
+          "decoder": "text"
+        },
+        {
+          "name": "Bamei",
+          "kind": "scalar",
+          "start": 29,
+          "width": 36,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 9
+    },
+    "JV_KS_KISYU": {
+      "width": 4173,
+      "fields": [
+        {
+          "name": "head",
+          "kind": "nested",
+          "start": 1,
+          "width": 11,
+          "struct": "RECORD_ID"
+        },
+        {
+          "name": "KisyuCode",
+          "kind": "scalar",
+          "start": 12,
+          "width": 5,
+          "decoder": "text"
+        },
+        {
+          "name": "DelKubun",
+          "kind": "scalar",
+          "start": 17,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "IssueDate",
+          "kind": "nested",
+          "start": 18,
+          "width": 8,
+          "struct": "YMD"
+        },
+        {
+          "name": "DelDate",
+          "kind": "nested",
+          "start": 26,
+          "width": 8,
+          "struct": "YMD"
+        },
+        {
+          "name": "BirthDate",
+          "kind": "nested",
+          "start": 34,
+          "width": 8,
+          "struct": "YMD"
+        },
+        {
+          "name": "KisyuName",
+          "kind": "scalar",
+          "start": 42,
+          "width": 34,
+          "decoder": "text"
+        },
+        {
+          "name": "reserved",
+          "kind": "scalar",
+          "start": 76,
+          "width": 34,
+          "decoder": "text"
+        },
+        {
+          "name": "KisyuNameKana",
+          "kind": "scalar",
+          "start": 110,
+          "width": 30,
+          "decoder": "text"
+        },
+        {
+          "name": "KisyuRyakusyo",
+          "kind": "scalar",
+          "start": 140,
+          "width": 8,
+          "decoder": "text"
+        },
+        {
+          "name": "KisyuNameEng",
+          "kind": "scalar",
+          "start": 148,
+          "width": 80,
+          "decoder": "text"
+        },
+        {
+          "name": "SexCD",
+          "kind": "scalar",
+          "start": 228,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "SikakuCD",
+          "kind": "scalar",
+          "start": 229,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "MinaraiCD",
+          "kind": "scalar",
+          "start": 230,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "TozaiCD",
+          "kind": "scalar",
+          "start": 231,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "Syotai",
+          "kind": "scalar",
+          "start": 232,
+          "width": 20,
+          "decoder": "text"
+        },
+        {
+          "name": "ChokyosiCode",
+          "kind": "scalar",
+          "start": 252,
+          "width": 5,
+          "decoder": "text"
+        },
+        {
+          "name": "ChokyosiRyakusyo",
+          "kind": "scalar",
+          "start": 257,
+          "width": 8,
+          "decoder": "text"
+        },
+        {
+          "name": "HatuKiJyo",
+          "kind": "repeat",
+          "start": 265,
+          "width": 67,
+          "stride": 67,
+          "count": 2,
+          "element_kind": "nested",
+          "struct": "HATUKIJYO_INFO"
+        },
+        {
+          "name": "HatuSyori",
+          "kind": "repeat",
+          "start": 399,
+          "width": 64,
+          "stride": 64,
+          "count": 2,
+          "element_kind": "nested",
+          "struct": "HATUSYORI_INFO"
+        },
+        {
+          "name": "SaikinJyusyo",
+          "kind": "repeat",
+          "start": 527,
+          "width": 163,
+          "stride": 163,
+          "count": 3,
+          "element_kind": "nested",
+          "struct": "SAIKIN_JYUSYO_INFO"
+        },
+        {
+          "name": "HonZenRuikei",
+          "kind": "repeat",
+          "start": 1016,
+          "width": 1052,
+          "stride": 1052,
+          "count": 3,
+          "element_kind": "nested",
+          "struct": "HON_ZEN_RUIKEISEI_INFO"
+        },
+        {
+          "name": "crlf",
+          "kind": "scalar",
+          "start": 4172,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 630
+    },
+    "JV_CH_CHOKYOSI": {
+      "width": 3862,
+      "fields": [
+        {
+          "name": "head",
+          "kind": "nested",
+          "start": 1,
+          "width": 11,
+          "struct": "RECORD_ID"
+        },
+        {
+          "name": "ChokyosiCode",
+          "kind": "scalar",
+          "start": 12,
+          "width": 5,
+          "decoder": "text"
+        },
+        {
+          "name": "DelKubun",
+          "kind": "scalar",
+          "start": 17,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "IssueDate",
+          "kind": "nested",
+          "start": 18,
+          "width": 8,
+          "struct": "YMD"
+        },
+        {
+          "name": "DelDate",
+          "kind": "nested",
+          "start": 26,
+          "width": 8,
+          "struct": "YMD"
+        },
+        {
+          "name": "BirthDate",
+          "kind": "nested",
+          "start": 34,
+          "width": 8,
+          "struct": "YMD"
+        },
+        {
+          "name": "ChokyosiName",
+          "kind": "scalar",
+          "start": 42,
+          "width": 34,
+          "decoder": "text"
+        },
+        {
+          "name": "ChokyosiNameKana",
+          "kind": "scalar",
+          "start": 76,
+          "width": 30,
+          "decoder": "text"
+        },
+        {
+          "name": "ChokyosiRyakusyo",
+          "kind": "scalar",
+          "start": 106,
+          "width": 8,
+          "decoder": "text"
+        },
+        {
+          "name": "ChokyosiNameEng",
+          "kind": "scalar",
+          "start": 114,
+          "width": 80,
+          "decoder": "text"
+        },
+        {
+          "name": "SexCD",
+          "kind": "scalar",
+          "start": 194,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "TozaiCD",
+          "kind": "scalar",
+          "start": 195,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "Syotai",
+          "kind": "scalar",
+          "start": 196,
+          "width": 20,
+          "decoder": "text"
+        },
+        {
+          "name": "SaikinJyusyo",
+          "kind": "repeat",
+          "start": 216,
+          "width": 163,
+          "stride": 163,
+          "count": 3,
+          "element_kind": "nested",
+          "struct": "SAIKIN_JYUSYO_INFO"
+        },
+        {
+          "name": "HonZenRuikei",
+          "kind": "repeat",
+          "start": 705,
+          "width": 1052,
+          "stride": 1052,
+          "count": 3,
+          "element_kind": "nested",
+          "struct": "HON_ZEN_RUIKEISEI_INFO"
+        },
+        {
+          "name": "crlf",
+          "kind": "scalar",
+          "start": 3861,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 585
+    },
+    "JV_BR_BREEDER": {
+      "width": 545,
+      "fields": [
+        {
+          "name": "head",
+          "kind": "nested",
+          "start": 1,
+          "width": 11,
+          "struct": "RECORD_ID"
+        },
+        {
+          "name": "BreederCode",
+          "kind": "scalar",
+          "start": 12,
+          "width": 8,
+          "decoder": "text"
+        },
+        {
+          "name": "BreederName_Co",
+          "kind": "scalar",
+          "start": 20,
+          "width": 72,
+          "decoder": "text"
+        },
+        {
+          "name": "BreederName",
+          "kind": "scalar",
+          "start": 92,
+          "width": 72,
+          "decoder": "text"
+        },
+        {
+          "name": "BreederNameKana",
+          "kind": "scalar",
+          "start": 164,
+          "width": 72,
+          "decoder": "text"
+        },
+        {
+          "name": "BreederNameEng",
+          "kind": "scalar",
+          "start": 236,
+          "width": 168,
+          "decoder": "text"
+        },
+        {
+          "name": "Address",
+          "kind": "scalar",
+          "start": 404,
+          "width": 20,
+          "decoder": "text"
+        },
+        {
+          "name": "HonRuikei",
+          "kind": "repeat",
+          "start": 424,
+          "width": 60,
+          "stride": 60,
+          "count": 2,
+          "element_kind": "nested",
+          "struct": "SEI_RUIKEI_INFO"
+        },
+        {
+          "name": "crlf",
+          "kind": "scalar",
+          "start": 544,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 30
+    },
+    "JV_BN_BANUSI": {
+      "width": 477,
+      "fields": [
+        {
+          "name": "head",
+          "kind": "nested",
+          "start": 1,
+          "width": 11,
+          "struct": "RECORD_ID"
+        },
+        {
+          "name": "BanusiCode",
+          "kind": "scalar",
+          "start": 12,
+          "width": 6,
+          "decoder": "text"
+        },
+        {
+          "name": "BanusiName_Co",
+          "kind": "scalar",
+          "start": 18,
+          "width": 64,
+          "decoder": "text"
+        },
+        {
+          "name": "BanusiName",
+          "kind": "scalar",
+          "start": 82,
+          "width": 64,
+          "decoder": "text"
+        },
+        {
+          "name": "BanusiNameKana",
+          "kind": "scalar",
+          "start": 146,
+          "width": 50,
+          "decoder": "text"
+        },
+        {
+          "name": "BanusiNameEng",
+          "kind": "scalar",
+          "start": 196,
+          "width": 100,
+          "decoder": "text"
+        },
+        {
+          "name": "Fukusyoku",
+          "kind": "scalar",
+          "start": 296,
+          "width": 60,
+          "decoder": "text"
+        },
+        {
+          "name": "HonRuikei",
+          "kind": "repeat",
+          "start": 356,
+          "width": 60,
+          "stride": 60,
+          "count": 2,
+          "element_kind": "nested",
+          "struct": "SEI_RUIKEI_INFO"
+        },
+        {
+          "name": "crlf",
+          "kind": "scalar",
+          "start": 476,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 30
+    },
+    "JV_HN_HANSYOKU": {
+      "width": 251,
+      "fields": [
+        {
+          "name": "head",
+          "kind": "nested",
+          "start": 1,
+          "width": 11,
+          "struct": "RECORD_ID"
+        },
+        {
+          "name": "HansyokuNum",
+          "kind": "scalar",
+          "start": 12,
+          "width": 10,
+          "decoder": "text"
+        },
+        {
+          "name": "reserved",
+          "kind": "scalar",
+          "start": 22,
+          "width": 8,
+          "decoder": "text"
+        },
+        {
+          "name": "KettoNum",
+          "kind": "scalar",
+          "start": 30,
+          "width": 10,
+          "decoder": "text"
+        },
+        {
+          "name": "DelKubun",
+          "kind": "scalar",
+          "start": 40,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "Bamei",
+          "kind": "scalar",
+          "start": 41,
+          "width": 36,
+          "decoder": "text"
+        },
+        {
+          "name": "BameiKana",
+          "kind": "scalar",
+          "start": 77,
+          "width": 40,
+          "decoder": "text"
+        },
+        {
+          "name": "BameiEng",
+          "kind": "scalar",
+          "start": 117,
+          "width": 80,
+          "decoder": "text"
+        },
+        {
+          "name": "BirthYear",
+          "kind": "scalar",
+          "start": 197,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "SexCD",
+          "kind": "scalar",
+          "start": 201,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "HinsyuCD",
+          "kind": "scalar",
+          "start": 202,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "KeiroCD",
+          "kind": "scalar",
+          "start": 203,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "HansyokuMochiKubun",
+          "kind": "scalar",
+          "start": 205,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "ImportYear",
+          "kind": "scalar",
+          "start": 206,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "SanchiName",
+          "kind": "scalar",
+          "start": 210,
+          "width": 20,
+          "decoder": "text"
+        },
+        {
+          "name": "HansyokuFNum",
+          "kind": "scalar",
+          "start": 230,
+          "width": 10,
+          "decoder": "text"
+        },
+        {
+          "name": "HansyokuMNum",
+          "kind": "scalar",
+          "start": 240,
+          "width": 10,
+          "decoder": "text"
+        },
+        {
+          "name": "crlf",
+          "kind": "scalar",
+          "start": 250,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 22
+    },
+    "JV_SK_SANKU": {
+      "width": 208,
+      "fields": [
+        {
+          "name": "head",
+          "kind": "nested",
+          "start": 1,
+          "width": 11,
+          "struct": "RECORD_ID"
+        },
+        {
+          "name": "KettoNum",
+          "kind": "scalar",
+          "start": 12,
+          "width": 10,
+          "decoder": "text"
+        },
+        {
+          "name": "BirthDate",
+          "kind": "nested",
+          "start": 22,
+          "width": 8,
+          "struct": "YMD"
+        },
+        {
+          "name": "SexCD",
+          "kind": "scalar",
+          "start": 30,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "HinsyuCD",
+          "kind": "scalar",
+          "start": 31,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "KeiroCD",
+          "kind": "scalar",
+          "start": 32,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "SankuMochiKubun",
+          "kind": "scalar",
+          "start": 34,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "ImportYear",
+          "kind": "scalar",
+          "start": 35,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "BreederCode",
+          "kind": "scalar",
+          "start": 39,
+          "width": 8,
+          "decoder": "text"
+        },
+        {
+          "name": "SanchiName",
+          "kind": "scalar",
+          "start": 47,
+          "width": 20,
+          "decoder": "text"
+        },
+        {
+          "name": "HansyokuNum",
+          "kind": "repeat",
+          "start": 67,
+          "width": 10,
+          "stride": 10,
+          "count": 14,
+          "element_kind": "scalar",
+          "decoder": "text"
+        },
+        {
+          "name": "crlf",
+          "kind": "scalar",
+          "start": 207,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 31
+    },
+    "JV_CK_UMA": {
+      "width": 1357,
+      "fields": [
+        {
+          "name": "KettoNum",
+          "kind": "scalar",
+          "start": 1,
+          "width": 10,
+          "decoder": "text"
+        },
+        {
+          "name": "Bamei",
+          "kind": "scalar",
+          "start": 11,
+          "width": 36,
+          "decoder": "text"
+        },
+        {
+          "name": "RuikeiHonsyoHeiti",
+          "kind": "scalar",
+          "start": 47,
+          "width": 9,
+          "decoder": "text"
+        },
+        {
+          "name": "RuikeiHonsyoSyogai",
+          "kind": "scalar",
+          "start": 56,
+          "width": 9,
+          "decoder": "text"
+        },
+        {
+          "name": "RuikeiFukaHeichi",
+          "kind": "scalar",
+          "start": 65,
+          "width": 9,
+          "decoder": "text"
+        },
+        {
+          "name": "RuikeiFukaSyogai",
+          "kind": "scalar",
+          "start": 74,
+          "width": 9,
+          "decoder": "text"
+        },
+        {
+          "name": "RuikeiSyutokuHeichi",
+          "kind": "scalar",
+          "start": 83,
+          "width": 9,
+          "decoder": "text"
+        },
+        {
+          "name": "RuikeiSyutokuSyogai",
+          "kind": "scalar",
+          "start": 92,
+          "width": 9,
+          "decoder": "text"
+        },
+        {
+          "name": "ChakuSogo",
+          "kind": "nested",
+          "start": 101,
+          "width": 18,
+          "struct": "CHAKUKAISU3_INFO"
+        },
+        {
+          "name": "ChakuChuo",
+          "kind": "nested",
+          "start": 119,
+          "width": 18,
+          "struct": "CHAKUKAISU3_INFO"
+        },
+        {
+          "name": "ChakuKaisuBa",
+          "kind": "repeat",
+          "start": 137,
+          "width": 18,
+          "stride": 18,
+          "count": 7,
+          "element_kind": "nested",
+          "struct": "CHAKUKAISU3_INFO"
+        },
+        {
+          "name": "ChakuKaisuJyotai",
+          "kind": "repeat",
+          "start": 263,
+          "width": 18,
+          "stride": 18,
+          "count": 12,
+          "element_kind": "nested",
+          "struct": "CHAKUKAISU3_INFO"
+        },
+        {
+          "name": "ChakuKaisuSibaKyori",
+          "kind": "repeat",
+          "start": 479,
+          "width": 18,
+          "stride": 18,
+          "count": 9,
+          "element_kind": "nested",
+          "struct": "CHAKUKAISU3_INFO"
+        },
+        {
+          "name": "ChakuKaisuDirtKyori",
+          "kind": "repeat",
+          "start": 641,
+          "width": 18,
+          "stride": 18,
+          "count": 9,
+          "element_kind": "nested",
+          "struct": "CHAKUKAISU3_INFO"
+        },
+        {
+          "name": "ChakuKaisuJyoSiba",
+          "kind": "repeat",
+          "start": 803,
+          "width": 18,
+          "stride": 18,
+          "count": 10,
+          "element_kind": "nested",
+          "struct": "CHAKUKAISU3_INFO"
+        },
+        {
+          "name": "ChakuKaisuJyoDirt",
+          "kind": "repeat",
+          "start": 983,
+          "width": 18,
+          "stride": 18,
+          "count": 10,
+          "element_kind": "nested",
+          "struct": "CHAKUKAISU3_INFO"
+        },
+        {
+          "name": "ChakuKaisuJyoSyogai",
+          "kind": "repeat",
+          "start": 1163,
+          "width": 18,
+          "stride": 18,
+          "count": 10,
+          "element_kind": "nested",
+          "struct": "CHAKUKAISU3_INFO"
+        },
+        {
+          "name": "Kyakusitu",
+          "kind": "repeat",
+          "start": 1343,
+          "width": 3,
+          "stride": 3,
+          "count": 4,
+          "element_kind": "scalar",
+          "decoder": "text"
+        },
+        {
+          "name": "RaceCount",
+          "kind": "scalar",
+          "start": 1355,
+          "width": 3,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 427
+    },
+    "JV_CK_HON_RUIKEISEI_INFO": {
+      "width": 1220,
+      "fields": [
+        {
+          "name": "SetYear",
+          "kind": "scalar",
+          "start": 1,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "HonSyokinHeichi",
+          "kind": "scalar",
+          "start": 5,
+          "width": 10,
+          "decoder": "text"
+        },
+        {
+          "name": "HonSyokinSyogai",
+          "kind": "scalar",
+          "start": 15,
+          "width": 10,
+          "decoder": "text"
+        },
+        {
+          "name": "FukaSyokinHeichi",
+          "kind": "scalar",
+          "start": 25,
+          "width": 10,
+          "decoder": "text"
+        },
+        {
+          "name": "FukaSyokinSyogai",
+          "kind": "scalar",
+          "start": 35,
+          "width": 10,
+          "decoder": "text"
+        },
+        {
+          "name": "ChakuKaisuSiba",
+          "kind": "nested",
+          "start": 45,
+          "width": 30,
+          "struct": "CHAKUKAISU5_INFO"
+        },
+        {
+          "name": "ChakuKaisuDirt",
+          "kind": "nested",
+          "start": 75,
+          "width": 30,
+          "struct": "CHAKUKAISU5_INFO"
+        },
+        {
+          "name": "ChakuKaisuSyogai",
+          "kind": "nested",
+          "start": 105,
+          "width": 24,
+          "struct": "CHAKUKAISU4_INFO"
+        },
+        {
+          "name": "ChakuKaisuSibaKyori",
+          "kind": "repeat",
+          "start": 129,
+          "width": 24,
+          "stride": 24,
+          "count": 9,
+          "element_kind": "nested",
+          "struct": "CHAKUKAISU4_INFO"
+        },
+        {
+          "name": "ChakuKaisuDirtKyori",
+          "kind": "repeat",
+          "start": 345,
+          "width": 24,
+          "stride": 24,
+          "count": 9,
+          "element_kind": "nested",
+          "struct": "CHAKUKAISU4_INFO"
+        },
+        {
+          "name": "ChakuKaisuJyoSiba",
+          "kind": "repeat",
+          "start": 561,
+          "width": 24,
+          "stride": 24,
+          "count": 10,
+          "element_kind": "nested",
+          "struct": "CHAKUKAISU4_INFO"
+        },
+        {
+          "name": "ChakuKaisuJyoDirt",
+          "kind": "repeat",
+          "start": 801,
+          "width": 24,
+          "stride": 24,
+          "count": 10,
+          "element_kind": "nested",
+          "struct": "CHAKUKAISU4_INFO"
+        },
+        {
+          "name": "ChakuKaisuJyoSyogai",
+          "kind": "repeat",
+          "start": 1041,
+          "width": 18,
+          "stride": 18,
+          "count": 10,
+          "element_kind": "nested",
+          "struct": "CHAKUKAISU3_INFO"
+        }
+      ],
+      "expanded_leaf_count": 311
+    },
+    "JV_CK_KISYU": {
+      "width": 2479,
+      "fields": [
+        {
+          "name": "KisyuCode",
+          "kind": "scalar",
+          "start": 1,
+          "width": 5,
+          "decoder": "text"
+        },
+        {
+          "name": "KisyuName",
+          "kind": "scalar",
+          "start": 6,
+          "width": 34,
+          "decoder": "text"
+        },
+        {
+          "name": "HonRuikei",
+          "kind": "repeat",
+          "start": 40,
+          "width": 1220,
+          "stride": 1220,
+          "count": 2,
+          "element_kind": "nested",
+          "struct": "JV_CK_HON_RUIKEISEI_INFO"
+        }
+      ],
+      "expanded_leaf_count": 624
+    },
+    "JV_CK_CHOKYOSI": {
+      "width": 2479,
+      "fields": [
+        {
+          "name": "ChokyosiCode",
+          "kind": "scalar",
+          "start": 1,
+          "width": 5,
+          "decoder": "text"
+        },
+        {
+          "name": "ChokyosiName",
+          "kind": "scalar",
+          "start": 6,
+          "width": 34,
+          "decoder": "text"
+        },
+        {
+          "name": "HonRuikei",
+          "kind": "repeat",
+          "start": 40,
+          "width": 1220,
+          "stride": 1220,
+          "count": 2,
+          "element_kind": "nested",
+          "struct": "JV_CK_HON_RUIKEISEI_INFO"
+        }
+      ],
+      "expanded_leaf_count": 624
+    },
+    "JV_CK_BANUSI": {
+      "width": 254,
+      "fields": [
+        {
+          "name": "BanusiCode",
+          "kind": "scalar",
+          "start": 1,
+          "width": 6,
+          "decoder": "text"
+        },
+        {
+          "name": "BanusiName_Co",
+          "kind": "scalar",
+          "start": 7,
+          "width": 64,
+          "decoder": "text"
+        },
+        {
+          "name": "BanusiName",
+          "kind": "scalar",
+          "start": 71,
+          "width": 64,
+          "decoder": "text"
+        },
+        {
+          "name": "HonRuikei",
+          "kind": "repeat",
+          "start": 135,
+          "width": 60,
+          "stride": 60,
+          "count": 2,
+          "element_kind": "nested",
+          "struct": "SEI_RUIKEI_INFO"
+        }
+      ],
+      "expanded_leaf_count": 21
+    },
+    "JV_CK_BREEDER": {
+      "width": 272,
+      "fields": [
+        {
+          "name": "BreederCode",
+          "kind": "scalar",
+          "start": 1,
+          "width": 8,
+          "decoder": "text"
+        },
+        {
+          "name": "BreederName_Co",
+          "kind": "scalar",
+          "start": 9,
+          "width": 72,
+          "decoder": "text"
+        },
+        {
+          "name": "BreederName",
+          "kind": "scalar",
+          "start": 81,
+          "width": 72,
+          "decoder": "text"
+        },
+        {
+          "name": "HonRuikei",
+          "kind": "repeat",
+          "start": 153,
+          "width": 60,
+          "stride": 60,
+          "count": 2,
+          "element_kind": "nested",
+          "struct": "SEI_RUIKEI_INFO"
+        }
+      ],
+      "expanded_leaf_count": 21
+    },
+    "JV_CK_CHAKU": {
+      "width": 6870,
+      "fields": [
+        {
+          "name": "head",
+          "kind": "nested",
+          "start": 1,
+          "width": 11,
+          "struct": "RECORD_ID"
+        },
+        {
+          "name": "id",
+          "kind": "nested",
+          "start": 12,
+          "width": 16,
+          "struct": "RACE_ID"
+        },
+        {
+          "name": "UmaChaku",
+          "kind": "nested",
+          "start": 28,
+          "width": 1357,
+          "struct": "JV_CK_UMA"
+        },
+        {
+          "name": "KisyuChaku",
+          "kind": "nested",
+          "start": 1385,
+          "width": 2479,
+          "struct": "JV_CK_KISYU"
+        },
+        {
+          "name": "ChokyoChaku",
+          "kind": "nested",
+          "start": 3864,
+          "width": 2479,
+          "struct": "JV_CK_CHOKYOSI"
+        },
+        {
+          "name": "BanusiChaku",
+          "kind": "nested",
+          "start": 6343,
+          "width": 254,
+          "struct": "JV_CK_BANUSI"
+        },
+        {
+          "name": "BreederChaku",
+          "kind": "nested",
+          "start": 6597,
+          "width": 272,
+          "struct": "JV_CK_BREEDER"
+        },
+        {
+          "name": "crlf",
+          "kind": "scalar",
+          "start": 6869,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 1729
+    },
+    "RECUMA_INFO": {
+      "width": 130,
+      "fields": [
+        {
+          "name": "KettoNum",
+          "kind": "scalar",
+          "start": 1,
+          "width": 10,
+          "decoder": "text"
+        },
+        {
+          "name": "Bamei",
+          "kind": "scalar",
+          "start": 11,
+          "width": 36,
+          "decoder": "text"
+        },
+        {
+          "name": "UmaKigoCD",
+          "kind": "scalar",
+          "start": 47,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "SexCD",
+          "kind": "scalar",
+          "start": 49,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "ChokyosiCode",
+          "kind": "scalar",
+          "start": 50,
+          "width": 5,
+          "decoder": "text"
+        },
+        {
+          "name": "ChokyosiName",
+          "kind": "scalar",
+          "start": 55,
+          "width": 34,
+          "decoder": "text"
+        },
+        {
+          "name": "Futan",
+          "kind": "scalar",
+          "start": 89,
+          "width": 3,
+          "decoder": "text"
+        },
+        {
+          "name": "KisyuCode",
+          "kind": "scalar",
+          "start": 92,
+          "width": 5,
+          "decoder": "text"
+        },
+        {
+          "name": "KisyuName",
+          "kind": "scalar",
+          "start": 97,
+          "width": 34,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 9
+    },
+    "JV_RC_RECORD": {
+      "width": 501,
+      "fields": [
+        {
+          "name": "head",
+          "kind": "nested",
+          "start": 1,
+          "width": 11,
+          "struct": "RECORD_ID"
+        },
+        {
+          "name": "RecInfoKubun",
+          "kind": "scalar",
+          "start": 12,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "id",
+          "kind": "nested",
+          "start": 13,
+          "width": 16,
+          "struct": "RACE_ID"
+        },
+        {
+          "name": "TokuNum",
+          "kind": "scalar",
+          "start": 29,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "Hondai",
+          "kind": "scalar",
+          "start": 33,
+          "width": 60,
+          "decoder": "text"
+        },
+        {
+          "name": "GradeCD",
+          "kind": "scalar",
+          "start": 93,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "SyubetuCD",
+          "kind": "scalar",
+          "start": 94,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "Kyori",
+          "kind": "scalar",
+          "start": 96,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "TrackCD",
+          "kind": "scalar",
+          "start": 100,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "RecKubun",
+          "kind": "scalar",
+          "start": 102,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "RecTime",
+          "kind": "scalar",
+          "start": 103,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "TenkoBaba",
+          "kind": "nested",
+          "start": 107,
+          "width": 3,
+          "struct": "TENKO_BABA_INFO"
+        },
+        {
+          "name": "RecUmaInfo",
+          "kind": "repeat",
+          "start": 110,
+          "width": 130,
+          "stride": 130,
+          "count": 3,
+          "element_kind": "nested",
+          "struct": "RECUMA_INFO"
+        },
+        {
+          "name": "crlf",
+          "kind": "scalar",
+          "start": 500,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 51
+    },
+    "JV_HC_HANRO": {
+      "width": 60,
+      "fields": [
+        {
+          "name": "head",
+          "kind": "nested",
+          "start": 1,
+          "width": 11,
+          "struct": "RECORD_ID"
+        },
+        {
+          "name": "TresenKubun",
+          "kind": "scalar",
+          "start": 12,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "ChokyoDate",
+          "kind": "nested",
+          "start": 13,
+          "width": 8,
+          "struct": "YMD"
+        },
+        {
+          "name": "ChokyoTime",
+          "kind": "scalar",
+          "start": 21,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "KettoNum",
+          "kind": "scalar",
+          "start": 25,
+          "width": 10,
+          "decoder": "text"
+        },
+        {
+          "name": "HaronTime4",
+          "kind": "scalar",
+          "start": 35,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "LapTime4",
+          "kind": "scalar",
+          "start": 39,
+          "width": 3,
+          "decoder": "text"
+        },
+        {
+          "name": "HaronTime3",
+          "kind": "scalar",
+          "start": 42,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "LapTime3",
+          "kind": "scalar",
+          "start": 46,
+          "width": 3,
+          "decoder": "text"
+        },
+        {
+          "name": "HaronTime2",
+          "kind": "scalar",
+          "start": 49,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "LapTime2",
+          "kind": "scalar",
+          "start": 53,
+          "width": 3,
+          "decoder": "text"
+        },
+        {
+          "name": "LapTime1",
+          "kind": "scalar",
+          "start": 56,
+          "width": 3,
+          "decoder": "text"
+        },
+        {
+          "name": "crlf",
+          "kind": "scalar",
+          "start": 59,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 19
+    },
+    "JV_HS_SALE": {
+      "width": 200,
+      "fields": [
+        {
+          "name": "head",
+          "kind": "nested",
+          "start": 1,
+          "width": 11,
+          "struct": "RECORD_ID"
+        },
+        {
+          "name": "KettoNum",
+          "kind": "scalar",
+          "start": 12,
+          "width": 10,
+          "decoder": "text"
+        },
+        {
+          "name": "HansyokuFNum",
+          "kind": "scalar",
+          "start": 22,
+          "width": 10,
+          "decoder": "text"
+        },
+        {
+          "name": "HansyokuMNum",
+          "kind": "scalar",
+          "start": 32,
+          "width": 10,
+          "decoder": "text"
+        },
+        {
+          "name": "BirthYear",
+          "kind": "scalar",
+          "start": 42,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "SaleCode",
+          "kind": "scalar",
+          "start": 46,
+          "width": 6,
+          "decoder": "text"
+        },
+        {
+          "name": "SaleHostName",
+          "kind": "scalar",
+          "start": 52,
+          "width": 40,
+          "decoder": "text"
+        },
+        {
+          "name": "SaleName",
+          "kind": "scalar",
+          "start": 92,
+          "width": 80,
+          "decoder": "text"
+        },
+        {
+          "name": "FromDate",
+          "kind": "nested",
+          "start": 172,
+          "width": 8,
+          "struct": "YMD"
+        },
+        {
+          "name": "ToDate",
+          "kind": "nested",
+          "start": 180,
+          "width": 8,
+          "struct": "YMD"
+        },
+        {
+          "name": "Barei",
+          "kind": "scalar",
+          "start": 188,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "Price",
+          "kind": "scalar",
+          "start": 189,
+          "width": 10,
+          "decoder": "text"
+        },
+        {
+          "name": "crlf",
+          "kind": "scalar",
+          "start": 199,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 21
+    },
+    "JV_HY_BAMEIORIGIN": {
+      "width": 123,
+      "fields": [
+        {
+          "name": "head",
+          "kind": "nested",
+          "start": 1,
+          "width": 11,
+          "struct": "RECORD_ID"
+        },
+        {
+          "name": "KettoNum",
+          "kind": "scalar",
+          "start": 12,
+          "width": 10,
+          "decoder": "text"
+        },
+        {
+          "name": "Bamei",
+          "kind": "scalar",
+          "start": 22,
+          "width": 36,
+          "decoder": "text"
+        },
+        {
+          "name": "Origin",
+          "kind": "scalar",
+          "start": 58,
+          "width": 64,
+          "decoder": "text"
+        },
+        {
+          "name": "crlf",
+          "kind": "scalar",
+          "start": 122,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 9
+    },
+    "JYUSYO_INFO": {
+      "width": 118,
+      "fields": [
+        {
+          "name": "TokuNum",
+          "kind": "scalar",
+          "start": 1,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "Hondai",
+          "kind": "scalar",
+          "start": 5,
+          "width": 60,
+          "decoder": "text"
+        },
+        {
+          "name": "Ryakusyo10",
+          "kind": "scalar",
+          "start": 65,
+          "width": 20,
+          "decoder": "text"
+        },
+        {
+          "name": "Ryakusyo6",
+          "kind": "scalar",
+          "start": 85,
+          "width": 12,
+          "decoder": "text"
+        },
+        {
+          "name": "Ryakusyo3",
+          "kind": "scalar",
+          "start": 97,
+          "width": 6,
+          "decoder": "text"
+        },
+        {
+          "name": "Nkai",
+          "kind": "scalar",
+          "start": 103,
+          "width": 3,
+          "decoder": "text"
+        },
+        {
+          "name": "GradeCD",
+          "kind": "scalar",
+          "start": 106,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "SyubetuCD",
+          "kind": "scalar",
+          "start": 107,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "KigoCD",
+          "kind": "scalar",
+          "start": 109,
+          "width": 3,
+          "decoder": "text"
+        },
+        {
+          "name": "JyuryoCD",
+          "kind": "scalar",
+          "start": 112,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "Kyori",
+          "kind": "scalar",
+          "start": 113,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "TrackCD",
+          "kind": "scalar",
+          "start": 117,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 12
+    },
+    "JV_YS_SCHEDULE": {
+      "width": 382,
+      "fields": [
+        {
+          "name": "head",
+          "kind": "nested",
+          "start": 1,
+          "width": 11,
+          "struct": "RECORD_ID"
+        },
+        {
+          "name": "id",
+          "kind": "nested",
+          "start": 12,
+          "width": 14,
+          "struct": "RACE_ID2"
+        },
+        {
+          "name": "YoubiCD",
+          "kind": "scalar",
+          "start": 26,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "JyusyoInfo",
+          "kind": "repeat",
+          "start": 27,
+          "width": 118,
+          "stride": 118,
+          "count": 3,
+          "element_kind": "nested",
+          "struct": "JYUSYO_INFO"
+        },
+        {
+          "name": "crlf",
+          "kind": "scalar",
+          "start": 381,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 48
+    },
+    "JV_BT_KEITO": {
+      "width": 6889,
+      "fields": [
+        {
+          "name": "head",
+          "kind": "nested",
+          "start": 1,
+          "width": 11,
+          "struct": "RECORD_ID"
+        },
+        {
+          "name": "HansyokuNum",
+          "kind": "scalar",
+          "start": 12,
+          "width": 10,
+          "decoder": "text"
+        },
+        {
+          "name": "KeitoId",
+          "kind": "scalar",
+          "start": 22,
+          "width": 30,
+          "decoder": "text"
+        },
+        {
+          "name": "KeitoName",
+          "kind": "scalar",
+          "start": 52,
+          "width": 36,
+          "decoder": "text"
+        },
+        {
+          "name": "KeitoEx",
+          "kind": "scalar",
+          "start": 88,
+          "width": 6800,
+          "decoder": "text"
+        },
+        {
+          "name": "crlf",
+          "kind": "scalar",
+          "start": 6888,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 10
+    },
+    "JV_CS_COURSE": {
+      "width": 6829,
+      "fields": [
+        {
+          "name": "head",
+          "kind": "nested",
+          "start": 1,
+          "width": 11,
+          "struct": "RECORD_ID"
+        },
+        {
+          "name": "JyoCD",
+          "kind": "scalar",
+          "start": 12,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "Kyori",
+          "kind": "scalar",
+          "start": 14,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "TrackCD",
+          "kind": "scalar",
+          "start": 18,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "KaishuDate",
+          "kind": "nested",
+          "start": 20,
+          "width": 8,
+          "struct": "YMD"
+        },
+        {
+          "name": "CourseEx",
+          "kind": "scalar",
+          "start": 28,
+          "width": 6800,
+          "decoder": "text"
+        },
+        {
+          "name": "crlf",
+          "kind": "scalar",
+          "start": 6828,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 13
+    },
+    "DM_INFO": {
+      "width": 15,
+      "fields": [
+        {
+          "name": "Umaban",
+          "kind": "scalar",
+          "start": 1,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "DMTime",
+          "kind": "scalar",
+          "start": 3,
+          "width": 5,
+          "decoder": "text"
+        },
+        {
+          "name": "DMGosaP",
+          "kind": "scalar",
+          "start": 8,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "DMGosaM",
+          "kind": "scalar",
+          "start": 12,
+          "width": 4,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 4
+    },
+    "JV_DM_INFO": {
+      "width": 303,
+      "fields": [
+        {
+          "name": "head",
+          "kind": "nested",
+          "start": 1,
+          "width": 11,
+          "struct": "RECORD_ID"
+        },
+        {
+          "name": "id",
+          "kind": "nested",
+          "start": 12,
+          "width": 16,
+          "struct": "RACE_ID"
+        },
+        {
+          "name": "MakeHM",
+          "kind": "nested",
+          "start": 28,
+          "width": 4,
+          "struct": "HM"
+        },
+        {
+          "name": "DMInfo",
+          "kind": "repeat",
+          "start": 32,
+          "width": 15,
+          "stride": 15,
+          "count": 18,
+          "element_kind": "nested",
+          "struct": "DM_INFO"
+        },
+        {
+          "name": "crlf",
+          "kind": "scalar",
+          "start": 302,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 86
+    },
+    "TM_INFO": {
+      "width": 6,
+      "fields": [
+        {
+          "name": "Umaban",
+          "kind": "scalar",
+          "start": 1,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "TMScore",
+          "kind": "scalar",
+          "start": 3,
+          "width": 4,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 2
+    },
+    "JV_TM_INFO": {
+      "width": 141,
+      "fields": [
+        {
+          "name": "head",
+          "kind": "nested",
+          "start": 1,
+          "width": 11,
+          "struct": "RECORD_ID"
+        },
+        {
+          "name": "id",
+          "kind": "nested",
+          "start": 12,
+          "width": 16,
+          "struct": "RACE_ID"
+        },
+        {
+          "name": "MakeHM",
+          "kind": "nested",
+          "start": 28,
+          "width": 4,
+          "struct": "HM"
+        },
+        {
+          "name": "TMInfo",
+          "kind": "repeat",
+          "start": 32,
+          "width": 6,
+          "stride": 6,
+          "count": 18,
+          "element_kind": "nested",
+          "struct": "TM_INFO"
+        },
+        {
+          "name": "crlf",
+          "kind": "scalar",
+          "start": 140,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 50
+    },
+    "WF_RACE_INFO": {
+      "width": 8,
+      "fields": [
+        {
+          "name": "JyoCD",
+          "kind": "scalar",
+          "start": 1,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "Kaiji",
+          "kind": "scalar",
+          "start": 3,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "Nichiji",
+          "kind": "scalar",
+          "start": 5,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "RaceNum",
+          "kind": "scalar",
+          "start": 7,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 4
+    },
+    "WF_YUKO_HYO_INFO": {
+      "width": 11,
+      "fields": [
+        {
+          "name": "Yuko_Hyo",
+          "kind": "scalar",
+          "start": 1,
+          "width": 11,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 1
+    },
+    "WF_PAY_INFO": {
+      "width": 29,
+      "fields": [
+        {
+          "name": "Kumiban",
+          "kind": "scalar",
+          "start": 1,
+          "width": 10,
+          "decoder": "text"
+        },
+        {
+          "name": "Pay",
+          "kind": "scalar",
+          "start": 11,
+          "width": 9,
+          "decoder": "text"
+        },
+        {
+          "name": "Tekichu_Hyo",
+          "kind": "scalar",
+          "start": 20,
+          "width": 10,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 3
+    },
+    "JV_WF_INFO": {
+      "width": 7215,
+      "fields": [
+        {
+          "name": "head",
+          "kind": "nested",
+          "start": 1,
+          "width": 11,
+          "struct": "RECORD_ID"
+        },
+        {
+          "name": "KaisaiDate",
+          "kind": "nested",
+          "start": 12,
+          "width": 8,
+          "struct": "YMD"
+        },
+        {
+          "name": "reserved1",
+          "kind": "scalar",
+          "start": 20,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "WFRaceInfo",
+          "kind": "repeat",
+          "start": 22,
+          "width": 8,
+          "stride": 8,
+          "count": 5,
+          "element_kind": "nested",
+          "struct": "WF_RACE_INFO"
+        },
+        {
+          "name": "reserved2",
+          "kind": "scalar",
+          "start": 62,
+          "width": 6,
+          "decoder": "text"
+        },
+        {
+          "name": "Hatsubai_Hyo",
+          "kind": "scalar",
+          "start": 68,
+          "width": 11,
+          "decoder": "text"
+        },
+        {
+          "name": "WFYukoHyoInfo",
+          "kind": "repeat",
+          "start": 79,
+          "width": 11,
+          "stride": 11,
+          "count": 5,
+          "element_kind": "nested",
+          "struct": "WF_YUKO_HYO_INFO"
+        },
+        {
+          "name": "HenkanFlag",
+          "kind": "scalar",
+          "start": 134,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "FuseiritsuFlag",
+          "kind": "scalar",
+          "start": 135,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "TekichunashiFlag",
+          "kind": "scalar",
+          "start": 136,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "COShoki",
+          "kind": "scalar",
+          "start": 137,
+          "width": 15,
+          "decoder": "text"
+        },
+        {
+          "name": "COZanDaka",
+          "kind": "scalar",
+          "start": 152,
+          "width": 15,
+          "decoder": "text"
+        },
+        {
+          "name": "WFPayInfo",
+          "kind": "repeat",
+          "start": 167,
+          "width": 29,
+          "stride": 29,
+          "count": 243,
+          "element_kind": "nested",
+          "struct": "WF_PAY_INFO"
+        },
+        {
+          "name": "crlf",
+          "kind": "scalar",
+          "start": 7214,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 771
+    },
+    "JV_JG_JOGAIBA": {
+      "width": 80,
+      "fields": [
+        {
+          "name": "head",
+          "kind": "nested",
+          "start": 1,
+          "width": 11,
+          "struct": "RECORD_ID"
+        },
+        {
+          "name": "id",
+          "kind": "nested",
+          "start": 12,
+          "width": 16,
+          "struct": "RACE_ID"
+        },
+        {
+          "name": "KettoNum",
+          "kind": "scalar",
+          "start": 28,
+          "width": 10,
+          "decoder": "text"
+        },
+        {
+          "name": "Bamei",
+          "kind": "scalar",
+          "start": 38,
+          "width": 36,
+          "decoder": "text"
+        },
+        {
+          "name": "ShutsubaTohyoJun",
+          "kind": "scalar",
+          "start": 74,
+          "width": 3,
+          "decoder": "text"
+        },
+        {
+          "name": "ShussoKubun",
+          "kind": "scalar",
+          "start": 77,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "JogaiJotaiKubun",
+          "kind": "scalar",
+          "start": 78,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "crlf",
+          "kind": "scalar",
+          "start": 79,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 17
+    },
+    "JV_WC_WOOD": {
+      "width": 105,
+      "fields": [
+        {
+          "name": "head",
+          "kind": "nested",
+          "start": 1,
+          "width": 11,
+          "struct": "RECORD_ID"
+        },
+        {
+          "name": "TresenKubun",
+          "kind": "scalar",
+          "start": 12,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "ChokyoDate",
+          "kind": "nested",
+          "start": 13,
+          "width": 8,
+          "struct": "YMD"
+        },
+        {
+          "name": "ChokyoTime",
+          "kind": "scalar",
+          "start": 21,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "KettoNum",
+          "kind": "scalar",
+          "start": 25,
+          "width": 10,
+          "decoder": "text"
+        },
+        {
+          "name": "Course",
+          "kind": "scalar",
+          "start": 35,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "BabaAround",
+          "kind": "scalar",
+          "start": 36,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "reserved",
+          "kind": "scalar",
+          "start": 37,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "HaronTime10",
+          "kind": "scalar",
+          "start": 38,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "LapTime10",
+          "kind": "scalar",
+          "start": 42,
+          "width": 3,
+          "decoder": "text"
+        },
+        {
+          "name": "HaronTime9",
+          "kind": "scalar",
+          "start": 45,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "LapTime9",
+          "kind": "scalar",
+          "start": 49,
+          "width": 3,
+          "decoder": "text"
+        },
+        {
+          "name": "HaronTime8",
+          "kind": "scalar",
+          "start": 52,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "LapTime8",
+          "kind": "scalar",
+          "start": 56,
+          "width": 3,
+          "decoder": "text"
+        },
+        {
+          "name": "HaronTime7",
+          "kind": "scalar",
+          "start": 59,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "LapTime7",
+          "kind": "scalar",
+          "start": 63,
+          "width": 3,
+          "decoder": "text"
+        },
+        {
+          "name": "HaronTime6",
+          "kind": "scalar",
+          "start": 66,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "LapTime6",
+          "kind": "scalar",
+          "start": 70,
+          "width": 3,
+          "decoder": "text"
+        },
+        {
+          "name": "HaronTime5",
+          "kind": "scalar",
+          "start": 73,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "LapTime5",
+          "kind": "scalar",
+          "start": 77,
+          "width": 3,
+          "decoder": "text"
+        },
+        {
+          "name": "HaronTime4",
+          "kind": "scalar",
+          "start": 80,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "LapTime4",
+          "kind": "scalar",
+          "start": 84,
+          "width": 3,
+          "decoder": "text"
+        },
+        {
+          "name": "HaronTime3",
+          "kind": "scalar",
+          "start": 87,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "LapTime3",
+          "kind": "scalar",
+          "start": 91,
+          "width": 3,
+          "decoder": "text"
+        },
+        {
+          "name": "HaronTime2",
+          "kind": "scalar",
+          "start": 94,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "LapTime2",
+          "kind": "scalar",
+          "start": 98,
+          "width": 3,
+          "decoder": "text"
+        },
+        {
+          "name": "LapTime1",
+          "kind": "scalar",
+          "start": 101,
+          "width": 3,
+          "decoder": "text"
+        },
+        {
+          "name": "crlf",
+          "kind": "scalar",
+          "start": 104,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 34
+    },
+    "BATAIJYU_INFO": {
+      "width": 45,
+      "fields": [
+        {
+          "name": "Umaban",
+          "kind": "scalar",
+          "start": 1,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "Bamei",
+          "kind": "scalar",
+          "start": 3,
+          "width": 36,
+          "decoder": "text"
+        },
+        {
+          "name": "BaTaijyu",
+          "kind": "scalar",
+          "start": 39,
+          "width": 3,
+          "decoder": "text"
+        },
+        {
+          "name": "ZogenFugo",
+          "kind": "scalar",
+          "start": 42,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "ZogenSa",
+          "kind": "scalar",
+          "start": 43,
+          "width": 3,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 5
+    },
+    "JV_WH_BATAIJYU": {
+      "width": 847,
+      "fields": [
+        {
+          "name": "head",
+          "kind": "nested",
+          "start": 1,
+          "width": 11,
+          "struct": "RECORD_ID"
+        },
+        {
+          "name": "id",
+          "kind": "nested",
+          "start": 12,
+          "width": 16,
+          "struct": "RACE_ID"
+        },
+        {
+          "name": "HappyoTime",
+          "kind": "nested",
+          "start": 28,
+          "width": 8,
+          "struct": "MDHM"
+        },
+        {
+          "name": "BataijyuInfo",
+          "kind": "repeat",
+          "start": 36,
+          "width": 45,
+          "stride": 45,
+          "count": 18,
+          "element_kind": "nested",
+          "struct": "BATAIJYU_INFO"
+        },
+        {
+          "name": "crlf",
+          "kind": "scalar",
+          "start": 846,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 106
+    },
+    "JV_WE_WEATHER": {
+      "width": 42,
+      "fields": [
+        {
+          "name": "head",
+          "kind": "nested",
+          "start": 1,
+          "width": 11,
+          "struct": "RECORD_ID"
+        },
+        {
+          "name": "id",
+          "kind": "nested",
+          "start": 12,
+          "width": 14,
+          "struct": "RACE_ID2"
+        },
+        {
+          "name": "HappyoTime",
+          "kind": "nested",
+          "start": 26,
+          "width": 8,
+          "struct": "MDHM"
+        },
+        {
+          "name": "HenkoID",
+          "kind": "scalar",
+          "start": 34,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "TenkoBaba",
+          "kind": "nested",
+          "start": 35,
+          "width": 3,
+          "struct": "TENKO_BABA_INFO"
+        },
+        {
+          "name": "TenkoBabaBefore",
+          "kind": "nested",
+          "start": 38,
+          "width": 3,
+          "struct": "TENKO_BABA_INFO"
+        },
+        {
+          "name": "crlf",
+          "kind": "scalar",
+          "start": 41,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 22
+    },
+    "JV_AV_INFO": {
+      "width": 78,
+      "fields": [
+        {
+          "name": "head",
+          "kind": "nested",
+          "start": 1,
+          "width": 11,
+          "struct": "RECORD_ID"
+        },
+        {
+          "name": "id",
+          "kind": "nested",
+          "start": 12,
+          "width": 16,
+          "struct": "RACE_ID"
+        },
+        {
+          "name": "HappyoTime",
+          "kind": "nested",
+          "start": 28,
+          "width": 8,
+          "struct": "MDHM"
+        },
+        {
+          "name": "Umaban",
+          "kind": "scalar",
+          "start": 36,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "Bamei",
+          "kind": "scalar",
+          "start": 38,
+          "width": 36,
+          "decoder": "text"
+        },
+        {
+          "name": "JiyuKubun",
+          "kind": "scalar",
+          "start": 74,
+          "width": 3,
+          "decoder": "text"
+        },
+        {
+          "name": "crlf",
+          "kind": "scalar",
+          "start": 77,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 19
+    },
+    "JC_INFO": {
+      "width": 43,
+      "fields": [
+        {
+          "name": "Futan",
+          "kind": "scalar",
+          "start": 1,
+          "width": 3,
+          "decoder": "text"
+        },
+        {
+          "name": "KisyuCode",
+          "kind": "scalar",
+          "start": 4,
+          "width": 5,
+          "decoder": "text"
+        },
+        {
+          "name": "KisyuName",
+          "kind": "scalar",
+          "start": 9,
+          "width": 34,
+          "decoder": "text"
+        },
+        {
+          "name": "MinaraiCD",
+          "kind": "scalar",
+          "start": 43,
+          "width": 1,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 4
+    },
+    "JV_JC_INFO": {
+      "width": 161,
+      "fields": [
+        {
+          "name": "head",
+          "kind": "nested",
+          "start": 1,
+          "width": 11,
+          "struct": "RECORD_ID"
+        },
+        {
+          "name": "id",
+          "kind": "nested",
+          "start": 12,
+          "width": 16,
+          "struct": "RACE_ID"
+        },
+        {
+          "name": "HappyoTime",
+          "kind": "nested",
+          "start": 28,
+          "width": 8,
+          "struct": "MDHM"
+        },
+        {
+          "name": "Umaban",
+          "kind": "scalar",
+          "start": 36,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "Bamei",
+          "kind": "scalar",
+          "start": 38,
+          "width": 36,
+          "decoder": "text"
+        },
+        {
+          "name": "JCInfoAfter",
+          "kind": "nested",
+          "start": 74,
+          "width": 43,
+          "struct": "JC_INFO"
+        },
+        {
+          "name": "JCInfoBefore",
+          "kind": "nested",
+          "start": 117,
+          "width": 43,
+          "struct": "JC_INFO"
+        },
+        {
+          "name": "crlf",
+          "kind": "scalar",
+          "start": 160,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 26
+    },
+    "TC_INFO": {
+      "width": 4,
+      "fields": [
+        {
+          "name": "Ji",
+          "kind": "scalar",
+          "start": 1,
+          "width": 2,
+          "decoder": "text"
+        },
+        {
+          "name": "Fun",
+          "kind": "scalar",
+          "start": 3,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 2
+    },
+    "JV_TC_INFO": {
+      "width": 45,
+      "fields": [
+        {
+          "name": "head",
+          "kind": "nested",
+          "start": 1,
+          "width": 11,
+          "struct": "RECORD_ID"
+        },
+        {
+          "name": "id",
+          "kind": "nested",
+          "start": 12,
+          "width": 16,
+          "struct": "RACE_ID"
+        },
+        {
+          "name": "HappyoTime",
+          "kind": "nested",
+          "start": 28,
+          "width": 8,
+          "struct": "MDHM"
+        },
+        {
+          "name": "TCInfoAfter",
+          "kind": "nested",
+          "start": 36,
+          "width": 4,
+          "struct": "TC_INFO"
+        },
+        {
+          "name": "TCInfoBefore",
+          "kind": "nested",
+          "start": 40,
+          "width": 4,
+          "struct": "TC_INFO"
+        },
+        {
+          "name": "crlf",
+          "kind": "scalar",
+          "start": 44,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 20
+    },
+    "CC_INFO": {
+      "width": 6,
+      "fields": [
+        {
+          "name": "Kyori",
+          "kind": "scalar",
+          "start": 1,
+          "width": 4,
+          "decoder": "text"
+        },
+        {
+          "name": "TruckCd",
+          "kind": "scalar",
+          "start": 5,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 2
+    },
+    "JV_CC_INFO": {
+      "width": 50,
+      "fields": [
+        {
+          "name": "head",
+          "kind": "nested",
+          "start": 1,
+          "width": 11,
+          "struct": "RECORD_ID"
+        },
+        {
+          "name": "id",
+          "kind": "nested",
+          "start": 12,
+          "width": 16,
+          "struct": "RACE_ID"
+        },
+        {
+          "name": "HappyoTime",
+          "kind": "nested",
+          "start": 28,
+          "width": 8,
+          "struct": "MDHM"
+        },
+        {
+          "name": "CCInfoAfter",
+          "kind": "nested",
+          "start": 36,
+          "width": 6,
+          "struct": "CC_INFO"
+        },
+        {
+          "name": "CCInfoBefore",
+          "kind": "nested",
+          "start": 42,
+          "width": 6,
+          "struct": "CC_INFO"
+        },
+        {
+          "name": "JiyuCd",
+          "kind": "scalar",
+          "start": 48,
+          "width": 1,
+          "decoder": "text"
+        },
+        {
+          "name": "crlf",
+          "kind": "scalar",
+          "start": 49,
+          "width": 2,
+          "decoder": "text"
+        }
+      ],
+      "expanded_leaf_count": 21
+    }
+  },
+  "root_records": {
+    "AV": {
+      "struct": "JV_AV_INFO",
+      "length": 78
+    },
+    "BN": {
+      "struct": "JV_BN_BANUSI",
+      "length": 477
+    },
+    "BR": {
+      "struct": "JV_BR_BREEDER",
+      "length": 545
+    },
+    "BT": {
+      "struct": "JV_BT_KEITO",
+      "length": 6889
+    },
+    "CC": {
+      "struct": "JV_CC_INFO",
+      "length": 50
+    },
+    "CH": {
+      "struct": "JV_CH_CHOKYOSI",
+      "length": 3862
+    },
+    "CK": {
+      "struct": "JV_CK_CHAKU",
+      "length": 6870
+    },
+    "CS": {
+      "struct": "JV_CS_COURSE",
+      "length": 6829
+    },
+    "DM": {
+      "struct": "JV_DM_INFO",
+      "length": 303
+    },
+    "H1": {
+      "struct": "JV_H1_HYOSU_ZENKAKE",
+      "length": 28955
+    },
+    "H6": {
+      "struct": "JV_H6_HYOSU_SANRENTAN",
+      "length": 102890
+    },
+    "HC": {
+      "struct": "JV_HC_HANRO",
+      "length": 60
+    },
+    "HN": {
+      "struct": "JV_HN_HANSYOKU",
+      "length": 251
+    },
+    "HR": {
+      "struct": "JV_HR_PAY",
+      "length": 719
+    },
+    "HS": {
+      "struct": "JV_HS_SALE",
+      "length": 200
+    },
+    "HY": {
+      "struct": "JV_HY_BAMEIORIGIN",
+      "length": 123
+    },
+    "JC": {
+      "struct": "JV_JC_INFO",
+      "length": 161
+    },
+    "JG": {
+      "struct": "JV_JG_JOGAIBA",
+      "length": 80
+    },
+    "KS": {
+      "struct": "JV_KS_KISYU",
+      "length": 4173
+    },
+    "O1": {
+      "struct": "JV_O1_ODDS_TANFUKUWAKU",
+      "length": 962
+    },
+    "O2": {
+      "struct": "JV_O2_ODDS_UMAREN",
+      "length": 2042
+    },
+    "O3": {
+      "struct": "JV_O3_ODDS_WIDE",
+      "length": 2654
+    },
+    "O4": {
+      "struct": "JV_O4_ODDS_UMATAN",
+      "length": 4031
+    },
+    "O5": {
+      "struct": "JV_O5_ODDS_SANREN",
+      "length": 12293
+    },
+    "O6": {
+      "struct": "JV_O6_ODDS_SANRENTAN",
+      "length": 83285
+    },
+    "RA": {
+      "struct": "JV_RA_RACE",
+      "length": 1272
+    },
+    "RC": {
+      "struct": "JV_RC_RECORD",
+      "length": 501
+    },
+    "SE": {
+      "struct": "JV_SE_RACE_UMA",
+      "length": 555
+    },
+    "SK": {
+      "struct": "JV_SK_SANKU",
+      "length": 208
+    },
+    "TC": {
+      "struct": "JV_TC_INFO",
+      "length": 45
+    },
+    "TK": {
+      "struct": "JV_TK_TOKUUMA",
+      "length": 21657
+    },
+    "TM": {
+      "struct": "JV_TM_INFO",
+      "length": 141
+    },
+    "UM": {
+      "struct": "JV_UM_UMA",
+      "length": 1609
+    },
+    "WC": {
+      "struct": "JV_WC_WOOD",
+      "length": 105
+    },
+    "WE": {
+      "struct": "JV_WE_WEATHER",
+      "length": 42
+    },
+    "WF": {
+      "struct": "JV_WF_INFO",
+      "length": 7215
+    },
+    "WH": {
+      "struct": "JV_WH_BATAIJYU",
+      "length": 847
+    },
+    "YS": {
+      "struct": "JV_YS_SCHEDULE",
+      "length": 382
+    }
+  },
+  "summary": {
+    "structure_count": 94,
+    "repeat_template_count": 93,
+    "root_record_count": 38,
+    "expanded_leaf_count": 46985
+  }
+}
