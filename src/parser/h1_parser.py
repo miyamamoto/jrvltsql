@@ -28,6 +28,8 @@ H1レコードパーサー: ５．票数１（全掛式）
 """
 
 from typing import Dict, List, Optional, Union
+from uuid import uuid4
+
 from src.utils.logger import get_logger
 
 
@@ -136,6 +138,7 @@ class H1Parser:
     def _parse_full(self, data: bytes) -> List[Dict[str, str]]:
         """Parse full 28,955-byte struct into multiple rows."""
         header = self._parse_header(data)
+        header["_physical_record_id"] = uuid4().hex
 
         # Parse HyoTotal[14] × 11 bytes at position 28799
         totals = {}

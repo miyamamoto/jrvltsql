@@ -21,6 +21,8 @@ HYO_INFO4: kumi(6) + hyo(11) + ninki(4) = 21
 """
 
 from typing import Dict, List, Optional, Union
+from uuid import uuid4
+
 from src.utils.logger import get_logger
 
 
@@ -100,6 +102,7 @@ class H6Parser:
     def _parse_full(self, data: bytes) -> List[Dict[str, str]]:
         """Parse full 102,890-byte struct into multiple rows."""
         header = self._parse_header(data)
+        header["_physical_record_id"] = uuid4().hex
 
         # Parse HyoTotal[2] × 11 bytes at position 102866
         total_hyo = self.decode_field(data[102866:102877])

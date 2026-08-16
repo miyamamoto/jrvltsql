@@ -979,7 +979,7 @@ def _upsert_rows_by_official_key(
     return total
 
 
-def _rollback_coupled_odds(database: BaseDatabase) -> None:
+def _rollback_coupled_snapshot(database: BaseDatabase) -> None:
     try:
         database.rollback()
     except DatabaseError:
@@ -987,7 +987,7 @@ def _rollback_coupled_odds(database: BaseDatabase) -> None:
             database.invalidate_connection()
         except Exception as invalidation_error:
             logger.error(
-                "Failed to invalidate database after standard odds rollback failure",
+                "Failed to invalidate database after coupled snapshot rollback failure",
                 error=str(invalidation_error),
             )
         raise
@@ -1093,7 +1093,7 @@ def insert_standard_odds_batch(
     except (DatabaseError, SchemaMigrationError):
         if verification_cache is not None:
             verification_cache.pop(owner_table_name, None)
-        _rollback_coupled_odds(database)
+        _rollback_coupled_snapshot(database)
         raise
 
 
@@ -1137,7 +1137,7 @@ def delete_standard_odds_record(
     except (DatabaseError, SchemaMigrationError):
         if verification_cache is not None:
             verification_cache.pop(owner_table_name, None)
-        _rollback_coupled_odds(database)
+        _rollback_coupled_snapshot(database)
         raise
 
 
@@ -1211,6 +1211,9 @@ def _standard_vote_physical_fingerprint(
     raw = record.get("_raw")
     if isinstance(raw, (bytes, bytearray, memoryview)):
         return owner_table_name, "raw", id(raw)
+    physical_record_id = record.get("_physical_record_id")
+    if physical_record_id not in (None, ""):
+        return owner_table_name, "parser", str(physical_record_id)
     if "RecordDelimiter" in record or "RecordSeparator" in record:
         # The compatibility layouts contain one complete physical record per
         # parser row, so adjacent revisions must not be coalesced.
@@ -1525,7 +1528,6 @@ def insert_standard_vote_batch(
             owner_table_name,
             list(header_by_key.values()),
             _STANDARD_VOTE_RACE_KEY_COLUMNS,
-            preserve_existing_on_null=True,
         )
         for child_table, keyed_rows in child_by_table.items():
             _upsert_rows_by_official_key(
@@ -1542,7 +1544,7 @@ def insert_standard_vote_batch(
     except (DatabaseError, SchemaMigrationError):
         if verification_cache is not None:
             verification_cache.pop(owner_table_name, None)
-        _rollback_coupled_odds(database)
+        _rollback_coupled_snapshot(database)
         raise
 
 
@@ -1589,7 +1591,7 @@ def delete_standard_vote_record(
     except (DatabaseError, SchemaMigrationError):
         if verification_cache is not None:
             verification_cache.pop(owner_table_name, None)
-        _rollback_coupled_odds(database)
+        _rollback_coupled_snapshot(database)
         raise
 
 

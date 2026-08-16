@@ -226,9 +226,47 @@
   (4,896 source rows) through both importers and removed all owner/child rows on
   status 0, without exposing race identity.
 
+## PR #190 aggregated review repair
+
+- PR #190 was opened at final pre-review head
+  `f7c4155a63845fea256d56f9202813246dacbe69`. GitHub Actions lint and test
+  checks passed on that exact head. The configured Codex review and the single
+  requested GitHub-native Copilot review both examined that head; CodeRabbit
+  completed its configured review as well.
+- Codex found that two consecutive full parser results with the same public
+  header values had no explicit physical-record boundary when used directly,
+  outside the fetcher path. Both importers could therefore coalesce revisions
+  and retain a combination removed by the later complete snapshot.
+- Codex and Copilot independently found the same header replacement defect:
+  nullable owner columns were omitted from the conflict update. A later blank
+  refund flag or total consequently preserved the prior non-null value even
+  though H1/H6 are complete snapshots. The findings were accepted as one
+  duplicate correctness cluster.
+- One minimal regression combines both failure modes: it imports two direct
+  H6 parser results with identical public headers, where the later record has
+  no child combination and blanks its refund flags and totals. Before repair it
+  failed for both importers (`2 failed, 2 passed`), retaining refund flag `1`
+  and both old totals instead of `NULL`; the child-removal assertion was not
+  reached. The duplicate-key fail-closed test was also parametrized over both
+  importers as a review coverage improvement.
+- Full H1/H6 parser results now carry an internal per-parse physical-record ID.
+  The importer uses it only when raw-buffer identity is unavailable, and the
+  normal metadata cleaner excludes it from storage. Complete owner replacement
+  now writes supplied nullable columns as `NULL`; the compact compatibility
+  layout still updates only the columns it actually supplies. The shared
+  rollback helper was renamed from an odds-specific name to a neutral coupled-
+  snapshot name without changing behavior.
+- The pre-implementation regression is now green (`4 passed, 66 deselected`).
+  Expanded storage, table mapping, parser compatibility, current-layout, and
+  parser coverage tests pass `320 passed, 20 skipped` on the repaired working
+  tree. The general docstring percentage warning was classified non-blocking:
+  it is not a correctness finding, and the new public/contract helpers already
+  document their behavior.
+
 ## Next safe action
 
-- Commit this evidence-only worklog update, run the smallest focused contract
-  on that final documentation head, then push once and open the PR. Collect the
-  single GitHub-native Copilot review plus configured automated reviewers,
-  aggregate findings, and repair once if necessary.
+- Commit and push this single aggregated repair, run the required focused and
+  PostgreSQL checks against the repaired full SHA, reply to the three duplicate
+  or addressed review threads, resolve all threads, then confirm check success,
+  clean worktree, and merge PR #190. Do not run a second automated-review loop
+  solely for the renamed helper or the additional test.

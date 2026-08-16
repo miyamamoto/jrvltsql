@@ -1158,6 +1158,34 @@ def test_sqlite_standard_vote_refund_arrays_keep_blank_positions(
 
 
 @pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_sqlite_standard_h6_direct_parser_revisions_replace_nullable_snapshot(
+    sqlite_db, importer_class
+):
+    _create_jravan_tables(sqlite_db, _STANDARD_H6_TABLES)
+    parser = H6Parser()
+    first = _flatten(parser.parse(_make_h6_vote_record()))
+    second_raw = bytearray(
+        _make_h6_vote_record(data_kubun="4", populated=False)
+    )
+    second_raw[32:50] = b" " * 18
+    second_raw[102866:102888] = b" " * 22
+    second = _flatten(parser.parse(bytes(second_raw)))
+
+    stats = importer_class(
+        sqlite_db, use_jravan_schema=True, batch_size=10000
+    ).import_records(iter([*first, *second]))
+
+    assert stats["records_failed"] == 0
+    assert sqlite_db.fetch_one(
+        "SELECT HenkanUma1 AS refund_flag, HyoTotal1 AS total1, "
+        "HyoTotal2 AS total2 FROM HYOSU2"
+    ) == {"refund_flag": None, "total1": None, "total2": None}
+    assert sqlite_db.fetch_one(
+        "SELECT COUNT(*) AS cnt FROM HYOSU_SANRENTAN"
+    )["cnt"] == 0
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
 def test_sqlite_standard_vote_flat_compatibility_layouts(
     sqlite_db, importer_class
 ):
@@ -1251,7 +1279,10 @@ def test_postgresql_standard_h6_migrates_existing_child_columns(
     )
 
 
-def test_sqlite_standard_h1_duplicate_header_keys_fail_closed(sqlite_db):
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_sqlite_standard_h1_duplicate_header_keys_fail_closed(
+    sqlite_db, importer_class
+):
     _create_jravan_tables(sqlite_db, _STANDARD_H1_TABLES)
     duplicate_key = (2026, 419, "06", 3, 8, 11)
     for status in ("2", "4"):
@@ -1265,7 +1296,7 @@ def test_sqlite_standard_h1_duplicate_header_keys_fail_closed(sqlite_db):
     rows = _flatten(H1Parser().parse(_make_h1_vote_record()))
 
     with pytest.raises(SchemaMigrationError, match="duplicate official keys"):
-        DataImporter(sqlite_db, use_jravan_schema=True).import_records(iter(rows))
+        importer_class(sqlite_db, use_jravan_schema=True).import_records(iter(rows))
 
     assert sqlite_db.fetch_one("SELECT COUNT(*) AS cnt FROM HYOSU")["cnt"] == 2
 
