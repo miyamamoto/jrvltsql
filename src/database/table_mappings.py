@@ -92,7 +92,7 @@ JRAVAN_TO_JLTSQL: Dict[str, str] = {
     "SALE": "NL_HS",          # 競走馬市場取引価格 (Sale)
     "HANRO": "NL_HC",         # 坂路調教 (Hill Training)
     "MEANING": "NL_HY",       # 馬名の意味由来 (Horse Name Meaning)
-    "WEIGHT_CHANGE": "NL_JG", # 重量変更 (Weight Change)
+    "WEIGHT_CHANGE": "NL_JG", # 競走馬除外情報 (legacy alias; canonical owner is JOGAIBA)
     "WOOD": "NL_WC",          # ウッドチップ調教 (Woodchip Training)
     # Official JRA-VAN change-notification table names. Keep the historical
     # aliases above for standard-name -> native compatibility, but place the
@@ -107,6 +107,7 @@ JRAVAN_TO_JLTSQL: Dict[str, str] = {
     "TAISENGATA_MINING": "NL_TM",  # 対戦型データマイニング予想
     "BAMEIORIGIN": "NL_HY",  # 馬名の意味由来
     "KEITO": "NL_BT",  # 系統情報
+    "JOGAIBA": "NL_JG",  # 競走馬除外情報 (SDK JV_JG_JOGAIBA)
 }
 
 # レコード種別コード → テーブル名 (Record Type Code -> Table Name)
@@ -147,7 +148,7 @@ RECORD_TYPE_TO_TABLE: Dict[str, str] = {
     "CC": "NL_CC",  # コース変更 (Course Change)
     "HC": "NL_HC",  # 坂路調教 (Hill Training)
     "HY": "NL_HY",  # 馬名の意味由来 (Horse Name Meaning)
-    "JG": "NL_JG",  # 重量変更 (Weight Change)
+    "JG": "NL_JG",  # 競走馬除外情報 (Excluded Horse)
     "JC": "NL_JC",  # 騎手変更 (Jockey Change)
     "WC": "NL_WC",  # ウッドチップ調教 (Woodchip Training)
 }

@@ -49,6 +49,17 @@ def resolve_standard_table_name(database: BaseDatabase, native_table_name: str) 
             "and reimport current 6,889-byte source records."
         )
     if (
+        native_table_name == "NL_JG"
+        and database.is_connected()
+        and database.table_exists("WEIGHT_CHANGE")
+        and not database.table_exists(standard_name)
+    ):
+        raise SchemaMigrationError(
+            "Legacy standard table WEIGHT_CHANGE exists but canonical JOGAIBA does not. "
+            "Automatic JG import is refused; rebuild the standard table as JOGAIBA "
+            "and reimport current 80-byte source records."
+        )
+    if (
         native_table_name == "NL_SK"
         and database.is_connected()
         and database.table_exists("HANSYOKU_UMA")
@@ -145,6 +156,11 @@ _STANDARD_FIELD_ALIASES = {
     "TOKU": {
         "RenbanNum": "Num",
     },
+    "JOGAIBA": {
+        "Num": "ShutsubaTohyoJun",
+        "SyussoKubun": "ShussoKubun",
+        "JyogaiStateKubun": "JogaiJotaiKubun",
+    },
     "TOKU_RACE": {
         "RaceRyakusyo10": "Ryakusyo10",
         "RaceRyakusyo6": "Ryakusyo6",
@@ -196,9 +212,21 @@ _TK_KEY_COLUMNS = ("Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum")
 _TK_ROWS_KEY = "_tk_registered_horse_rows"
 _HY_STORAGE_TABLES = frozenset({"NL_HY", "BAMEIORIGIN"})
 _BT_STORAGE_TABLES = frozenset({"NL_BT", "KEITO"})
-_STRICT_NONADDITIVE_STANDARD_TABLES = frozenset({"KEITO"})
+_JG_STORAGE_TABLES = frozenset({"NL_JG", "JOGAIBA"})
+_JG_KEY_COLUMNS = (
+    "Year",
+    "MonthDay",
+    "JyoCD",
+    "Kaiji",
+    "Nichiji",
+    "RaceNum",
+    "KettoNum",
+    "Num",
+)
+_STRICT_NONADDITIVE_STANDARD_TABLES = frozenset({"KEITO", "JOGAIBA"})
 _LEGACY_STANDARD_PREFLIGHT_NATIVE_TABLES = (
     "NL_BT",
+    "NL_JG",
     "NL_SK",
     "NL_BR",
     "NL_HY",
@@ -221,6 +249,115 @@ def verify_bt_storage_schema(database: BaseDatabase, table_name: str) -> bool:
     if schema_sql is None:
         raise SchemaMigrationError(f"BT storage schema is undefined: {table_name}")
     verify_table_schema(database, table_name, schema_sql)
+    return True
+
+
+def verify_jg_storage_schema(database: BaseDatabase, table_name: str) -> bool:
+    """Fail closed unless JG storage preserves every field and the eight-part key."""
+    if table_name not in _JG_STORAGE_TABLES:
+        return False
+
+    from src.database.migration import verify_table_schema
+    from src.database.schema import SCHEMAS
+    from src.database.schema_jravan import JRAVAN_SCHEMAS
+
+    schema_sql = SCHEMAS.get(table_name) or JRAVAN_SCHEMAS.get(table_name)
+    if schema_sql is None:
+        raise SchemaMigrationError(f"JG storage schema is undefined: {table_name}")
+    verify_table_schema(database, table_name, schema_sql)
+    return True
+
+
+def validate_jg_record(record: dict, table_name: str) -> bool:
+    """Revalidate a JG row's status and official key immediately before storage.
+
+    The parser already enforces the current contract, but importer entry points
+    also accept caller-built dictionaries. A row outside ``DataKubun`` 0/1 or
+    without the complete eight-part key must stop the import before any row of
+    that record can be upserted, deleted, or silently skipped.
+    """
+    if table_name not in _JG_STORAGE_TABLES:
+        return False
+    if _record_type_from_record(record) != "JG":
+        raise SchemaMigrationError(f"{table_name} received a non-JG record")
+
+    from src.parser.jg_parser import JGParser
+
+    if record.get("DataKubun") in (None, "") and record.get("headDataKubun") in (
+        None,
+        "",
+    ):
+        raise SchemaMigrationError("JG DataKubun is required")
+    try:
+        data_kubun = resolve_record_data_kubun(record)
+    except ValueError as error:
+        raise SchemaMigrationError(str(error)) from error
+    if data_kubun not in JGParser.DATA_KUBUN_VALUES:
+        raise SchemaMigrationError(f"JG record has unsupported DataKubun: {data_kubun!r}")
+    aliases = _STANDARD_FIELD_ALIASES.get(table_name, {})
+    conflicts = [
+        (native_name, standard_name)
+        for native_name, standard_name in aliases.items()
+        if native_name in record
+        and standard_name in record
+        and record[native_name] != record[standard_name]
+    ]
+    if conflicts:
+        raise SchemaMigrationError(f"conflicting JG alias values: {conflicts}")
+
+    def value_for(native_name: str):
+        if native_name in record:
+            return record[native_name]
+        return record.get(aliases.get(native_name, native_name))
+
+    missing = [column for column in _JG_KEY_COLUMNS if value_for(column) in (None, "")]
+    if missing:
+        raise SchemaMigrationError(f"JG record has incomplete official key: {missing}")
+
+    digit_widths = {
+        "MakeDate": 8,
+        "Year": 4,
+        "MonthDay": 4,
+        "Kaiji": 2,
+        "Nichiji": 2,
+        "RaceNum": 2,
+        "KettoNum": 10,
+        "Num": 3,
+    }
+    for field_name, width in digit_widths.items():
+        value = value_for(field_name)
+        if (
+            not isinstance(value, str)
+            or len(value) != width
+            or not value.isascii()
+            or not value.isdigit()
+        ):
+            raise SchemaMigrationError(
+                f"JG record {field_name} must be exactly {width} ASCII digits"
+            )
+    jyo_cd = value_for("JyoCD")
+    if (
+        not isinstance(jyo_cd, str)
+        or len(jyo_cd) != 2
+        or not jyo_cd.isascii()
+        or not jyo_cd.isalnum()
+    ):
+        raise SchemaMigrationError("JG record JyoCD must be a 2-character code")
+
+    syusso = value_for("SyussoKubun")
+    if syusso not in JGParser.SYUSSO_KUBUN_VALUES and not (
+        data_kubun == "0" and syusso in (None, "")
+    ):
+        raise SchemaMigrationError(
+            f"JG record SyussoKubun has unsupported code: {syusso!r}"
+        )
+    jyogai = value_for("JyogaiStateKubun")
+    if jyogai not in JGParser.JYOGAI_STATE_KUBUN_VALUES and not (
+        data_kubun == "0" and jyogai in (None, "")
+    ):
+        raise SchemaMigrationError(
+            f"JG record JyogaiStateKubun has unsupported code: {jyogai!r}"
+        )
     return True
 
 
@@ -708,7 +845,15 @@ _MINING_STORAGE_CONFIG: dict[str, dict[str, Any]] = {
 
 def _record_type_from_record(record: dict) -> Any:
     """Resolve every record-type alias accepted by importer entry points."""
-    return record.get("レコード種別ID") or record.get("RecordSpec") or record.get("headRecordSpec")
+    aliases = tuple(
+        (name, str(record[name]))
+        for name in ("レコード種別ID", "RecordSpec", "headRecordSpec")
+        if record.get(name) not in (None, "")
+    )
+    values = {value for _, value in aliases}
+    if len(values) > 1:
+        raise SchemaMigrationError(f"record-type aliases conflict: {aliases}")
+    return aliases[0][1] if aliases else None
 
 
 CANCELLATION_STATE_RECORD_TYPES = frozenset(
@@ -731,6 +876,7 @@ _OFFICIAL_ERASE_KEY_COLUMNS = {
     "WF": ("Year", "MonthDay"),
     "HY": ("KettoNum",),
     "BT": ("HansyokuNum",),
+    "JG": _JG_KEY_COLUMNS,
 }
 
 _OFFICIAL_ERASE_STORAGE_TABLES = {
@@ -748,6 +894,7 @@ _OFFICIAL_ERASE_STORAGE_TABLES = {
     "WF": {"NL_WF", "RT_WF", "WIN5"},
     "HY": {"NL_HY", "BAMEIORIGIN"},
     "BT": {"NL_BT", "KEITO"},
+    "JG": {"NL_JG", "JOGAIBA"},
 }
 
 _STANDARD_ODDS_RACE_KEY_COLUMNS = _MINING_RACE_KEY_COLUMNS
@@ -825,6 +972,9 @@ def clean_record_metadata(record: dict) -> dict:
         for key, value in record.items()
         if key not in metadata_fields and not key.startswith("_")
     }
+    record_type = _record_type_from_record(record)
+    if record_type is not None:
+        cleaned["RecordSpec"] = record_type
     if record.get("DataKubun") not in (None, "") or record.get("headDataKubun") not in (
         None,
         "",
@@ -1731,7 +1881,13 @@ def _delete_official_record(database: BaseDatabase, record: dict, table_name: st
     if not _is_official_record_erase(record, table_name):
         raise ValueError(f"{table_name} is not erase storage for record {record_type!r}")
 
-    key_columns = _OFFICIAL_ERASE_KEY_COLUMNS[record_type]
+    # Key columns are declared with native parser names; a standard-name table
+    # such as JOGAIBA stores them under its own official column names.
+    aliases = _STANDARD_FIELD_ALIASES.get(table_name, {})
+    key_columns = tuple(
+        aliases.get(column, column) for column in _OFFICIAL_ERASE_KEY_COLUMNS[record_type]
+    )
+    record = translate_standard_field_names(record, table_name)
     converted = convert_record_types(record, table_name)
     # Some legacy standard schemas omit type metadata for an otherwise valid
     # race key. Preserve the raw key only for those columns.
@@ -3352,6 +3508,7 @@ class DataImporter:
         self._verified_mining_native_tables: set[str] = set()
         self._verified_hy_tables: set[str] = set()
         self._verified_bt_tables: set[str] = set()
+        self._verified_jg_tables: set[str] = set()
         self._verified_ck_child_tables: dict[str, tuple[str, str]] = {}
         self._verified_rc_tables: set[str] = set()
         self._verified_ys_tables: set[str] = set()
@@ -3372,7 +3529,7 @@ class DataImporter:
             "RA": "NL_RA",  # レース詳細
             "SE": "NL_SE",  # 馬毎レース情報
             "HR": "NL_HR",  # 払戻
-            "JG": "NL_JG",  # 除外馬
+            "JG": "NL_JG",  # 競走馬除外情報
             "H1": "NL_H1",  # 票数1（全賭式）
             "H6": "NL_H6",  # 票数6（三連単）
             "O1": "NL_O1",  # 単勝・複勝・枠連オッズ
@@ -3614,6 +3771,10 @@ class DataImporter:
                 if table_name not in self._verified_bt_tables:
                     if verify_bt_storage_schema(self.database, table_name):
                         self._verified_bt_tables.add(table_name)
+                if table_name not in self._verified_jg_tables:
+                    if verify_jg_storage_schema(self.database, table_name):
+                        self._verified_jg_tables.add(table_name)
+                validate_jg_record(record, table_name)
 
                 if table_name not in self._verified_mining_native_tables:
                     if verify_mining_native_schema(self.database, record, table_name):
@@ -4159,6 +4320,10 @@ class DataImporter:
             if table_name not in self._verified_bt_tables:
                 if verify_bt_storage_schema(self.database, table_name):
                     self._verified_bt_tables.add(table_name)
+            if table_name not in self._verified_jg_tables:
+                if verify_jg_storage_schema(self.database, table_name):
+                    self._verified_jg_tables.add(table_name)
+            validate_jg_record(record, table_name)
             if table_name not in self._verified_rc_tables:
                 if verify_rc_storage_schema(self.database, table_name):
                     self._verified_rc_tables.add(table_name)

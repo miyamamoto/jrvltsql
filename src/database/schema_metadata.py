@@ -879,23 +879,16 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
         "indexes": ["開催年月日", "騎手名"]
     },
 
-    "NL_JG": {
-        "table_name": "NL_JG",
-        "record_type": "JG",
-        "description": "除外馬詳細情報",
-        "purpose": "出馬投票から除外された馬の詳細情報を格納",
-        "columns": [
-            {"name": "レコード種別ID", "type": "TEXT", "description": "レコード種別識別子（'JG'）", "example": "JG", "nullable": False},
-            {"name": "開催年月日", "type": "TEXT", "description": "レース開催日", "example": "20240601", "nullable": False},
-            {"name": "競馬場コード", "type": "TEXT", "description": "競馬場コード", "example": "05", "nullable": False},
-            {"name": "レース番号", "type": "TEXT", "description": "レース番号", "example": "11", "nullable": False},
-            {"name": "血統登録番号", "type": "TEXT", "description": "除外馬の血統登録番号", "example": "2020123456", "nullable": False},
-            {"name": "馬名", "type": "TEXT", "description": "除外馬の馬名", "example": "○○○○", "nullable": True},
-            {"name": "除外状態区分", "type": "TEXT", "description": "除外理由区分", "example": "1", "nullable": True}
-        ],
-        "primary_key": ["開催年月日", "競馬場コード", "レース番号", "血統登録番号"],
-        "indexes": ["開催年月日", "馬名"]
-    },
+    "NL_JG": _schema_backed_metadata(
+        "NL_JG",
+        record_type="JG",
+        description="競走馬除外情報",
+        purpose=(
+            "出馬投票で受け付けた馬ごとの出走区分・除外状態区分を、公式8列キー"
+            "（開催キー6列＋血統登録番号＋出馬投票受付順番）で格納"
+        ),
+        indexes=["Year", "MonthDay", "JyoCD", "RaceNum"],
+    ),
 
     "NL_TC": {
         "table_name": "NL_TC",

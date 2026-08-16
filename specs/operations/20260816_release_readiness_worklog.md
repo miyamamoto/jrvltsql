@@ -1692,3 +1692,134 @@
   unchanged base. STOP if the apparent standard table is semantically
   unrelated, cannot store all official payload, lacks a deterministic key, or
   another current PR already implements the same contract.
+- The independent exact-base Codex audit returned `NEEDS_CHANGES` with no P0
+  and selected JG as the smallest safe iteration. Official 4.8.0.2 and 4.9.0.1
+  rows 1338-1354 and SDK 5.0.0 `JV_JG_JOGAIBA` agree on the unchanged 80-byte,
+  17-leaf layout, `DataKubun=0/1`, and eight-part key: six race identifiers,
+  `KettoNum`, and `ShutsubaTohyoJun`. The current native key omits the final
+  component, causing two provider rows with reception order `001/002` to
+  report two imports while retaining only `002`. Current deletion replaces
+  the collapsed row with a `DataKubun=0` tombstone, undefined status `8` is
+  accepted, and standard mode resolves to semantically incorrect
+  `WEIGHT_CHANGE` although no matching standard schema exists. `JOGAIBA` is a
+  project canonical owner inferred from the official SDK structure name; the
+  provider specification does not publish SQL DDL or prescribe this table
+  name. The legacy native parser field names remain a compatibility surface and
+  must translate only at the standard boundary.
+- The official online 4.9.0.1 document independently confirms JG under the
+  `RACE` dataspec, and the provider-operated developer community confirms that
+  blank or shared blood-registration numbers are not normal valid JG keys and
+  describes the Thursday/Friday-Saturday publication stages ([topic 322](https://developer.jra-van.jp/t/topic/322)).
+  A separate recent community report where only JG appeared under `RACE` was
+  resolved by the caller using `JVSkip` ([topic 732](https://developer.jra-van.jp/t/topic/732)),
+  so it does not justify changing JG dispatch.
+- Red-first evidence was captured before any implementation change at code base
+  `a53eed6c24cbb4cbb8ebc0edc845ae67849b76b2` (worklog-only descendant
+  `78056df7c6584e4cc9b8a4d3ba88f35b03d77300`). The grouped JG contract
+  completed `35 failed, 7 passed, 1 PostgreSQL opt-in skip`. The failures cover
+  undefined status and malformed numeric fields, the missing eighth native
+  key, absent `JOGAIBA` mapping/schema, silent revote collapse, tombstone
+  deletion in both commit modes, absent writer revalidation, obsolete-key
+  mutation, legacy-only owner handling, and single-record divergence. The
+  seven greens cover exact offsets/CRLF/CP932 boundary rejection and the
+  official delete key remaining readable. This is the required pre-change
+  proof that the new parser/storage checks can say no.
+- Implementation is delegated to Claude Code `2.1.233` with `--model fable`,
+  session `cdcfb194-aec1-4045-8827-8d5753a45d71`. Fable is selected because
+  this iteration changes a fail-closed schema validator and provider-order
+  deletion across two importer implementations; a half-fixed branch could
+  silently collapse or erase the wrong official key. The session receives the
+  exact official contract and red evidence above and must remain resumable for
+  any review repair in this same worktree.
+- Claude Fable implemented the initial aggregate parser/schema/mapping/importer/
+  documentation/history patch but reached its session limit before executing
+  tests (`resets 08:40 Asia/Tokyo`). The result was therefore not accepted as
+  verified. Codex inspected every changed path and extended the same grouped
+  writer-negative test to direct invalid numeric and semantic code dictionaries.
+  On the unmodified partial writer this produced the expected `4 failed` for
+  DataImporter/OptimizedDataImporter across `NL_JG`/`JOGAIBA`: an invalid
+  `SyussoKubun=8` was stored instead of rejected. The writer now validates the
+  exact ASCII widths of the header/key plus both official code domains before
+  any mutation, while allowing blank non-key body fields only for deletion.
+- Current pre-candidate verification is green. The complete focused JG/oracle/
+  dispatch selection completed `215 passed, 1 PostgreSQL opt-in skip`. A fresh
+  disposable PostgreSQL 16 database then completed the whole JG contract `46
+  passed`: both importers stored two same-race/same-horse reception orders as
+  two rows in native and canonical schemas, exact deletion left the other row,
+  and native/canonical seven-column legacy primary keys were rejected with
+  catalog and sentinel rows unchanged for owned and caller transactions. The
+  disposable database was removed. Next safe action: run the broader affected
+  and complete suite, commit one candidate, then perform one exact-SHA Codex
+  critical review and GitHub gate. STOP on any schema mutation before rejection,
+  provider-order loss, official-history hash drift, or review blocker.
+- The broader affected selection initially completed `749 passed, 5 skipped,
+  3 failed`. All three failures were the same pre-existing generic positive
+  fixture in `tests/test_parsers.py`: it constructed JG with blank official key
+  fields even though current and historical JG require the fixed-width eight-
+  part key. The test fixture, not the parser, was corrected to a valid official
+  80-byte JG record; the identical selection then completed `752 passed, 5
+  skipped`.
+- A final Codex diff audit found one additional fail-open path before candidate
+  freeze: a caller-built standard row could provide both native `Num` and
+  canonical `ShutsubaTohyoJun` with different values. Validation read the native
+  value while translation stored the canonical value. The existing grouped
+  writer-negative test was extended first; both standard importers failed red
+  (`2 failed, 2 passed`) because no exception was raised. The shared JG writer
+  validator now rejects every conflicting native/canonical alias pair before
+  mutation. The grouped focused/oracle/parser selection is green (`507 passed,
+  1 PostgreSQL opt-in skip`) under Python 3.12.11, and the fail-closed workflow
+  self-check prints `TEST GATE PASS`.
+- Pre-candidate local gates are complete on the current worktree content. The
+  CI-equivalent non-integration/non-E2E suite completed `2507 passed, 108
+  skipped, 14 deselected, 15 subtests passed` under Python 3.12.11. The tracked
+  SDK 5.0.0 oracle validates (`OFFICIAL ORACLE PASS`), `compileall` is clean,
+  strict MkDocs builds, fatal `flake8` returns zero findings, and `git diff
+  --check` is clean. Fresh wheel and sdist build successfully; the distribution
+  content gate passes both artifacts and confirms repository `specs/` and the
+  retired crawler audit pages remain outside the release archives. Setuptools
+  emits only the existing future license-metadata deprecation warning. Next
+  safe action: commit one clean candidate and run one independent exact-SHA
+  Codex critical review plus an exact-SHA PostgreSQL replay. STOP if either
+  finds a correctness/data-integrity blocker.
+- Candidate `f16463cf7c076721e142bae7abdd5c68104c960b` was clean and based
+  directly on `a53eed6c24cbb4cbb8ebc0edc845ae67849b76b2`. Its exact-SHA
+  PostgreSQL 16 replay completed `46 passed`, and the disposable container was
+  removed. Independent Codex review returned `NEEDS_CHANGES` (P0=0, P1=3,
+  P2=2) after `526 passed, 1 skipped` focused tests, an independent PostgreSQL
+  replay, and a Python 3.12 full suite of `2521 passed, 114 skipped, 15
+  subtests passed`. The JG physical layout, official key, schema, deletion,
+  history and documentation were confirmed; the blockers were all at the
+  caller-built header boundary: missing/blank status defaulted through
+  validation and stored NULL, conflicting record-type aliases could route JG
+  while persisting another type, and accepted legacy-only record aliases were
+  removed before storage. Coverage also proved that the newly added JyoCD
+  rejectors had no tracked negative case. Canonical-only standard aliases were
+  independently green but lacked a tracked positive regression.
+- Review repair tests were added before production changes. On exact candidate
+  `f16463cf7c076721e142bae7abdd5c68104c960b`, the grouped header/single/cleaner
+  selection produced the expected `9 failed, 12 passed`: four batch paths did
+  not reject conflicting record-type aliases, four single-record paths did not
+  reject missing status, and the cleaner discarded a legacy-only record type.
+  A temporary detached worktree at exact base
+  `a53eed6c24cbb4cbb8ebc0edc845ae67849b76b2` separately failed both assertions
+  for `JyoCD=@5`: the parser returned a row and the native writer stored it.
+  That worktree was removed. The aggregate repair rejects record-type alias
+  conflicts before dispatch, canonicalizes an accepted legacy record type,
+  requires an explicit JG status, converts status-alias conflicts to the shared
+  schema error, and adds parser/writer JyoCD negatives plus canonical-only
+  standard-name greens. The immediate repaired selection is green (`21
+  passed`). Next safe action: run affected/full/PostgreSQL gates once, amend the
+  candidate, and request one exact-delta confirmation rather than restarting
+  the complete review pipeline. STOP on any row mutation after a rejected
+  header or any regression outside JG.
+- The aggregated review repair is green. The affected importer/parser/oracle/
+  realtime selection completed `928 passed, 28 skipped, 12 subtests passed`.
+  Because record-type conflict resolution is shared by all importer entry
+  points, the CI-equivalent full selection was rerun once and completed `2508
+  passed, 108 skipped, 14 deselected, 15 subtests passed` under Python 3.12.11.
+  A fresh PostgreSQL 16 container then completed the expanded JG contract `47
+  passed`, including the reviewed header negatives and existing revote/delete/
+  obsolete-schema paths; the container was removed. Next safe action: rerun the
+  small static/oracle/document gate, amend the candidate, confirm exact SHA and
+  clean state, then obtain one review-delta verdict. STOP on any failed gate or
+  non-worklog drift.

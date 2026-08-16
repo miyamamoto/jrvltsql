@@ -25,7 +25,7 @@ OFFICIAL_MANIFEST_CONTRACT_SHA256 = (
     "f35859d252fd20e4d7e38ee8d0a224deae87a62bae9db1995ed897bdccef6c45"
 )
 OFFICIAL_HISTORY_CONTRACT_SHA256 = (
-    "e697a97c2730099239f432203d56fea2869e11264e483b39f953257f9dc60d66"
+    "9f275d4c35714464cfd8737bd14fae08cf473388a725a31507f52ceb99ce4a80"
 )
 
 
@@ -721,7 +721,7 @@ def test_official_hy_and_ck_sentinels_cannot_follow_current_implementation_drift
 def _assert_history_cardinality(history):
     assert len(history["sources"]) == 2
     assert len(history["physical_length_changes"]) == 10
-    assert len(history["same_length_semantic_changes"]) == 1
+    assert len(history["same_length_semantic_changes"]) == 2
 
 
 def _assert_history_truth_contract(history):
@@ -773,6 +773,23 @@ def _assert_history_truth_contract(history):
     assert semantic_change["length_unchanged"] is True
     assert semantic_change["provenance_required"] is True
 
+    # Ver.4.1.1 only appended the KettoNum initial value; JG kept the 80-byte
+    # layout introduced in Ver.4.1.0, so the ledger must not invent a distinct
+    # pre-change byte layout or require provenance to parse it.
+    jg_change = history["same_length_semantic_changes"][1]
+    assert jg_change["record_type"] == "JG"
+    assert jg_change["official_spec_version"] == "4.1.1"
+    assert jg_change["announced_date"] == "2011-09-28"
+    assert jg_change["length_unchanged"] is True
+    assert jg_change["layout_unchanged"] is True
+    assert jg_change["change_kind"] == "initial_value_clarification"
+    assert jg_change["current_fields"] == [
+        {"name": "KettoNum", "start": 28, "width": 10, "initial_value": "0"}
+    ]
+    assert "before_fields" not in jg_change
+    assert jg_change["provenance_required"] is False
+    assert jg_change["source"] == "JV-Data4901.xlsx:変更履歴:110"
+
 
 def test_official_layout_history_is_provenanced_and_continuous_to_current():
     history = json.loads(HISTORY_PATH.read_text(encoding="utf-8"))
@@ -799,6 +816,14 @@ def test_official_layout_history_is_provenanced_and_continuous_to_current():
     assert um_fields["ZaikyuFlag"] == (179, 1)
     assert um_fields["Reserved"] == (180, 19)
 
+    jg_root = current["root_records"]["JG"]
+    assert jg_root == {"struct": "JV_JG_JOGAIBA", "length": 80}
+    jg_fields = {
+        field["name"]: (field["start"], field["width"])
+        for field in current["structures"]["JV_JG_JOGAIBA"]["fields"]
+    }
+    assert jg_fields["KettoNum"] == (28, 10)
+
 
 @pytest.mark.parametrize(
     ("path", "value"),
@@ -810,6 +835,10 @@ def test_official_layout_history_is_provenanced_and_continuous_to_current():
         (("physical_length_changes", 0, "effective_date"), "1900-01-01"),
         (("same_length_semantic_changes", 0, "before_fields"), []),
         (("same_length_semantic_changes", 0, "reason"), "wrong"),
+        (("same_length_semantic_changes", 1, "current_fields"), []),
+        (("same_length_semantic_changes", 1, "layout_unchanged"), False),
+        (("same_length_semantic_changes", 1, "provenance_required"), True),
+        (("same_length_semantic_changes", 1, "source"), "wrong:999"),
     ),
 )
 def test_history_truth_contract_rejects_content_and_provenance_drift(path, value):
@@ -825,7 +854,7 @@ def test_history_truth_contract_rejects_content_and_provenance_drift(path, value
     (
         ("sources", 2),
         ("physical_length_changes", 10),
-        ("same_length_semantic_changes", 1),
+        ("same_length_semantic_changes", 2),
     ),
 )
 def test_history_contract_rejects_duplicate_entries(collection, expected_count):

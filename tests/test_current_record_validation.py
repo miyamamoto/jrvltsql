@@ -27,7 +27,9 @@ PREVIOUS_OFFICIAL_LENGTHS = tuple(
 # These parsers also require populated domain-specific arrays or master fields.
 # Their valid payloads are covered by dedicated official-contract tests; this
 # module limits their positive case to the shared physical-record envelope.
-DOMAIN_PAYLOAD_REQUIRED = {"CK", "DM", "KS", "TK", "TM", "WH"}
+# JG additionally requires its numeric eight-part official key (KettoNum and
+# ShutsubaTohyoJun) and current status codes.
+DOMAIN_PAYLOAD_REQUIRED = {"CK", "DM", "JG", "KS", "TK", "TM", "WH"}
 
 
 def test_declared_current_lengths_match_every_factory_parser():

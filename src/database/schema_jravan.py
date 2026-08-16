@@ -10,7 +10,7 @@ from src.database.schema_ch import CHOKYO_SCHEMA, CHOKYO_SEISEKI_SCHEMA
 from src.database.schema_ks import KISYU_SCHEMA, KISYU_SEISEKI_SCHEMA
 
 
-# JRA-VAN Standard Schema (52 tables)
+# JRA-VAN Standard Schema (53 tables)
 JRAVAN_SCHEMAS: Dict[str, str] = {
     "BAMEIORIGIN": """
         CREATE TABLE IF NOT EXISTS BAMEIORIGIN (
@@ -658,6 +658,25 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             Kumi                           VARCHAR(2)          ,  -- 文字列(2)
             Hyo                            VARCHAR(11)         ,  -- 文字列(11)
             Ninki                          SMALLINT              -- 人気
+        )
+    """,
+    "JOGAIBA": """
+        CREATE TABLE IF NOT EXISTS JOGAIBA (
+            RecordSpec                     CHAR(2)             ,  -- レコード種別ID
+            DataKubun                      CHAR(1)             ,  -- データ区分
+            MakeDate                       DATE                ,  -- YYYYMMDD形式の日付
+            Year                           SMALLINT            ,  -- 年(4桁)
+            MonthDay                       SMALLINT            ,  -- 月日(MMDD)
+            JyoCD                          CHAR(2)             ,  -- 競馬場コード
+            Kaiji                          SMALLINT            ,  -- 開催回
+            Nichiji                        SMALLINT            ,  -- 開催日目
+            RaceNum                        SMALLINT            ,  -- レース番号
+            KettoNum                       VARCHAR(10)         ,  -- 血統登録番号
+            Bamei                          VARCHAR(36)         ,  -- 馬名
+            ShutsubaTohyoJun               SMALLINT            ,  -- 出馬投票受付順番
+            ShussoKubun                    CHAR(1)             ,  -- 出走区分
+            JogaiJotaiKubun                CHAR(1)             ,  -- 除外状態区分
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, KettoNum, ShutsubaTohyoJun)
         )
     """,
     "JYUSYOSIKI": """

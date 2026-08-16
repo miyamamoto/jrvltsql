@@ -207,6 +207,20 @@ jrvltsql は現在、以下 38 種類の JRA レコード種別に対してパ�
 自動変更せず停止します。DBをバックアップして対象テーブルを現行schemaで再作成し、
 `BLDN`のoption 3/4で現行データを再取得してください。
 
+`JG`は現行公式80バイト（Ver.4.1.0で追加、Ver.4.1.1は血統登録番号の初期値を追記した
+のみでlayout不変）を扱い、`DataKubun`は公式どおり0/1のみ、出走区分・除外状態区分は
+公式コードのみを受け付けます。native名モードの保存先は`NL_JG`（互換名`Num`、
+`SyussoKubun`、`JyogaiStateKubun`）、JRA-VAN標準名モードの保存先はSDK構造体
+`JV_JG_JOGAIBA`から採ったproject canonical名`JOGAIBA`（`ShutsubaTohyoJun`、
+`ShussoKubun`、`JogaiJotaiKubun`）です。どちらも公式8列キー（開催キー6列＋
+`KettoNum`＋出馬投票受付順番）で更新するため、同一馬の再投票行は共存し、
+`DataKubun=0`では同じ8列キーの行だけを提供順に物理削除します。
+旧名`WEIGHT_CHANGE`は読み取り側の名前解決互換として残しますが、新規import先には
+使わず、`WEIGHT_CHANGE`しか存在しない標準名DBは行を変更せず停止します。
+旧7列キー（受付順番を含まない）の`NL_JG`/`JOGAIBA`や列の欠けた`JOGAIBA`は、
+再投票行を安全に復元できないため自動`ALTER`せず停止します。DBをバックアップして
+対象テーブルを現行schemaで再作成し、`RACE`で保持期間内の現行データを再取得してください。
+
 `CK`は現行公式6,870バイトの1,729 scalar leafを扱います。PostgreSQLの
 1テーブル列数上限を超えないよう、native名モードでは互換親`NL_CK`と
 `NL_CK_CHAKU` 278行、`NL_CK_RUIKEI` 8行を1物理レコード単位のtransactionで

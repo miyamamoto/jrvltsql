@@ -54,10 +54,12 @@ from src.importer.importer import (
     replace_mining_native_snapshot,
     resolve_standard_storage_table_name,
     resolve_standard_table_name,
+    validate_jg_record,
     verify_bt_storage_schema,
     verify_ch_coupled_table,
     verify_ck_coupled_tables,
     verify_hy_storage_schema,
+    verify_jg_storage_schema,
     verify_ks_coupled_table,
     verify_mining_native_schema,
     verify_rc_storage_schema,
@@ -100,6 +102,7 @@ class OptimizedDataImporter:
         self._verified_mining_native_tables: set[str] = set()
         self._verified_hy_tables: set[str] = set()
         self._verified_bt_tables: set[str] = set()
+        self._verified_jg_tables: set[str] = set()
         self._verified_ck_child_tables: dict[str, tuple[str, str]] = {}
         self._verified_rc_tables: set[str] = set()
         self._verified_ys_tables: set[str] = set()
@@ -320,6 +323,10 @@ class OptimizedDataImporter:
                 if table_name not in self._verified_bt_tables:
                     if verify_bt_storage_schema(self.database, table_name):
                         self._verified_bt_tables.add(table_name)
+                if table_name not in self._verified_jg_tables:
+                    if verify_jg_storage_schema(self.database, table_name):
+                        self._verified_jg_tables.add(table_name)
+                validate_jg_record(record, table_name)
 
                 if table_name not in self._verified_rc_tables:
                     if verify_rc_storage_schema(self.database, table_name):

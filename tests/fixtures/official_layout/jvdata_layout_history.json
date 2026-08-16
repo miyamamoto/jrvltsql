@@ -136,6 +136,25 @@
       "provenance_required": true,
       "reason": "Record length alone cannot distinguish the pre-change physical generation from the current field semantics.",
       "source": "JV-Data4901.xlsx:変更履歴:184-187"
+    },
+    {
+      "record_type": "JG",
+      "announced_date": "2011-09-28",
+      "official_spec_version": "4.1.1",
+      "length_unchanged": true,
+      "layout_unchanged": true,
+      "change_kind": "initial_value_clarification",
+      "current_fields": [
+        {
+          "name": "KettoNum",
+          "start": 28,
+          "width": 10,
+          "initial_value": "0"
+        }
+      ],
+      "provenance_required": false,
+      "reason": "Ver.4.1.1 only appended the initial value 0 for item 10 KettoNum. The 80-byte layout introduced in Ver.4.1.0 is unchanged, so no distinct pre-change byte layout is documented or recorded.",
+      "source": "JV-Data4901.xlsx:変更履歴:110"
     }
   ]
 }

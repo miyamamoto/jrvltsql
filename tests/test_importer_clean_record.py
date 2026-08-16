@@ -9,6 +9,7 @@ class TestCleanRecord:
 
     def setup_method(self):
         from src.importer.importer import DataImporter
+
         mock_db = MagicMock()
         self.importer = DataImporter(mock_db)
 
@@ -31,6 +32,7 @@ class TestCleanRecord:
         record = {"headRecordSpec": "RA", "JyoCD": "01"}
         cleaned = self.importer._clean_record(record)
         assert "headRecordSpec" not in cleaned
+        assert cleaned["RecordSpec"] == "RA"
         assert "JyoCD" in cleaned
 
     def test_removes_underscore_prefixed(self):

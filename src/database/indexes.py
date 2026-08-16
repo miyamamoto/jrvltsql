@@ -108,8 +108,8 @@ INDEXES = {
     ],
 
     "NL_JG": [
-        # 重賞レース (Graded Stakes Race)
-        # 実際のスキーマにはGradeCDが存在しない
+        # 競走馬除外情報 (Excluded Horse); primary key already covers the
+        # eight-part official key, these indexes serve date/venue/race lookups.
         "CREATE INDEX IF NOT EXISTS idx_nl_jg_date ON NL_JG(Year, MonthDay)",
         "CREATE INDEX IF NOT EXISTS idx_nl_jg_venue ON NL_JG(JyoCD)",
         "CREATE INDEX IF NOT EXISTS idx_nl_jg_race ON NL_JG(RaceNum)",

@@ -139,6 +139,22 @@ class TestIndividualParsers:
                 ):
                     mutable[start:end] = b"0" * (end - start)
                 data = bytes(mutable)
+            if record_type == "JG":
+                # JG has fixed-width official key/code domains; a generic
+                # space-filled record is not a valid positive fixture.
+                mutable = bytearray(data)
+                mutable[11:15] = b"2024"
+                mutable[15:19] = b"0601"
+                mutable[19:21] = b"05"
+                mutable[21:23] = b"03"
+                mutable[23:25] = b"08"
+                mutable[25:27] = b"00"
+                mutable[27:37] = b"2024000001"
+                mutable[37:73] = "テスト除外馬".encode("cp932").ljust(36, b" ")
+                mutable[73:76] = b"001"
+                mutable[76:77] = b"1"
+                mutable[77:78] = b"0"
+                data = bytes(mutable)
             if record_type == "TK":
                 mutable = bytearray(data)
                 mutable[11:15] = b"2024"
