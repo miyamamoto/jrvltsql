@@ -212,10 +212,23 @@
   also made automatic discovery or virtual-environment reuse fail. The runtime
   regression now creates a real Windows virtual environment under a path with
   spaces and parentheses, points `PYTHON` to its `python.exe`, and executes a
-  minimal copied quickstart script. The next intermediate Windows run must
-  demonstrate this real-interpreter regression is red before all ten probes
-  are repaired together; the final exact SHA must then pass all three runtime
-  tests.
+  minimal copied quickstart script.
+- Red-first Windows run `31935316683` on intermediate full SHA
+  `8f9de1ea4a72f3a88b233f3adf010870b483bf9a` created that real 32-bit Python
+  3.12 environment successfully, then failed exactly at the launcher version
+  gate with `ERROR: PYTHON must point to Python 3.12 or later`; the compound
+  override and PATH-precedence runtime tests both passed. This is the required
+  pre-implementation red evidence, not an accepted candidate.
+- Replaced the quoted `^<` expression with quoted `<` in all ten probes and
+  extended the existing static launcher regression to reject a reintroduced
+  caret form. Post-repair local evidence is 51 passed with 3 expected
+  non-Windows skips, fatal flake8 zero, workflow YAML parse success, no
+  remaining caret-form batch probe, and clean `git diff --check`. The final
+  exact SHA must execute and pass all three Windows runtime tests before merge.
+- The resumed Fable post-repair review found no blocker. Its two optional
+  evidence-strengthening suggestions were adopted: `daily_sync.bat` is now
+  covered by the caret-form static guard, and the Windows marker includes and
+  verifies the exact selected virtual-environment `sys.executable` path.
 
 ## Audit iteration: fixed-record envelope
 

@@ -16,7 +16,7 @@ if defined PYTHON (
         echo [ERROR] PYTHON must be a full path to python.exe.
         exit /b 1
     )
-    "%PYTHON%" -c "import sys; raise SystemExit(sys.version_info ^< (3, 12))" >nul 2>&1
+    "%PYTHON%" -c "import sys; raise SystemExit(sys.version_info < (3, 12))" >nul 2>&1
     if !errorlevel! neq 0 (
         echo [ERROR] PYTHON must point to Python 3.12 or later.
         exit /b 1

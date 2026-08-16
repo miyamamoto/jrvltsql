@@ -44,7 +44,8 @@ def test_quickstart_accepts_explicit_python_path_with_parentheses(tmp_path):
     batch = checkout / "quickstart.bat"
     batch.write_bytes((ROOT / "quickstart.bat").read_bytes())
     (checkout / "scripts" / "quickstart.py").write_text(
-        'print("REAL_PYTHON_SELECTED")\n',
+        "import sys\n"
+        'print(f"REAL_PYTHON_SELECTED={sys.executable}")\n',
         encoding="utf-8",
     )
 
@@ -58,7 +59,7 @@ def test_quickstart_accepts_explicit_python_path_with_parentheses(tmp_path):
     result = _run_batch(batch, "--yes", "--help", env=env, cwd=checkout)
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "REAL_PYTHON_SELECTED" in result.stdout
+    assert f"REAL_PYTHON_SELECTED={interpreter}".lower() in result.stdout.lower()
 
 
 def test_quickstart_rejects_compound_python_override():

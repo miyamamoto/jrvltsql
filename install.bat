@@ -25,7 +25,7 @@ if defined PYTHON (
         echo   [NG] PYTHON must be a full path to python.exe.
         exit /b 1
     )
-    "%PYTHON%" -c "import sys; raise SystemExit(sys.version_info ^< (3, 12))" >nul 2>&1
+    "%PYTHON%" -c "import sys; raise SystemExit(sys.version_info < (3, 12))" >nul 2>&1
     if !errorlevel! neq 0 (
         echo   [NG] PYTHON must point to Python 3.12 or later.
         exit /b 1
@@ -50,7 +50,7 @@ if !errorlevel!==0 (
 
 py -3 --version >nul 2>&1
 if !errorlevel!==0 (
-    py -3 -c "import sys; raise SystemExit(sys.version_info ^< (3, 12))" >nul 2>&1
+    py -3 -c "import sys; raise SystemExit(sys.version_info < (3, 12))" >nul 2>&1
     if !errorlevel!==0 (
         set "PYTHON_CMD=py -3"
         goto :found_python
@@ -59,7 +59,7 @@ if !errorlevel!==0 (
 
 python --version >nul 2>&1
 if !errorlevel!==0 (
-    python -c "import sys; raise SystemExit(sys.version_info ^< (3, 12))" >nul 2>&1
+    python -c "import sys; raise SystemExit(sys.version_info < (3, 12))" >nul 2>&1
     if !errorlevel!==0 (
         set "PYTHON_CMD=python"
         goto :found_python
@@ -143,7 +143,7 @@ if exist "%INSTALL_DIR%\.venv\Scripts\python.exe" (
 )
 
 if exist "%VENV_DIR%\Scripts\python.exe" (
-    "%VENV_DIR%\Scripts\python.exe" -c "import sys; raise SystemExit(sys.version_info ^< (3, 12))" >nul 2>&1
+    "%VENV_DIR%\Scripts\python.exe" -c "import sys; raise SystemExit(sys.version_info < (3, 12))" >nul 2>&1
     if !errorlevel!==0 (
         "%VENV_DIR%\Scripts\python.exe" -c "import struct; raise SystemExit(struct.calcsize('P') * 8 != int('!PYTHON_BITS!'))" >nul 2>&1
         if !errorlevel!==0 set "VENV_BITS=!PYTHON_BITS!"

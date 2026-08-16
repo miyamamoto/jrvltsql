@@ -314,6 +314,8 @@ class TestQuickstartBatchRoles:
             assert "PYTHON must be a full path to python.exe" in text, launcher.name
             assert "if defined VIRTUAL_ENV" in text, launcher.name
             assert 'set "PYTHON_CMD=%PYTHON%"' not in text, launcher.name
+            assert "sys.version_info ^<" not in text, launcher.name
+            assert "sys.version_info < (3, 12)" in text, launcher.name
 
     def test_launcher_command_assignment_defers_paths_until_execution(self):
         """Parentheses in Program Files paths must not close an IF block early."""
@@ -331,6 +333,8 @@ class TestQuickstartBatchRoles:
             text = launcher.read_text(encoding="utf-8")
             assert "!PYTHON!" in text, launcher.name
             assert '"%PYTHON%""' not in text, launcher.name
+            assert "sys.version_info ^<" not in text, launcher.name
+            assert "sys.version_info < (3, 12)" in text, launcher.name
 
     def test_installers_recreate_virtual_environment_on_bitness_mismatch(self):
         """A selected 32-bit interpreter must not silently reuse a 64-bit venv."""
