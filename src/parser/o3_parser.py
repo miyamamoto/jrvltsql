@@ -32,11 +32,7 @@ class O3Parser:
     @staticmethod
     def decode_field(data: bytes) -> str:
         """バイトデータをデコードして文字列に変換"""
-        try:
-            # cp932でデコード、空白を除去
-            return data.decode("cp932", errors="replace").strip()
-        except Exception:
-            return ""
+        return data.decode("cp932", errors="strict").strip()
 
     def parse(self, data: bytes) -> Optional[List[Dict[str, str]]]:
         """

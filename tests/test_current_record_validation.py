@@ -17,8 +17,8 @@ CURRENT_LENGTHS = {
     "CS": (6829,),
     "DM": (303,),
     "HR": (719,),
-    "H1": (317, 28955),
-    "H6": (78, 102890),
+    "H1": (28955,),
+    "H6": (102890,),
     "HC": (60,),
     "HN": (251,),
     "HS": (200,),
@@ -61,13 +61,7 @@ def test_declared_current_lengths_match_every_factory_parser():
 
     for record_type, expected_lengths in CURRENT_LENGTHS.items():
         parser = factory.get_parser(record_type)
-        if record_type in {"H1", "H6"}:
-            parser_lengths = (
-                parser.RECORD_LENGTH_FLAT,
-                parser.RECORD_LENGTH,
-            )
-        else:
-            parser_lengths = (parser.RECORD_LENGTH,)
+        parser_lengths = (parser.RECORD_LENGTH,)
         assert parser_lengths == expected_lengths, record_type
 
 
@@ -145,3 +139,57 @@ def test_current_record_shape_rejects_wrong_type_delimiter_and_encoding(record_t
             length,
             "encoding",
         )
+
+
+@pytest.mark.parametrize(
+    ("record_type", "repository_only_length"),
+    (("H1", 317), ("H6", 78)),
+)
+def test_provider_parser_rejects_repository_only_flattened_vote_records(
+    record_type,
+    repository_only_length,
+):
+    """Synthetic repository layouts are not provider JV-Data records."""
+
+    parser = ParserFactory().get_parser(record_type)
+    assert _is_rejected(parser, _record(record_type, repository_only_length))
+
+
+@pytest.mark.parametrize(
+    ("record_type", "length"),
+    (
+        ("AV", 78),
+        ("BT", 6889),
+        ("H1", 28955),
+        ("H6", 102890),
+        ("HN", 251),
+        ("HR", 719),
+        ("HS", 200),
+        ("HY", 123),
+        ("JG", 80),
+        ("O1", 962),
+        ("O2", 2042),
+        ("O3", 2654),
+        ("O4", 4031),
+        ("O5", 12293),
+        ("O6", 83285),
+        ("SE", 555),
+        ("SK", 208),
+        ("UM", 1609),
+        ("WF", 7215),
+    ),
+)
+def test_current_record_shape_rejects_cp932_pair_crossing_field_boundary(
+    record_type,
+    length,
+):
+    """A multibyte code point may not span two fixed-width fields."""
+
+    parser = ParserFactory().get_parser(record_type)
+    record = bytearray(_record(record_type, length))
+    # MakeDate ends at byte 11 and the next physical field begins there.
+    # Together these bytes are valid CP932, but neither field slice is valid.
+    record[10:12] = b"\x82\xa0"
+
+    assert bytes(record).decode("cp932", errors="strict")
+    assert _is_rejected(parser, bytes(record))

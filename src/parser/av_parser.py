@@ -14,10 +14,7 @@ class AVParser(BaseParser):
 
     @staticmethod
     def decode_field(data: bytes) -> str:
-        try:
-            return data.decode("cp932", errors="replace").strip()
-        except Exception:
-            return ""
+        return data.decode("cp932", errors="strict").strip()
 
     def parse(self, record: bytes) -> dict:
         """Parse AV by byte offsets because Bamei is a multibyte cp932 field."""

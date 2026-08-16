@@ -164,7 +164,7 @@ class BaseParser(ABC):
 
         # JV-Data positions and lengths are byte-based. Decode only after
         # slicing so CP932 multibyte text cannot shift later field offsets.
-        actual_type = record[:2].decode(ENCODING_JVDATA, errors="replace")
+        actual_type = record[:2].decode(ENCODING_JVDATA, errors="strict")
         if actual_type != self.record_type:
             raise ValueError(
                 f"Record type mismatch: expected {self.record_type}, got {actual_type}"
@@ -176,6 +176,10 @@ class BaseParser(ABC):
             try:
                 value = self._extract_field(record, field_def)
                 result[field_def.name] = value
+            except UnicodeDecodeError:
+                # A fixed-width field boundary may split an otherwise valid
+                # whole-record CP932 sequence. Never persist a partial row.
+                raise
             except Exception as e:
                 logger.warning(
                     f"Failed to parse field {field_def.name}",
@@ -200,7 +204,7 @@ class BaseParser(ABC):
         """
         end = field_def.start + field_def.length
         raw_value = record[field_def.start:end].decode(
-            ENCODING_JVDATA, errors="replace"
+            ENCODING_JVDATA, errors="strict"
         )
 
         # Strip whitespace

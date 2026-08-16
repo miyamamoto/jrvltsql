@@ -148,8 +148,9 @@ def _make_h6_vote_record(
     return bytes(data)
 
 
-def _make_h1_vote_flat_record() -> bytes:
-    data = bytearray(b" " * H1Parser.RECORD_LENGTH_FLAT)
+def _make_repository_h1_vote_flat_record() -> bytes:
+    """Build the former 317-byte repository reconstruction."""
+    data = bytearray(b" " * 317)
     data[0:2] = b"H1"
     data[2:3] = b"4"
     data[3:11] = b"20260419"
@@ -182,8 +183,9 @@ def _make_h1_vote_flat_record() -> bytes:
     return bytes(data)
 
 
-def _make_h6_vote_flat_record() -> bytes:
-    data = bytearray(b" " * H6Parser.RECORD_LENGTH_FLAT)
+def _make_repository_h6_vote_flat_record() -> bytes:
+    """Build the former 78-byte repository reconstruction."""
+    data = bytearray(b" " * 78)
     data[0:2] = b"H6"
     data[2:3] = b"4"
     data[3:11] = b"20260419"
@@ -1185,36 +1187,9 @@ def test_sqlite_standard_h6_direct_parser_revisions_replace_nullable_snapshot(
     )["cnt"] == 0
 
 
-@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
-def test_sqlite_standard_vote_flat_compatibility_layouts(
-    sqlite_db, importer_class
-):
-    _create_jravan_tables(
-        sqlite_db, (*_STANDARD_H1_TABLES, *_STANDARD_H6_TABLES)
-    )
-    importer = importer_class(sqlite_db, use_jravan_schema=True, batch_size=1)
-
-    h1 = H1Parser().parse(_make_h1_vote_flat_record())
-    h6 = H6Parser().parse(_make_h6_vote_flat_record())
-    assert importer.import_records(iter([h1]))["records_failed"] == 0
-    assert importer.import_records(iter([h6]))["records_failed"] == 0
-
-    assert sqlite_db.fetch_one(
-        "SELECT HyoTotal1 AS total1, HyoTotal14 AS total14 FROM HYOSU"
-    ) == {"total1": "00000001000", "total14": "00000001013"}
-    assert sqlite_db.fetch_one(
-        "SELECT TanHyo AS tan_hyo, FukuHyo AS fuku_hyo FROM HYOSU_TANPUKU"
-    ) == {"tan_hyo": "00000000101", "fuku_hyo": "00000000202"}
-    assert sqlite_db.fetch_one(
-        "SELECT UmarenHyo AS umaren_hyo, WideHyo AS wide_hyo "
-        "FROM HYOSU_UMARENWIDE"
-    ) == {"umaren_hyo": "00000000404", "wide_hyo": "00000000505"}
-    assert sqlite_db.fetch_one(
-        "SELECT HyoTotal1 AS total1, HyoTotal2 AS total2 FROM HYOSU2"
-    ) == {"total1": "00000008000", "total2": "00000000008"}
-    assert sqlite_db.fetch_one(
-        "SELECT Kumi AS kumi, Hyo AS hyo FROM HYOSU_SANRENTAN"
-    ) == {"kumi": "010203", "hyo": "00000000808"}
+def test_provider_vote_parsers_reject_repository_flattened_layouts():
+    assert H1Parser().parse(_make_repository_h1_vote_flat_record()) is None
+    assert H6Parser().parse(_make_repository_h6_vote_flat_record()) is None
 
 
 @pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))

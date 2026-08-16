@@ -153,7 +153,7 @@ def make_h1_record_flat(
     tan_uma="01", tan_hyo="00000010000",
     **kwargs,
 ) -> bytes:
-    """Create flat H1 record (317 bytes) matching current parser."""
+    """Create the former 317-byte repository reconstruction for rejection tests."""
     data = bytearray(317)
     data[0:2] = _pad("H1", 2)
     data[2:3] = _pad(data_kubun, 1)

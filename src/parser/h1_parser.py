@@ -27,7 +27,7 @@ H1レコードパーサー: ５．票数１（全掛式）
   Total = 28,955
 """
 
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional
 from uuid import uuid4
 
 from src.parser.base import validate_fixed_record
@@ -62,33 +62,23 @@ class H1Parser:
 
     ５．票数１（全掛式）
     レコード長: 28,955 bytes (JV_H1_HYOSU_ZENKAKE)
-    旧レコード長: 317 bytes (フラット1組合せ分) — 後方互換のためフォールバック対応
-
-    parse() は List[Dict] を返す（フルストラクト時、1組合せ = 1行）。
-    フラットレコード時は単一 Dict を返す（後方互換）。
+    parse() は1組合せを1行へ展開した List[Dict] を返す。
     """
 
     RECORD_TYPE = "H1"
     RECORD_LENGTH = 28955
-    RECORD_LENGTH_FLAT = 317
 
     def __init__(self):
         self.logger = get_logger(__name__)
 
     @staticmethod
     def decode_field(data: bytes) -> str:
-        try:
-            return data.decode("cp932", errors="replace").strip()
-        except Exception:
-            return ""
+        return data.decode("cp932", errors="strict").strip()
 
     @staticmethod
     def decode_fixed_flags(data: bytes) -> str:
         """Decode positional one-byte flags without shifting blank entries."""
-        try:
-            return data.decode("cp932", errors="replace")
-        except Exception:
-            return " " * len(data)
+        return data.decode("cp932", errors="strict")
 
     def _parse_header(self, data: bytes) -> Dict[str, str]:
         """Parse common header fields (first 83 bytes)."""
@@ -113,22 +103,11 @@ class H1Parser:
         h["HenkanDoWaku"] = self.decode_fixed_flags(data[75:83])
         return h
 
-    def parse(self, data: bytes) -> Optional[Union[Dict[str, str], List[Dict[str, str]]]]:
-        """
-        H1レコードをパースする。
-
-        28,955バイトのフルストラクトの場合: List[Dict] を返す（各組合せ1行）。
-        317バイトのフラットレコードの場合: 単一 Dict を返す（後方互換）。
-        """
+    def parse(self, data: bytes) -> Optional[List[Dict[str, str]]]:
+        """Parse one official 28,955-byte H1 physical record."""
         try:
-            validate_fixed_record(
-                data,
-                self.RECORD_TYPE,
-                (self.RECORD_LENGTH_FLAT, self.RECORD_LENGTH),
-            )
-            if len(data) == self.RECORD_LENGTH:
-                return self._parse_full(data)
-            return self._parse_flat(data)
+            validate_fixed_record(data, self.RECORD_TYPE, self.RECORD_LENGTH)
+            return self._parse_full(data)
         except Exception as e:
             self.logger.error(f"H1レコードパース中にエラー: {e}")
             return None
@@ -174,61 +153,3 @@ class H1Parser:
             rows.append(total_row)
 
         return rows if rows else [header]
-
-    def _parse_flat(self, data: bytes) -> Optional[Dict[str, str]]:
-        """Parse legacy 317-byte flat record (single combination)."""
-        result = {}
-        result["RecordSpec"] = self.decode_field(data[0:2])
-        result["DataKubun"] = self.decode_field(data[2:3])
-        result["MakeDate"] = self.decode_field(data[3:11])
-        result["Year"] = self.decode_field(data[11:15])
-        result["MonthDay"] = self.decode_field(data[15:19])
-        result["JyoCD"] = self.decode_field(data[19:21])
-        result["Kaiji"] = self.decode_field(data[21:23])
-        result["Nichiji"] = self.decode_field(data[23:25])
-        result["RaceNum"] = self.decode_field(data[25:27])
-        result["TorokuTosu"] = self.decode_field(data[27:29])
-        result["SyussoTosu"] = self.decode_field(data[29:31])
-        for i in range(7):
-            result[f"HatubaiFlag{i+1}"] = self.decode_field(data[31+i:32+i])
-        result["FukuChakuBaraiKey"] = self.decode_field(data[38:39])
-        result["HenkanUma1"] = self.decode_field(data[39:40])
-        result["HenkanUma2"] = self.decode_field(data[40:41])
-        result["HenkanUma3"] = self.decode_field(data[41:42])
-        result["TanUma"] = self.decode_field(data[42:44])
-        result["TanHyo"] = self.decode_field(data[44:55])
-        result["TanNinki"] = self.decode_field(data[55:57])
-        result["FukuUma"] = self.decode_field(data[57:59])
-        result["FukuHyo"] = self.decode_field(data[59:70])
-        result["FukuNinki"] = self.decode_field(data[70:72])
-        result["WakuKumi"] = self.decode_field(data[72:74])
-        result["WakuHyo"] = self.decode_field(data[74:85])
-        result["WakuNinki"] = self.decode_field(data[85:87])
-        result["UmarenKumi"] = self.decode_field(data[87:91])
-        result["UmarenHyo"] = self.decode_field(data[91:102])
-        result["UmarenNinki"] = self.decode_field(data[102:105])
-        result["WideKumi"] = self.decode_field(data[105:109])
-        result["WideHyo"] = self.decode_field(data[109:120])
-        result["WideNinki"] = self.decode_field(data[120:123])
-        result["UmatanKumi"] = self.decode_field(data[123:127])
-        result["UmatanHyo"] = self.decode_field(data[127:138])
-        result["UmatanNinki"] = self.decode_field(data[138:141])
-        result["SanrenfukuKumi"] = self.decode_field(data[141:147])
-        result["SanrenfukuHyo"] = self.decode_field(data[147:158])
-        result["SanrenfukuNinki"] = self.decode_field(data[158:161])
-        result["TanHyoTotal"] = self.decode_field(data[161:172])
-        result["FukuHyoTotal"] = self.decode_field(data[172:183])
-        result["WakuHyoTotal"] = self.decode_field(data[183:194])
-        result["UmarenHyoTotal"] = self.decode_field(data[194:205])
-        result["WideHyoTotal"] = self.decode_field(data[205:216])
-        result["UmatanHyoTotal"] = self.decode_field(data[216:227])
-        result["SanrenfukuHyoTotal"] = self.decode_field(data[227:238])
-        result["TanHenkanHyoTotal"] = self.decode_field(data[238:249])
-        result["FukuHenkanHyoTotal"] = self.decode_field(data[249:260])
-        result["WakuHenkanHyoTotal"] = self.decode_field(data[260:271])
-        result["UmarenHenkanHyoTotal"] = self.decode_field(data[271:282])
-        result["WideHenkanHyoTotal"] = self.decode_field(data[282:293])
-        result["UmatanHenkanHyoTotal"] = self.decode_field(data[293:304])
-        result["SanrenfukuHenkanHyoTotal"] = self.decode_field(data[304:315])
-        result["RecordDelimiter"] = self.decode_field(data[315:317])
-        return result

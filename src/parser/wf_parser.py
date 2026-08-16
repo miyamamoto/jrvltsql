@@ -22,10 +22,7 @@ class WFParser:
 
     @staticmethod
     def decode_field(data: bytes) -> str:
-        try:
-            return data.decode("cp932", errors="replace").strip()
-        except Exception:
-            return ""
+        return data.decode("cp932", errors="strict").strip()
 
     def parse(self, data: bytes) -> Optional[Dict[str, str]]:
         try:

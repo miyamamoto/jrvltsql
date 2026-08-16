@@ -20,7 +20,7 @@ H6レコードパーサー: ６．票数6（3連単）
 HYO_INFO4: kumi(6) + hyo(11) + ninki(4) = 21
 """
 
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional
 from uuid import uuid4
 
 from src.parser.base import validate_fixed_record
@@ -33,33 +33,23 @@ class H6Parser:
 
     ６．票数6（3連単）
     レコード長: 102,890 bytes (JV_H6_HYOSU_SANRENTAN)
-    旧レコード長: 78 bytes (フラット1組合せ分) — 後方互換のためフォールバック対応
-
-    parse() は List[Dict] を返す（フルストラクト時、1組合せ = 1行）。
-    フラットレコード時は単一 Dict を返す（後方互換）。
+    parse() は1組合せを1行へ展開した List[Dict] を返す。
     """
 
     RECORD_TYPE = "H6"
     RECORD_LENGTH = 102890
-    RECORD_LENGTH_FLAT = 78
 
     def __init__(self):
         self.logger = get_logger(__name__)
 
     @staticmethod
     def decode_field(data: bytes) -> str:
-        try:
-            return data.decode("cp932", errors="replace").strip()
-        except Exception:
-            return ""
+        return data.decode("cp932", errors="strict").strip()
 
     @staticmethod
     def decode_fixed_flags(data: bytes) -> str:
         """Decode positional one-byte flags without shifting blank entries."""
-        try:
-            return data.decode("cp932", errors="replace")
-        except Exception:
-            return " " * len(data)
+        return data.decode("cp932", errors="strict")
 
     def _parse_header(self, data: bytes) -> Dict[str, str]:
         """Parse common header fields (first 50 bytes)."""
@@ -79,22 +69,11 @@ class H6Parser:
         h["HenkanUma"] = self.decode_fixed_flags(data[32:50])
         return h
 
-    def parse(self, data: bytes) -> Optional[Union[Dict[str, str], List[Dict[str, str]]]]:
-        """
-        H6レコードをパースする。
-
-        102,890バイトのフルストラクトの場合: List[Dict] を返す。
-        78バイトのフラットレコードの場合: 単一 Dict を返す（後方互換）。
-        """
+    def parse(self, data: bytes) -> Optional[List[Dict[str, str]]]:
+        """Parse one official 102,890-byte H6 physical record."""
         try:
-            validate_fixed_record(
-                data,
-                self.RECORD_TYPE,
-                (self.RECORD_LENGTH_FLAT, self.RECORD_LENGTH),
-            )
-            if len(data) == self.RECORD_LENGTH:
-                return self._parse_full(data)
-            return self._parse_flat(data)
+            validate_fixed_record(data, self.RECORD_TYPE, self.RECORD_LENGTH)
+            return self._parse_full(data)
         except Exception as e:
             self.logger.error(f"H6レコードパース中にエラー: {e}")
             return None
@@ -129,27 +108,3 @@ class H6Parser:
             rows.append(row)
 
         return rows if rows else [header]
-
-    def _parse_flat(self, data: bytes) -> Optional[Dict[str, str]]:
-        """Parse legacy 78-byte flat record (single combination)."""
-        result = {}
-        result["RecordSpec"] = self.decode_field(data[0:2])
-        result["DataKubun"] = self.decode_field(data[2:3])
-        result["MakeDate"] = self.decode_field(data[3:11])
-        result["Year"] = self.decode_field(data[11:15])
-        result["MonthDay"] = self.decode_field(data[15:19])
-        result["JyoCD"] = self.decode_field(data[19:21])
-        result["Kaiji"] = self.decode_field(data[21:23])
-        result["Nichiji"] = self.decode_field(data[23:25])
-        result["RaceNum"] = self.decode_field(data[25:27])
-        result["TorokuTosu"] = self.decode_field(data[27:29])
-        result["SyussoTosu"] = self.decode_field(data[29:31])
-        result["HatubaiFlag"] = self.decode_field(data[31:32])
-        result["HenkanUma"] = self.decode_field(data[32:33])
-        result["SanrentanKumi"] = self.decode_field(data[33:39])
-        result["SanrentanHyo"] = self.decode_field(data[39:50])
-        result["SanrentanNinki"] = self.decode_field(data[50:54])
-        result["SanrentanHyoTotal"] = self.decode_field(data[54:65])
-        result["SanrentanHenkanHyoTotal"] = self.decode_field(data[65:76])
-        result["RecordDelimiter"] = self.decode_field(data[76:78])
-        return result
