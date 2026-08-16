@@ -46,8 +46,21 @@
 - Four superseded pages still exist under `docs/` and strict MkDocs reports
   them as files outside navigation. Their deletion is explicitly requested.
 
+## Red-first distribution gate evidence
+
+- Added `tests/test_distribution_contents.py` before the checker exists. The
+  test pairs a wheel and sdist, requires both artifact kinds, and supplies
+  explicit negative fixtures for tracked specifications and superseded audit
+  pages in either archive format.
+- The pre-implementation command
+  `python3 -m pytest -q -o addopts='' --basetemp=/home/keiba/scratch/pytest_distribution_red tests/test_distribution_contents.py`
+  failed during collection with
+  `ModuleNotFoundError: No module named 'scripts.check_distribution_contents'`.
+  This proves the new release gate is absent before implementation; the test
+  must not be weakened when the checker is added.
+
 ## Next safe command
 
-- Inventory exact tracked paths and references, then design the smallest
-  packaging-content check. Do not edit release version or publish artifacts in
-  this iteration.
+- Commit the red test/evidence, then implement the smallest archive checker and
+  wire one actual wheel+sdist build into CI. Do not edit release version or
+  publish artifacts in this iteration.
