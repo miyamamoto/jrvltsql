@@ -2,41 +2,31 @@
 # -*- coding: utf-8 -*-
 """Comprehensive integration tests covering all major workflows.
 
-This test suite validates end-to-end integration of:
-- JV-Link wrapper
-- Data fetching (historical + realtime)
-- Parsing (all record types)
-- Database operations (SQLite, DuckDB, PostgreSQL)
-- Import workflow
-- Realtime monitoring
+This deterministic suite validates synthetic fetch, parse, SQLite import, and
+realtime-monitor integration. Authenticated acquisition and live PostgreSQL
+coverage are separate opt-in suites.
 
 Test Categories:
 1. Full pipeline tests (fetch → parse → import → query)
-2. Multi-database consistency tests
-3. Realtime integration tests
-4. Batch processing tests
-5. Transaction handling tests
+2. Realtime integration tests
+3. Batch processing tests
+4. Transaction handling tests
 """
 
-import os
 import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 from pathlib import Path
 
 from src.database.sqlite_handler import SQLiteDatabase
-try:
-    from src.database.postgresql_handler import PostgreSQLDatabase
-except ImportError:
-    PostgreSQLDatabase = None  # type: ignore[misc,assignment]
-from src.database.schema import SchemaManager, SCHEMAS
-from src.parser.factory import ParserFactory, ALL_RECORD_TYPES
+from src.database.schema import SchemaManager
+from src.parser.factory import ParserFactory
 from src.importer.importer import DataImporter
 from src.importer.batch import BatchProcessor
-from src.fetcher.historical import HistoricalFetcher
 from src.fetcher.realtime import RealtimeFetcher
 from src.services.realtime_monitor import RealtimeMonitor
-from src.jvlink.constants import JV_RT_SUCCESS, JV_READ_SUCCESS
+from src.jvlink.constants import JV_RT_SUCCESS
+from tests.fixtures.record_factory import make_hr_record, make_ra_record, make_se_record
 
 
 class TestFullPipelineIntegration(unittest.TestCase):
@@ -63,33 +53,21 @@ class TestFullPipelineIntegration(unittest.TestCase):
         # Create NL_RA table
         self.assertTrue(self.schema_mgr.create_table("NL_RA"))
 
-        # Sample RA record (simplified)
-        sample_ra = (
-            "RA120241201100120240101000000000000000000000000000000000"
-            "東京0110R  1回東京1日1R                          "
-            "新馬    芝    右  外 1600200024121412002412300000000"
-        )
+        record = self.factory.parse(make_ra_record(hondai="統合テスト競走"))
+        self.assertIsNotNone(record)
+        self.assertEqual(record["RecordSpec"], "RA")
 
-        # Parse
-        record = self.factory.parse(sample_ra.encode('cp932'))
+        importer = DataImporter(self.database, batch_size=10)
+        self.assertTrue(importer.import_single_record(record))
 
-        # Parser may return None for incomplete sample data - that's acceptable
-        if record is not None:
-            self.assertEqual(record.get('RecordSpec'), 'RA')
-
-            # Import
-            importer = DataImporter(self.database, batch_size=10)
-            success = importer.import_single_record(record)
-            self.assertTrue(success, "Import should succeed")
-
-            # Query back
-            rows = self.database.fetch_all("SELECT * FROM NL_RA")
-            self.assertGreater(len(rows), 0, "Should have imported data")
+        rows = self.database.fetch_all("SELECT Hondai FROM NL_RA")
+        self.assertEqual(rows, [{"Hondai": "統合テスト競走"}])
 
     def test_batch_processor_workflow(self):
         """Test batch processor with mocked JV-Link."""
         # Create necessary tables
-        self.schema_mgr.create_all_tables()
+        results = self.schema_mgr.create_all_tables()
+        self.assertTrue(all(results.values()))
 
         # Mock JV-Link to avoid actual API calls
         with patch('src.fetcher.base.JVLinkWrapper') as mock_jvlink_class:
@@ -108,121 +86,39 @@ class TestFullPipelineIntegration(unittest.TestCase):
                 batch_size=100
             )
 
-            # Process (will return empty but shouldn't error)
             result = processor.process_date_range(
                 data_spec="RACE",
                 from_date="20240101",
                 to_date="20240101"
             )
 
-            self.assertIn('records_fetched', result)
-            self.assertIn('records_parsed', result)
-            self.assertIn('records_imported', result)
+            self.assertEqual(result['records_fetched'], 0)
+            self.assertEqual(result['records_parsed'], 0)
+            self.assertEqual(result['records_imported'], 0)
+            mock_jvlink.jv_close.assert_called_once_with()
 
     def test_multiple_record_types(self):
         """Test importing multiple different record types."""
         # Create tables for multiple types
-        test_tables = ['NL_RA', 'NL_SE', 'NL_HR', 'NL_YS']
+        test_tables = ['NL_RA', 'NL_SE', 'NL_HR']
         for table_name in test_tables:
-            self.schema_mgr.create_table(table_name)
+            self.assertTrue(self.schema_mgr.create_table(table_name))
 
-        # Sample records for different types
         samples = {
-            'RA': b"RA120241201100120240101...",
-            'SE': b"SE120241201100120240101...",
-            'HR': b"HR120241201100120240101...",
-            'YS': b"YS120241201100120240101...",
+            'RA': make_ra_record(),
+            'SE': make_se_record(),
+            'HR': make_hr_record(),
         }
 
         importer = DataImporter(self.database, batch_size=10)
 
         for record_type, sample in samples.items():
             parsed = self.factory.parse(sample)
-            if parsed:
-                # Should route to correct table
-                success = importer.import_single_record(parsed)
-                # May fail due to incomplete sample data, but shouldn't crash
-                self.assertIsInstance(success, bool)
-
-
-@unittest.skip("DuckDBDatabase not yet implemented")
-class TestMultiDatabaseConsistency(unittest.TestCase):
-    """Test that same operations produce consistent results across databases."""
-
-    def setUp(self):
-        """Set up test databases."""
-        self.temp_dir = tempfile.TemporaryDirectory()
-
-        # SQLite
-        sqlite_path = Path(self.temp_dir.name) / 'test.db'
-        self.sqlite = SQLiteDatabase({'path': str(sqlite_path)})
-        self.sqlite.connect()
-
-        # DuckDB (class not yet implemented)
-        duckdb_path = Path(self.temp_dir.name) / 'test.duckdb'
-        self.duckdb = None  # DuckDBDatabase not yet implemented  # noqa: F841
-        self.duckdb.connect()
-
-        # PostgreSQL (skip if not available)
-        try:
-            pg_config = {
-                'host': os.getenv('POSTGRES_HOST', 'localhost'),
-                'port': int(os.getenv('POSTGRES_PORT', 5432)),
-                'database': os.getenv('POSTGRES_DB', 'jltsql_test'),
-                'user': os.getenv('POSTGRES_USER', 'jltsql'),
-                'password': os.getenv('POSTGRES_PASSWORD', 'jltsql_pass')
-            }
-            self.postgresql = PostgreSQLDatabase(pg_config)
-            self.postgresql.connect()
-            self.pg_available = True
-        except Exception:
-            self.pg_available = False
-
-        self.databases = [self.sqlite, self.duckdb]
-        if self.pg_available:
-            self.databases.append(self.postgresql)
-
-    def tearDown(self):
-        """Clean up."""
-        for db in self.databases:
-            if db._connection:
-                db.disconnect()
-        self.temp_dir.cleanup()
-
-    def test_schema_creation_consistency(self):
-        """Test that all databases create same schemas."""
-        for db in self.databases:
-            schema_mgr = SchemaManager(db)
-            results = schema_mgr.create_all_tables()
-
-            # All databases should create same number of tables
-            successful = sum(1 for success in results.values() if success)
-            failed_tables = [name for name, success in results.items() if not success]
-            self.assertEqual(successful, len(SCHEMAS),
-                f"{db.__class__.__name__}: Should create all tables, failed: {failed_tables}")
-
-    def test_data_storage_consistency(self):
-        """Test that same data is stored consistently across databases."""
-        sample_data = {
-            'レコード種別ID': 'RA',
-            '開催年月日': '20240101',
-            '競馬場コード': '01',
-            'レース番号': '01'
-        }
-
-        for db in self.databases:
-            schema_mgr = SchemaManager(db)
-            schema_mgr.create_table('NL_RA')
-
-            # Insert same data
-            importer = DataImporter(db, batch_size=10)
-            success = importer.import_single_record(sample_data)
-
-            if success:
-                # Query back
-                rows = db.fetch_all("SELECT * FROM NL_RA")
-                self.assertEqual(len(rows), 1,
-                    f"{db.__class__.__name__}: Should have 1 row")
+            self.assertIsNotNone(parsed)
+            self.assertEqual(parsed["RecordSpec"], record_type)
+            self.assertTrue(importer.import_single_record(parsed))
+            rows = self.database.fetch_all(f"SELECT RecordSpec FROM NL_{record_type}")
+            self.assertEqual(rows, [{"RecordSpec": record_type}])
 
 
 class TestRealtimeIntegration(unittest.TestCase):
@@ -251,14 +147,15 @@ class TestRealtimeIntegration(unittest.TestCase):
 
         mock_jvlink.jv_init.return_value = JV_RT_SUCCESS
         mock_jvlink.jv_rt_open.return_value = (JV_RT_SUCCESS, 10)
+        payload = b"RA20240101..."
         mock_jvlink.jv_read.side_effect = [
-            (JV_READ_SUCCESS, b"RA20240101...", "test.txt"),
+            (len(payload), payload, "test.txt"),
             (0, b"", ""),  # End of data
         ]
 
         # Mock parser
         mock_parser = MagicMock()
-        mock_parser.parse.return_value = {'レコード種別ID': 'RA', 'data': 'test'}
+        mock_parser.parse.return_value = {'RecordSpec': 'RA', 'data': 'test'}
         mock_factory_instance = MagicMock()
         mock_factory_instance.parse = mock_parser.parse
         mock_factory.return_value = mock_factory_instance
@@ -267,8 +164,9 @@ class TestRealtimeIntegration(unittest.TestCase):
         fetcher = RealtimeFetcher(sid="TEST")
         records = list(fetcher.fetch(data_spec="0B12", continuous=False))
 
-        # Should have processed records
-        self.assertGreaterEqual(len(records), 0)
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["RecordSpec"], "RA")
+        mock_jvlink.jv_close.assert_called_once_with()
 
     @patch('src.database.schema.SchemaManager')
     @patch('src.services.realtime_monitor.threading.Thread')
@@ -325,38 +223,33 @@ class TestTransactionHandling(unittest.TestCase):
         """Test successful transaction commit."""
         importer = DataImporter(self.database, batch_size=10)
 
-        # Use RecordSpec to get proper field names
-        sample = {
-            'RecordSpec': 'RA',  # Using ASCII field name to avoid encoding issues
-            'year': '2024',
-            'month_day': '0101'
-        }
+        sample = ParserFactory().parse(make_ra_record(hondai="コミット確認"))
+        self.assertIsNotNone(sample)
+        self.assertTrue(importer.import_single_record(sample))
 
-        # Import may or may not succeed with limited fields, but shouldn't crash
-        success = importer.import_single_record(sample)
-
-        # Verify database connection still works
-        rows = self.database.fetch_all("SELECT * FROM NL_RA")
-        # Should return empty or with records depending on whether import succeeded
-        self.assertIsInstance(rows, list)
+        rows = self.database.fetch_all("SELECT Hondai FROM NL_RA")
+        self.assertEqual(rows, [{"Hondai": "コミット確認"}])
 
     def test_batch_import_partial_failure(self):
         """Test batch import with some invalid records."""
         importer = DataImporter(self.database, batch_size=5)
+        factory = ParserFactory()
 
         records = [
-            {'RecordSpec': 'RA', 'year': '2024'},  # May succeed with limited fields
-            {'RecordSpec': 'INVALID'},  # Invalid record type
-            {'RecordSpec': 'RA', 'year': '2024'},  # May succeed with limited fields
+            factory.parse(make_ra_record(race_num="01")),
+            {'RecordSpec': 'INVALID'},
+            factory.parse(make_ra_record(race_num="02")),
         ]
+        self.assertTrue(all(record is not None for record in (records[0], records[2])))
 
         result = importer.import_records(records)
 
-        # Should have statistics (at least the invalid one should fail)
-        self.assertIn('records_imported', result)
-        self.assertIn('records_failed', result)
-        # Invalid record type should fail
-        self.assertGreater(result['records_failed'], 0)
+        self.assertEqual(result['records_imported'], 2)
+        self.assertEqual(result['records_failed'], 1)
+        self.assertEqual(
+            self.database.fetch_one("SELECT COUNT(*) AS count FROM NL_RA")["count"],
+            2,
+        )
 
 
 class TestEdgeCases(unittest.TestCase):
@@ -395,34 +288,33 @@ class TestEdgeCases(unittest.TestCase):
 
         importer = DataImporter(self.database, batch_size=10000)
 
-        # Should not crash with large batch size
+        factory = ParserFactory()
         records = [
-            {'レコード種別ID': 'RA', '開催年月日': f'2024010{i % 10}'}
-            for i in range(100)
+            factory.parse(make_ra_record(race_num=f"{race_num:02d}"))
+            for race_num in range(1, 11)
         ]
+        self.assertTrue(all(record is not None for record in records))
 
         result = importer.import_records(records)
-        self.assertIn('records_imported', result)
+        self.assertEqual(result['records_imported'], 10)
+        self.assertEqual(result['records_failed'], 0)
+        self.assertEqual(
+            self.database.fetch_one("SELECT COUNT(*) AS count FROM NL_RA")["count"],
+            10,
+        )
 
     def test_unicode_handling(self):
         """Test handling of Japanese characters."""
         schema_mgr = SchemaManager(self.database)
         schema_mgr.create_table('NL_RA')
 
-        # Sample with Japanese text
-        sample = {
-            'レコード種別ID': 'RA',
-            '開催年月日': '20240101',
-            'レース名': '東京新聞杯',  # Japanese race name
-            '競馬場名': '東京'  # Japanese venue name
-        }
+        sample = ParserFactory().parse(make_ra_record(hondai="東京新聞杯"))
+        self.assertIsNotNone(sample)
 
         importer = DataImporter(self.database, batch_size=10)
-        success = importer.import_single_record(sample)
-
-        if success:
-            rows = self.database.fetch_all("SELECT * FROM NL_RA")
-            self.assertGreater(len(rows), 0)
+        self.assertTrue(importer.import_single_record(sample))
+        rows = self.database.fetch_all("SELECT Hondai FROM NL_RA")
+        self.assertEqual(rows, [{"Hondai": "東京新聞杯"}])
 
 
 if __name__ == '__main__':

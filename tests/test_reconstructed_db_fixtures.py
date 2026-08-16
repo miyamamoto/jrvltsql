@@ -1,13 +1,12 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""
-JRAパーサーの実データフィクスチャテスト
+"""Parser value regressions reconstructed from stored database rows.
 
-tests/fixtures/jra/ にある実データ（keiba.dbから再構成）を使って
-各パーサーの parse() が正しくフィールドを抽出できることを検証する。
-
-フィクスチャは scripts/extract_fixtures_from_db.py で生成。
-データソース: JV-Link経由で取得したJRA実データ (keiba.db)
+The binary files under ``tests/fixtures/reconstructed_db`` were generated from
+already-parsed SQLite rows by ``scripts/reconstruct_fixtures_from_db.py``.
+They preserve selected stored values for regression testing, but they are not
+byte-preserved provider records and cannot establish physical offsets, lengths,
+initial values, availability, or historical-layout compatibility.
 """
 
 import os
@@ -33,7 +32,9 @@ from src.parser.tm_parser import TMParser
 from src.parser.wf_parser import WFParser
 from src.parser.ys_parser import YSParser
 
-FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures", "jra")
+FIXTURES_DIR = os.path.join(
+    os.path.dirname(__file__), "fixtures", "reconstructed_db"
+)
 
 # Record type -> (ParserClass, record_length)
 PARSER_MAP = {
@@ -86,7 +87,7 @@ def load_fixture_records(record_type, record_length):
     """Load fixture binary file and split into individual records."""
     filepath = os.path.join(FIXTURES_DIR, f"{record_type.lower()}_records.bin")
     if not os.path.exists(filepath):
-        pytest.skip(f"Fixture file not found: {filepath}")
+        raise AssertionError(f"Required reconstructed fixture is missing: {filepath}")
     with open(filepath, "rb") as f:
         data = f.read()
     source_record_length = record_length
@@ -212,8 +213,8 @@ def test_ch_legacy_fixture_preserves_only_the_position_compatible_prefix():
 
 
 @pytest.mark.parametrize("record_type", list(PARSER_MAP.keys()))
-class TestJRAFixtures:
-    """実データフィクスチャを使ったJRAパーサーテスト"""
+class TestReconstructedDBFixtures:
+    """Value regressions backed by reconstructed database-row fixtures."""
 
     def test_parse_returns_expected_shape(self, record_type):
         """parse()が期待する戻り値形状を返すことを確認"""
@@ -272,8 +273,8 @@ class TestJRAFixtures:
             assert result is not None, f"{record_type} record {i}: parse returned None"
 
 
-class TestHCParserRealData:
-    """HCパーサーの坂路調教レイアウト詳細テスト"""
+class TestHCParserReconstructedValues:
+    """HC parser checks for values retained by the reconstruction."""
 
     def setup_method(self):
         self.parser = HCParser()
@@ -335,8 +336,8 @@ class TestHCParserRealData:
         assert converted["LapTime1"] == 16.4
 
 
-class TestRAParserRealData:
-    """RAパーサーの実データ詳細テスト"""
+class TestRAParserReconstructedValues:
+    """RA parser plausibility checks for reconstructed stored values."""
 
     def setup_method(self):
         self.parser = RAParser()
@@ -371,8 +372,8 @@ class TestRAParserRealData:
                 assert kyori.isdigit(), f"Kyori not numeric: {kyori}"
 
 
-class TestSEParserRealData:
-    """SEパーサーの実データ詳細テスト"""
+class TestSEParserReconstructedValues:
+    """SE parser plausibility checks for reconstructed stored values."""
 
     def setup_method(self):
         self.parser = SEParser()
@@ -415,7 +416,9 @@ def test_se_storage_schemas_keep_all_three_opponent_slots():
 def test_sk_current_fixture_file_is_split_at_the_current_record_length(tmp_path, monkeypatch):
     record = b"SK" + b" " * (SKParser.RECORD_LENGTH - 4) + b"\r\n"
     (tmp_path / "sk_records.bin").write_bytes(record * 2)
-    monkeypatch.setattr("tests.test_jra_fixtures.FIXTURES_DIR", str(tmp_path))
+    monkeypatch.setattr(
+        "tests.test_reconstructed_db_fixtures.FIXTURES_DIR", str(tmp_path)
+    )
 
     records = load_fixture_records("SK", PARSER_MAP["SK"][1])
 

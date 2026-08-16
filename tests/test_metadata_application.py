@@ -29,6 +29,10 @@ from src.database.schema_types import (
     get_table_primary_key_columns,
 )
 
+RUN_POSTGRESQL_INTEGRATION = (
+    os.environ.get("JLTSQL_RUN_POSTGRESQL_INTEGRATION") == "1"
+)
+
 
 def test_metadata_primary_key_columns_are_described():
     """Every metadata primary-key column should have a column definition."""
@@ -220,32 +224,15 @@ class TestSQLiteMetadata(unittest.TestCase):
         self.assertEqual(rows[0]['cnt'], 1)
 
 
+@unittest.skipUnless(
+    RUN_POSTGRESQL_INTEGRATION,
+    "set JLTSQL_RUN_POSTGRESQL_INTEGRATION=1 to run live PostgreSQL tests",
+)
 class TestPostgreSQLMetadata(unittest.TestCase):
     """Test metadata application and retrieval for PostgreSQL."""
 
-    @classmethod
-    def setUpClass(cls):
-        """Check if PostgreSQL is available."""
-        try:
-            pg_config = {
-                'host': os.getenv('POSTGRES_HOST', 'localhost'),
-                'port': int(os.getenv('POSTGRES_PORT', 5432)),
-                'database': os.getenv('POSTGRES_DB', 'jltsql_test'),
-                'user': os.getenv('POSTGRES_USER', 'jltsql'),
-                'password': os.getenv('POSTGRES_PASSWORD', 'jltsql_pass')
-            }
-            test_db = PostgreSQLDatabase(pg_config)
-            test_db.connect()
-            test_db.disconnect()
-            cls.pg_available = True
-        except Exception:
-            cls.pg_available = False
-
     def setUp(self):
         """Set up test fixtures."""
-        if not self.pg_available:
-            self.skipTest("PostgreSQL not available")
-
         pg_config = {
             'host': os.getenv('POSTGRES_HOST', 'localhost'),
             'port': int(os.getenv('POSTGRES_PORT', 5432)),
@@ -261,15 +248,10 @@ class TestPostgreSQLMetadata(unittest.TestCase):
 
     def tearDown(self):
         """Clean up."""
-        if self.pg_available:
-            # Drop test tables
-            try:
-                self.database.execute("DROP TABLE IF EXISTS NL_RA CASCADE")
-                self.database.execute("DROP TABLE IF EXISTS NL_SE CASCADE")
-                self.database.execute("DROP TABLE IF EXISTS NL_HR CASCADE")
-            except Exception:
-                pass
-            self.database.disconnect()
+        self.database.execute("DROP TABLE IF EXISTS NL_RA CASCADE")
+        self.database.execute("DROP TABLE IF EXISTS NL_SE CASCADE")
+        self.database.execute("DROP TABLE IF EXISTS NL_HR CASCADE")
+        self.database.disconnect()
 
     def test_postgresql_comment_on_table(self):
         """Test that COMMENT ON TABLE works in PostgreSQL."""
@@ -457,18 +439,13 @@ class TestMetadataRetrieval(unittest.TestCase):
 
         metadata = self.schema_mgr.get_table_metadata('NL_RA')
 
-        # Should return None or empty metadata
-        if metadata is not None:
-            self.assertEqual(len(metadata.get('columns', {})), 0)
+        self.assertEqual(metadata, {"table": None, "columns": {}})
 
     def test_get_metadata_for_nonexistent_table(self):
         """Test retrieving metadata for table that doesn't exist."""
         metadata = self.schema_mgr.get_table_metadata('NONEXISTENT_TABLE')
 
-        # Should return dict with None table and empty columns, or empty dict
-        if metadata:
-            self.assertIsNone(metadata.get('table'))
-            self.assertEqual(metadata.get('columns', {}), {})
+        self.assertEqual(metadata, {"table": None, "columns": {}})
 
     def test_column_descriptions_completeness(self):
         """Test that all columns get descriptions."""
@@ -547,9 +524,7 @@ class TestMCPIntegration(unittest.TestCase):
 
         # Should have Japanese descriptions
         self.assertIsNotNone(metadata['table'])
-        # Verify it contains Japanese characters
-        if metadata['table']:
-            self.assertTrue(any(ord(char) > 127 for char in metadata['table']))
+        self.assertTrue(any(ord(char) > 127 for char in metadata['table']))
 
 
 if __name__ == '__main__':

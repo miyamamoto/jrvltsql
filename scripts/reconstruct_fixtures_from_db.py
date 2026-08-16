@@ -1,12 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""Extract real JRA records from SQLite DB and reconstruct raw cp932 byte fixtures.
+"""Reconstruct synthetic parser-regression fixtures from stored SQLite rows.
 
 Reads parsed field values from keiba.db, places them back at their byte positions
-to reconstruct raw records suitable for parser testing.
+to create synthetic current-shape records. These files are not byte-preserved
+provider records and cannot prove the provider's physical layout.
 
 Usage (on a Windows execution environment):
-    python scripts/extract_fixtures_from_db.py --db data/keiba.db --output tests/fixtures/jra
+    python scripts/reconstruct_fixtures_from_db.py \
+        --db data/keiba.db --output tests/fixtures/reconstructed_db
 """
 
 import argparse
@@ -85,7 +87,7 @@ def reconstruct_record(row, fields, record_length, col_types):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--db', default='data/keiba.db')
-    parser.add_argument('--output', default='tests/fixtures/jra')
+    parser.add_argument('--output', default='tests/fixtures/reconstructed_db')
     parser.add_argument('--count', type=int, default=3)
     args = parser.parse_args()
 

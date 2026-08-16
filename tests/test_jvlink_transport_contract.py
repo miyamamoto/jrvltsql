@@ -18,9 +18,12 @@ from src.jvlink.bridge import JVLinkBridge, JVLinkBridgeError
 from src.jvlink.wrapper import JVLinkError, JVLinkWrapper
 
 
-def test_github_actions_executes_transport_contract_suite():
+def test_github_actions_executes_entire_deterministic_suite():
     workflow = Path(".github/workflows/test.yml").read_text(encoding="utf-8")
-    assert "tests/test_jvlink_transport_contract.py" in workflow
+    assert "pytest tests \\" in workflow
+    assert "--ignore=tests/integration" in workflow
+    assert "--ignore=tests/e2e" in workflow
+    assert "--ignore=tests/test_jvlink_transport_contract.py" not in workflow
 
 
 def _wrapper(com, *, is_open=False):

@@ -218,7 +218,7 @@ class TestHRParser:
 
 
 class TestAllParsersBasic:
-    """Basic tests for all 41 parsers."""
+    """Basic dispatch tests for all 38 current parsers."""
 
     RECORD_LENGTHS = {
         'BN': 477, 'BR': 545, 'CH': 3862, 'DM': 303,
@@ -243,39 +243,6 @@ class TestAllParsersBasic:
         parser = factory.get_parser(record_type)
         assert hasattr(parser, 'parse')
         assert callable(parser.parse)
-
-    @pytest.mark.parametrize("record_type", ALL_RECORD_TYPES)
-    def test_parser_handles_minimal_data(self, factory, record_type):
-        """Parser handles minimal valid data without crashing."""
-        parser = factory.get_parser(record_type)
-        record_len = getattr(parser, 'RECORD_LENGTH', 100)
-
-        # Create minimal data with correct record spec
-        data = record_type.encode('cp932')
-        data += b'1'  # DataKubun
-        data += b'20260101'  # MakeDate
-        data += b' ' * (record_len - len(data) - 2)
-        data += b'\r\n'
-
-        # Should not raise
-        result = parser.parse(data)
-        if result is not None:
-            # Full-struct parsers return List[Dict]
-            if isinstance(result, list):
-                assert len(result) > 0
-                assert result[0].get("RecordSpec") == record_type
-            else:
-                assert result.get("RecordSpec") == record_type
-
-    @pytest.mark.parametrize("record_type", ALL_RECORD_TYPES)
-    def test_parser_handles_empty_data(self, factory, record_type):
-        """Parser handles empty data gracefully (returns None or raises ValueError)."""
-        parser = factory.get_parser(record_type)
-        try:
-            result = parser.parse(b"")
-            # Should return None
-        except (ValueError, IndexError):
-            pass  # Acceptable to raise on empty data
 
     @pytest.mark.parametrize("record_type", ALL_RECORD_TYPES)
     def test_parser_rejects_short_data(self, factory, record_type):

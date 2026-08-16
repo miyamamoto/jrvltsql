@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""全データベース包括テスト
+"""全データベース手動診断
 
-PostgreSQL、SQLiteで全スキーマをテストします。
+PostgreSQL、SQLiteで全スキーマを対話的に診断します。
+pytest/release gateではありません。
 """
 
 import sys
@@ -23,8 +24,6 @@ from src.database.postgresql_handler import PostgreSQLDatabase
 from src.database.schema import SchemaManager, SCHEMAS
 from src.importer.importer import DataImporter
 from src.jvlink.wrapper import JVLinkWrapper
-from dotenv import load_dotenv
-import os
 
 
 class DatabaseTester:
@@ -104,7 +103,6 @@ class DatabaseTester:
         print(f"{self.db_type} データインポートテスト")
         print(f"{'='*70}\n")
 
-        load_dotenv()
         sid = os.getenv("JVLINK_SID", "JLTSQL")
 
         try:

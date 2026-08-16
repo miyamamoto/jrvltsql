@@ -29,25 +29,15 @@ jobs:
         python -m pip install --upgrade pip
         pip install -e ".[dev,postgres]"
 
+    - name: Validate fail-closed test gate
+      run: python scripts/validate_test_gate.py
+
     - name: Run tests
       run: |
-        pytest \
-          tests/test_parsers.py \
-          tests/test_current_record_validation.py \
-          tests/test_parser.py \
-          tests/test_comprehensive_integration.py \
-          tests/test_realtime.py \
-          tests/test_error_scenarios.py \
-          tests/test_jvd_self_repair.py \
-          tests/test_cache_manager.py \
-          tests/test_historical_cache_failures.py \
-          tests/test_batch_processor.py \
-          tests/test_time_series.py \
-          tests/test_distribution_contents.py \
-          tests/test_retired_data_specs.py \
-          tests/test_jvlink_transport_contract.py \
-          tests/test_quickstart_cli.py \
-          tests/unit/test_jvlink_bridge.py \
+        pytest tests \
+          --ignore=tests/integration \
+          --ignore=tests/e2e \
+          -m "not slow" \
           -v --cov=src --cov-report=xml --cov-report=term
 
     - name: Verify distribution contents
@@ -81,7 +71,9 @@ jobs:
       run: python -m pip install pytest
 
     - name: Exercise Windows launcher contracts
-      run: pytest tests/test_windows_launchers.py -v -o addopts=
+      run: >-
+        pytest tests/test_windows_launchers.py -v
+        -o addopts="--strict-markers --strict-config"
 
   performance-test:
     runs-on: ubuntu-latest
@@ -127,15 +119,18 @@ jobs:
         python -m pip install --upgrade pip
         pip install flake8 mypy
 
-    - name: Lint with flake8
-      run: |
-        # Stop the build if there are Python syntax errors or undefined names
-        flake8 src tests --count --select=E9,F63,F7,F82 --show-source --statistics
-        # Exit-zero treats all errors as warnings
-        flake8 src tests --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+    - name: Fatal syntax and undefined-name lint
+      run: >-
+        flake8 src tests scripts/validate_test_gate.py
+        --count --select=E9,F63,F7,F82 --show-source --statistics
+
+    - name: Advisory style debt report
+      run: >-
+        flake8 src tests scripts/validate_test_gate.py
+        --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
       continue-on-error: true
 
-    - name: Type check with mypy
+    - name: Advisory type debt report
       run: |
         mypy src --ignore-missing-imports --no-strict-optional
       continue-on-error: true

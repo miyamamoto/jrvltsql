@@ -246,58 +246,6 @@ class TestIndividualParsers:
         assert record['RecordSpec'] == record_type, \
             f"{record_type}パーサーのRecordSpecの値が正しくない: {record.get('RecordSpec')}"
 
-    @pytest.mark.parametrize("record_type", ALL_RECORD_TYPES)
-    def test_parser_empty_data(self, parser_factory, record_type):
-        """空データでのエラーハンドリングテスト"""
-        parser = parser_factory.get_parser(record_type)
-
-        # 空のバイト列
-        # パーサーによってはNoneを返すか、例外を発生させる可能性がある
-        # 例外が発生する場合はキャッチする
-        try:
-            result = parser.parse(b'')
-            # 結果がNoneまたは空である場合はOK
-        except (ValueError, Exception):
-            # 例外が発生する場合もエラーハンドリングが機能しているとみなす
-            pass
-
-    @pytest.mark.parametrize("record_type", ALL_RECORD_TYPES)
-    def test_parser_short_data(self, parser_factory, record_type):
-        """短すぎるデータでのエラーハンドリングテスト"""
-        parser = parser_factory.get_parser(record_type)
-
-        # 最小限の短いデータ（RecordSpec + DataKubun のみ）
-        short_data = record_type.encode('cp932') + b'1'
-
-        # パーサーによってはNoneを返すか、ログに警告を出す、または例外を発生させる
-        try:
-            result = parser.parse(short_data)
-            # エラーハンドリングが存在することを確認
-            # 完全なパースができない可能性があるが、エラーで停止しない
-        except (ValueError, Exception):
-            # 例外が発生する場合もエラーハンドリングが機能しているとみなす
-            pass
-
-    @pytest.mark.parametrize("record_type", ALL_RECORD_TYPES)
-    def test_parser_wrong_record_type(self, parser_factory, sample_data, record_type):
-        """間違ったレコードタイプでのパース試行"""
-        parser = parser_factory.get_parser(record_type)
-
-        # 他のレコードタイプのデータを取得
-        wrong_type = 'RA' if record_type != 'RA' else 'SE'
-        if wrong_type in sample_data:
-            wrong_data = sample_data[wrong_type]
-
-            # 間違ったレコードタイプでパースを試行
-            # パーサーによってはNoneを返すか、エラーログを出す、または例外を発生させる
-            try:
-                result = parser.parse(wrong_data)
-                # エラーハンドリングを確認
-            except (ValueError, Exception):
-                # 例外が発生する場合もエラーハンドリングが機能しているとみなす
-                pass
-
-
 class TestParserFactoryParseMethod:
     """ParserFactoryのparseメソッドのテスト"""
 

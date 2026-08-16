@@ -13,7 +13,7 @@
 代表的な契約:
 
 - `test_current_record_validation.py`: 全38種の物理レコード境界
-- `test_*_official_contract.py`: 公式offset、配列、schema、保存契約
+- `test_*_official_contract.py`: 実装済み形式の公式offset、配列、schema、保存契約
 - `test_retired_data_specs.py`: 2023年変更前dataspecのfail-closed拒否
 - `test_realtime.py`, `test_expanded_record_storage.py`: 速報の更新・取消状態
 - `test_integration.py`: parsed rowからSQLiteへのrouting、upsert、transaction
@@ -26,12 +26,18 @@
 python -m pytest tests/ -q \
   --ignore=tests/integration/ \
   --ignore=tests/e2e/ \
+  -m "not slow" \
   --basetemp=.pytest-tmp-local
 ```
 
-固定の総テスト数は正本にしません。CIの実行selectionは
-`.github/workflows/test.yml`、releaseで追加する比例テストは対象PRのworklogを
-正本にします。
+固定の総テスト数は正本にしません。CIは上記のdeterministic test tree全体を
+実行します。公式record別契約は現時点では全38形式を網羅しておらず、未実装分を
+ローカルsuiteの緑で代替しません。coverage matrixとreleaseで追加する比例テストは
+対象PRのworklogを正本にします。
+
+`fixtures/reconstructed_db/` は既存DB行から再構成した値回帰用fixtureです。
+providerの保存済みraw byteではないため、offset・長さ・初期値・availabilityの
+公式仕様証拠には数えません。
 
 ## 実接続integration
 

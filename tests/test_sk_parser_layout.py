@@ -3,7 +3,7 @@
 
 import pytest
 
-from scripts.extract_fixtures_from_db import extract_parser_info
+from scripts.reconstruct_fixtures_from_db import extract_parser_info
 from src.database.migration import SchemaMigrationError
 from src.database.schema import SCHEMAS
 from src.database.schema_jravan import JRAVAN_SCHEMAS
@@ -196,7 +196,7 @@ def test_standard_import_refuses_a_legacy_alias_only_database(tmp_path, importer
     assert row_count["count"] == 0
 
 
-def test_fixture_extractor_discovers_every_current_sk_field():
+def test_reconstruction_helper_discovers_every_current_sk_field():
     parser_path = "src/parser/sk_parser.py"
     fields, record_length = extract_parser_info(parser_path)
     discovered = {name: (start, end) for name, start, end in fields}

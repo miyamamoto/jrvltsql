@@ -21,6 +21,14 @@ from pathlib import Path
 
 import pytest
 
+RUN_POSTGRESQL_INTEGRATION = (
+    os.environ.get("JLTSQL_RUN_POSTGRESQL_INTEGRATION") == "1"
+)
+postgresql_integration = pytest.mark.skipif(
+    not RUN_POSTGRESQL_INTEGRATION,
+    reason="set JLTSQL_RUN_POSTGRESQL_INTEGRATION=1 to run live PostgreSQL tests",
+)
+
 # プロジェクトルートをパスに追加
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
@@ -284,6 +292,7 @@ PostgreSQLに接続できませんでした。以下を確認してください:
 """)
 
 
+@postgresql_integration
 def test_connection():
     """PostgreSQL接続テスト"""
     print("=" * 60)
@@ -316,7 +325,7 @@ def test_connection():
         print(f"  [ERROR] ドライバーがインストールされていません: {e}")
         print(f"\n  インストール方法:")
         print('    pip install "psycopg[binary]"')
-        pytest.skip("PostgreSQL driver not available")
+        pytest.fail(f"PostgreSQL integration was requested but no driver is available: {e}")
 
     # 接続テスト
     print(f"\n接続テスト...")
@@ -330,21 +339,23 @@ def test_connection():
     except Exception as e:
         print(f"  [ERROR] 接続失敗: {e}")
         print_installation_guide()
-        pytest.skip("PostgreSQL driver not available")
+        raise
 
     # バージョン確認
     print(f"\nPostgreSQLバージョン...")
     try:
         result = db.fetch_one("SELECT version()")
-        if result:
-            # pg8000はリストを返す、psycopgはdictを返す
-            if isinstance(result, (list, tuple)):
-                version = result[0]
-            else:
-                version = result.get("version", result)
-            print(f"  {version}")
+        assert result
+        # pg8000はリストを返す、psycopgはdictを返す
+        if isinstance(result, (list, tuple)):
+            version = result[0]
+        else:
+            version = result.get("version", result)
+        assert version
+        print(f"  {version}")
     except Exception as e:
         print(f"  [ERROR] バージョン取得失敗: {e}")
+        raise
 
     # テーブル作成テスト
     print(f"\nテーブル作成テスト...")
@@ -364,7 +375,7 @@ def test_connection():
     except Exception as e:
         print(f"  [ERROR] テーブル作成失敗: {e}")
         db.disconnect()
-        pytest.skip("PostgreSQL driver not available")
+        raise
 
     # データ挿入テスト
     print(f"\nデータ挿入テスト...")
@@ -386,7 +397,7 @@ def test_connection():
     except Exception as e:
         print(f"  [ERROR] データ挿入失敗: {e}")
         db.disconnect()
-        pytest.skip("PostgreSQL driver not available")
+        raise
 
     # データ読み取りテスト
     print(f"\nデータ読み取りテスト...")
@@ -397,6 +408,7 @@ def test_connection():
 
         # 全行取得
         rows = db.fetch_all("SELECT name, value FROM test_jltsql ORDER BY value")
+        assert len(rows) == 4
         print(f"  全行数: {len(rows)}")
         for r in rows:
             print(f"    {r}")
@@ -404,7 +416,7 @@ def test_connection():
     except Exception as e:
         print(f"  [ERROR] データ読み取り失敗: {e}")
         db.disconnect()
-        pytest.skip("PostgreSQL driver not available")
+        raise
 
     # クリーンアップ
     print(f"\nクリーンアップ...")
@@ -413,6 +425,7 @@ def test_connection():
         print(f"  [OK] テストテーブル削除完了")
     except Exception as e:
         print(f"  [WARNING] クリーンアップ失敗: {e}")
+        raise
 
     # 切断
     db.disconnect()
@@ -423,6 +436,7 @@ def test_connection():
     print("=" * 60)
 
 
+@postgresql_integration
 def test_schema_creation():
     """スキーマ作成テスト (NL_RAテーブル)"""
     print("\n" + "=" * 60)
@@ -448,8 +462,7 @@ def test_schema_creation():
         # NL_RAスキーマを取得してPostgreSQL用に変換
         sqlite_schema = SCHEMAS.get("NL_RA", "")
         if not sqlite_schema:
-            print("  [ERROR] NL_RAスキーマが見つかりません")
-            pytest.skip("PostgreSQL driver not available")
+            pytest.fail("NL_RA schema is missing")
 
         # SQLiteスキーマをPostgreSQL用に変換
         pg_schema = sqlite_schema
@@ -479,9 +492,10 @@ def test_schema_creation():
         print(f"  [ERROR] スキーマ作成テスト失敗: {e}")
         import traceback
         traceback.print_exc()
-        pytest.skip("PostgreSQL driver not available")
+        raise
 
 
+@postgresql_integration
 def test_table_exists_and_column_lookups_respect_search_path():
     """search_path が非 public スキーマを指す環境で、table_exists() /
     migration.py の既存カラム・主キー取得が正しいテーブルを解決すること。
@@ -502,17 +516,14 @@ def test_table_exists_and_column_lookups_respect_search_path():
         "connect_timeout": 5,
     }
 
-    try:
-        from src.database.postgresql_handler import PostgreSQLDatabase
-        from src.database.migration import (
-            _get_existing_columns,
-            _get_existing_primary_key_columns,
-        )
+    from src.database.postgresql_handler import PostgreSQLDatabase
+    from src.database.migration import (
+        _get_existing_columns,
+        _get_existing_primary_key_columns,
+    )
 
-        db = PostgreSQLDatabase(config)
-        db.connect()
-    except Exception:
-        pytest.skip("PostgreSQL driver not available")
+    db = PostgreSQLDatabase(config)
+    db.connect()
 
     schema_a = "jltsql_test_search_path_a"
     schema_b = "jltsql_test_search_path_b"
@@ -556,17 +567,3 @@ def test_table_exists_and_column_lookups_respect_search_path():
         db.execute("SET search_path TO public")
         db.commit()
         db.disconnect()
-
-
-if __name__ == "__main__":
-    success = True
-
-    # 基本接続テスト
-    if not test_connection():
-        success = False
-    else:
-        # スキーマ作成テスト
-        if not test_schema_creation():
-            success = False
-
-    sys.exit(0 if success else 1)

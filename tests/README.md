@@ -26,6 +26,7 @@ Run the full local suite outside the authenticated Windows-only directories:
 python -m pytest tests/ -q \
   --ignore=tests/integration/ \
   --ignore=tests/e2e/ \
+  -m "not slow" \
   --basetemp=.pytest-tmp-local
 ```
 
@@ -42,9 +43,14 @@ physical envelope: exact supported length, record ID, strict CP932, and CRLF.
 Record-specific tests separately check offsets, repeated arrays, schema,
 upsert/delete behavior, and SQLite/PostgreSQL storage.
 
-The GitHub Actions selection is defined in `.github/workflows/test.yml`. Do not
-copy a fixed test count into documentation; the suite changes with each
-official-contract repair.
+GitHub Actions runs this whole deterministic tree rather than a fixed file
+allowlist. Do not copy a fixed test count into documentation; the suite changes
+with each official-contract repair.
+
+`fixtures/reconstructed_db/` contains records reconstructed from already-parsed
+database rows. Those fixtures test retained values only; they are not provider
+bytes and do not prove physical layout. Record-specific official-contract
+coverage is still incomplete and is tracked as release-blocking work.
 
 ## Authenticated tests
 

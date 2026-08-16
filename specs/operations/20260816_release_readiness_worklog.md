@@ -553,13 +553,61 @@
   label and relocate reconstructed database-row fixtures away from provider or
   official fixture namespaces; and make the workflow collect the whole
   deterministic tree. Production data-contract defects remain out of scope.
+- The test-gate validator and paired controls were committed separately as
+  exact SHA `6bcce2015e1d04e3679d3444a273203b76f83d26`. Against the then-current
+  workflow, `tests/test_ci_test_gate.py` produced the required red result:
+  1 failed and 3 passed. The repository case reported eight configuration
+  errors, including the fixed pytest allowlist, missing integration/slow and
+  warning exclusions, missing self-check, and non-fatal flake8 wiring. The
+  synthetic valid workflow remained green, proving the validator was capable
+  of both rejection and acceptance.
+- The grouped implementation now runs the whole deterministic `tests` tree in
+  CI, excludes only explicit authenticated/E2E and slow boundaries, treats
+  warnings as errors, validates the CI gate before pytest, makes fatal flake8
+  a real job failure, and continues to label repository-wide mypy/style debt
+  advisory. The Windows launcher job keeps strict pytest configuration instead
+  of clearing all configured safeguards.
+- The three boolean-return pseudo-tests were replaced with assertions or moved
+  out of pytest collection. Duplicate parser cases that caught exceptions but
+  asserted nothing were removed. Manual database/download scripts were moved
+  to `scripts/` or `tools/manual/`, and collection no longer requires the
+  undeclared dotenv package. Test imports suppress production auto-logging so
+  collection does not open repository-local log handlers.
+- Reconstructed binary fixtures were moved from `fixtures/jra` to
+  `fixtures/reconstructed_db`; the generator, test module, class names, and
+  documentation now state that they are synthetic records reconstructed from
+  already-parsed database rows and do not prove physical provider layout.
+  A missing fixture is now a failure rather than a skip. Deterministic
+  parse/import tests use complete current synthetic RA/SE/HR records and assert
+  parse, insert counts, readback values, EOF, and close calls instead of
+  succeeding through conditional assertions.
+- Live PostgreSQL cases now require the explicit
+  `JLTSQL_RUN_POSTGRESQL_INTEGRATION=1` opt-in. When opted in, missing drivers,
+  failed connections, schema failures, read failures, and cleanup failures are
+  test failures rather than being mislabeled as an unavailable-driver skip.
+- The first grouped focused run exposed two newly meaningful failures: the
+  realtime mock supplied JVRead EOF (`0`) instead of a positive record length,
+  and one transaction test referenced a nonexistent fixture attribute. Both
+  test defects were corrected; the affected comprehensive/metadata/PostgreSQL
+  selection then passed 41 tests with 7 explicit live-environment skips. The
+  gate controls passed 4 tests and the current workflow self-check reported
+  `TEST GATE PASS`; workflow YAML parsing and `git diff --check` were clean.
+- A first whole-tree warning-strict run after the grouped changes reported one
+  failure, 2,262 passed, 79 explicit environment skips, 14 slow deselections,
+  and 15 subtests. The sole failure was an older transport contract that still
+  required its filename to appear in the former workflow allowlist. It was
+  updated to require whole-tree collection and to prohibit exclusion of that
+  module. This was a test-expectation repair caused by the intentional CI
+  selection change, not a production-code failure. A final whole-tree run is
+  still required on the committed candidate full SHA.
 
 ## Next safe action
 
-- Commit this start-state handoff, then run the recorded Fable session and an
-  independent Codex audit against the clean start SHA. Aggregate findings
-  before changes. For every new or changed gate, first add a minimal negative
-  fixture and prove it fails on the pre-repair implementation, paired with a
-  green control. Stop if the proposed scope requires production parser/schema
-  changes, provider credentials, or the invalid real-data E2E harness; those
-  belong to later iterations.
+- Run fatal lint, distribution, and final whole-tree tests; commit the grouped
+  implementation and bind those checks to its full SHA. Resume Claude Code
+  Fable session `b63e9497-10e4-45d0-bf19-3f369dc6332d` exactly once for a
+  read-only critical review of that clean candidate. Aggregate and repair only
+  actionable iteration-local findings, then open the PR. Stop rather than
+  treating the result as release-ready: the compact official oracle and the
+  known HY, CK, standard-schema, metadata, obsolete-route, and strict fresh E2E
+  blockers remain separate required iterations.
