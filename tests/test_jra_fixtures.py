@@ -64,7 +64,7 @@ PARSER_MAP = {
     "O5": (O5Parser, 68),     # Fixture files use legacy compact format (68 bytes)
     "O6": (O6Parser, 70),     # Fixture files use legacy compact format (70 bytes)
     "RA": (RAParser, RAParser.RECORD_LENGTH),
-    "RC": (RCParser, 241),
+    "RC": (RCParser, RCParser.RECORD_LENGTH),
     "SE": (SEParser, 463),
     "SK": (SKParser, SKParser.RECORD_LENGTH),
     "TK": (TKParser, 727),
@@ -80,6 +80,7 @@ LEGACY_RECONSTRUCTED_LENGTHS = {
     "DM": 48,
     "KS": 772,
     "RA": 856,
+    "RC": 241,
     "SK": 78,
     "TM": 39,
 }
@@ -169,6 +170,16 @@ def load_fixture_records(record_type, record_length):
                 # in a synthetic current record; the full arrays are covered
                 # by test_ra_official_contract.py.
                 chunk = chunk[:713].ljust(RAParser.RECORD_LENGTH - 2, b" ") + b"\r\n"
+            if record_type == "RC" and len(chunk) == 241:
+                # The historical fixture was reconstructed through the former
+                # non-official 241-byte parser. Only bytes 1-93 precede its
+                # shifted course fields; retain that compatible prefix and use
+                # documented numeric initial values for bytes 94-109.
+                current = bytearray(b" " * RCParser.RECORD_LENGTH)
+                current[:93] = chunk[:93]
+                current[93:109] = b"00" + b"0000" + b"00" + b"0" + b"0000" + b"000"
+                current[-2:] = b"\r\n"
+                chunk = bytes(current)
             if record_type == "TM" and len(chunk) == 39:
                 # The historical fixture contains a correct header and first
                 # six-byte horse block reconstructed through the obsolete

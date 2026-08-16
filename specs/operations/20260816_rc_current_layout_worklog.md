@@ -30,6 +30,99 @@
   developer-community corrections must be compared before deciding whether any
   historical/current dual-layout support is legitimate.
 
+## Official and community evidence
+
+- Primary official JV-Data 4.8.0.2 (2023-02-15) and 4.9.0.1 (2024-08-07)
+  both define RC as exactly 501 bytes. In both, bytes 1-109 are the header and
+  record attributes, bytes 110-499 are three 130-byte record-holder blocks, and
+  bytes 500-501 are CR/LF. The 4.9 changes do not list an RC physical-layout
+  transition, so the repository's 241-byte shape is not an official old layout.
+- SDK 5.0.0 independently agrees: `JV_RC_RECORD.SetDataB` allocates 501 bytes,
+  extracts `SyubetuCD` at 94/2, `Kyori` at 96/4, `TrackCD` at 100/2, and loops
+  three times over `RECUMA_INFO` at `110 + 130 * i` before CR/LF at 500/2.
+- The official table marks eleven key fields: `RecInfoKubun`, the six race-ID
+  fields, `TokuNum`, `SyubetuCD`, `Kyori`, and `TrackCD`. `TokuNum` is the G1
+  discriminator; course-record rows retain its documented numeric initial value.
+- The official developer-community archive topic 39 reports a concrete database
+  construction error where G1 (`RecInfoKubun=2`) rows appeared missing. After
+  correcting the code/key handling, both record-identification classes were
+  present (the archived 2022 example reports 1,906 course and 117 G1 rows).
+  This reinforces that a permissive or incomplete database key is data loss, not
+  a harmless schema preference.
+- The format documents `DataKubun=0` as deletion of the identified record. The
+  importer must therefore apply upserts and deletions in provider order and must
+  verify the full primary key before any mutation.
+- The 2005-09-29 Ver.2.1.3 history explicitly says RC's former `DataKubun=1/2`
+  variants were unified to current `1`. Because this was a semantic transition,
+  not a 501-byte physical-layout change, legacy `2` must remain a non-delete
+  upsert while current `1` and deletion `0` retain their documented behavior.
+
+## Decisions before implementation
+
+- Support only the evidenced 501-byte RC physical layout and reject 241-byte,
+  short, long, wrong-type, non-CR/LF, and invalid-CP932 records.
+- Dispatch `DataKubun=0` to keyed deletion and both current `1` and legacy `2`
+  to keyed upsert, preserving compatibility across the documented 2005 change.
+- Flatten all three official holder blocks into the existing one-row RC model;
+  a child table adds no cardinality because the provider caps tied holders at
+  three inside one physical master record.
+- Replace `SyubetuCD_TrackCD` with the separate official fields and require the
+  full eleven-column primary key for both `NL_RC` and standard `RECORD`.
+- Existing tables with the obsolete/keyless primary key are unsafe to migrate
+  additively. Import must fail closed without changing their rows; an operator
+  can perform an explicit data-preserving key migration after collision audit.
+
+## Red-first evidence
+
+- Before changing production code, added `tests/test_rc_official_contract.py`
+  and ran it with Python 3.12:
+  `.venv/bin/python -m pytest -q --no-cov --basetemp=/home/keiba/scratch/20260816_jrvltsql_rc_layout_pytest_red tests/test_rc_official_contract.py`.
+- Result: **20 failed**. Representative failures were
+  `assert RCParser.RECORD_LENGTH == 501` (`241 == 501`), all malformed-boundary
+  cases being accepted, missing `SyubetuCD`/holder-3 schema columns, and
+  `Failed: DID NOT RAISE SchemaMigrationError` for obsolete primary keys.
+  This proves both the new boundary check and the storage-key validator can say
+  “no” on the unchanged implementation.
+
+## Implementation and pre-candidate validation
+
+- Replaced the permissive 241-byte parser with a strict 501-byte parser. It
+  separates `SyubetuCD` and `TrackCD`, reads all three 130-byte holder blocks,
+  and rejects wrong length/type/CRLF and undecodable CP932.
+- Expanded native `NL_RC` and standard `RECORD` to all 49/48 stored parser
+  fields respectively, retained raw four-byte time and three-byte holder weight
+  text, and declared the official eleven-column primary key in both schemas.
+- Added a schema verifier before either importer can mutate RC storage. Additive
+  startup migration cannot safely change primary keys or existing numeric time /
+  weight columns, so old or keyless tables fail closed with their rows intact.
+- Added an ordered RC writer shared by `DataImporter` and
+  `OptimizedDataImporter`: `0` deletes exactly one full official key; current
+  `1` and pre-Ver.2.1.3 legacy `2` upsert. Every row/key is validated before the
+  transaction starts.
+- Updated reconstructed-fixture handling, parser-length compatibility checks,
+  schema metadata/index descriptions, and the tracked compatibility audit. The
+  old 241-byte binary fixture is used only to synthesize a current-shape test
+  record from its compatible 93-byte prefix; it is never accepted by production.
+- Focused SQLite tests after implementation: 392 passed, 1 skipped. A broader
+  metadata/index selection initially found that five newly documented RC key
+  names lacked metadata column definitions; these were added, after which that
+  selection passed 38 with 4 optional PostgreSQL skips.
+- Disposable PostgreSQL 16 validation, both importers and both table-name modes:
+  `tests/test_rc_official_contract.py` passed 22/22, including legacy-2 upsert,
+  exact-key delete, distinct-key coexistence, and third-holder round trip.
+- The first full-suite run exposed three obsolete `tests/test_parsers.py` RC
+  sample assumptions (1,926 bytes and no CR/LF); they were corrected to 501 and
+  strict CR/LF. Two CLI tests also failed only in that full-run process but
+  passed 429/429 when rerun with their parser suite. The complete rerun then
+  passed: **2,241 passed, 63 skipped, 6 subtests passed** (three pre-existing
+  pytest return-value warnings).
+- `scripts/validate_schema_parser.py --all` is not used as RC evidence: its
+  static AST collector cannot expand dynamic f-string fields and reports the
+  same false mismatch class for RC as for existing CH/KS repeated blocks. The
+  executable 49-field gap-free contract and storage round trips are authoritative.
+- Workflow-fatal flake8 selection passed with zero findings; `git diff --check`
+  passed.
+
 ## Plan and gates
 
 - Extract every RC offset, repeated-holder field, key, initial value, and
@@ -50,6 +143,6 @@
 
 ## Next safe command
 
-- Extract the RC table and SDK structure from the local official 4.9.0.1/5.0.0
-  evidence, then compare the native and standard `RECORD` schemas field by
-  field before writing the red contract.
+- Review the complete diff once more, commit the implementation/worklog, then
+  rerun full and PostgreSQL validation against that exact full candidate SHA
+  before pushing a single RC-only PR.

@@ -88,7 +88,7 @@ class TestIndividualParsers:
             'H1': 28955, 'H6': 102890, 'HC': 60, 'HN': 251, 'HR': 719, 'HS': 200, 'HY': 123,
             'JC': 252, 'JG': 251, 'KS': 4173,
             'O1': 962, 'O2': 2042, 'O3': 2654, 'O4': 4031, 'O5': 12293, 'O6': 83285,
-            'RA': 1272, 'RC': 1926, 'SE': 555, 'SK': 208, 'TC': 71, 'TK': 240, 'TM': 141,
+            'RA': 1272, 'RC': 501, 'SE': 555, 'SK': 208, 'TC': 71, 'TK': 240, 'TM': 141,
             'UM': 1609, 'WC': 72, 'WE': 195, 'WF': 7215, 'WH': 847, 'YS': 424,
         }
 
@@ -103,7 +103,7 @@ class TestIndividualParsers:
             data += b' ' * remaining
             # 固定長＋終端CRLFを強制するパーサーは末尾を CRLF にする
             if record_type in (
-                "BN", "BR", "CH", "DM", "HN", "KS", "RA", "SE", "SK", "TM", "UM", "WH"
+                "BN", "BR", "CH", "DM", "HN", "KS", "RA", "RC", "SE", "SK", "TM", "UM", "WH"
             ):
                 data = data[:-2] + b"\r\n"
             if record_type == "DM":

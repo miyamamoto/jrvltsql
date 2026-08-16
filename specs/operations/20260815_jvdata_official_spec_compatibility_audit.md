@@ -96,15 +96,14 @@ race identityと`Umaban`を複合主キーに持ち、馬名、馬体重、増�
 
 ### B-04 現行38種のうち複数が公式配列を途中で切る
 
-明らかに短い公開契約は、WH、SK、RA、BN、BR、CH、DM、TM、KSの修正後、次の3種である。
+明らかに短い公開契約は、WH、SK、RA、BN、BR、CH、DM、TM、KS、RCの修正後、次の2種である。
 
 ```text
-RC 241/501
 TK 727/21657  YS 146/382
 ```
 
 左が実装上の公開長または終端、右が公式現行長。TK の300頭配列、
-RC の3頭分記録、YS の3競走案内などを
+YS の3競走案内などを
 1件または一部だけ取り、公式レコード内部に `RecordDelimiter` を置くものがある。
 これは「不要列を捨てる」だけではなく、繰返し要素のデータ損失と key collision を
 固定する schema になっている。
@@ -295,7 +294,7 @@ skip の扱いに関する実運用上の質問が繰り返されている:
 | HN | 251 | current-shape | currentのみ、全フィールドの現行位置と長さ/CRLFを厳密検査 |
 | SK | 208 | current-shape | currentのみ、14件血統と長さ/CRLFを厳密検査 |
 | CK | 6870 | current-shape / weak gate | byte-first修正済み、旧長の明示拒否なし |
-| RC | 501 | partial | 3頭ブロックを途中で終了、公開長241 |
+| RC | 501 | current-shape | 3頭保持馬を全展開、厳密長/type/CRLF、11項目キーと削除順序を検査 |
 | HC | 60 | current-shape / weak gate | 現行末尾まで |
 | HS | 200 | current-shape / weak gate | 2023 current幅 |
 | HY | 123 | current-shape / weak gate | 現行末尾まで |

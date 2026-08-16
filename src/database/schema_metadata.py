@@ -1177,18 +1177,25 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
     "NL_RC": {
         "table_name": "NL_RC",
         "record_type": "RC",
-        "description": "レースレコード情報",
-        "purpose": "コース別レコードタイムと保持馬情報を格納",
+        "description": "レコードマスタ",
+        "purpose": "コース・G1レコード履歴と最大3頭の同着保持馬情報を格納",
         "columns": [
             {"name": "レコード種別ID", "type": "TEXT", "description": "レコード種別識別子（'RC'）", "example": "RC", "nullable": False},
+            {"name": "レコード識別区分", "type": "TEXT", "description": "1:コース、2:G1", "example": "1", "nullable": False},
+            {"name": "開催年", "type": "INTEGER", "description": "レコード樹立レースの開催年", "example": "2026", "nullable": False},
+            {"name": "開催月日", "type": "INTEGER", "description": "レコード樹立レースの開催月日", "example": "816", "nullable": False},
+            {"name": "特別競走番号", "type": "TEXT", "description": "G1レコードの識別番号", "example": "1234", "nullable": False},
             {"name": "競馬場コード", "type": "TEXT", "description": "競馬場コード", "example": "05", "nullable": False},
+            {"name": "開催回", "type": "INTEGER", "description": "開催回", "example": "3", "nullable": False},
+            {"name": "開催日目", "type": "INTEGER", "description": "開催日目", "example": "8", "nullable": False},
+            {"name": "レース番号", "type": "INTEGER", "description": "レース番号", "example": "11", "nullable": False},
+            {"name": "競走種別コード", "type": "TEXT", "description": "競走年齢・障害区分", "example": "13", "nullable": False},
             {"name": "距離", "type": "TEXT", "description": "コース距離", "example": "2400", "nullable": False},
             {"name": "トラックコード", "type": "TEXT", "description": "トラック種別", "example": "10", "nullable": False},
             {"name": "レコードタイム", "type": "TEXT", "description": "レコードタイム（分秒形式）", "example": "2:22.1", "nullable": True},
-            {"name": "レコード保持馬", "type": "TEXT", "description": "レコード保持馬名", "example": "○○○○", "nullable": True},
-            {"name": "レコード樹立年月日", "type": "TEXT", "description": "レコード樹立日", "example": "20180527", "nullable": True}
+            {"name": "レコード保持馬1～3", "type": "TEXT", "description": "同着を含む全保持馬・調教師・負担重量・騎手", "example": "○○○○", "nullable": True}
         ],
-        "primary_key": ["競馬場コード", "距離", "トラックコード"],
+        "primary_key": ["レコード識別区分", "開催年", "開催月日", "競馬場コード", "開催回", "開催日目", "レース番号", "特別競走番号", "競走種別コード", "距離", "トラックコード"],
         "indexes": ["競馬場コード"]
     },
 

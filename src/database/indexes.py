@@ -154,7 +154,7 @@ INDEXES = {
     ],
 
     "NL_RC": [
-        # レースコード (Race Code)
+        # レコードマスタ (Course/G1 Record Master)
         "CREATE INDEX IF NOT EXISTS idx_nl_rc_date ON NL_RC(Year, MonthDay)",
         "CREATE INDEX IF NOT EXISTS idx_nl_rc_venue ON NL_RC(JyoCD)",
     ],

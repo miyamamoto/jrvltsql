@@ -1175,8 +1175,9 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             TokuNum                        VARCHAR(4)          ,  -- 文字列(4)
             Hondai                         VARCHAR(60)         ,  -- 文字列(60)
             GradeCD                        VARCHAR(1)          ,  -- 文字列(1)
-            SyubetuCD_TrackCD              VARCHAR(4)          ,  -- 文字列(4)
+            SyubetuCD                      VARCHAR(2)          ,  -- 競走種別コード
             Kyori                          SMALLINT            ,  -- 距離(m)
+            TrackCD                        VARCHAR(2)          ,  -- トラックコード
             RecKubun                       VARCHAR(1)          ,  -- 文字列(1)
             RecTime                        VARCHAR(4)          ,  -- 文字列(4)
             TenkoCD                        VARCHAR(1)          ,  -- 文字列(1)
@@ -1208,7 +1209,11 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             RecUmaChokyosiName3            VARCHAR(34)         ,  -- 文字列(34)
             RecUmaFutan3                   VARCHAR(3)          ,  -- 文字列(3)
             RecUmaKisyuCode3               VARCHAR(5)          ,  -- 文字列(5)
-            RecUmaKisyuName3               VARCHAR(34)           -- 文字列(34)
+            RecUmaKisyuName3               VARCHAR(34)         ,  -- 文字列(34)
+            PRIMARY KEY (
+                RecInfoKubun, Year, MonthDay, JyoCD, Kaiji, Nichiji,
+                RaceNum, TokuNum, SyubetuCD, Kyori, TrackCD
+            )
         )
     """,
     "SALE": """

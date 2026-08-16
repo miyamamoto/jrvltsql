@@ -14,12 +14,14 @@ from src.database.migration import SchemaMigrationError
 from src.importer.importer import (
     _PREPARED_CH_SEISEKI_ROWS_KEY,
     _PREPARED_KS_SEISEKI_ROWS_KEY,
+    _RC_STORAGE_TABLES,
     _delete_mining_race_rows,
     _expanded_record_fingerprint,
     _is_mining_race_delete,
     _is_mining_snapshot_follower,
     _mining_native_snapshot_rows,
     _record_type_from_record,
+    apply_rc_batch,
     insert_ch_coupled_batch,
     insert_ks_coupled_batch,
     prepare_ch_coupled_rows,
@@ -29,6 +31,7 @@ from src.importer.importer import (
     verify_ch_coupled_table,
     verify_ks_coupled_table,
     verify_mining_native_schema,
+    verify_rc_storage_schema,
 )
 from src.utils.logger import get_logger
 
@@ -64,6 +67,7 @@ class OptimizedDataImporter:
         self._batches_processed = 0
         self._jravan_tables_ready = not use_jravan_schema
         self._verified_mining_native_tables: set[str] = set()
+        self._verified_rc_tables: set[str] = set()
 
         # Detect database type for optimization
         self.db_type = self._detect_database_type()
@@ -271,6 +275,10 @@ class OptimizedDataImporter:
                     self._records_failed += 1
                     continue
 
+                if table_name not in self._verified_rc_tables:
+                    if verify_rc_storage_schema(self.database, table_name):
+                        self._verified_rc_tables.add(table_name)
+
                 if table_name not in self._verified_mining_native_tables:
                     if verify_mining_native_schema(self.database, record, table_name):
                         self._verified_mining_native_tables.add(table_name)
@@ -435,6 +443,19 @@ class OptimizedDataImporter:
         if not batch:
             return
 
+        if table_name in _RC_STORAGE_TABLES:
+            rows = apply_rc_batch(
+                self.database,
+                table_name,
+                batch,
+                commit_batch=commit_batch,
+                optimized=True,
+            )
+            self._records_imported += rows
+            if rows:
+                self._batches_processed += 1
+            return
+
         prepared_ch = []
         for record in batch:
             coupled = record.get(_PREPARED_CH_SEISEKI_ROWS_KEY)
@@ -515,6 +536,9 @@ class OptimizedDataImporter:
                 # The backend may already have rolled back the caller-owned
                 # transaction. Retrying rows here would create a partial import
                 # and make the reported statistics diverge from persisted data.
+                raise
+
+            if table_name in _RC_STORAGE_TABLES:
                 raise
 
             # Try inserting one by one on batch failure
