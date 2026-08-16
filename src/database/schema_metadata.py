@@ -1165,24 +1165,16 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
         "indexes": ["開催年月日"]
     },
 
-    "NL_WC": {
-        "table_name": "NL_WC",
-        "record_type": "WC",
-        "description": "調教詳細タイム情報",
-        "purpose": "調教時の詳細ラップタイム（200m刻み）を格納",
-        "columns": [
-            {"name": "レコード種別ID", "type": "TEXT", "description": "レコード種別識別子（'WC'）", "example": "WC", "nullable": False},
-            {"name": "トレセン区分", "type": "TEXT", "description": "トレーニングセンター", "example": "1", "nullable": False},
-            {"name": "調教年月日", "type": "TEXT", "description": "調教実施日", "example": "20240525", "nullable": False},
-            {"name": "調教時刻", "type": "TEXT", "description": "調教実施時刻", "example": "0630", "nullable": False},
-            {"name": "血統登録番号", "type": "TEXT", "description": "馬の血統登録番号", "example": "2020123456", "nullable": False},
-            {"name": "2000M通過タイム", "type": "TEXT", "description": "2000m地点通過タイム", "example": "120.5", "nullable": True},
-            {"name": "1800M通過タイム", "type": "TEXT", "description": "1800m地点通過タイム", "example": "108.2", "nullable": True},
-            {"name": "200M通過タイム", "type": "TEXT", "description": "200m地点通過タイム", "example": "12.1", "nullable": True}
-        ],
-        "primary_key": ["トレセン区分", "調教年月日", "調教時刻", "血統登録番号"],
-        "indexes": ["血統登録番号", "調教年月日"]
-    },
+    "NL_WC": _schema_backed_metadata(
+        "NL_WC",
+        record_type="WC",
+        description="ウッドチップ調教詳細タイム情報",
+        purpose=(
+            "トレセン・調教日時・血統登録番号を公式キーとして、200m刻みの"
+            "全ラップタイムを格納"
+        ),
+        indexes=["KettoNum", "ChokyoDate"],
+    ),
 
     "NL_WF": {
         "table_name": "NL_WF",

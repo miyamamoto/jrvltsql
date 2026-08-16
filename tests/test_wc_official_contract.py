@@ -9,15 +9,16 @@ from uuid import uuid4
 import pytest
 
 from src.database.migration import SchemaMigrationError
-from src.database.schema import SCHEMAS
+from src.database.schema import SCHEMAS, SchemaManager
 from src.database.schema_jravan import JRAVAN_SCHEMAS
+from src.database.schema_metadata import TABLE_METADATA
 from src.database.schema_types import (
     get_table_column_types,
     get_table_primary_key_columns,
 )
 from src.database.sqlite_handler import SQLiteDatabase
 from src.database.table_mappings import JLTSQL_TO_JRAVAN, JRAVAN_TO_JLTSQL
-from src.importer.importer import DataImporter
+from src.importer.importer import _STANDARD_FIELD_ALIASES, DataImporter
 from src.importer.importer_optimized import OptimizedDataImporter
 from src.parser.wc_parser import WCParser
 
@@ -189,6 +190,74 @@ def test_wc_layout_is_gap_free_and_reads_every_official_field() -> None:
     assert all(all_nines[name] == "9" * width for name, width in TIME_FIELDS)
 
 
+def test_wc_layout_is_bound_to_the_pinned_sdk_manifest() -> None:
+    manifest = json.loads(
+        Path("tests/fixtures/official_layout/jvdata_sdk500_manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    structures = manifest["structures"]
+    actual = []
+    for field in structures["JV_WC_WOOD"]["fields"]:
+        if field["name"] == "head":
+            for header_field in structures[field["struct"]]["fields"]:
+                actual.append(
+                    (
+                        header_field["name"],
+                        field["start"] + header_field["start"] - 1,
+                        header_field["width"],
+                    )
+                )
+        else:
+            actual.append(
+                (
+                    {
+                        "BabaAround": "BabaMawari",
+                        "HaronTime10": "HaronTime10Total",
+                        "LapTime10": "LapTime_2000M_1800M",
+                        "HaronTime9": "HaronTime9Total",
+                        "LapTime9": "LapTime_1800M_1600M",
+                        "HaronTime8": "HaronTime8Total",
+                        "LapTime8": "LapTime_1600M_1400M",
+                        "HaronTime7": "HaronTime7Total",
+                        "LapTime7": "LapTime_1400M_1200M",
+                        "HaronTime6": "HaronTime6Total",
+                        "LapTime6": "LapTime_1200M_1000M",
+                        "HaronTime5": "HaronTime5Total",
+                        "LapTime5": "LapTime_1000M_800M",
+                        "HaronTime4": "HaronTime4Total",
+                        "LapTime4": "LapTime_800M_600M",
+                        "HaronTime3": "HaronTime3Total",
+                        "LapTime3": "LapTime_600M_400M",
+                        "HaronTime2": "HaronTime2Total",
+                        "LapTime2": "LapTime_400M_200M",
+                        "LapTime1": "LapTime_200M_0M",
+                        "crlf": "RecordDelimiter",
+                    }.get(field["name"], field["name"]),
+                    field["start"],
+                    field["width"],
+                )
+            )
+
+    expected = [(name, position, width) for name, position, width, _ in FIELDS]
+    assert actual == expected
+    assert _STANDARD_FIELD_ALIASES["WOOD"] == STANDARD_ALIASES
+
+
+def test_wc_accepts_real_calendar_dates_and_midnight() -> None:
+    parsed = WCParser().parse(
+        build_record(
+            make_date="20260228",
+            chokyo_date="20240229",
+            chokyo_time="0000",
+        )
+    )
+    assert parsed is not None
+    assert parsed["MakeDate"] == "20260228"
+    assert parsed["ChokyoDate"] == "20240229"
+    assert parsed["ChokyoTime"] == "0000"
+
+
 @pytest.mark.parametrize(
     "record",
     (
@@ -200,9 +269,14 @@ def test_wc_layout_is_gap_free_and_reads_every_official_field() -> None:
         build_record(data_kubun=""),
         build_record(data_kubun="8"),
         build_record(make_date="20A60817"),
+        build_record(make_date="20260230"),
         build_record(tresen_kubun="8"),
         build_record(chokyo_date="202A0816"),
+        build_record(chokyo_date="20260230"),
         build_record(chokyo_time="06A0"),
+        build_record(chokyo_time="1160"),
+        build_record(chokyo_time="2400"),
+        build_record(chokyo_time="9999"),
         build_record(ketto_num="20201A0001"),
         build_record(course="8"),
         build_record(baba_mawari="8"),
@@ -232,6 +306,11 @@ def test_wc_native_and_canonical_schemas_match_the_official_key_and_fields() -> 
     assert get_table_primary_key_columns("WOOD") == OFFICIAL_KEY
     assert JRAVAN_TO_JLTSQL["WOOD"] == "NL_WC"
     assert JLTSQL_TO_JRAVAN["NL_WC"] == "WOOD"
+    metadata = TABLE_METADATA["NL_WC"]
+    assert [(column["name"], column["type"]) for column in metadata["columns"]] == list(
+        get_table_column_types("NL_WC").items()
+    )
+    assert metadata["primary_key"] == OFFICIAL_KEY
 
 
 def test_wc_4701_history_is_documentation_only_not_a_physical_layout() -> None:
@@ -374,6 +453,9 @@ def test_wc_caller_built_rows_are_revalidated_before_mutation(
         legacy_headers["headDataKubun"] = legacy_headers.pop("DataKubun")
         assert importer.import_records(iter([legacy_headers]))["records_imported"] == 1
 
+        blank_reserved = parsed_record(chokyo_time="0633", field_overrides={"reserved": ""})
+        assert importer.import_records(iter([blank_reserved]))["records_imported"] == 1
+
         if standard:
             canonical = _canonical_only(parsed_record(chokyo_time="0632", all_nines=True))
             assert importer.import_records(iter([canonical]))["records_imported"] == 1
@@ -400,11 +482,17 @@ def test_wc_caller_built_rows_are_revalidated_before_mutation(
 
         for field_name, invalid_value in (
             ("TresenKubun", "8"),
+            ("MakeDate", "20260230"),
             ("ChokyoDate", "202A0816"),
+            ("ChokyoDate", "20260230"),
             ("ChokyoTime", "06A0"),
+            ("ChokyoTime", "1160"),
+            ("ChokyoTime", "2400"),
             ("KettoNum", "20201A0001"),
             ("Course", "8"),
             ("BabaMawari", "8"),
+            ("reserved", "OVERSIZED"),
+            ("reserved", "馬"),
             ("HaronTime10Total", "12A0"),
         ):
             invalid = parsed_record()
@@ -516,6 +604,10 @@ def test_wc_single_record_uses_the_same_validation_and_exact_delete(
         missing_status.pop("DataKubun")
         with pytest.raises(SchemaMigrationError):
             importer.import_single_record(missing_status, auto_commit=auto_commit)
+        invalid_time = parsed_record()
+        invalid_time["ChokyoTime"] = "1160"
+        with pytest.raises(SchemaMigrationError):
+            importer.import_single_record(invalid_time, auto_commit=auto_commit)
         assert importer.import_single_record(
             parsed_record(data_kubun="0", course="4", all_nines=True),
             auto_commit=auto_commit,
@@ -526,6 +618,8 @@ def test_wc_single_record_uses_the_same_validation_and_exact_delete(
 def test_wc_postgresql_native_and_standard_key_update_delete(postgresql_db) -> None:
     postgresql_db.execute(SCHEMAS["NL_WC"])
     postgresql_db.execute(JRAVAN_SCHEMAS["WOOD"])
+    postgresql_db.commit()
+    assert SchemaManager(postgresql_db).apply_metadata_to_table("NL_WC") is True
     postgresql_db.commit()
 
     for importer_class in (DataImporter, OptimizedDataImporter):

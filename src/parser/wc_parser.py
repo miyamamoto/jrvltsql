@@ -4,6 +4,8 @@ The layout is pinned to JV-Data 4.9.0.1 and SDK 5.0.0 ``JV_WC_WOOD``.
 JV-Data 4.7.0.1 added availability notes but did not change this layout.
 """
 
+from datetime import date, time
+
 from src.parser.base import BaseParser, FieldDef
 from src.utils.logger import get_logger
 
@@ -57,6 +59,40 @@ class WCParser(BaseParser):
         ):
             raise ValueError(f"WC {name} must be exactly {width} ASCII digits")
 
+    @classmethod
+    def _require_yyyymmdd(cls, name: str, value: object) -> None:
+        """Require an actual Gregorian date, not merely eight digits."""
+        cls._require_ascii_digits(name, value, 8)
+        assert isinstance(value, str)
+        try:
+            date(int(value[:4]), int(value[4:6]), int(value[6:8]))
+        except ValueError as error:
+            raise ValueError(f"WC {name} must be a real yyyymmdd date") from error
+
+    @classmethod
+    def _require_hhmm(cls, name: str, value: object) -> None:
+        """Require a real 24-hour time; payload all-nine rules do not apply."""
+        cls._require_ascii_digits(name, value, 4)
+        assert isinstance(value, str)
+        try:
+            time(int(value[:2]), int(value[2:4]))
+        except ValueError as error:
+            raise ValueError(f"WC {name} must be a real HHMM time") from error
+
+    @staticmethod
+    def _require_cp932_width(name: str, value: object, width: int) -> None:
+        """Require an optional caller value to fit its physical CP932 field."""
+        if value in (None, ""):
+            return
+        if not isinstance(value, str):
+            raise ValueError(f"WC {name} must be text or blank")
+        try:
+            encoded = value.encode("cp932", errors="strict")
+        except UnicodeEncodeError as error:
+            raise ValueError(f"WC {name} must be valid CP932 text") from error
+        if len(encoded) > width:
+            raise ValueError(f"WC {name} must fit in {width} CP932 byte(s)")
+
     def parse(self, record: bytes) -> dict[str, str] | None:
         """Return a validated current WC row, or ``None`` for invalid input."""
         try:
@@ -69,6 +105,9 @@ class WCParser(BaseParser):
                 raise ValueError("WC DataKubun must be 0 or 1")
             for name, width in self.KEY_FIXED_FIELDS:
                 self._require_ascii_digits(name, result[name], width)
+            self._require_yyyymmdd("MakeDate", result["MakeDate"])
+            self._require_yyyymmdd("ChokyoDate", result["ChokyoDate"])
+            self._require_hhmm("ChokyoTime", result["ChokyoTime"])
             if result["TresenKubun"] not in self.TRESEN_KUBUN_VALUES:
                 raise ValueError("WC TresenKubun must be 0 or 1")
 
@@ -80,6 +119,7 @@ class WCParser(BaseParser):
                     raise ValueError("WC Course must be in 0..4")
                 if result["BabaMawari"] not in self.BABA_MAWARI_VALUES:
                     raise ValueError("WC BabaMawari must be 0 or 1")
+                self._require_cp932_width("reserved", result["reserved"], 1)
                 for name, width in self.TIME_FIXED_FIELDS:
                     self._require_ascii_digits(name, result[name], width)
             return result

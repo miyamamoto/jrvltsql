@@ -452,6 +452,12 @@ def validate_wc_record(record: dict, table_name: str) -> bool:
 
     for field_name, width in WCParser.KEY_FIXED_FIELDS:
         require_digits(field_name, width)
+    try:
+        WCParser._require_yyyymmdd("MakeDate", value_for("MakeDate"))
+        WCParser._require_yyyymmdd("ChokyoDate", value_for("ChokyoDate"))
+        WCParser._require_hhmm("ChokyoTime", value_for("ChokyoTime"))
+    except ValueError as error:
+        raise SchemaMigrationError(str(error)) from error
     if value_for("TresenKubun") not in WCParser.TRESEN_KUBUN_VALUES:
         raise SchemaMigrationError("WC record TresenKubun must be 0 or 1")
 
@@ -463,6 +469,10 @@ def validate_wc_record(record: dict, table_name: str) -> bool:
             raise SchemaMigrationError("WC record Course must be in 0..4")
         if value_for("BabaMawari") not in WCParser.BABA_MAWARI_VALUES:
             raise SchemaMigrationError("WC record BabaMawari must be 0 or 1")
+        try:
+            WCParser._require_cp932_width("reserved", value_for("reserved"), 1)
+        except ValueError as error:
+            raise SchemaMigrationError(str(error)) from error
         for field_name, width in WCParser.TIME_FIXED_FIELDS:
             require_digits(field_name, width)
     return True

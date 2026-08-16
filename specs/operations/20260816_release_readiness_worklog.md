@@ -1879,7 +1879,8 @@
   `miyamamoto/jrvltsql`; dedicated worktree:
   `/home/keiba/scratch/20260817_jrvltsql_wc_standard`; branch:
   `agent/wc-standard-storage-20260817`. Minimal scope is WC only: reconcile the
-  current 105-byte official/SDK layout, the historical 4.7.0.1 key correction,
+  current 105-byte official/SDK layout, the documentation-only 4.7.0.1
+  availability/measured-distance clarification,
   native `NL_WC` and canonical `WOOD` ownership, status/delete semantics,
   migration fail-closed behavior, tests, public support documentation, and the
   official-history oracle. JG is already merged; WF remains a separate later
@@ -1928,8 +1929,9 @@
 - The bounded WC repair is implemented without touching another record type's
   storage contract. `WCParser` now validates the exact 105-byte/type/CP932/CRLF
   envelope, explicit status 0/1, four fixed-width key values, current code
-  domains, and all 19 status-1 timing fields while accepting official zero and
-  all-nine sentinels. Native `NL_WC` now uses the official four-part key;
+  domains, and all 19 status-1 timing fields while accepting documented
+  zero-valued measurement fields and all-nine timing sentinels. Native `NL_WC`
+  now uses the official four-part key;
   canonical `WOOD` stores the SDK field names losslessly. Both importers and
   the single-record path share a schema verifier and caller-dictionary
   validator, reject native/canonical alias conflicts, and apply status 0 as an
@@ -1944,10 +1946,10 @@
   lap/total values are provider-valid overflow measurement sentinels, not a
   parse error, in [topic 367](https://developer.jra-van.jp/t/topic/367). A 2023
   report of malformed course/hill/WC data was acknowledged and re-provided by
-  support in [topic 237](https://developer.jra-van.jp/t/topic/237); this supports
-  fail-closed field validation and reacquisition, not accepting malformed
-  values or changing the documented key. These links and the official workbook
-  rows are independent sources for the test contract.
+  support in [topic 237](https://developer.jra-van.jp/t/topic/237); this is the
+  basis for adding semantic date/time rejection and reacquisition rather than
+  accepting malformed values or changing the documented key. These links and
+  the official workbook rows are independent sources for the test contract.
 - The original grouped contract is now green: `43 passed, 1 PostgreSQL opt-in
   skip`. Its first affected selection exposed four old generic fixture
   failures: the shared length test and parser sample used blank WC keys and
@@ -1985,3 +1987,47 @@
   safe action: commit one candidate, confirm exact SHA/clean state, then request
   one independent Codex critical review of that immutable SHA. STOP on any
   worktree drift, failed exact-SHA replay, or data-integrity finding.
+- Exact candidate `4be96d1f3ad1f88c47894c7337ee7dcd28f094d8` was clean and
+  completed an exact-SHA no-coverage full replay (`2553 passed, 109 skipped,
+  14 deselected, 15 subtests passed`) plus a fresh disposable PostgreSQL 16 WC
+  contract (`44 passed`). Independent Codex critical review then returned
+  `P0=0 / P1=2 / P2=2` and NEEDS_CHANGES. The two P1 findings were semantic
+  fail-open acceptance of impossible Gregorian dates, invalid HHMM values such
+  as the provider-confirmed bad `1160`, and over-width caller `reserved`
+  values; and stale Japanese-name `NL_WC` metadata whose physical-column
+  intersection was zero. The P2 findings were lack of a tracked-manifest bind
+  for all WC fields/aliases and the earlier worklog's incorrect description of
+  4.7.0.1 as a key change. No release or fresh-provider claim was made, and the
+  review did not use a 64-bit SDK runtime. The Claude Fable session remains
+  quota-blocked, so this aggregated repair continues under the operator-
+  approved Codex fallback.
+- Before changing production code, the grouped WC contract was extended on
+  exact candidate `4be96d1f3ad1f88c47894c7337ee7dcd28f094d8` and produced the
+  required red result: `14 failed, 36 passed, 1 PostgreSQL opt-in skip`.
+  Failures covered parser calendar/HHMM semantics, both batch importers and
+  native/canonical caller dictionaries, `DataImporter.import_single_record`,
+  over-width/CP932-multibyte `reserved`, and exact metadata column/key drift.
+  The paired valid leap-day/midnight case, all-nine timing payload, blank
+  reserved field, and nonblank status-0 body remained green. The test now also
+  binds all 30 logical parser fields and every WOOD alias to the pinned SDK
+  5.0.0 manifest. The bounded repair shares Gregorian/HHMM/CP932-width helpers
+  between parser and importer validation, keeps status-0 body opaque, and
+  derives `NL_WC` metadata from the executable schema. The same contract is
+  now green (`50 passed, 1 PostgreSQL opt-in skip`). Next safe action: run the
+  affected SQLite/metadata/oracle selection, repeat the real PostgreSQL WC and
+  metadata application paths, then freeze a repaired exact SHA for one
+  aggregated delta review. STOP if any valid official zero/all-nine payload is
+  rejected, metadata application fails, a wrong schema or row mutates, or a
+  non-WC regression appears.
+- The repaired affected selection completed `556 passed, 5 skipped`. A fresh
+  disposable PostgreSQL 16 instance then completed the expanded WC contract
+  `51 passed`, including both importers/native/canonical storage and actual
+  `COMMENT ON COLUMN` metadata application; the container was stopped and
+  removed. `TEST GATE PASS`, `OFFICIAL ORACLE PASS`, compileall, fatal flake8,
+  focused Black/Ruff, strict MkDocs, and `git diff --check` also pass. Full-file
+  Black/Ruff still report the repository's pre-existing formatting/typing debt
+  in `importer.py` and `schema_metadata.py`; no unrelated mechanical rewrite
+  was made. Next safe action: commit the repaired candidate, run one exact-SHA
+  CI-equivalent full suite, and resume the same Codex reviewer for one
+  aggregated delta review. STOP on a failed full test, post-commit drift, or a
+  remaining correctness/data-integrity finding.
