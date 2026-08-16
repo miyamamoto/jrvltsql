@@ -153,7 +153,23 @@
 
 ## Next safe command
 
-- Review the complete diff for schema/writer edge cases, commit the candidate,
-  then run focused, workflow-equivalent, full, PostgreSQL, docs, lint, and
-  clean-tree gates against that exact full SHA. Stop if the full rerun retains
-  any failure.
+- Frozen implementation candidate:
+  `ef8218f7304a311b00c2d9acd574dc0b4841b43d`; base remained
+  `b62ba13be49c07e034acab1b5a5b483e10eb365a` after `git fetch origin master`.
+- Exact-candidate full suite: `2307 passed, 67 skipped, 3 warnings,
+  6 subtests passed`. The prior CLI order-dependent failures did not recur.
+- Exact-candidate workflow-equivalent selection: `864 passed, 2 skipped,
+  3 warnings, 3 subtests passed`.
+- Exact-candidate focused parser/schema/importer/raceday/index selection:
+  `64 passed, 4 skipped`; exact-candidate disposable PostgreSQL 16 contract:
+  `31 passed`. The PostgreSQL container was stopped and removed.
+- Exact-candidate strict MkDocs build passed. It only reported the four existing
+  crawler-audit pages outside `nav`; their separately requested deletion remains
+  outside this implementation iteration.
+- Exact-candidate `compileall`, fatal flake8 (`E9,F63,F7,F82`),
+  `git diff --check`, clean worktree, and absence of disposable TK PostgreSQL
+  containers all passed.
+- Commit this evidence-only worklog update, rerun the final SHA gates required
+  for a documentation-only delta, then push/open the TK PR. Request one native
+  Copilot review, resolve every actionable thread, require green CI and a clean
+  tree, and merge only if the final tree is unchanged from the reviewed tree.
