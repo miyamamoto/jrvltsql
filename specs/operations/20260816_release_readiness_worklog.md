@@ -342,8 +342,10 @@
   independent length/factory parity check plus the focused parser/envelope
   selection passed 483 tests. The complete suite then passed 2,449 tests with
   90 environment-specific skips, 15 subtests, and the same three pre-existing
-  warnings. Fatal flake8 syntax/undefined-name checks reported zero, and mypy
-  with imports skipped reported zero issues in all 38 changed parser files.
+  warnings. This is pre-repair development evidence and is non-gating because
+  that SHA still accepted the repository-only H1/H6 layouts. Fatal flake8
+  syntax/undefined-name checks reported zero, and mypy with imports skipped
+  reported zero issues in all 38 changed parser files.
 - Repository-wide mypy is not green: the direct workflow command reports 79
   pre-existing errors in 20 files. The workflow's `continue-on-error` setting
   makes the job look successful, so neither PR #191 nor this iteration treats
@@ -399,11 +401,15 @@
   parsers and deletes their production parsing branches. Every field decoder
   that previously used replacement mode now decodes its fixed byte slice
   strictly. BaseParser re-raises a field UnicodeDecodeError rather than
-  converting it into a partial row. Historical reconstructed fixtures are no
-  longer labelled or exercised as provider records. Post-repair, the six red
-  cases pass. Extending the same boundary contract to every parser whose
-  decoder changed gives 98 passed in the complete 38-type envelope matrix. The
-  affected parser/fixture/storage selection reports 395 passed with 20
+  converting it into a partial row. The H1/H6 and O1-O6 repository
+  reconstructions are no longer labelled or exercised as provider vote
+  records; the broader reconstructed fixture suite remains a release-blocking
+  follow-up and is not described as repaired here. Post-repair, the six red
+  cases pass. Those replaced cases are three H1 flat tests, two H6 flat tests,
+  and `test_sqlite_standard_vote_flat_compatibility_layouts`. Extending the
+  same boundary contract to every parser whose decoder changed gives 98 passed
+  in the complete 38-type envelope matrix. The affected
+  parser/fixture/storage selection reports 395 passed with 20
   environment-specific skips. A scan of production parsers finds no remaining
   replacement-mode decoder or synthetic flat-length branch.
 - The complete local suite initially stopped during collection because the
@@ -416,14 +422,63 @@
   zero, changed-parser mypy with imported modules skipped reports zero, and
   `git diff --check` is clean. Repo-wide all-rule lint/type debt remains
   distinct from this candidate and is not reported as green.
+- GitHub workflow run `31939754174` on exact SHA
+  `1efd998b66d416bc4c2763deeadaadfe5ff1e386` ran the workflow's configured
+  subset and reported 944 passed. It is distinct from, and does not replace,
+  the local full-suite result of 2,443 passed on the same SHA.
+- Codex independently expanded the official SDK 5.0.0 Python structures into
+  46,985 scalar leaves across 94 structures and 93 repeated templates. All 38
+  current record lengths were gap/overlap free and matched both the executable
+  parser declarations and JV-Data 4.9.0.1. The 4.8.0.2 to 4.9.0.1 physical
+  changes are UM 1577, BR 537, HN 245, SK 178, CK 6864, HS 196, and BT 6887;
+  current N-layout dispatch rejects all seven previous lengths. The source
+  SHA-256 values used were `6a567f10b601115eca350571f36d27d9d28bd2d3835ea72b5bc057711155d4a7`
+  for JV-Data 4.8.0.2, `23bafd375f704acbdd696b5032ac1619f17d47e882587d6e7954b610527a8234`
+  for JV-Data 4.9.0.1, and
+  `8994f985fce846f1b4fcbc3ddf2a5c6394c586a458478346891222b3b61e4ee3`
+  for the SDK structure.
+- A warning-strict local audit on exact SHA
+  `1efd998b66d416bc4c2763deeadaadfe5ff1e386` reported 3 failed, 2,455
+  passed, 84 skipped, and 15 subtests. The three failures are pytest functions
+  returning non-None values in `test_key_generation`,
+  `test_fetch_time_series_method`, and `test_list_methods`; this is explicit
+  red evidence for the separate test-truth iteration, not a green result for
+  this candidate.
+- The official-contract coverage audit found release blockers outside this
+  iteration: HY assigns the official KettoNum/Bamei/Origin spans to the wrong
+  fields and primary key; CK omits 988 of 1,729 official leaves; standard
+  schema routing cannot store BT, CK, HY, JG, WC, or WF; executable metadata
+  disagrees with 70 of 78 schemas; and the current real-data E2E harness has
+  invalid call signatures, no PostgreSQL path, and no fail-closed fresh
+  download/EOF/close evidence. These require separate red-first PRs before a
+  release.
+- Claude Code 2.1.233 resumed the same Fable session
+  `81f08480-ef14-435c-9a06-1f7592fbfac5` after its 20:10 JST reset and
+  independently reviewed clean exact SHA
+  `1efd998b66d416bc4c2763deeadaadfe5ff1e386` read-only. Fable was retained
+  because this fail-closed boundary has high rollback cost. It confirmed the
+  official source hashes, all 38 current lengths, removal of H1 317/H6 78,
+  strict fixed-field CP932 boundaries, and no official-leaf boundary split.
+  It classified two remaining PR-local blockers: the new 38-type gate was not
+  in the workflow whitelist, and the existing oversized-record test also had
+  an invalid delimiter. The grouped follow-up adds the gate to CI and makes
+  the oversized regression retain a valid CRLF delimiter. CK, HY, the six
+  standard-schema routes, the broader CI contract gap, and real-data E2E were
+  independently classified as downstream release blockers.
+- Before the grouped follow-up commit, the current-record and parser selection
+  passed 511 tests with coverage disabled, workflow YAML parsed successfully,
+  fatal flake8 syntax/undefined-name checks reported zero, and
+  `git diff --check` was clean. This is development evidence; the same focused
+  selection and the workflow-configured suite must be bound to the pushed full
+  SHA before merge.
 
 ## Next safe action
 
-- Resume the recorded Fable session after 20:10 JST for one aggregate critical
-  review of the grouped PR #192 correction. Commit and push only after that
-  result is reconciled. Merge only after replacement exact-SHA checks, actionable
-  findings, unresolved threads zero, and clean worktree are complete. Then
-  repair the fail-open real-data
-  E2E harness and remove the obsolete realtime route as separate red-first
-  iterations. Stop before version changes or authenticated acquisition until
-  all audit iterations are merged.
+- Run the focused envelope/parser/workflow checks for the grouped PR #192
+  follow-up, commit and push once, and bind replacement checks to the resulting
+  full SHA. Reply to and resolve both review threads with exact evidence. Merge
+  only when required checks are green, unresolved threads are zero, and the
+  worktree is clean. Start the test-truth and compact official-oracle work from
+  the latest merged `origin/master`; stop before version changes or
+  authenticated acquisition until all release-blocking audit iterations are
+  merged.

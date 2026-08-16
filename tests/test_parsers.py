@@ -478,11 +478,15 @@ class TestParserRobustness:
         """Trailing bytes cannot be accepted as an official fixed record."""
         parser = parser_factory.get_parser(record_type)
 
-        # 長すぎるデータを作成
+        # Keep every other physical-record condition valid so this regression
+        # isolates the oversized length rather than also failing on CRLF.
         data = record_type.encode('cp932')
         data += b'1'
         data += b'20240601'
-        data += b' ' * (parser.RECORD_LENGTH + 100)
+        data += b' ' * (parser.RECORD_LENGTH + 100 - len(data) - 2)
+        data += b'\r\n'
+
+        assert len(data) == parser.RECORD_LENGTH + 100
 
         result = parser.parse(data)
         assert result is None

@@ -156,6 +156,28 @@ def test_provider_parser_rejects_repository_only_flattened_vote_records(
 
 
 @pytest.mark.parametrize(
+    ("record_type", "previous_official_length"),
+    (
+        ("UM", 1577),
+        ("BR", 537),
+        ("HN", 245),
+        ("SK", 178),
+        ("CK", 6864),
+        ("HS", 196),
+        ("BT", 6887),
+    ),
+)
+def test_provider_parser_rejects_4802_lengths_changed_in_4901(
+    record_type,
+    previous_official_length,
+):
+    """Current N-layout dispatch must not accept a previous physical length."""
+
+    parser = ParserFactory().get_parser(record_type)
+    assert _is_rejected(parser, _record(record_type, previous_official_length))
+
+
+@pytest.mark.parametrize(
     ("record_type", "length"),
     (
         ("AV", 78),

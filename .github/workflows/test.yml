@@ -33,6 +33,7 @@ jobs:
       run: |
         pytest \
           tests/test_parsers.py \
+          tests/test_current_record_validation.py \
           tests/test_parser.py \
           tests/test_comprehensive_integration.py \
           tests/test_realtime.py \
