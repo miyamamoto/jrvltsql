@@ -98,7 +98,7 @@ goto :check_result
 echo.
 if !SCRIPT_EXIT_CODE! neq 0 (
     echo ============================================================
-    echo   Setup Failed (Exit Code: !SCRIPT_EXIT_CODE!)
+    echo   Setup Failed ^(Exit Code: !SCRIPT_EXIT_CODE!^)
     echo ============================================================
     echo.
     echo   Please check the error messages above.

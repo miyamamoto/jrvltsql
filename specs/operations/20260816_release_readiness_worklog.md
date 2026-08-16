@@ -229,6 +229,22 @@
   evidence-strengthening suggestions were adopted: `daily_sync.bat` is now
   covered by the caret-form static guard, and the Windows marker includes and
   verifies the exact selected virtual-environment `sys.executable` path.
+- Windows run `31935631538` on full SHA
+  `e33a02cc0093452679cd7c7bba87dc99e2fe7d6a` proved the corrected version
+  probe passed and the exact parenthesized-path venv interpreter executed the
+  marker script. It then exposed a separate existing cmd.exe control-flow
+  defect: an unescaped parenthesized `Setup Failed (Exit Code: ...)` ECHO line
+  prematurely closed the surrounding failure block, so its remaining guidance
+  executed even after a zero exit code. The same literal-ECHO class occurred
+  in three grouped cache messages in `scripts/quickstart.bat`. All four are
+  escaped together and the existing parenthesized-launcher static regression
+  now covers their exact forms. A replacement exact-SHA Windows run must still
+  pass all three tests.
+- A same-session Fable follow-up was attempted for this second cmd.exe finding,
+  but the local Claude subscription session limit had been reached. It produced
+  no review result and is not counted as evidence. The finding and repair are
+  instead grounded in the exact Windows output/control flow plus the focused
+  regression; final release review must resume after the stated service reset.
 
 ## Audit iteration: fixed-record envelope
 

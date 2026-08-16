@@ -336,6 +336,15 @@ class TestQuickstartBatchRoles:
             assert "sys.version_info ^<" not in text, launcher.name
             assert "sys.version_info < (3, 12)" in text, launcher.name
 
+        quickstart = (root / "quickstart.bat").read_text(encoding="utf-8")
+        cache_quickstart = (root / "scripts/quickstart.bat").read_text(
+            encoding="utf-8"
+        )
+        assert "Setup Failed ^(Exit Code: !SCRIPT_EXIT_CODE!^)" in quickstart
+        assert "S3 ^(S3 -> local^)" in cache_quickstart
+        assert "configured ^(optional^)" in cache_quickstart
+        assert "S3 ^(local -> S3^)" in cache_quickstart
+
     def test_installers_recreate_virtual_environment_on_bitness_mismatch(self):
         """A selected 32-bit interpreter must not silently reuse a 64-bit venv."""
         root = Path(__file__).resolve().parents[1]

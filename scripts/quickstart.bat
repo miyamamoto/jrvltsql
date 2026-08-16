@@ -63,14 +63,14 @@ if exist "config\s3_credentials.enc" (
     echo.
     set /p DOWNLOAD_S3="  Download cache from S3 now? [Y/n]: "
     if /i not "!DOWNLOAD_S3!"=="n" (
-        echo   Syncing cache from S3 (S3 -> local)...
+        echo   Syncing cache from S3 ^(S3 -> local^)...
         %PYTHON_CMD% -m src.cli.main cache sync --download
         if errorlevel 1 (
             echo   [WARN] S3 download failed or skipped. Continuing with JV-Link fetch.
         )
     )
 ) else (
-    echo   No S3 credentials configured (optional).
+    echo   No S3 credentials configured ^(optional^).
     echo   To enable S3 cache sync, run: jltsql cache s3-setup
 )
 echo.
@@ -119,7 +119,7 @@ REM ============================================================
 if exist "config\s3_credentials.enc" (
     set /p UPLOAD_S3="  Upload updated cache to S3? [Y/n]: "
     if /i not "!UPLOAD_S3!"=="n" (
-        echo   Uploading cache to S3 (local -> S3)...
+        echo   Uploading cache to S3 ^(local -> S3^)...
         %PYTHON_CMD% -m src.cli.main cache sync --upload
         if errorlevel 1 (
             echo   [WARN] S3 upload failed. Cache remains local.
