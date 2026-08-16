@@ -23,6 +23,7 @@ HYO_INFO4: kumi(6) + hyo(11) + ninki(4) = 21
 from typing import Dict, List, Optional, Union
 from uuid import uuid4
 
+from src.parser.base import validate_fixed_record
 from src.utils.logger import get_logger
 
 
@@ -86,15 +87,14 @@ class H6Parser:
         78バイトのフラットレコードの場合: 単一 Dict を返す（後方互換）。
         """
         try:
-            if len(data) >= self.RECORD_LENGTH:
+            validate_fixed_record(
+                data,
+                self.RECORD_TYPE,
+                (self.RECORD_LENGTH_FLAT, self.RECORD_LENGTH),
+            )
+            if len(data) == self.RECORD_LENGTH:
                 return self._parse_full(data)
-            elif len(data) >= self.RECORD_LENGTH_FLAT:
-                return self._parse_flat(data)
-            else:
-                self.logger.warning(
-                    f"H6レコード長不足: actual={len(data)}"
-                )
-                return self._parse_flat(data)
+            return self._parse_flat(data)
         except Exception as e:
             self.logger.error(f"H6レコードパース中にエラー: {e}")
             return None

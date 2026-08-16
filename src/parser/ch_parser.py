@@ -2,6 +2,7 @@
 """CH trainer-master parser for the official current 3862-byte layout."""
 
 from src.jvlink.constants import ENCODING_JVDATA
+from src.parser.base import validate_fixed_record
 from src.utils.logger import get_logger
 
 
@@ -82,6 +83,7 @@ class CHParser:
     def parse(self, data: bytes) -> dict[str, object] | None:
         """Return the 42-field header plus three private normalized result rows."""
         try:
+            validate_fixed_record(data, self.RECORD_TYPE, self.RECORD_LENGTH)
             if len(data) != self.RECORD_LENGTH:
                 self.logger.warning(f"CHレコード長不正: expected={self.RECORD_LENGTH}, actual={len(data)}")
                 return None

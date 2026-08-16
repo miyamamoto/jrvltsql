@@ -16,6 +16,7 @@ class TCParser(BaseParser):
     """
 
     record_type = "TC"
+    RECORD_LENGTH = 45
 
     def _define_fields(self) -> List[FieldDef]:
         """Define field positions calculated from schema.

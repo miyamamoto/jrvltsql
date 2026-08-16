@@ -88,7 +88,7 @@ def build_record() -> bytes:
         buf += _field("", 6) + _num(0, 9) + _field("", 4)
 
     # レコード区切
-    buf += _field("", 2)
+    buf += b"\r\n"
     assert len(buf) == 719, len(buf)
     return buf
 

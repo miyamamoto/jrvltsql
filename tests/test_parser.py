@@ -229,7 +229,8 @@ class TestHRParser:
         record += b"03"  # idKaiji
         record += b"08"  # idNichiji
         record += b"11"  # idRaceNum
-        record += b" " * (719 - len(record))  # Pad to correct length
+        record += b" " * (719 - len(record) - 2)
+        record += b"\r\n"
 
         data = parser.parse(record)
         assert data is not None

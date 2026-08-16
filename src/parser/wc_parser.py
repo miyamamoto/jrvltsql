@@ -16,6 +16,7 @@ class WCParser(BaseParser):
     """
 
     record_type = "WC"
+    RECORD_LENGTH = 105
 
     def _define_fields(self) -> List[FieldDef]:
         """Define field positions with JRA-VAN standard names and types.

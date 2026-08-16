@@ -2,6 +2,7 @@
 """Parser for the official 382-byte JV-Data YS schedule record."""
 
 from src.jvlink.constants import ENCODING_JVDATA
+from src.parser.base import validate_fixed_record
 from src.utils.logger import get_logger
 
 
@@ -37,6 +38,7 @@ class YSParser:
     def parse(self, data: bytes) -> dict[str, str] | None:
         """Return every official YS field, or ``None`` for invalid framing."""
         try:
+            validate_fixed_record(data, self.RECORD_TYPE, self.RECORD_LENGTH)
             if len(data) != self.RECORD_LENGTH:
                 self.logger.warning(
                     "YS record length mismatch: "

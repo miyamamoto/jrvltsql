@@ -261,7 +261,8 @@ class TestAllParsersBasic:
         data = record_type.encode('cp932')
         data += b'1'  # DataKubun
         data += b'20260101'  # MakeDate
-        data += b' ' * (record_len - len(data))
+        data += b' ' * (record_len - len(data) - 2)
+        data += b'\r\n'
 
         # Should not raise
         result = parser.parse(data)
@@ -284,15 +285,15 @@ class TestAllParsersBasic:
             pass  # Acceptable to raise on empty data
 
     @pytest.mark.parametrize("record_type", ALL_RECORD_TYPES)
-    def test_parser_handles_short_data(self, factory, record_type):
-        """Parser handles data shorter than expected without crashing."""
+    def test_parser_rejects_short_data(self, factory, record_type):
+        """A short physical record is rejected rather than partially parsed."""
         parser = factory.get_parser(record_type)
         short_data = record_type.encode('cp932') + b'1' + b'20260101'
-        # Should not raise (may return None or partial data)
         try:
             result = parser.parse(short_data)
-        except Exception:
-            pytest.fail(f"{record_type} parser crashed on short data")
+        except ValueError:
+            return
+        assert result is None
 
 
 def test_wf_parser_preserves_all_official_payout_slots(factory):

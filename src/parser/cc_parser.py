@@ -16,6 +16,7 @@ class CCParser(BaseParser):
     """
 
     record_type = "CC"
+    RECORD_LENGTH = 50
 
     def _define_fields(self) -> List[FieldDef]:
         """Define field positions calculated from schema.

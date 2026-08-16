@@ -30,8 +30,8 @@ H1レコードパーサー: ５．票数１（全掛式）
 from typing import Dict, List, Optional, Union
 from uuid import uuid4
 
+from src.parser.base import validate_fixed_record
 from src.utils.logger import get_logger
-
 
 # Array definitions: (bet_type, start_0indexed, count, entry_size, kumi_len, ninki_len)
 # HYO_INFO1: kumi(2) + hyo(11) + ninki(2) = 15
@@ -121,16 +121,14 @@ class H1Parser:
         317バイトのフラットレコードの場合: 単一 Dict を返す（後方互換）。
         """
         try:
-            if len(data) >= self.RECORD_LENGTH:
+            validate_fixed_record(
+                data,
+                self.RECORD_TYPE,
+                (self.RECORD_LENGTH_FLAT, self.RECORD_LENGTH),
+            )
+            if len(data) == self.RECORD_LENGTH:
                 return self._parse_full(data)
-            elif len(data) >= self.RECORD_LENGTH_FLAT:
-                return self._parse_flat(data)
-            else:
-                self.logger.warning(
-                    f"H1レコード長不足: actual={len(data)}"
-                )
-                # Try flat parse anyway for short records
-                return self._parse_flat(data)
+            return self._parse_flat(data)
         except Exception as e:
             self.logger.error(f"H1レコードパース中にエラー: {e}")
             return None

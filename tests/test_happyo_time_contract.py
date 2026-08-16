@@ -23,9 +23,9 @@ from src.parser.we_parser import WEParser
 CHANGE_RECORDS = (
     ("AV", AVParser, 78, 27, "TORIKESI_JYOGAI", "NL_AV"),
     ("WE", WEParser, 42, 25, "TENKO_BABA", "NL_WE"),
-    ("CC", CCParser, 48, 27, "COURSE_CHANGE", "NL_CC"),
-    ("JC", JCParser, 159, 27, "KISYU_CHANGE", "NL_JC"),
-    ("TC", TCParser, 43, 27, "HASSOU_JIKOKU_CHANGE", "NL_TC"),
+    ("CC", CCParser, 50, 27, "COURSE_CHANGE", "NL_CC"),
+    ("JC", JCParser, 161, 27, "KISYU_CHANGE", "NL_JC"),
+    ("TC", TCParser, 45, 27, "HASSOU_JIKOKU_CHANGE", "NL_TC"),
 )
 
 STANDARD_MDHM_TABLES = (
@@ -61,6 +61,7 @@ def _record(record_type: str, length: int, announcement_start: int) -> bytes:
         record[35:37] = b"01"
     if record_type == "WE":
         record[33:40] = b"1123456"
+    record[-2:] = b"\r\n"
     return bytes(record)
 
 

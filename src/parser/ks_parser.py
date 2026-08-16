@@ -2,6 +2,7 @@
 """KS jockey-master parser for the official current 4,173-byte layout."""
 
 from src.jvlink.constants import ENCODING_JVDATA
+from src.parser.base import validate_fixed_record
 from src.utils.logger import get_logger
 
 
@@ -124,6 +125,7 @@ class KSParser:
     def parse(self, data: bytes) -> dict[str, object] | None:
         """Return the complete header plus three private normalized result rows."""
         try:
+            validate_fixed_record(data, self.RECORD_TYPE, self.RECORD_LENGTH)
             if len(data) != self.RECORD_LENGTH:
                 self.logger.warning(
                     f"KSレコード長不正: expected={self.RECORD_LENGTH}, actual={len(data)}"

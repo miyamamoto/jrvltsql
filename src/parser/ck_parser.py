@@ -16,6 +16,7 @@ class CKParser(BaseParser):
     """
 
     record_type = "CK"
+    RECORD_LENGTH = 6870
 
     def _define_fields(self) -> List[FieldDef]:
         """Define field positions with JRA-VAN standard names and types.

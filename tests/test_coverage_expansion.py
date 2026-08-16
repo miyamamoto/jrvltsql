@@ -266,25 +266,19 @@ class TestH1FlatParsing:
 class TestH1EdgeCases:
     """Edge cases for H1 parser."""
 
-    def test_empty_data_returns_flat_parse(self):
-        """Empty bytes falls back to flat parse (returns dict with empty fields)."""
-        result = H1Parser().parse(b"")
-        # H1 parser attempts flat parse as fallback even for empty data
-        assert isinstance(result, dict)
-        assert result["RecordSpec"] == ""
+    def test_empty_data_is_rejected(self):
+        """Empty bytes are not a physical flat record."""
+        assert H1Parser().parse(b"") is None
 
-    def test_short_data_attempts_flat_parse(self):
-        """Data shorter than flat format still attempts flat parse."""
+    def test_short_data_is_rejected(self):
+        """Data shorter than the declared flat layout is rejected."""
         data = b"H1" + b" " * 50
-        result = H1Parser().parse(data)
-        assert isinstance(result, dict)
-        assert result["RecordSpec"] == "H1"
+        assert H1Parser().parse(data) is None
 
-    def test_between_flat_and_full_size(self):
-        """Data between flat (317) and full (28955) is parsed as flat."""
+    def test_between_flat_and_full_size_is_rejected(self):
+        """An unknown length between the two declared layouts is rejected."""
         data = b"H1" + b" " * 500
-        result = H1Parser().parse(data)
-        assert isinstance(result, dict)
+        assert H1Parser().parse(data) is None
 
     def test_all_empty_entries_returns_header_only(self):
         """Full struct with no valid entries returns header row."""
@@ -414,22 +408,19 @@ class TestH6FlatParsing:
 class TestH6EdgeCases:
     """Edge cases for H6 parser."""
 
-    def test_empty_data_returns_dict(self):
-        """Empty bytes returns dict with empty fields (flat parse fallback)."""
-        result = H6Parser().parse(b"")
-        assert isinstance(result, dict)
+    def test_empty_data_is_rejected(self):
+        """Empty bytes are not a physical flat record."""
+        assert H6Parser().parse(b"") is None
 
     def test_short_data(self):
-        """Short data attempts flat parse."""
+        """Short data is rejected."""
         data = b"H6" + b" " * 50
-        result = H6Parser().parse(data)
-        assert result is None or isinstance(result, dict)
+        assert H6Parser().parse(data) is None
 
     def test_between_flat_and_full(self):
-        """Data between 78 and 102890 bytes is parsed as flat."""
+        """Data between 78 and 102890 bytes is rejected."""
         data = b"H6" + b" " * 200
-        result = H6Parser().parse(data)
-        assert result is None or isinstance(result, dict)
+        assert H6Parser().parse(data) is None
 
 
 

@@ -16,6 +16,7 @@ class JCParser(BaseParser):
     """
 
     record_type = "JC"
+    RECORD_LENGTH = 161
 
     def _define_fields(self) -> List[FieldDef]:
         """Define field positions calculated from schema.

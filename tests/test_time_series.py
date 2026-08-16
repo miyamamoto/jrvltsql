@@ -395,7 +395,14 @@ def test_odds_parsers_expand_combination_arrays():
     assert rows_o1[-1]["Umaban"] == "0"
 
     header_combo = b"O2" + b"4" + b"20260419" + b"2026" + b"0419" + b"06" + b"03" + b"08" + b"11" + b"04191549" + b"18" + b"18" + b"7"
-    raw_o2 = header_combo + b"0102000123010" + b"0103000456020" + b"0" * 13 + b"00000000999\r\n"
+    raw_o2 = (
+        header_combo
+        + b"0102000123010"
+        + b"0103000456020"
+        + b"0" * (151 * 13)
+        + b"00000000999\r\n"
+    )
+    assert len(raw_o2) == O2Parser.RECORD_LENGTH
     rows_o2 = O2Parser().parse(raw_o2)
     assert [(r["Kumi"], r["Odds"], r["Ninki"], r["Vote"]) for r in rows_o2] == [
         ("0102", "000123", "010", "00000000999"),
@@ -448,7 +455,14 @@ def test_odds_parsers_expand_combination_arrays():
     ]
 
     header_o6 = b"O6" + header_combo[2:]
-    raw_o6 = header_o6 + b"01020300012340010" + b"01020400045670020" + b"0" * 17 + b"00000000888\r\n"
+    raw_o6 = (
+        header_o6
+        + b"01020300012340010"
+        + b"01020400045670020"
+        + b"0" * (4894 * 17)
+        + b"00000000888\r\n"
+    )
+    assert len(raw_o6) == O6Parser.RECORD_LENGTH
     rows_o6 = O6Parser().parse(raw_o6)
     assert [(r["Kumi"], r["Odds"], r["Ninki"], r["Vote"]) for r in rows_o6] == [
         ("010203", "0001234", "0010", "00000000888"),

@@ -7,6 +7,8 @@ UMレコードパーサー: １３．競走馬マスタ
 """
 
 from typing import Dict, Optional
+
+from src.parser.base import validate_fixed_record
 from src.utils.logger import get_logger
 
 
@@ -49,6 +51,7 @@ class UMParser:
             フィールド名をキーとした辞書、エラー時はNone
         """
         try:
+            validate_fixed_record(data, self.RECORD_TYPE, self.RECORD_LENGTH)
             # レコード長チェック: 仕様の 1609 バイト以外は取り込まない。
             # 旧仕様（1577 バイト等）のレコードを部分抽出すると、壊れた
             # 競走馬マスタ行が黙って保存されてしまうため None で拒否する。

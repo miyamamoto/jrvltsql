@@ -2,6 +2,7 @@
 """Parser for the official 501-byte JV-Data RC record master."""
 
 from src.jvlink.constants import ENCODING_JVDATA
+from src.parser.base import validate_fixed_record
 from src.utils.logger import get_logger
 
 
@@ -34,6 +35,7 @@ class RCParser:
     def parse(self, data: bytes) -> dict[str, str] | None:
         """Return every official RC field, or ``None`` for invalid framing."""
         try:
+            validate_fixed_record(data, self.RECORD_TYPE, self.RECORD_LENGTH)
             if len(data) != self.RECORD_LENGTH:
                 self.logger.warning(
                     "RC record length mismatch: "

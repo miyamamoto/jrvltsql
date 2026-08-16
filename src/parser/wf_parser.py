@@ -5,6 +5,7 @@
 import json
 from typing import Dict, Optional
 
+from src.parser.base import validate_fixed_record
 from src.utils.logger import get_logger
 
 
@@ -27,13 +28,8 @@ class WFParser:
             return ""
 
     def parse(self, data: bytes) -> Optional[Dict[str, str]]:
-        if len(data) < self.RECORD_LENGTH:
-            self.logger.warning(
-                f"WFレコード長不足: expected={self.RECORD_LENGTH}, actual={len(data)}"
-            )
-            return None
-
         try:
+            validate_fixed_record(data, self.RECORD_TYPE, self.RECORD_LENGTH)
             result = {
                 "RecordSpec": self.decode_field(data[0:2]),
                 "DataKubun": self.decode_field(data[2:3]),

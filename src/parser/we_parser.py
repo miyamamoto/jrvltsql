@@ -16,6 +16,7 @@ class WEParser(BaseParser):
     """
 
     record_type = "WE"
+    RECORD_LENGTH = 42
 
     def _define_fields(self) -> List[FieldDef]:
         """Define field positions with JRA-VAN standard names and types.
