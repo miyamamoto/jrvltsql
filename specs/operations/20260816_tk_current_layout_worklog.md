@@ -102,6 +102,15 @@
 
 ## Next safe command
 
-- Commit this reconciliation evidence. Then add one consolidated contract test
-  against unchanged production code and record the expected red result before
-  implementing the parser/schema/writer batch.
+- Added `tests/test_tk_official_contract.py` before production changes. The
+  pre-implementation command
+  `python3 -m pytest -q -o addopts='' --basetemp=/home/keiba/scratch/pytest_tk_red tests/test_tk_official_contract.py`
+  completed with `25 failed, 2 passed, 2 skipped`. Representative red evidence
+  was `assert TKParser.RECORD_LENGTH == 21657` (`727 == 21657`); the remaining
+  failures covered strict rejection, normalized schemas/mapping, coupled
+  replacement/deletion, importer revalidation, single-record atomicity, and
+  obsolete-schema fail-closed behavior. The two green cases were unrelated
+  standard-import isolation and the two skips were credential-gated PostgreSQL
+  variants.
+- Implement the parser/schema/coupled-writer batch once, then rerun this same
+  contract. Do not weaken the red assertions to fit the old layout.
