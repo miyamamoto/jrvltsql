@@ -1283,8 +1283,45 @@
   compileall, fatal Ruff `E9/F63/F7/F82`, full Ruff and Black for all new Python
   files, and `git diff --check` also pass. Existing all-rule Ruff debt in large
   legacy modules is unchanged and is not substituted for the fatal gate.
-- Current changes remain uncommitted, so these results are not final candidate
-  evidence. Next safe action: run strict documentation/distribution/mechanical
-  checks, commit the aggregated CK iteration once, and execute one exact-SHA
-  local gate plus one independent critical review. STOP if any leaf/cardinality,
-  schema fail-closed, transaction, documentation, or exact-SHA check regresses.
+- The aggregated implementation was committed as full SHA
+  `a0604c99e5379ecc18d5edc1032ce1a9cf9c72f6` on unchanged base
+  `9f2e2a8c11bae32a76e850c13aa0e112f75ef67a`. Its clean exact-SHA full local
+  suite completed `2428 passed, 92 skipped, 15 subtests passed in 52.97s`;
+  exact disposable PostgreSQL CK verification completed `42 passed in 2.24s`.
+  The test-gate self-check, fatal/new-file lint and formatting, compileall,
+  strict docs, two-artifact distribution-content gate, and clean-tree check all
+  passed on that SHA. The exact PostgreSQL schema/container was removed.
+- An independent read-only Codex critical review used `gpt-5.6-sol` at `xhigh`
+  on clean exact SHA `a0604c99e5379ecc18d5edc1032ce1a9cf9c72f6` and returned
+  `NEEDS_CHANGES` with two P1 fail-open findings. It independently confirmed
+  all CK offsets/repeats against the pinned manifest and found no other parser,
+  storage, history, ordering, marker, or standard-mode blocker.
+- P1 one: PostgreSQL constraint verification checked expected names and token
+  substrings rather than constraint semantics. Keeping every token inside
+  `CHECK (TRUE OR (...))` let both importers accept the malformed schema and
+  replace the preserved parent. The added real PostgreSQL regression failed for
+  both importers with `DID NOT RAISE SchemaMigrationError`; the review's
+  independent fake-catalog probe also accepted a weak count-shape OR check.
+  The repair now verifies constraint type and validated state, the exact ordered
+  local/remote FK columns, referenced parent, and cascade action. It evaluates
+  PostgreSQL's actual `pg_get_expr` CHECK expressions against the full 278 valid
+  CK dimensions plus metric boundary, invalid entity/period/family cases, and
+  paired count/summary NULL-shape positives and negatives. Tautological domain,
+  weak count shape, NOT VALID, RESTRICT, and wrong FK order are all rejected.
+- P1 two: the public single-table creation API excluded strict children from
+  additive repair but still ran only the generic column/PK verifier. A complete
+  SQLite child with `ck_chaku_domain CHECK(TRUE)` therefore returned `True`.
+  The new regression failed exactly at `assert True is False`. A dedicated
+  single-child verifier now validates the selected child and parent without
+  requiring the sibling that may not yet have been created; create-all retains
+  the full coupled verifier.
+- Post-review repair verification is currently uncommitted: the three SQLite
+  schema regressions pass; the complete disposable PostgreSQL 16 CK contract,
+  including both importers and all new malformed constraints, completes
+  `51 passed in 2.22s`; and the broader affected selection completes
+  `701 passed, 36 skipped in 4.67s`. The container and all test schemas were
+  removed. The stale E2E introduction was also corrected from 78/45 to the
+  already asserted 80 total/47 native tables. Next safe action: finish
+  mechanical checks, commit this one aggregated review repair, then run one
+  clean exact-SHA final review/gate. STOP on any false-green schema result,
+  failed test, container residue, source drift, or dirty final worktree.

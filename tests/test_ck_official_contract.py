@@ -531,12 +531,33 @@ def test_ck_metadata_defects_fail_before_replacing_a_complete_row(
 
 def _weaken_ck_chaku_schema(defect: str) -> str:
     schema = SCHEMAS["NL_CK_CHAKU"]
+    if defect == "not-validated":
+        return schema
     if defect == "check-true":
         start = schema.index("CONSTRAINT ck_chaku_domain")
         end = schema.index(",\n            CONSTRAINT ck_chaku_count_shape", start)
         return schema[:start] + "CONSTRAINT ck_chaku_domain CHECK (TRUE)" + schema[end:]
+    if defect == "token-tautology":
+        start = schema.index("CONSTRAINT ck_chaku_domain")
+        end = schema.index(",\n            CONSTRAINT ck_chaku_count_shape", start)
+        constraint = schema[start:end].replace("CHECK (", "CHECK (TRUE OR (", 1) + ")"
+        return schema[:start] + constraint + schema[end:]
+    if defect == "weak-count-shape":
+        start = schema.index("CONSTRAINT ck_chaku_count_shape")
+        end = schema.index(",\n            PRIMARY KEY", start)
+        constraint = (
+            "CONSTRAINT ck_chaku_count_shape CHECK "
+            "(Count5 IS NULL OR Count6 IS NULL OR MetricKubun = 'Kyakusitu')"
+        )
+        return schema[:start] + constraint + schema[end:]
     if defect == "restrict-fk":
         return schema.replace("ON DELETE CASCADE", "ON DELETE RESTRICT", 1)
+    if defect == "wrong-fk-order":
+        return schema.replace(
+            "FOREIGN KEY (Year, MonthDay,",
+            "FOREIGN KEY (MonthDay, Year,",
+            1,
+        )
     if defect == "nullable-dimension":
         return schema.replace("EntityKubun TEXT NOT NULL", "EntityKubun TEXT", 1)
     if defect == "wrong-pk":
@@ -570,6 +591,14 @@ def test_ck_child_schema_is_never_additively_repaired(tmp_path) -> None:
         assert SchemaManager(database).create_table("NL_CK_CHAKU") is False
         columns = {row["name"] for row in database.fetch_all('PRAGMA table_info("NL_CK_CHAKU")')}
         assert "Count6" not in columns
+
+
+def test_ck_single_child_creation_rejects_tautological_check(tmp_path) -> None:
+    database = SQLiteDatabase({"path": str(tmp_path / "single-child-check.db")})
+    with database:
+        database.create_table("NL_CK", SCHEMAS["NL_CK"])
+        database.create_table("NL_CK_CHAKU", _weaken_ck_chaku_schema("check-true"))
+        assert SchemaManager(database).create_table("NL_CK_CHAKU") is False
 
 
 def test_ck_create_all_tables_reports_malformed_child_contract(tmp_path) -> None:
@@ -687,13 +716,30 @@ def test_ck_postgresql_complete_roundtrip_reconnect_update_delete(
 
 
 @pytest.mark.parametrize("importer_class", [DataImporter, OptimizedDataImporter])
-@pytest.mark.parametrize("defect", ["check-true", "restrict-fk"])
+@pytest.mark.parametrize(
+    "defect",
+    [
+        "check-true",
+        "token-tautology",
+        "weak-count-shape",
+        "not-validated",
+        "restrict-fk",
+        "wrong-fk-order",
+    ],
+)
 def test_ck_postgresql_malformed_constraints_fail_before_parent_mutation(
     postgresql_db, importer_class, defect
 ) -> None:
     database, _ = postgresql_db
     database.execute(SCHEMAS["NL_CK"])
     database.execute(_weaken_ck_chaku_schema(defect))
+    if defect == "not-validated":
+        schema = SCHEMAS["NL_CK_CHAKU"]
+        start = schema.index("CONSTRAINT ck_chaku_domain")
+        end = schema.index(",\n            CONSTRAINT ck_chaku_count_shape", start)
+        domain_constraint = schema[start:end]
+        database.execute("ALTER TABLE NL_CK_CHAKU DROP CONSTRAINT ck_chaku_domain")
+        database.execute(f"ALTER TABLE NL_CK_CHAKU ADD {domain_constraint} NOT VALID")
     database.execute(SCHEMAS["NL_CK_RUIKEI"])
     database.execute(
         "INSERT INTO NL_CK "

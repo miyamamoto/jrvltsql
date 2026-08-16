@@ -7,11 +7,11 @@ Tests data storage across:
 - PostgreSQL (if available)
 
 Schema Status:
-- Total defined: 78 tables (45 NL_* + 21 RT_* + 12 TS_*)
+- Total defined: 80 tables (47 NL_* + 21 RT_* + 12 TS_*)
 - All tables should be created successfully with the current schema
 
 Note: The schema has been fully implemented with proper SQL syntax.
-All 78 tables should create successfully across all database backends.
+All 80 tables should create successfully across all database backends.
 DuckDB is outside this project's supported database matrix.
 """
 

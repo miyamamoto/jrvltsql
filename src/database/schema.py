@@ -2778,6 +2778,10 @@ class SchemaManager:
                 migrate_table_if_needed(self.db, table_name, schema_sql)
             self.db.execute(schema_sql)
             verify_table_schema(self.db, table_name, schema_sql)
+            if table_name in STRICT_RECREATE_TABLES:
+                from src.importer.importer import verify_ck_child_table
+
+                verify_ck_child_table(self.db, table_name)
             logger.info(f"Created table: {table_name}")
             return True
         except Exception as e:

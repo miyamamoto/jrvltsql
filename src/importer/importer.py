@@ -2357,7 +2357,9 @@ def _verify_ck_postgresql_constraints(
     expected_names = set(_ck_named_constraints(expected_schema))
     rows = database.fetch_all(
         "SELECT conname AS name, contype AS type, confdeltype AS delete_type, "
-        "pg_get_constraintdef(oid) AS definition "
+        "convalidated AS validated, "
+        "confrelid = to_regclass('nl_ck') AS parent_matches, "
+        "pg_get_expr(conbin, conrelid) AS expression "
         "FROM pg_constraint WHERE conrelid = to_regclass(?)",
         (table_name.lower(),),
     )
@@ -2367,45 +2369,254 @@ def _verify_ck_postgresql_constraints(
             f"CK child constraints missing for {table_name}: "
             f"{sorted(expected_names - set(by_name))}"
         )
-    required_tokens = {
-        "ck_chaku_parent_fk": (*_CK_PARENT_KEY, "nl_ck", "cascade"),
-        "ck_chaku_domain": (
-            "entitykubun",
-            "periodnum",
-            "metrickubun",
-            "bucketnum",
-            "uma",
-            "kisyu",
-            "chokyosi",
-            "banusi",
-            "breeder",
-            *tuple(metric for metric, _ in (*_CK_HORSE_METRICS, *_CK_PROFESSIONAL_METRICS)),
-        ),
-        "ck_chaku_count_shape": ("count5", "count6", "kyakusitu", "is null"),
-        "ck_ruikei_parent_fk": (*_CK_PARENT_KEY, "nl_ck", "cascade"),
-        "ck_ruikei_shape": (
-            "entitykubun",
-            "periodnum",
-            "honsyokinheichi",
-            "honsyokinsyogai",
-            "fukasyokinheichi",
-            "fukasyokinsyogai",
-            "honsyokintotal",
-            "fukasyokin",
-            "is not null",
-        ),
+    unexpected = {
+        name
+        for name, row in by_name.items()
+        if str(row.get("type")) in {"c", "f", "u", "x"} and name not in expected_names
     }
+    if unexpected:
+        raise SchemaMigrationError(
+            f"CK child has unexpected constraints for {table_name}: {sorted(unexpected)}"
+        )
+
     for constraint_name in expected_names:
-        definition = str(by_name[constraint_name].get("definition") or "").lower()
-        if not all(str(token).lower() in definition for token in required_tokens[constraint_name]):
+        row = by_name[constraint_name]
+        if not bool(row.get("validated")):
             raise SchemaMigrationError(
-                f"CK child constraint body mismatch for {table_name}.{constraint_name}"
+                f"CK child constraint is not validated for {table_name}.{constraint_name}"
             )
-        if (
-            constraint_name.endswith("parent_fk")
-            and str(by_name[constraint_name].get("delete_type")) != "c"
-        ):
-            raise SchemaMigrationError(f"CK child foreign key is not CASCADE: {table_name}")
+        if constraint_name.endswith("parent_fk"):
+            if (
+                str(row.get("type")) != "f"
+                or str(row.get("delete_type")) != "c"
+                or not bool(row.get("parent_matches"))
+            ):
+                raise SchemaMigrationError(
+                    f"CK child foreign key metadata mismatch for {table_name}"
+                )
+            key_rows = database.fetch_all(
+                "SELECT local_column.attname AS local_name, "
+                "remote_column.attname AS remote_name "
+                "FROM pg_constraint constraint_row "
+                "JOIN LATERAL generate_subscripts(constraint_row.conkey, 1) "
+                "AS key_position(position) ON TRUE "
+                "JOIN pg_attribute local_column "
+                "ON local_column.attrelid = constraint_row.conrelid "
+                "AND local_column.attnum = constraint_row.conkey[key_position.position] "
+                "JOIN pg_attribute remote_column "
+                "ON remote_column.attrelid = constraint_row.confrelid "
+                "AND remote_column.attnum = constraint_row.confkey[key_position.position] "
+                "WHERE constraint_row.conrelid = to_regclass(?) "
+                "AND constraint_row.conname = ? ORDER BY key_position.position",
+                (table_name.lower(), constraint_name),
+            )
+            local_names = [str(key_row["local_name"]).lower() for key_row in key_rows]
+            remote_names = [str(key_row["remote_name"]).lower() for key_row in key_rows]
+            if local_names != [name.lower() for name in _CK_PARENT_KEY] or remote_names != [
+                name.lower() for name in _CK_PARENT_KEY
+            ]:
+                raise SchemaMigrationError(
+                    f"CK child foreign key columns mismatch for {table_name}"
+                )
+            continue
+
+        if str(row.get("type")) != "c" or not row.get("expression"):
+            raise SchemaMigrationError(
+                f"CK child CHECK metadata mismatch for {table_name}.{constraint_name}"
+            )
+        _verify_ck_postgresql_check_truth_table(
+            database,
+            table_name,
+            constraint_name,
+            str(row["expression"]),
+        )
+
+
+def _ck_postgresql_check_cases(
+    constraint_name: str,
+) -> tuple[tuple[tuple[str, str], ...], list[tuple[tuple[Any, ...], bool]]]:
+    if constraint_name == "ck_chaku_domain":
+        columns = (
+            ("EntityKubun", "TEXT"),
+            ("PeriodNum", "INTEGER"),
+            ("MetricKubun", "TEXT"),
+            ("BucketNum", "INTEGER"),
+        )
+        cases = [(dimension, True) for dimension in _CK_EXPECTED_CHAKU_DIMENSIONS]
+        maximums: dict[tuple[str, int, str], int] = {}
+        for entity, period, metric, bucket in _CK_EXPECTED_CHAKU_DIMENSIONS:
+            maximums[(entity, period, metric)] = max(
+                maximums.get((entity, period, metric), 0), bucket
+            )
+        for (entity, period, metric), maximum in maximums.items():
+            cases.append(((entity, period, metric, 0), False))
+            cases.append(((entity, period, metric, maximum + 1), False))
+        cases.extend(
+            [
+                (("INVALID", 0, "ChakuSogo", 1), False),
+                (("UMA", 1, "ChakuSogo", 1), False),
+                (("KISYU", 0, "ChakuKaisuSiba", 1), False),
+                (("CHOKYOSI", 3, "ChakuKaisuSiba", 1), False),
+                (("BANUSI", 0, "ChakuKaisu", 1), False),
+                (("BREEDER", 3, "ChakuKaisu", 1), False),
+                (("UMA", 0, "ChakuKaisuSiba", 1), False),
+                (("KISYU", 1, "ChakuSogo", 1), False),
+                (("BANUSI", 1, "ChakuSogo", 1), False),
+                (("UMA", 0, "INVALID", 1), False),
+            ]
+        )
+        return columns, cases
+
+    if constraint_name == "ck_chaku_count_shape":
+        columns = (
+            ("EntityKubun", "TEXT"),
+            ("MetricKubun", "TEXT"),
+            ("Count5", "INTEGER"),
+            ("Count6", "INTEGER"),
+        )
+        return columns, [
+            (("UMA", "Kyakusitu", None, None), True),
+            (("UMA", "Kyakusitu", 1, 1), False),
+            (("UMA", "Kyakusitu", None, 1), False),
+            (("KISYU", "ChakuKaisuSiba", 1, 1), True),
+            (("KISYU", "ChakuKaisuSiba", 0, 999999), True),
+            (("KISYU", "ChakuKaisuSiba", None, None), False),
+            (("KISYU", "ChakuKaisuSiba", 1, None), False),
+        ]
+
+    if constraint_name == "ck_ruikei_shape":
+        columns = (
+            ("EntityKubun", "TEXT"),
+            ("PeriodNum", "INTEGER"),
+            ("HonSyokinHeichi", "BIGINT"),
+            ("HonSyokinSyogai", "BIGINT"),
+            ("FukaSyokinHeichi", "BIGINT"),
+            ("FukaSyokinSyogai", "BIGINT"),
+            ("HonSyokinTotal", "BIGINT"),
+            ("FukaSyokin", "BIGINT"),
+        )
+        professional = (1, 1, 1, 1, None, None)
+        owner = (None, None, None, None, 1, 1)
+        cases = [
+            ((entity, period, *professional), True)
+            for entity in ("KISYU", "CHOKYOSI")
+            for period in (1, 2)
+        ]
+        cases.extend(
+            ((entity, period, *owner), True)
+            for entity in ("BANUSI", "BREEDER")
+            for period in (1, 2)
+        )
+        cases.extend(
+            [
+                (("KISYU", 1, 0, 9999999999, 0, 9999999999, None, None), True),
+                (("BANUSI", 1, None, None, None, None, 0, 9999999999), True),
+            ]
+        )
+        cases.extend(
+            [
+                (("INVALID", 1, *professional), False),
+                (("KISYU", 0, *professional), False),
+                (("BANUSI", 3, *owner), False),
+            ]
+        )
+        for missing_index in range(4):
+            values = list(professional)
+            values[missing_index] = None
+            cases.append((("KISYU", 1, *values), False))
+        for forbidden_index in (4, 5):
+            values = list(professional)
+            values[forbidden_index] = 1
+            cases.append((("KISYU", 1, *values), False))
+        for missing_index in (4, 5):
+            values = list(owner)
+            values[missing_index] = None
+            cases.append((("BANUSI", 1, *values), False))
+        for forbidden_index in range(4):
+            values = list(owner)
+            values[forbidden_index] = 1
+            cases.append((("BANUSI", 1, *values), False))
+        return columns, cases
+
+    raise SchemaMigrationError(f"Unknown CK PostgreSQL CHECK constraint: {constraint_name}")
+
+
+def _verify_ck_postgresql_check_truth_table(
+    database: BaseDatabase,
+    table_name: str,
+    constraint_name: str,
+    expression: str,
+) -> None:
+    columns, cases = _ck_postgresql_check_cases(constraint_name)
+    value_rows = []
+    parameters: list[Any] = []
+    for case_number, (values, _) in enumerate(cases):
+        casts = ["CAST(? AS INTEGER)"]
+        parameters.append(case_number)
+        for value, (_, sql_type) in zip(values, columns, strict=True):
+            casts.append(f"CAST(? AS {sql_type})")
+            parameters.append(value)
+        value_rows.append(f"({', '.join(casts)})")
+    aliases = ", ".join(("case_number", *(name.lower() for name, _ in columns)))
+    rows = database.fetch_all(
+        "SELECT case_number, COALESCE(("
+        + expression
+        + "), FALSE) AS accepted FROM (VALUES "
+        + ", ".join(value_rows)
+        + f") AS ck_probe({aliases}) ORDER BY case_number",
+        tuple(parameters),
+    )
+    actual = {int(row["case_number"]): bool(row["accepted"]) for row in rows}
+    expected = {case_number: accepted for case_number, (_, accepted) in enumerate(cases)}
+    if actual != expected:
+        mismatches = [
+            case_number
+            for case_number, accepted in expected.items()
+            if actual.get(case_number) != accepted
+        ]
+        raise SchemaMigrationError(
+            f"CK child CHECK behavior mismatch for {table_name}.{constraint_name}: "
+            f"cases={mismatches[:5]}"
+        )
+
+
+def _verify_ck_child_on_target(
+    target: BaseDatabase,
+    main_table_name: str,
+    table_name: str,
+) -> None:
+    from src.database.migration import verify_table_schema
+    from src.database.schema import SCHEMAS
+
+    for required_table in (main_table_name, table_name):
+        if not target.table_exists_strict(required_table):
+            raise SchemaMigrationError(
+                f"CK import requires table {required_table} before mutation"
+            )
+        verify_table_schema(target, required_table, SCHEMAS[required_table])
+
+    schema_sql = SCHEMAS[table_name]
+    actual = _ck_actual_column_contract(target, table_name)
+    expected = _ck_expected_column_contract(schema_sql)
+    if actual != expected:
+        raise SchemaMigrationError(
+            f"CK child columns/types/nullability must match exactly for {table_name}"
+        )
+    if target.get_db_type() == "sqlite":
+        _verify_ck_sqlite_constraints(target, table_name, schema_sql)
+    elif target.get_db_type() == "postgresql":
+        _verify_ck_postgresql_constraints(target, table_name, schema_sql)
+
+
+def verify_ck_child_table(
+    database: BaseDatabase,
+    table_name: str,
+) -> None:
+    """Verify one CK child without requiring its not-yet-created sibling."""
+    if table_name not in {"NL_CK_CHAKU", "NL_CK_RUIKEI"}:
+        raise SchemaMigrationError(f"Unknown CK child table: {table_name}")
+    for target in _ck_schema_targets(database):
+        _verify_ck_child_on_target(target, "NL_CK", table_name)
 
 
 def verify_ck_coupled_tables(
@@ -2417,26 +2628,9 @@ def verify_ck_coupled_tables(
     if child_tables is None:
         return None
 
-    from src.database.migration import verify_table_schema
-    from src.database.schema import SCHEMAS
-
     for target in _ck_schema_targets(database):
-        for table_name in (main_table_name, *child_tables):
-            schema_sql = SCHEMAS[table_name]
-            if not target.table_exists_strict(table_name):
-                raise SchemaMigrationError(f"CK import requires table {table_name} before mutation")
-            verify_table_schema(target, table_name, schema_sql)
-            if table_name != main_table_name:
-                actual = _ck_actual_column_contract(target, table_name)
-                expected = _ck_expected_column_contract(schema_sql)
-                if actual != expected:
-                    raise SchemaMigrationError(
-                        f"CK child columns/types/nullability must match exactly for {table_name}"
-                    )
-                if target.get_db_type() == "sqlite":
-                    _verify_ck_sqlite_constraints(target, table_name, schema_sql)
-                elif target.get_db_type() == "postgresql":
-                    _verify_ck_postgresql_constraints(target, table_name, schema_sql)
+        for table_name in child_tables:
+            _verify_ck_child_on_target(target, main_table_name, table_name)
     return child_tables
 
 
