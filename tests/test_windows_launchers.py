@@ -72,6 +72,33 @@ def test_quickstart_rejects_compound_python_override():
     assert "PYTHON must be a full path to python.exe" in result.stdout
 
 
+def test_quickstart_rejects_invalid_active_virtual_environment(tmp_path):
+    """An invalid active environment must fail loudly, not fall back."""
+    checkout = tmp_path / "checkout"
+    (checkout / "scripts").mkdir(parents=True)
+    batch = checkout / "quickstart.bat"
+    batch.write_bytes((ROOT / "quickstart.bat").read_bytes())
+    (checkout / "scripts" / "quickstart.py").write_text(
+        'print("UNEXPECTED_FALLBACK")\n',
+        encoding="utf-8",
+    )
+
+    active_env = tmp_path / "invalid active env"
+    scripts_dir = active_env / "Scripts"
+    scripts_dir.mkdir(parents=True)
+    (scripts_dir / "python.exe").write_bytes(b"not-a-windows-executable")
+
+    env = os.environ.copy()
+    env.pop("PYTHON", None)
+    env["VIRTUAL_ENV"] = str(active_env)
+    env["JLTSQL_SKIP_SCHEDULER_PROMPT"] = "1"
+    result = _run_batch(batch, "--yes", "--help", env=env, cwd=checkout)
+
+    assert result.returncode != 0
+    assert "VIRTUAL_ENV must point to Python 3.12 or later" in result.stdout
+    assert "UNEXPECTED_FALLBACK" not in result.stdout
+
+
 def test_timeseries_fetch_uses_path_installed_cli_before_global_python(tmp_path):
     """A working PATH CLI must win over unrelated global launcher fallbacks."""
     checkout = tmp_path / "checkout"

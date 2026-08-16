@@ -95,27 +95,32 @@ def test_hs_metadata_matches_market_price_schema():
 
 
 def test_sk_metadata_describes_all_three_generation_lineage_slots():
-    """SK metadata must name all fourteen official pedigree-number slots."""
+    """SK metadata must target every executable physical schema column."""
 
     expected_lineage_columns = {
-        "父馬繁殖登録番号",
-        "母馬繁殖登録番号",
-        "父父繁殖登録番号",
-        "父母繁殖登録番号",
-        "母父繁殖登録番号",
-        "母母繁殖登録番号",
-        "父父父繁殖登録番号",
-        "父父母繁殖登録番号",
-        "父母父繁殖登録番号",
-        "父母母繁殖登録番号",
-        "母父父繁殖登録番号",
-        "母父母繁殖登録番号",
-        "母母父繁殖登録番号",
-        "母母母繁殖登録番号",
+        "FNum",
+        "MNum",
+        "FFNum",
+        "FMNum",
+        "MFNum",
+        "MMNum",
+        "FFFNum",
+        "FFMNum",
+        "FMFNum",
+        "FMMNum",
+        "MFFNum",
+        "MFMNum",
+        "MMFNum",
+        "MMMNum",
     }
-    column_names = {column["name"] for column in TABLE_METADATA["NL_SK"]["columns"]}
+    metadata = TABLE_METADATA["NL_SK"]
+    metadata_types = {
+        column["name"]: column["type"] for column in metadata["columns"]
+    }
 
-    assert expected_lineage_columns <= column_names
+    assert expected_lineage_columns <= set(metadata_types)
+    assert metadata_types == get_table_column_types("NL_SK")
+    assert metadata["primary_key"] == get_table_primary_key_columns("NL_SK")
 
 
 class TestSQLiteMetadata(unittest.TestCase):

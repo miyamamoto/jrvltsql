@@ -245,6 +245,21 @@
   no review result and is not counted as evidence. The finding and repair are
   instead grounded in the exact Windows output/control flow plus the focused
   regression; final release review must resume after the stated service reset.
+- CodeRabbit then added seven inline threads plus one outside-diff finding from
+  its intermediate-SHA review. The two delayed-expansion path claims are
+  refuted by final run `31935845018`, which executed the exact selected real
+  interpreter under a parenthesized path. The remaining findings were grouped
+  before changes: workflow least privilege, fail-loud active-environment and
+  fallback version validation, secret-safe PostgreSQL password transport,
+  executable NL_SK metadata parity, public-evidence wording, quoted worklog
+  commands, and redundant test f-strings are actionable.
+- Red-first local evidence before that grouped repair: the revised password
+  transport and NL_SK executable-metadata contracts fail `2 failed` because
+  delayed expansion remains enabled around the secret argument and metadata
+  still uses display names absent from the physical schema. A Windows runtime
+  regression also supplies an invalid active environment and requires a clear
+  fail-loud result without fallback; its intermediate exact-SHA run must be red
+  before implementing the validator.
 
 ## Audit iteration: fixed-record envelope
 

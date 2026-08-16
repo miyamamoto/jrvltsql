@@ -452,7 +452,9 @@ class TestQuickstartBatchRoles:
         batch = Path(__file__).resolve().parents[1] / "daily_sync.bat"
         text = batch.read_text(encoding="utf-8")
 
-        assert '--pg-password "!POSTGRES_PASSWORD!"' in text
+        assert "setlocal DisableDelayedExpansion" in text
+        assert 'set "PGPASSWORD=%POSTGRES_PASSWORD%"' in text
+        assert "--pg-password" not in text
 
     def test_unified_timeseries_batch_supports_sqlite_and_postgresql(self):
         batch = Path(__file__).resolve().parents[1] / "quickstart_timeseries.bat"
