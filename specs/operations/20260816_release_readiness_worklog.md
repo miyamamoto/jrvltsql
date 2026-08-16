@@ -180,6 +180,13 @@
   interpreter path containing spaces/parentheses, invalid compound override
   rejection, and PATH CLI precedence. That job is a launcher parser check only
   and is not SDK architecture or provider-acquisition evidence.
+- The first Windows job on candidate
+  `fbcbb877bced86fa706295fcd651babbb03ebbcf` failed before collecting any test:
+  the minimal job installed pytest without pytest-cov while repository-wide
+  addopts requested coverage arguments. This is a real workflow failure, not a
+  billing exception and not launcher evidence. The job now clears global
+  addopts for its isolated three-test selection; it must execute all three and
+  finish green on the replacement exact SHA before merge.
 
 ## Audit iteration: fixed-record envelope
 
