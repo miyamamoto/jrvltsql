@@ -17,6 +17,8 @@ from src.importer import importer as importer_module
 from src.importer.importer import DataImporter, ImporterError
 from src.importer.importer_optimized import OptimizedDataImporter
 from src.parser.av_parser import AVParser
+from src.parser.h1_parser import H1Parser
+from src.parser.h6_parser import H6Parser
 from src.parser.o1_parser import O1Parser
 from src.parser.o2_parser import O2Parser
 from src.realtime.updater import RealtimeUpdater
@@ -65,6 +67,143 @@ def _make_empty_o2_record() -> bytes:
     raw = _odds_header("O2") + b"7" + b"0" * (153 * 13) + b"00000000999\r\n"
     assert len(raw) == O2Parser.RECORD_LENGTH
     return raw
+
+
+def _make_h1_vote_record(
+    *,
+    data_kubun: str = "4",
+    populated: bool = True,
+    total_start: int = 1000,
+) -> bytes:
+    data = bytearray(b" " * H1Parser.RECORD_LENGTH)
+    data[0:2] = b"H1"
+    data[2:3] = data_kubun.encode("ascii")
+    data[3:11] = b"20260419"
+    data[11:15] = b"2026"
+    data[15:19] = b"0419"
+    data[19:21] = b"06"
+    data[21:23] = b"03"
+    data[23:25] = b"08"
+    data[25:27] = b"11"
+    data[27:29] = b"18"
+    data[29:31] = b"18"
+    data[31:38] = b"7777777" if populated else b"0000000"
+    data[38:39] = b"3"
+    data[39:67] = b"10" + (b"0" * 26)
+    data[67:75] = b"01000000"
+    data[75:83] = b"00100000"
+    if populated:
+        entries = (
+            (83, b"01", b"00000000101", b"01"),
+            (503, b"01", b"00000000202", b"02"),
+            (923, b"12", b"00000000303", b"03"),
+            (1463, b"0102", b"00000000404", b"004"),
+            (4217, b"0102", b"00000000505", b"005"),
+            (6971, b"0102", b"00000000606", b"006"),
+            (12479, b"010203", b"00000000707", b"007"),
+        )
+        for offset, kumi, hyo, ninki in entries:
+            data[offset : offset + len(kumi)] = kumi
+            data[offset + len(kumi) : offset + len(kumi) + 11] = hyo
+            data[
+                offset + len(kumi) + 11 : offset + len(kumi) + 11 + len(ninki)
+            ] = ninki
+    for index in range(14):
+        data[28799 + index * 11 : 28810 + index * 11] = (
+            f"{total_start + index:011d}".encode("ascii")
+        )
+    data[-2:] = b"\r\n"
+    return bytes(data)
+
+
+def _make_h6_vote_record(
+    *,
+    data_kubun: str = "4",
+    populated: bool = True,
+    child_hyo: str = "00000000808",
+    total_hyo: str = "00000008000",
+    refund_hyo: str = "00000000008",
+) -> bytes:
+    data = bytearray(b" " * H6Parser.RECORD_LENGTH)
+    data[0:2] = b"H6"
+    data[2:3] = data_kubun.encode("ascii")
+    data[3:11] = b"20260419"
+    data[11:15] = b"2026"
+    data[15:19] = b"0419"
+    data[19:21] = b"06"
+    data[21:23] = b"03"
+    data[23:25] = b"08"
+    data[25:27] = b"11"
+    data[27:29] = b"18"
+    data[29:31] = b"18"
+    data[31:32] = b"7" if populated else b"0"
+    data[32:50] = b"100000000000000001"
+    if populated:
+        data[50:56] = b"010203"
+        data[56:67] = child_hyo.encode("ascii")
+        data[67:71] = b"0008"
+    data[102866:102877] = total_hyo.encode("ascii")
+    data[102877:102888] = refund_hyo.encode("ascii")
+    data[-2:] = b"\r\n"
+    return bytes(data)
+
+
+def _make_h1_vote_flat_record() -> bytes:
+    data = bytearray(b" " * H1Parser.RECORD_LENGTH_FLAT)
+    data[0:2] = b"H1"
+    data[2:3] = b"4"
+    data[3:11] = b"20260419"
+    data[11:15] = b"2026"
+    data[15:19] = b"0419"
+    data[19:21] = b"06"
+    data[21:23] = b"03"
+    data[23:25] = b"08"
+    data[25:27] = b"11"
+    data[27:29] = b"18"
+    data[29:31] = b"18"
+    data[31:38] = b"7777777"
+    data[38:39] = b"3"
+    data[39:42] = b"101"
+    fields = (
+        (42, "01", 2), (44, "00000000101", 11), (55, "01", 2),
+        (57, "01", 2), (59, "00000000202", 11), (70, "02", 2),
+        (72, "12", 2), (74, "00000000303", 11), (85, "03", 2),
+        (87, "0102", 4), (91, "00000000404", 11), (102, "004", 3),
+        (105, "0102", 4), (109, "00000000505", 11), (120, "005", 3),
+        (123, "0102", 4), (127, "00000000606", 11), (138, "006", 3),
+        (141, "010203", 6), (147, "00000000707", 11), (158, "007", 3),
+    )
+    for offset, value, length in fields:
+        data[offset : offset + length] = _pad(value, length)
+    for index in range(14):
+        offset = 161 + index * 11
+        data[offset : offset + 11] = f"{1000 + index:011d}".encode("ascii")
+    data[-2:] = b"\r\n"
+    return bytes(data)
+
+
+def _make_h6_vote_flat_record() -> bytes:
+    data = bytearray(b" " * H6Parser.RECORD_LENGTH_FLAT)
+    data[0:2] = b"H6"
+    data[2:3] = b"4"
+    data[3:11] = b"20260419"
+    data[11:15] = b"2026"
+    data[15:19] = b"0419"
+    data[19:21] = b"06"
+    data[21:23] = b"03"
+    data[23:25] = b"08"
+    data[25:27] = b"11"
+    data[27:29] = b"18"
+    data[29:31] = b"18"
+    data[31:32] = b"7"
+    data[32:33] = b"1"
+    data[33:39] = b"010203"
+    data[39:50] = b"00000000808"
+    data[50:54] = b"0008"
+    data[54:65] = b"00000008000"
+    data[65:76] = b"00000000008"
+    data[-2:] = b"\r\n"
+    return bytes(data)
 
 
 def _make_av_record(data_kubun: str = "1") -> bytes:
@@ -787,6 +926,339 @@ def test_sqlite_standard_odds_child_failure_rolls_back_header(
     assert sqlite_db.fetch_all(
         "SELECT Kumi AS kumi FROM ODDS_UMAREN"
     ) == [{"kumi": "0102"}]
+
+
+_STANDARD_H1_TABLES = (
+    "HYOSU",
+    "HYOSU_TANPUKU",
+    "HYOSU_WAKU",
+    "HYOSU_UMARENWIDE",
+    "HYOSU_UMATAN",
+    "HYOSU_SANREN",
+)
+_STANDARD_H6_TABLES = ("HYOSU2", "HYOSU_SANRENTAN")
+
+
+def _assert_standard_h1_replaces_complete_snapshot(db, importer_class):
+    _create_jravan_tables(db, _STANDARD_H1_TABLES)
+    importer = importer_class(db, use_jravan_schema=True, batch_size=1)
+    populated = _flatten(H1Parser().parse(_make_h1_vote_record()))
+
+    stats = importer.import_records(iter(populated))
+
+    assert stats["records_failed"] == 0
+    assert db.fetch_one(
+        "SELECT DataKubun AS status, HenkanUma1 AS henkan_uma1, "
+        "HenkanWaku2 AS henkan_waku2, HenkanDoWaku3 AS henkan_dowaku3, "
+        "HyoTotal1 AS total1, HyoTotal14 AS total14 FROM HYOSU"
+    ) == {
+        "status": "4",
+        "henkan_uma1": "1",
+        "henkan_waku2": "1",
+        "henkan_dowaku3": "1",
+        "total1": "00000001000",
+        "total14": "00000001013",
+    }
+    assert db.fetch_one(
+        "SELECT Umaban AS umaban, TanHyo AS tan_hyo, TanNinki AS tan_ninki, "
+        "FukuHyo AS fuku_hyo, FukuNinki AS fuku_ninki FROM HYOSU_TANPUKU"
+    ) == {
+        "umaban": 1,
+        "tan_hyo": "00000000101",
+        "tan_ninki": "01",
+        "fuku_hyo": "00000000202",
+        "fuku_ninki": "02",
+    }
+    assert db.fetch_one(
+        "SELECT Kumi AS kumi, UmarenHyo AS umaren_hyo, "
+        "WideHyo AS wide_hyo FROM HYOSU_UMARENWIDE"
+    ) == {
+        "kumi": "0102",
+        "umaren_hyo": "00000000404",
+        "wide_hyo": "00000000505",
+    }
+    for table_name in _STANDARD_H1_TABLES[1:]:
+        assert db.fetch_one(f"SELECT COUNT(*) AS cnt FROM {table_name}")["cnt"] == 1
+
+    empty = _flatten(
+        H1Parser().parse(
+            _make_h1_vote_record(
+                data_kubun="5",
+                populated=False,
+                total_start=9000,
+            )
+        )
+    )
+    assert importer.import_records(iter(empty))["records_failed"] == 0
+    assert db.fetch_one(
+        "SELECT DataKubun AS status, HatubaiFlag1 AS flag, "
+        "HyoTotal1 AS total1 FROM HYOSU"
+    ) == {"status": "5", "flag": "0", "total1": "00000009000"}
+    for table_name in _STANDARD_H1_TABLES[1:]:
+        assert db.fetch_one(f"SELECT COUNT(*) AS cnt FROM {table_name}")["cnt"] == 0
+
+    # The inverse 0-to-7 release-flag transition must recreate children even
+    # though the header already exists.
+    assert importer.import_records(iter(populated))["records_failed"] == 0
+    for table_name in _STANDARD_H1_TABLES[1:]:
+        assert db.fetch_one(f"SELECT COUNT(*) AS cnt FROM {table_name}")["cnt"] == 1
+
+    erase = _flatten(
+        H1Parser().parse(
+            _make_h1_vote_record(data_kubun="0", populated=False)
+        )
+    )
+    assert importer.import_records(iter(erase))["records_failed"] == 0
+    for table_name in _STANDARD_H1_TABLES:
+        assert db.fetch_one(f"SELECT COUNT(*) AS cnt FROM {table_name}")["cnt"] == 0
+
+
+def _assert_standard_h6_replaces_complete_snapshot(db, importer_class):
+    _create_jravan_tables(db, _STANDARD_H6_TABLES)
+    importer = importer_class(db, use_jravan_schema=True, batch_size=1)
+    populated = _flatten(H6Parser().parse(_make_h6_vote_record()))
+
+    stats = importer.import_records(iter(populated))
+
+    assert stats["records_failed"] == 0
+    assert db.fetch_one(
+        "SELECT DataKubun AS status, HatubaiFlag1 AS flag, "
+        "HenkanUma1 AS henkan_uma1, HenkanUma18 AS henkan_uma18, "
+        "HyoTotal1 AS total1, HyoTotal2 AS total2 FROM HYOSU2"
+    ) == {
+        "status": "4",
+        "flag": "7",
+        "henkan_uma1": "1",
+        "henkan_uma18": "1",
+        "total1": "00000008000",
+        "total2": "00000000008",
+    }
+    assert db.fetch_one(
+        "SELECT Kumi AS kumi, Hyo AS hyo, Ninki AS ninki "
+        "FROM HYOSU_SANRENTAN"
+    ) == {"kumi": "010203", "hyo": "00000000808", "ninki": 8}
+
+    empty = _flatten(
+        H6Parser().parse(
+            _make_h6_vote_record(
+                data_kubun="5",
+                populated=False,
+                total_hyo="00000009000",
+                refund_hyo="00000000009",
+            )
+        )
+    )
+    assert importer.import_records(iter(empty))["records_failed"] == 0
+    assert db.fetch_one(
+        "SELECT DataKubun AS status, HatubaiFlag1 AS flag, "
+        "HyoTotal1 AS total1, HyoTotal2 AS total2 FROM HYOSU2"
+    ) == {
+        "status": "5",
+        "flag": "0",
+        "total1": "00000009000",
+        "total2": "00000000009",
+    }
+    assert db.fetch_one("SELECT COUNT(*) AS cnt FROM HYOSU_SANRENTAN")["cnt"] == 0
+
+    assert importer.import_records(iter(populated))["records_failed"] == 0
+    assert db.fetch_one("SELECT COUNT(*) AS cnt FROM HYOSU_SANRENTAN")["cnt"] == 1
+
+    erase = _flatten(
+        H6Parser().parse(
+            _make_h6_vote_record(data_kubun="0", populated=False)
+        )
+    )
+    assert importer.import_records(iter(erase))["records_failed"] == 0
+    for table_name in _STANDARD_H6_TABLES:
+        assert db.fetch_one(f"SELECT COUNT(*) AS cnt FROM {table_name}")["cnt"] == 0
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_sqlite_standard_h1_replaces_complete_snapshot(sqlite_db, importer_class):
+    _assert_standard_h1_replaces_complete_snapshot(sqlite_db, importer_class)
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_postgresql_standard_h1_replaces_complete_snapshot(
+    postgresql_db, importer_class
+):
+    _assert_standard_h1_replaces_complete_snapshot(postgresql_db, importer_class)
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_sqlite_standard_h6_replaces_complete_snapshot(sqlite_db, importer_class):
+    _assert_standard_h6_replaces_complete_snapshot(sqlite_db, importer_class)
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_postgresql_standard_h6_replaces_complete_snapshot(
+    postgresql_db, importer_class
+):
+    _assert_standard_h6_replaces_complete_snapshot(postgresql_db, importer_class)
+
+
+def test_h6_empty_full_record_retains_physical_totals_on_header():
+    rows = _flatten(
+        H6Parser().parse(
+            _make_h6_vote_record(
+                populated=False,
+                total_hyo="00000009000",
+                refund_hyo="00000000009",
+            )
+        )
+    )
+
+    assert len(rows) == 1
+    assert rows[0]["SanrentanHyoTotal"] == "00000009000"
+    assert rows[0]["SanrentanHenkanHyoTotal"] == "00000000009"
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_sqlite_standard_vote_flat_compatibility_layouts(
+    sqlite_db, importer_class
+):
+    _create_jravan_tables(
+        sqlite_db, (*_STANDARD_H1_TABLES, *_STANDARD_H6_TABLES)
+    )
+    importer = importer_class(sqlite_db, use_jravan_schema=True, batch_size=1)
+
+    h1 = H1Parser().parse(_make_h1_vote_flat_record())
+    h6 = H6Parser().parse(_make_h6_vote_flat_record())
+    assert importer.import_records(iter([h1]))["records_failed"] == 0
+    assert importer.import_records(iter([h6]))["records_failed"] == 0
+
+    assert sqlite_db.fetch_one(
+        "SELECT HyoTotal1 AS total1, HyoTotal14 AS total14 FROM HYOSU"
+    ) == {"total1": "00000001000", "total14": "00000001013"}
+    assert sqlite_db.fetch_one(
+        "SELECT TanHyo AS tan_hyo, FukuHyo AS fuku_hyo FROM HYOSU_TANPUKU"
+    ) == {"tan_hyo": "00000000101", "fuku_hyo": "00000000202"}
+    assert sqlite_db.fetch_one(
+        "SELECT UmarenHyo AS umaren_hyo, WideHyo AS wide_hyo "
+        "FROM HYOSU_UMARENWIDE"
+    ) == {"umaren_hyo": "00000000404", "wide_hyo": "00000000505"}
+    assert sqlite_db.fetch_one(
+        "SELECT HyoTotal1 AS total1, HyoTotal2 AS total2 FROM HYOSU2"
+    ) == {"total1": "00000008000", "total2": "00000000008"}
+    assert sqlite_db.fetch_one(
+        "SELECT Kumi AS kumi, Hyo AS hyo FROM HYOSU_SANRENTAN"
+    ) == {"kumi": "010203", "hyo": "00000000808"}
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_sqlite_standard_vote_verification_is_reused(
+    sqlite_db, importer_class, monkeypatch
+):
+    _create_jravan_tables(sqlite_db, _STANDARD_H6_TABLES)
+    verification_calls = 0
+    original_verify = importer_module.verify_standard_vote_tables
+
+    def counted_verify(*args, **kwargs):
+        nonlocal verification_calls
+        verification_calls += 1
+        return original_verify(*args, **kwargs)
+
+    monkeypatch.setattr(importer_module, "verify_standard_vote_tables", counted_verify)
+    importer = importer_class(sqlite_db, use_jravan_schema=True)
+    first = _flatten(H6Parser().parse(_make_h6_vote_record()))
+    second = _flatten(
+        H6Parser().parse(
+            _make_h6_vote_record(data_kubun="5", child_hyo="00000000909")
+        )
+    )
+
+    assert importer.import_records(iter(first))["records_failed"] == 0
+    assert importer.import_records(iter(second))["records_failed"] == 0
+    assert verification_calls == 1
+
+
+def _assert_standard_h6_migrates_existing_child_columns(db, importer_class):
+    _create_jravan_tables(db, ["HYOSU2"])
+    db.execute(
+        "CREATE TABLE HYOSU_SANRENTAN ("
+        "MakeDate DATE, Year SMALLINT, MonthDay SMALLINT, JyoCD CHAR(2), "
+        "Kaiji SMALLINT, Nichiji SMALLINT, RaceNum SMALLINT, "
+        "Kumi VARCHAR(6), Hyo VARCHAR(11))"
+    )
+    db.commit()
+    rows = _flatten(H6Parser().parse(_make_h6_vote_record()))
+
+    stats = importer_class(db, use_jravan_schema=True).import_records(iter(rows))
+
+    assert stats["records_failed"] == 0
+    assert db.fetch_one(
+        "SELECT Ninki AS ninki FROM HYOSU_SANRENTAN"
+    ) == {"ninki": 8}
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_sqlite_standard_h6_migrates_existing_child_columns(
+    sqlite_db, importer_class
+):
+    _assert_standard_h6_migrates_existing_child_columns(sqlite_db, importer_class)
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_postgresql_standard_h6_migrates_existing_child_columns(
+    postgresql_db, importer_class
+):
+    _assert_standard_h6_migrates_existing_child_columns(
+        postgresql_db, importer_class
+    )
+
+
+def test_sqlite_standard_h1_duplicate_header_keys_fail_closed(sqlite_db):
+    _create_jravan_tables(sqlite_db, _STANDARD_H1_TABLES)
+    duplicate_key = (2026, 419, "06", 3, 8, 11)
+    for status in ("2", "4"):
+        sqlite_db.execute(
+            "INSERT INTO HYOSU "
+            "(DataKubun, Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (status, *duplicate_key),
+        )
+    sqlite_db.commit()
+    rows = _flatten(H1Parser().parse(_make_h1_vote_record()))
+
+    with pytest.raises(SchemaMigrationError, match="duplicate official keys"):
+        DataImporter(sqlite_db, use_jravan_schema=True).import_records(iter(rows))
+
+    assert sqlite_db.fetch_one("SELECT COUNT(*) AS cnt FROM HYOSU")["cnt"] == 2
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_sqlite_standard_h6_child_failure_restores_previous_snapshot(
+    sqlite_db, importer_class
+):
+    _create_jravan_tables(sqlite_db, _STANDARD_H6_TABLES)
+    importer = importer_class(sqlite_db, use_jravan_schema=True)
+    original = _flatten(H6Parser().parse(_make_h6_vote_record()))
+    assert importer.import_records(iter(original))["records_failed"] == 0
+    sqlite_db.execute(
+        "CREATE TRIGGER reject_standard_h6_child "
+        "BEFORE INSERT ON HYOSU_SANRENTAN "
+        "BEGIN SELECT RAISE(ABORT, 'child rejected'); END"
+    )
+    sqlite_db.commit()
+    replacement = _flatten(
+        H6Parser().parse(
+            _make_h6_vote_record(
+                data_kubun="9",
+                child_hyo="00000000999",
+                total_hyo="00000009999",
+            )
+        )
+    )
+
+    with pytest.raises(ImporterError, match="child rejected"):
+        importer.import_records(iter(replacement))
+
+    assert sqlite_db.fetch_one(
+        "SELECT DataKubun AS status, HyoTotal1 AS total1 FROM HYOSU2"
+    ) == {"status": "4", "total1": "00000008000"}
+    assert sqlite_db.fetch_one(
+        "SELECT Hyo AS hyo FROM HYOSU_SANRENTAN"
+    ) == {"hyo": "00000000808"}
 
 
 def test_sqlite_importer_stores_official_av_record(sqlite_db):

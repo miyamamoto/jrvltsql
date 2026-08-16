@@ -41,5 +41,20 @@ def test_training_sale_odds_and_vote_mappings():
 
     assert RECORD_TYPE_TO_TABLE["H1"] == "NL_H1"
     assert RECORD_TYPE_TO_TABLE["H6"] == "NL_H6"
+    for standard_name in (
+        "HYOSU",
+        "HYOSU_TANPUKU",
+        "HYOSU_WAKU",
+        "HYOSU_UMARENWIDE",
+        "HYOSU_UMATAN",
+        "HYOSU_SANREN",
+    ):
+        assert JRAVAN_TO_JLTSQL[standard_name] == "NL_H1"
+    for standard_name in ("HYOSU2", "HYOSU_SANRENTAN"):
+        assert JRAVAN_TO_JLTSQL[standard_name] == "NL_H6"
     assert JRAVAN_TO_JLTSQL["HYO_TANPUKU"] == "NL_H1"
     assert JRAVAN_TO_JLTSQL["HYO_SANRENTAN"] == "NL_H6"
+    assert JLTSQL_TO_JRAVAN["NL_H1"] == "HYO_TANPUKU"
+    assert JLTSQL_TO_JRAVAN["NL_H6"] == "HYO_SANRENTAN"
+    assert STANDARD_EXPANDED_RECORD_OWNER["NL_H1"] == "HYOSU"
+    assert STANDARD_EXPANDED_RECORD_OWNER["NL_H6"] == "HYOSU2"
