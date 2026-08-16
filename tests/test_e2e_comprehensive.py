@@ -47,9 +47,9 @@ class TestAllTablesCreation(unittest.TestCase):
         nl_tables = [name for name in SCHEMAS.keys() if name.startswith('NL_')]
         rt_tables = [name for name in SCHEMAS.keys() if name.startswith('RT_')]
 
-        self.assertEqual(len(nl_tables), 45, "Should have 45 NL_* tables")
+        self.assertEqual(len(nl_tables), 47, "Should have 47 NL_* tables")
         self.assertEqual(len(rt_tables), 21, "Should have 21 RT_* tables")
-        self.assertEqual(len(SCHEMAS), 78, "Should have 78 total tables")
+        self.assertEqual(len(SCHEMAS), 80, "Should have 80 total tables")
 
     def test_realtime_tables_subset(self):
         """Verify RT tables are only for real-time record types."""
@@ -83,7 +83,7 @@ class TestSQLiteAllTables(unittest.TestCase):
         self.temp_dir.cleanup()
 
     def test_create_all_nl_tables(self):
-        """Test creating NL_* tables (all 44 should succeed)."""
+        """Test creating NL_* tables (all 47 should succeed)."""
         nl_tables = [name for name in SCHEMAS.keys() if name.startswith('NL_')]
 
         created_count = 0
@@ -95,8 +95,8 @@ class TestSQLiteAllTables(unittest.TestCase):
             else:
                 failed_tables.append(table_name)
 
-        # All 45 NL tables should create successfully
-        self.assertEqual(created_count, 45, f"Should create all 45 NL_* tables, failed: {failed_tables}")
+        # All 47 NL tables should create successfully
+        self.assertEqual(created_count, 47, f"Should create all 47 NL_* tables, failed: {failed_tables}")
 
         # Verify all tables exist
         for table_name in nl_tables:
@@ -135,8 +135,8 @@ class TestSQLiteAllTables(unittest.TestCase):
         failed = sum(1 for success in results.values() if not success)
         failed_tables = [name for name, success in results.items() if not success]
 
-        # All 78 tables should create successfully (45 NL + 21 RT + 12 TS)
-        self.assertEqual(successful, 78, f"Should create all 78 tables, failed: {failed_tables}")
+        # All 80 tables should create successfully (47 NL + 21 RT + 12 TS)
+        self.assertEqual(successful, 80, f"Should create all 80 tables, failed: {failed_tables}")
         self.assertEqual(failed, 0, "Should have 0 failing tables")
 
         # Verify all tables exist

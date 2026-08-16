@@ -14,12 +14,14 @@ from src.database.migration import SchemaMigrationError
 from src.importer.importer import (
     _ORDERED_MASTER_STORAGE_TABLES,
     _PREPARED_CH_SEISEKI_ROWS_KEY,
+    _PREPARED_CK_ROWS_KEY,
     _PREPARED_KS_SEISEKI_ROWS_KEY,
     _RC_STORAGE_TABLES,
     _STANDARD_ODDS_CONFIG_BY_OWNER,
     _STANDARD_VOTE_CONFIG_BY_OWNER,
     _TK_CHILD_STORAGE_TABLES,
     _YS_STORAGE_TABLES,
+    _ck_child_tables,
     _delete_mining_race_rows,
     _delete_official_record,
     _expanded_record_fingerprint,
@@ -38,17 +40,20 @@ from src.importer.importer import (
     delete_standard_odds_record,
     delete_standard_vote_record,
     insert_ch_coupled_batch,
+    insert_ck_coupled_batch,
     insert_ks_coupled_batch,
     insert_standard_odds_batch,
     insert_standard_vote_batch,
     insert_tk_coupled_batch,
     prepare_ch_coupled_rows,
+    prepare_ck_coupled_rows,
     prepare_ks_coupled_rows,
     prepare_tk_coupled_record,
     replace_mining_native_snapshot,
     resolve_standard_storage_table_name,
     resolve_standard_table_name,
     verify_ch_coupled_table,
+    verify_ck_coupled_tables,
     verify_hy_storage_schema,
     verify_ks_coupled_table,
     verify_mining_native_schema,
@@ -91,6 +96,7 @@ class OptimizedDataImporter:
         self._jravan_tables_ready = not use_jravan_schema
         self._verified_mining_native_tables: set[str] = set()
         self._verified_hy_tables: set[str] = set()
+        self._verified_ck_child_tables: dict[str, tuple[str, str]] = {}
         self._verified_rc_tables: set[str] = set()
         self._verified_ys_tables: set[str] = set()
         self._verified_tk_header_tables: dict[str, str] = {}
@@ -528,6 +534,16 @@ class OptimizedDataImporter:
                             f"KS import could not resolve normalized table for {table_name}"
                         )
                     verified_ks_result_tables[table_name] = result_table
+                if (
+                    _ck_child_tables(table_name) is not None
+                    and table_name not in self._verified_ck_child_tables
+                ):
+                    child_tables = verify_ck_coupled_tables(self.database, table_name)
+                    if child_tables is None:
+                        raise SchemaMigrationError(
+                            f"CK import could not resolve normalized children for {table_name}"
+                        )
+                    self._verified_ck_child_tables[table_name] = child_tables
                 coupled = prepare_ch_coupled_rows(
                     self.database,
                     record,
@@ -544,6 +560,15 @@ class OptimizedDataImporter:
                 )
                 if ks_coupled is not None:
                     converted_record[_PREPARED_KS_SEISEKI_ROWS_KEY] = ks_coupled
+                ck_coupled = prepare_ck_coupled_rows(
+                    self.database,
+                    record,
+                    table_name,
+                    converted_record,
+                    verified_child_tables=self._verified_ck_child_tables.get(table_name),
+                )
+                if ck_coupled is not None:
+                    converted_record[_PREPARED_CK_ROWS_KEY] = ck_coupled
                 batch_buffers[table_name].append(converted_record)
 
                 # Check if any batch is full
@@ -692,6 +717,30 @@ class OptimizedDataImporter:
                 self.database,
                 table_name,
                 prepared_ch,
+                commit_batch=commit_batch,
+                optimized=True,
+            )
+            self._records_imported += succeeded
+            self._records_failed += failed
+            if succeeded:
+                self._batches_processed += 1
+            return
+
+        prepared_ck = []
+        for record in batch:
+            coupled = record.get(_PREPARED_CK_ROWS_KEY)
+            if coupled is None:
+                continue
+            chaku_table, chaku_rows, ruikei_table, ruikei_rows = coupled
+            main_row = {key: value for key, value in record.items() if key != _PREPARED_CK_ROWS_KEY}
+            prepared_ck.append((main_row, chaku_table, chaku_rows, ruikei_table, ruikei_rows))
+        if prepared_ck:
+            if len(prepared_ck) != len(batch):
+                raise SchemaMigrationError("CK batch lost its coupled child rows")
+            succeeded, failed = insert_ck_coupled_batch(
+                self.database,
+                table_name,
+                prepared_ck,
                 commit_batch=commit_batch,
                 optimized=True,
             )

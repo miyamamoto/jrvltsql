@@ -59,7 +59,7 @@ jrvltsql は JRA / 中央競馬専用です。NAR / 地方競馬はこのリポ�
 | `HOSN` | `HOSE` | 競走馬市場取引価格 | `HS` | `NL_HS` | はい | いいえ | はい | 旧名 `HOSE` は受け付けません（下記参照）。 |
 | `HOYU` | - | 馬名の意味由来 | `HY` | `NL_HY` | はい | いいえ | はい | standard / full quickstart に含めています。 |
 | `COMM` | - | 各種解説・コース情報 | `CS` | `NL_CS` | はい | いいえ | はい | full quickstart に含めています。 |
-| `SNPN` | `SNAP` | 出走時点情報 | `CK` | `NL_CK` | はい | はい | はい | validation 上は対応。既定 quickstart では使っていません。旧名 `SNAP` は受け付けません（下記参照）。 |
+| `SNPN` | `SNAP` | 出走時点情報 | `CK` | `NL_CK`、`NL_CK_CHAKU`、`NL_CK_RUIKEI` | はい | はい | はい | 現行6,870バイトをnative名モードで完全格納します。既定 quickstart では使っていません。旧名 `SNAP` は受け付けません（下記参照）。 |
 | `TCVN` | `TCOV` | 特別登録馬情報補填 | 複数のマスタ・レース系レコード | レコード種別に応じた既存 `NL_*` テーブル | いいえ | はい | いいえ | 今週データ更新で使います。旧名 `TCOV` は受け付けません（下記参照）。 |
 | `RCVN` | `RCOV` | レース情報補填 | 複数のマスタ・レース系レコード | レコード種別に応じた既存 `NL_*` テーブル | いいえ | はい | いいえ | 今週データ更新で使います。旧名 `RCOV` は受け付けません（下記参照）。 |
 
@@ -173,7 +173,8 @@ jrvltsql は現在、以下 38 種類の JRA レコード種別に対してパ�
 | `YS`, `TK`, `CS` | `NL_YS`、`NL_TK_RACE`＋`NL_TK`、`NL_CS` |
 | `WE`, `WH`, `AV`, `JC`, `TC`, `CC` | `NL_WE`, `NL_WH`, `NL_AV`, `NL_JC`, `NL_TC`, `NL_CC` |
 | `DM`, `TM`, `WF`, `JG` | `NL_DM`, `NL_TM`, `NL_WF`, `NL_JG` |
-| `HC`, `HS`, `HY`, `WC`, `CK` | `NL_HC`, `NL_HS`, `NL_HY`, `NL_WC`, `NL_CK` |
+| `HC`, `HS`, `HY`, `WC` | `NL_HC`, `NL_HS`, `NL_HY`, `NL_WC` |
+| `CK` | `NL_CK`（互換親）、`NL_CK_CHAKU`（着回数278行）、`NL_CK_RUIKEI`（累計8行） |
 
 対応済みの速報系レコードは `RT_*` にも保存できます。公式時系列オッズは
 `TS_O1` / `TS_O2`、開催週速報オッズは `TS_SOKUHO_O1`〜`TS_SOKUHO_O6`
@@ -191,6 +192,18 @@ jrvltsql は現在、以下 38 種類の JRA レコード種別に対してパ�
 旧標準名テーブルは主キーと文字列日付の契約を満たさないため、自動変換せず停止します。
 バックアップ後に両テーブルを現行schemaで再作成し、保持期間内の現行データを
 再取得してください。
+
+`CK`は現行公式6,870バイトの1,729 scalar leafを扱います。PostgreSQLの
+1テーブル列数上限を超えないよう、native名モードでは互換親`NL_CK`と
+`NL_CK_CHAKU` 278行、`NL_CK_RUIKEI` 8行を1物理レコード単位のtransactionで
+更新します。`DataKubun=0`は7列の公式キーで親子を削除します。旧6,864バイトは
+現行offsetと混同せず拒否します。
+
+既存`NL_CK`には完全展開していない行があるため、追加される
+`CKStorageVersion`が`NULL`の行を完全格納済みと扱ってはいけません。現行`SNPN`を
+再取得して`CKStorageVersion=1`、子行数278/8をキーごとに確認してください。
+CKのJRA-VAN標準名モードはまだ実装しておらず、`CHOKYO_DETAIL`へ誤って部分保存せず
+明示的に停止します。
 
 `DM`は公式303バイトの18頭配列を扱います。native名モードでは`NL_DM`/`RT_DM`へ
 馬ごとの行として保存し、JRA-VAN標準名モードでは`MINING`へ1レース1行のwide形式で

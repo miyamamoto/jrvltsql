@@ -121,6 +121,24 @@ class TestIndividualParsers:
                     mutable[start : start + size] = b"0" * size
                 mutable[1015:4171] = b"0" * 3156
                 data = bytes(mutable)
+            if record_type == "CK":
+                mutable = bytearray(data)
+                mutable[11:15] = b"2024"
+                mutable[15:19] = b"0601"
+                mutable[19:21] = b"05"
+                mutable[21:23] = b"01"
+                mutable[23:25] = b"01"
+                mutable[25:27] = b"01"
+                mutable[27:37] = b"2024000001"
+                for start, end in (
+                    (73, 1384),
+                    (1423, 3863),
+                    (3902, 6342),
+                    (6476, 6596),
+                    (6748, 6868),
+                ):
+                    mutable[start:end] = b"0" * (end - start)
+                data = bytes(mutable)
             if record_type == "TK":
                 mutable = bytearray(data)
                 mutable[11:15] = b"2024"

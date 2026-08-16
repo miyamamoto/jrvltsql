@@ -32,6 +32,11 @@ def resolve_standard_storage_table_name(native_table_name: str) -> str:
 def resolve_standard_table_name(database: BaseDatabase, native_table_name: str) -> str:
     """Resolve a canonical standard table and reject unsupported legacy-only storage."""
     standard_name = resolve_standard_storage_table_name(native_table_name)
+    if native_table_name == "NL_CK":
+        raise SchemaMigrationError(
+            "CK standard-schema storage is not implemented; use native NL_CK until the "
+            "canonical CHOKYO_DETAIL parent/child contract is available"
+        )
     if (
         native_table_name == "NL_SK"
         and database.is_connected()
@@ -2185,6 +2190,441 @@ def insert_ks_coupled_batch(
     return succeeded, failed
 
 
+_CK_CHAKU_ROWS_KEY = "_ck_chaku_rows"
+_CK_RUIKEI_ROWS_KEY = "_ck_ruikei_rows"
+_PREPARED_CK_ROWS_KEY = "_prepared_ck_rows"
+_CK_PARENT_KEY = ("Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "KettoNum")
+_CK_HORSE_METRICS = (
+    ("ChakuSogo", 1),
+    ("ChakuChuo", 1),
+    ("ChakuKaisuBa", 7),
+    ("ChakuKaisuJyotai", 12),
+    ("ChakuKaisuSibaKyori", 9),
+    ("ChakuKaisuDirtKyori", 9),
+    ("ChakuKaisuJyoSiba", 10),
+    ("ChakuKaisuJyoDirt", 10),
+    ("ChakuKaisuJyoSyogai", 10),
+    ("Kyakusitu", 1),
+)
+_CK_PROFESSIONAL_METRICS = (
+    ("ChakuKaisuSiba", 1),
+    ("ChakuKaisuDirt", 1),
+    ("ChakuKaisuSyogai", 1),
+    ("ChakuKaisuSibaKyori", 9),
+    ("ChakuKaisuDirtKyori", 9),
+    ("ChakuKaisuJyoSiba", 10),
+    ("ChakuKaisuJyoDirt", 10),
+    ("ChakuKaisuJyoSyogai", 10),
+)
+_CK_EXPECTED_CHAKU_DIMENSIONS = (
+    *(
+        ("UMA", 0, metric, bucket)
+        for metric, count in _CK_HORSE_METRICS
+        for bucket in range(1, count + 1)
+    ),
+    *(
+        (entity, period, metric, bucket)
+        for entity in ("KISYU", "CHOKYOSI")
+        for period in (1, 2)
+        for metric, count in _CK_PROFESSIONAL_METRICS
+        for bucket in range(1, count + 1)
+    ),
+    *((entity, period, "ChakuKaisu", 1) for entity in ("BANUSI", "BREEDER") for period in (1, 2)),
+)
+_CK_EXPECTED_RUIKEI_DIMENSIONS = tuple(
+    (entity, period) for entity in ("KISYU", "CHOKYOSI", "BANUSI", "BREEDER") for period in (1, 2)
+)
+
+
+def _ck_child_tables(main_table_name: str) -> tuple[str, str] | None:
+    if main_table_name == "NL_CK":
+        return "NL_CK_CHAKU", "NL_CK_RUIKEI"
+    return None
+
+
+def _ck_schema_targets(database: BaseDatabase) -> tuple[BaseDatabase, ...]:
+    getter = getattr(database, "get_migration_targets", None)
+    if getter is None:
+        return (database,)
+    targets = tuple(getter())
+    return targets or (database,)
+
+
+def _ck_actual_column_contract(
+    database: BaseDatabase,
+    table_name: str,
+) -> dict[str, tuple[str, bool]]:
+    if database.get_db_type() == "postgresql":
+        rows = database.fetch_all(
+            "SELECT a.attname AS name, format_type(a.atttypid, a.atttypmod) AS type, "
+            "a.attnotnull AS not_null FROM pg_attribute a "
+            "WHERE a.attrelid = to_regclass(?) AND a.attnum > 0 AND NOT a.attisdropped",
+            (table_name.lower(),),
+        )
+    else:
+        rows = database.fetch_all(f'PRAGMA table_info("{table_name}")')
+
+    def normalized_type(value: Any) -> str:
+        normalized = str(value or "").lower().strip()
+        return {
+            "int": "integer",
+            "int4": "integer",
+            "integer": "integer",
+            "int8": "bigint",
+            "bigint": "bigint",
+            "text": "text",
+        }.get(normalized, normalized)
+
+    result = {}
+    for row in rows:
+        not_null_value = row.get("not_null", row.get("notnull", 0))
+        result[str(row["name"]).lower()] = (
+            normalized_type(row.get("type")),
+            bool(not_null_value),
+        )
+    return result
+
+
+def _ck_expected_column_contract(schema_sql: str) -> dict[str, tuple[str, bool]]:
+    from src.database.migration import _extract_column_definitions
+
+    definitions = _extract_column_definitions(schema_sql)
+    if definitions is None:
+        raise SchemaMigrationError("CK expected child columns are unreadable")
+    result = {}
+    for name, definition in definitions.items():
+        tokens = definition.split()
+        result[name.lower()] = (tokens[1].lower(), "NOT NULL" in definition.upper())
+    return result
+
+
+def _ck_named_constraints(create_sql: str) -> dict[str, str]:
+    import re
+
+    from src.database.migration import _schema_body, _split_schema_items
+
+    body = _schema_body(create_sql)
+    if body is None:
+        raise SchemaMigrationError("CK schema SQL has no table body")
+    constraints = {}
+    for item in _split_schema_items(body):
+        match = re.match(r"CONSTRAINT\s+(\w+)\s+(.+)", item, re.IGNORECASE | re.DOTALL)
+        if match:
+            normalized = re.sub(r"[\s\"`]", "", match.group(2)).lower()
+            constraints[match.group(1).lower()] = normalized
+    return constraints
+
+
+def _verify_ck_sqlite_constraints(
+    database: BaseDatabase,
+    table_name: str,
+    expected_schema: str,
+) -> None:
+    row = database.fetch_one(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?",
+        (table_name,),
+    )
+    if not row or not row.get("sql"):
+        raise SchemaMigrationError(f"CK child table definition is unreadable: {table_name}")
+    expected = _ck_named_constraints(expected_schema)
+    actual = _ck_named_constraints(str(row["sql"]))
+    if actual != expected:
+        raise SchemaMigrationError(
+            f"CK child constraints mismatch for {table_name}: "
+            f"actual={sorted(actual)}, expected={sorted(expected)}"
+        )
+
+    foreign_keys = database.fetch_all(f'PRAGMA foreign_key_list("{table_name}")')
+    ordered = sorted(foreign_keys, key=lambda item: int(item["seq"]))
+    local = [str(item["from"]) for item in ordered]
+    remote = [str(item["to"]) for item in ordered]
+    if (
+        len(ordered) != len(_CK_PARENT_KEY)
+        or len({item["id"] for item in ordered}) != 1
+        or [name.lower() for name in local] != [name.lower() for name in _CK_PARENT_KEY]
+        or [name.lower() for name in remote] != [name.lower() for name in _CK_PARENT_KEY]
+        or any(str(item["table"]).lower() != "nl_ck" for item in ordered)
+        or any(str(item["on_delete"]).upper() != "CASCADE" for item in ordered)
+    ):
+        raise SchemaMigrationError(f"CK child foreign key mismatch for {table_name}")
+
+
+def _verify_ck_postgresql_constraints(
+    database: BaseDatabase,
+    table_name: str,
+    expected_schema: str,
+) -> None:
+    expected_names = set(_ck_named_constraints(expected_schema))
+    rows = database.fetch_all(
+        "SELECT conname AS name, contype AS type, confdeltype AS delete_type, "
+        "pg_get_constraintdef(oid) AS definition "
+        "FROM pg_constraint WHERE conrelid = to_regclass(?)",
+        (table_name.lower(),),
+    )
+    by_name = {str(row["name"]).lower(): row for row in rows}
+    if not expected_names <= set(by_name):
+        raise SchemaMigrationError(
+            f"CK child constraints missing for {table_name}: "
+            f"{sorted(expected_names - set(by_name))}"
+        )
+    required_tokens = {
+        "ck_chaku_parent_fk": (*_CK_PARENT_KEY, "nl_ck", "cascade"),
+        "ck_chaku_domain": (
+            "entitykubun",
+            "periodnum",
+            "metrickubun",
+            "bucketnum",
+            "uma",
+            "kisyu",
+            "chokyosi",
+            "banusi",
+            "breeder",
+            *tuple(metric for metric, _ in (*_CK_HORSE_METRICS, *_CK_PROFESSIONAL_METRICS)),
+        ),
+        "ck_chaku_count_shape": ("count5", "count6", "kyakusitu", "is null"),
+        "ck_ruikei_parent_fk": (*_CK_PARENT_KEY, "nl_ck", "cascade"),
+        "ck_ruikei_shape": (
+            "entitykubun",
+            "periodnum",
+            "honsyokinheichi",
+            "honsyokinsyogai",
+            "fukasyokinheichi",
+            "fukasyokinsyogai",
+            "honsyokintotal",
+            "fukasyokin",
+            "is not null",
+        ),
+    }
+    for constraint_name in expected_names:
+        definition = str(by_name[constraint_name].get("definition") or "").lower()
+        if not all(str(token).lower() in definition for token in required_tokens[constraint_name]):
+            raise SchemaMigrationError(
+                f"CK child constraint body mismatch for {table_name}.{constraint_name}"
+            )
+        if (
+            constraint_name.endswith("parent_fk")
+            and str(by_name[constraint_name].get("delete_type")) != "c"
+        ):
+            raise SchemaMigrationError(f"CK child foreign key is not CASCADE: {table_name}")
+
+
+def verify_ck_coupled_tables(
+    database: BaseDatabase,
+    main_table_name: str,
+) -> tuple[str, str] | None:
+    """Verify the complete CK parent/child contract before any mutation."""
+    child_tables = _ck_child_tables(main_table_name)
+    if child_tables is None:
+        return None
+
+    from src.database.migration import verify_table_schema
+    from src.database.schema import SCHEMAS
+
+    for target in _ck_schema_targets(database):
+        for table_name in (main_table_name, *child_tables):
+            schema_sql = SCHEMAS[table_name]
+            if not target.table_exists_strict(table_name):
+                raise SchemaMigrationError(f"CK import requires table {table_name} before mutation")
+            verify_table_schema(target, table_name, schema_sql)
+            if table_name != main_table_name:
+                actual = _ck_actual_column_contract(target, table_name)
+                expected = _ck_expected_column_contract(schema_sql)
+                if actual != expected:
+                    raise SchemaMigrationError(
+                        f"CK child columns/types/nullability must match exactly for {table_name}"
+                    )
+                if target.get_db_type() == "sqlite":
+                    _verify_ck_sqlite_constraints(target, table_name, schema_sql)
+                elif target.get_db_type() == "postgresql":
+                    _verify_ck_postgresql_constraints(target, table_name, schema_sql)
+    return child_tables
+
+
+def prepare_ck_coupled_rows(
+    database: BaseDatabase,
+    record: dict,
+    main_table_name: str,
+    main_row: dict,
+    *,
+    verified_child_tables: tuple[str, str] | None = None,
+) -> tuple[str, list[dict], str, list[dict]] | None:
+    """Validate all CK dimensions, keys, and values before a write begins."""
+    expected_tables = _ck_child_tables(main_table_name)
+    if expected_tables is None:
+        return None
+    child_tables = verified_child_tables or verify_ck_coupled_tables(database, main_table_name)
+    if child_tables != expected_tables:
+        raise SchemaMigrationError("CK normalized child-table resolution is inconsistent")
+    chaku_table, ruikei_table = child_tables
+
+    if "CKStorageVersion" in record:
+        raise SchemaMigrationError("CKStorageVersion is importer-owned metadata")
+    data_kubun = resolve_record_data_kubun(record)
+    chaku_rows = record.get(_CK_CHAKU_ROWS_KEY)
+    ruikei_rows = record.get(_CK_RUIKEI_ROWS_KEY)
+    if data_kubun == "0":
+        if chaku_rows != [] or ruikei_rows != []:
+            raise SchemaMigrationError("CK delete record must not carry normalized child rows")
+        return chaku_table, [], ruikei_table, []
+    if data_kubun not in {"1", "2"}:
+        raise SchemaMigrationError(f"CK import does not support DataKubun={data_kubun!r}")
+    if not isinstance(chaku_rows, list) or not isinstance(ruikei_rows, list):
+        raise SchemaMigrationError("CK import requires both normalized child row lists")
+
+    expected_chaku_fields = set(get_table_column_types(chaku_table))
+    expected_ruikei_fields = set(get_table_column_types(ruikei_table))
+    converted_chaku = []
+    converted_ruikei = []
+    dimensions = []
+    for number, row in enumerate(chaku_rows, start=1):
+        if not isinstance(row, dict) or set(row) != expected_chaku_fields:
+            raise SchemaMigrationError(f"CK count row {number} does not match {chaku_table}")
+        converted = convert_record_types(row, chaku_table)
+        if any(converted.get(key) != main_row.get(key) for key in _CK_PARENT_KEY):
+            raise SchemaMigrationError(f"CK count row {number} has a mismatched parent key")
+        dimension = (
+            converted.get("EntityKubun"),
+            converted.get("PeriodNum"),
+            converted.get("MetricKubun"),
+            converted.get("BucketNum"),
+        )
+        dimensions.append(dimension)
+        last_rank = 4 if dimension[0] == "UMA" and dimension[2] == "Kyakusitu" else 6
+        if any(converted.get(f"Count{rank}") is None for rank in range(1, last_rank + 1)):
+            raise SchemaMigrationError(f"CK count row {number} has a missing official value")
+        if last_rank == 4 and any(converted.get(f"Count{rank}") is not None for rank in (5, 6)):
+            raise SchemaMigrationError("CK running-style row must contain exactly four values")
+        converted_chaku.append(converted)
+    if tuple(dimensions) != _CK_EXPECTED_CHAKU_DIMENSIONS:
+        raise SchemaMigrationError("CK count dimensions are missing, duplicated, or out of order")
+
+    summary_dimensions = []
+    for number, row in enumerate(ruikei_rows, start=1):
+        if not isinstance(row, dict) or set(row) != expected_ruikei_fields:
+            raise SchemaMigrationError(f"CK summary row {number} does not match {ruikei_table}")
+        converted = convert_record_types(row, ruikei_table)
+        if any(converted.get(key) != main_row.get(key) for key in _CK_PARENT_KEY):
+            raise SchemaMigrationError(f"CK summary row {number} has a mismatched parent key")
+        summary_dimensions.append((converted.get("EntityKubun"), converted.get("PeriodNum")))
+        required = (
+            (
+                "SetYear",
+                "HonSyokinHeichi",
+                "HonSyokinSyogai",
+                "FukaSyokinHeichi",
+                "FukaSyokinSyogai",
+            )
+            if converted.get("EntityKubun") in {"KISYU", "CHOKYOSI"}
+            else ("SetYear", "HonSyokinTotal", "FukaSyokin")
+        )
+        if any(converted.get(name) is None for name in required):
+            raise SchemaMigrationError(f"CK summary row {number} has a missing official value")
+        converted_ruikei.append(converted)
+    if tuple(summary_dimensions) != _CK_EXPECTED_RUIKEI_DIMENSIONS:
+        raise SchemaMigrationError("CK summary dimensions are missing, duplicated, or out of order")
+
+    main_row["CKStorageVersion"] = 1
+    return chaku_table, converted_chaku, ruikei_table, converted_ruikei
+
+
+def insert_ck_coupled_batch(
+    database: BaseDatabase,
+    main_table_name: str,
+    prepared: list[tuple[dict, str, list[dict], str, list[dict]]],
+    *,
+    commit_batch: bool,
+    optimized: bool,
+) -> tuple[int, int]:
+    """Apply complete CK records in provider order under one transaction."""
+    if not prepared:
+        return 0, 0
+
+    def begin_if_owned() -> None:
+        if commit_batch:
+            database.begin_transaction()
+
+    def insert_many(table_name: str, rows: list[dict]) -> int:
+        if optimized and hasattr(database, "insert_many_optimized"):
+            return database.insert_many_optimized(table_name, rows)
+        return database.insert_many(table_name, rows)
+
+    def rollback_or_invalidate() -> None:
+        try:
+            database.rollback()
+        except DatabaseError:
+            try:
+                database.invalidate_connection()
+            except Exception as disconnect_error:
+                logger.error(
+                    "Failed to invalidate database after CK rollback failure",
+                    table=main_table_name,
+                    error=str(disconnect_error),
+                )
+            raise
+
+    def write_one(
+        main_row: dict,
+        chaku_table: str,
+        chaku_rows: list[dict],
+        ruikei_table: str,
+        ruikei_rows: list[dict],
+    ) -> None:
+        where = " AND ".join(f"{column} = ?" for column in _CK_PARENT_KEY)
+        values = tuple(main_row.get(column) for column in _CK_PARENT_KEY)
+        if any(value in (None, "") for value in values):
+            raise SchemaMigrationError("CK write has an incomplete parent key")
+        if main_row.get("DataKubun") == "0":
+            database.execute(f"DELETE FROM {chaku_table} WHERE {where}", values)
+            database.execute(f"DELETE FROM {ruikei_table} WHERE {where}", values)
+            database.execute(f"DELETE FROM {main_table_name} WHERE {where}", values)
+            return
+
+        incomplete = dict(main_row)
+        incomplete["CKStorageVersion"] = None
+        insert_many(main_table_name, [incomplete])
+        database.execute(f"DELETE FROM {chaku_table} WHERE {where}", values)
+        database.execute(f"DELETE FROM {ruikei_table} WHERE {where}", values)
+        insert_many(chaku_table, chaku_rows)
+        insert_many(ruikei_table, ruikei_rows)
+        database.execute(
+            f"UPDATE {main_table_name} SET CKStorageVersion = ? WHERE {where}",
+            (1, *values),
+        )
+
+    def write_all(items: list[tuple[dict, str, list[dict], str, list[dict]]]) -> None:
+        for item in items:
+            write_one(*item)
+
+    try:
+        begin_if_owned()
+        write_all(prepared)
+        if commit_batch:
+            database.commit()
+        return len(prepared), 0
+    except DatabaseError:
+        rollback_or_invalidate()
+        if not commit_batch:
+            raise
+
+    succeeded = 0
+    failed = 0
+    for item in prepared:
+        try:
+            begin_if_owned()
+            write_one(*item)
+            database.commit()
+            succeeded += 1
+        except DatabaseError as error:
+            failed += 1
+            rollback_or_invalidate()
+            logger.error(
+                "Failed to insert coupled CK record",
+                table=main_table_name,
+                error=str(error),
+            )
+    return succeeded, failed
+
+
 # ============================================================================
 # REAL型フィールドの変換ルール定義
 # JV-Dataでは一部の数値フィールドが10倍された状態で格納されている
@@ -2422,6 +2862,7 @@ class DataImporter:
         self._jravan_tables_ready = not use_jravan_schema
         self._verified_mining_native_tables: set[str] = set()
         self._verified_hy_tables: set[str] = set()
+        self._verified_ck_child_tables: dict[str, tuple[str, str]] = {}
         self._verified_rc_tables: set[str] = set()
         self._verified_ys_tables: set[str] = set()
         self._verified_tk_header_tables: dict[str, str] = {}
@@ -2930,6 +3371,16 @@ class DataImporter:
                 # has happened yet, and a second failure aborts the import.
                 verified_ch_result_table = verify_ch_coupled_table(self.database, table_name)
 
+        verified_ck_child_tables = self._verified_ck_child_tables.get(table_name)
+        if _ck_child_tables(table_name) is not None and verified_ck_child_tables is None:
+            verified = verify_ck_coupled_tables(self.database, table_name)
+            if verified is None:
+                raise SchemaMigrationError(
+                    f"CK import could not resolve normalized children for {table_name}"
+                )
+            verified_ck_child_tables = verified
+            self._verified_ck_child_tables[table_name] = verified
+
         verified_ks_result_table = None
         if _ks_result_table_name(table_name) is not None:
             try:
@@ -2952,6 +3403,7 @@ class DataImporter:
             converted_batch = []
             prepared_ch: list[tuple[dict, str, list[dict]]] = []
             prepared_ks: list[tuple[dict, str, list[dict]]] = []
+            prepared_ck: list[tuple[dict, str, list[dict], str, list[dict]]] = []
             for original_record, record in zip(batch, clean_batch, strict=True):
                 converted_record = self._convert_record(record, table_name)
                 if (
@@ -2977,6 +3429,24 @@ class DataImporter:
                     if ks_coupled is not None:
                         result_table, result_rows = ks_coupled
                         prepared_ks.append((converted_record, result_table, result_rows))
+                    ck_coupled = prepare_ck_coupled_rows(
+                        self.database,
+                        original_record,
+                        table_name,
+                        converted_record,
+                        verified_child_tables=verified_ck_child_tables,
+                    )
+                    if ck_coupled is not None:
+                        chaku_table, chaku_rows, ruikei_table, ruikei_rows = ck_coupled
+                        prepared_ck.append(
+                            (
+                                converted_record,
+                                chaku_table,
+                                chaku_rows,
+                                ruikei_table,
+                                ruikei_rows,
+                            )
+                        )
                 else:
                     self._records_failed += 1
                     logger.warning(
@@ -3011,6 +3481,22 @@ class DataImporter:
                 )
                 self._records_imported += rows
                 if rows:
+                    self._batches_processed += 1
+                return
+
+            if prepared_ck:
+                if len(prepared_ck) != len(converted_batch):
+                    raise SchemaMigrationError("CK batch lost its coupled child rows")
+                succeeded, failed = insert_ck_coupled_batch(
+                    self.database,
+                    table_name,
+                    prepared_ck,
+                    commit_batch=auto_commit,
+                    optimized=False,
+                )
+                self._records_imported += succeeded
+                self._records_failed += failed
+                if succeeded:
                     self._batches_processed += 1
                 return
 
@@ -3317,6 +3803,35 @@ class DataImporter:
                 if rows:
                     self._batches_processed += 1
                 return rows == 1
+            verified_ck = self._verified_ck_child_tables.get(table_name)
+            if _ck_child_tables(table_name) is not None and verified_ck is None:
+                verified_ck = verify_ck_coupled_tables(self.database, table_name)
+                if verified_ck is None:
+                    raise SchemaMigrationError(
+                        f"CK import could not resolve normalized children for {table_name}"
+                    )
+                self._verified_ck_child_tables[table_name] = verified_ck
+            ck_coupled = prepare_ck_coupled_rows(
+                self.database,
+                record,
+                table_name,
+                converted_record,
+                verified_child_tables=verified_ck,
+            )
+            if ck_coupled is not None:
+                chaku_table, chaku_rows, ruikei_table, ruikei_rows = ck_coupled
+                succeeded, failed = insert_ck_coupled_batch(
+                    self.database,
+                    table_name,
+                    [(converted_record, chaku_table, chaku_rows, ruikei_table, ruikei_rows)],
+                    commit_batch=auto_commit,
+                    optimized=False,
+                )
+                self._records_imported += succeeded
+                self._records_failed += failed
+                if succeeded:
+                    self._batches_processed += 1
+                return succeeded == 1
             coupled = prepare_ch_coupled_rows(self.database, record, table_name)
             if coupled is not None:
                 result_table, result_rows = coupled

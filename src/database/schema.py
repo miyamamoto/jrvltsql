@@ -99,6 +99,10 @@ from typing import Any, Dict, List
 
 from src.database.base import BaseDatabase
 from src.database.schema_ch import NL_CH_SCHEMA, NL_CH_SEISEKI_SCHEMA
+from src.database.schema_ck import (
+    NL_CK_CHAKU_SCHEMA,
+    NL_CK_RUIKEI_SCHEMA,
+)
 from src.database.schema_ks import NL_KS_SCHEMA, NL_KS_SEISEKI_SCHEMA
 from src.utils.logger import get_logger
 
@@ -329,6 +333,7 @@ SCHEMAS = {
             BreederName TEXT,
             BreederName_Co TEXT,
             BreederResultsInfo TEXT,
+            CKStorageVersion INTEGER,
             RecordDelimiter TEXT,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, KettoNum)
         )
@@ -2718,6 +2723,15 @@ for _source_table, _target_table in (
     )
 
 
+SCHEMAS.update(
+    {
+        "NL_CK_CHAKU": NL_CK_CHAKU_SCHEMA,
+        "NL_CK_RUIKEI": NL_CK_RUIKEI_SCHEMA,
+    }
+)
+STRICT_RECREATE_TABLES = frozenset({"NL_CK_CHAKU", "NL_CK_RUIKEI"})
+
+
 class SchemaManager:
     """Schema management for JLTSQL database.
 
@@ -2760,7 +2774,8 @@ class SchemaManager:
             )
 
             schema_sql = SCHEMAS[table_name]
-            migrate_table_if_needed(self.db, table_name, schema_sql)
+            if table_name not in STRICT_RECREATE_TABLES:
+                migrate_table_if_needed(self.db, table_name, schema_sql)
             self.db.execute(schema_sql)
             verify_table_schema(self.db, table_name, schema_sql)
             logger.info(f"Created table: {table_name}")
@@ -2778,7 +2793,14 @@ class SchemaManager:
         from src.database.migration import migrate_all_tables, verify_table_schema
 
         logger.info("Creating all tables...")
-        migrate_all_tables(self.db, SCHEMAS)
+        migrate_all_tables(
+            self.db,
+            {
+                table_name: schema_sql
+                for table_name, schema_sql in SCHEMAS.items()
+                if table_name not in STRICT_RECREATE_TABLES
+            },
+        )
         results = {}
 
         for table_name, schema_sql in SCHEMAS.items():
@@ -2789,6 +2811,15 @@ class SchemaManager:
                 results[table_name] = True
             except Exception as e:
                 logger.error(f"Failed to create table {table_name}: {e}")
+                results[table_name] = False
+
+        try:
+            from src.importer.importer import verify_ck_coupled_tables
+
+            verify_ck_coupled_tables(self.db, "NL_CK")
+        except Exception as e:
+            logger.error(f"Failed to verify coupled CK tables: {e}")
+            for table_name in STRICT_RECREATE_TABLES:
                 results[table_name] = False
 
         success_count = sum(1 for v in results.values() if v)
@@ -2987,7 +3018,14 @@ def create_all_tables(db: BaseDatabase) -> None:
     logger.info("Creating tables...")
 
     # Check and migrate existing tables with mismatched schemas
-    migrate_all_tables(db, SCHEMAS)
+    migrate_all_tables(
+        db,
+        {
+            table_name: schema_sql
+            for table_name, schema_sql in SCHEMAS.items()
+            if table_name not in STRICT_RECREATE_TABLES
+        },
+    )
 
     for table_name, schema_sql in SCHEMAS.items():
         try:
@@ -2997,4 +3035,8 @@ def create_all_tables(db: BaseDatabase) -> None:
         except Exception as e:
             logger.error(f"Failed to create table {table_name}: {e}")
             raise
+
+    from src.importer.importer import verify_ck_coupled_tables
+
+    verify_ck_coupled_tables(db, "NL_CK")
     logger.info(f"Successfully created {len(SCHEMAS)} tables")
