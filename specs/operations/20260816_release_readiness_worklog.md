@@ -1666,3 +1666,29 @@
   self-referential commit loop. Next safe action: push that clean descendant,
   open the BT PR, request the one-time GitHub auxiliary review, and merge only
   after all exact-head checks succeed and unresolved threads are zero.
+
+### 2026-08-17 — remaining standard-storage audit and JG iteration
+
+- PR `#198` squash-merged the BT canonical-storage iteration as master full SHA
+  `a53eed6c24cbb4cbb8ebc0edc845ae67849b76b2`. Its GitHub test, lint,
+  Windows launcher, and distribution jobs passed; the optional performance job
+  was skipped. Copilot and CodeRabbit both reported quota limits and supplied no
+  findings, while the exact code SHA retained the independent Claude and final
+  Codex GREEN evidence recorded above. The dedicated worktree and branch were
+  removed after the merge was confirmed.
+- Objective and minimum scope: re-audit the three remaining undefined or
+  suspicious standard owners for JG, WC, and WF against the current and
+  immediately prior official contracts, then implement only the smallest
+  independent record iteration that can preserve every official field, key,
+  status, and delete/update semantic. Repository: `miyamamoto/jrvltsql`;
+  dedicated worktree: `$WORKSPACE/20260817_jrvltsql_jg_standard`; branch:
+  `agent/jg-standard-storage-20260817`; base and initial HEAD:
+  `a53eed6c24cbb4cbb8ebc0edc845ae67849b76b2`.
+- No implementation claim has been made. A fresh independent Codex audit is
+  comparing JG/WC/WF official layouts, parser fields, native/canonical schemas,
+  mapping ownership, importer behavior, cancellation semantics, tests, and
+  docs. Next safe action: select one record only after the owner and complete
+  storage contract are proven, then capture grouped red-first evidence on this
+  unchanged base. STOP if the apparent standard table is semantically
+  unrelated, cannot store all official payload, lacks a deterministic key, or
+  another current PR already implements the same contract.
