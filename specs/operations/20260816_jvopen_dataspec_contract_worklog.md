@@ -13,7 +13,8 @@
   cancellation semantics, release versioning, and publication are separate
   iterations.
 - Repository: `miyamamoto/jrvltsql`.
-- Worktree: `/home/keiba/scratch/20260816_jrvltsql_jvopen_dataspec`.
+- Worktree: dedicated worktree for the branch below; its local absolute path is
+  intentionally omitted from this tracked public record.
 - Branch: `agent/jvopen-dataspec-contract-20260816`.
 - Base/initial HEAD/origin master full SHA:
   `8fc0d7c3a3e10bfcd3c589cca7ec4707573c5c16`.
@@ -196,8 +197,35 @@
   passed. Disposable source/archive files were removed; the service lock was
   free afterward and the development acquisition environment remained healthy.
 
+## Aggregated review repair
+
+- PR #187 was opened at candidate
+  `accc5f9f0b9ca9c2845a3fcf4c1660bfc3dee940`. GitHub Actions test/lint
+  passed, and one GitHub-native Codex review plus the configured optional
+  CodeRabbit review were allowed to finish before any repair.
+- Codex found that the `cache build` and `cache rebuild` commands validated too
+  late. A stale `O1` cache created by an older release could make `build`
+  return `[CACHED]`, while `rebuild` could delete that cache before the fetcher
+  rejected the non-selector. This is actionable because it violates both the
+  shared contract and the pre-side-effect guarantee.
+- Extended the existing CLI contract test with one parameterized build/rebuild
+  case. Before production repair it failed **2 cases**: build returned exit 0,
+  and rebuild removed the complete cache. This is the required negative proof
+  for the newly repaired cache-command guard.
+- Added one CLI rendering helper around the shared validator and called it at
+  the start of both cache commands, before cache-manager construction, lookup,
+  or deletion. Retired-selector diagnostics remain stable, and valid option-2
+  requests still reach the existing cache-specific usage rejection.
+- CodeRabbit independently flagged the worklog's local absolute worktree path
+  as unnecessary public environment disclosure. Replaced it with the dedicated
+  branch identity while preserving the worktree handoff contract.
+- Focused review-repair selection (JVOpen contract, CLI, cache, quickstart,
+  batch, and historical cache tests): **291 passed**. Compileall, fatal flake8,
+  strict MkDocs, and diff check also passed. No Claude session or code was used.
+
 ## Next safe command
 
-- Commit this evidence-only worklog update, repeat the required tests and
-  acquisition smoke on the resulting final full SHA, then push/open one PR and
-  run the single GitHub-native review/final gate.
+- Commit and push the aggregated repair once, repeat the focused/local,
+  distribution, and acquisition gates on the resulting full SHA, reply to and
+  resolve both review threads, then merge only after CI and final state are
+  green.

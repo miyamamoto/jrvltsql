@@ -89,6 +89,17 @@ def _reject_retired_data_spec(data_spec: str) -> None:
     sys.exit(1)
 
 
+def _reject_invalid_jvopen_combination(data_spec: str, option: int) -> None:
+    """Render a stable CLI error for any invalid JVOpen request."""
+    from src.jvlink.constants import validate_jvopen_combination
+
+    try:
+        validate_jvopen_combination(data_spec, option)
+    except ValueError as exc:
+        click.echo(f"Error: {exc}")
+        sys.exit(1)
+
+
 def _print_fetch_guardrail_notes(jv_option: int) -> None:
     """Emit option-dependent date-range caveats after input validation."""
     if jv_option in (3, 4):
@@ -580,7 +591,7 @@ def cache_build(ctx, data_spec, date_from, date_to, jv_option, also_import, db, 
     from src.cache import CacheManager
     from src.fetcher.historical import HistoricalFetcher
 
-    _reject_retired_data_spec(data_spec)
+    _reject_invalid_jvopen_combination(data_spec, jv_option)
 
     if jv_option == 2:
         raise click.UsageError(
@@ -680,9 +691,9 @@ def cache_rebuild(ctx, data_spec, date_from, date_to, jv_option, cache_dir):
     Example:
       jltsql cache rebuild --spec RACE --from 20260301 --to 20260328
     """
-    # Reject before clearing: an unsupported legacy spec must never destroy a
-    # usable cache and then fail in the delegated build command.
-    _reject_retired_data_spec(data_spec)
+    # Reject before cache lookup or clearing. A stale cache created by an older
+    # release must not make an invalid request look successful or be destroyed.
+    _reject_invalid_jvopen_combination(data_spec, jv_option)
 
     if jv_option == 2:
         raise click.UsageError(

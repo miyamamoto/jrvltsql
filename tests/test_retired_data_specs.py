@@ -474,3 +474,31 @@ class TestCLIRejectsRetiredSpecs:
             assert "2023-08" in result.output
             assert "DIFN" in result.output
             assert cache_file.read_bytes() == b"existing-cache"
+
+    @pytest.mark.parametrize("command", ("build", "rebuild"))
+    def test_cache_commands_reject_record_type_before_cache_access(self, command):
+        from src.cache import CacheManager
+
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            config_path = Path("config.yaml")
+            config_path.write_text(MINIMAL_CLI_CONFIG, encoding="utf-8")
+            manager = CacheManager(Path("cache"))
+            manager.write_nl_record("O1", "20240101", b"existing-cache")
+            manager.mark_nl_complete("O1", "20240101")
+
+            result = runner.invoke(
+                cli,
+                [
+                    "--config", str(config_path),
+                    "cache", command, "--spec", "O1",
+                    "--from", "20240101", "--to", "20240101",
+                    "--cache-dir", "cache",
+                ],
+            )
+
+            assert result.exit_code != 0
+            assert manager.has_nl_range("O1", "20240101", "20240101") is True
+            assert list(manager.read_nl("O1", "20240101", "20240101")) == [
+                b"existing-cache"
+            ]
