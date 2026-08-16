@@ -102,9 +102,9 @@ INDEXES = {
 
     "NL_HY": [
         # 馬名意味由来 (Horse Name Meaning/Origin)
-        # 実際のスキーマにはYear, MonthDay, JyoCDが存在しない
         "CREATE INDEX IF NOT EXISTS idx_nl_hy_date ON NL_HY(MakeDate)",
-        "CREATE INDEX IF NOT EXISTS idx_nl_hy_horse ON NL_HY(Bamei)",
+        "CREATE INDEX IF NOT EXISTS idx_nl_hy_horse ON NL_HY(KettoNum)",
+        "CREATE INDEX IF NOT EXISTS idx_nl_hy_name ON NL_HY(Bamei)",
     ],
 
     "NL_JG": [

@@ -55,6 +55,17 @@ def resolve_standard_table_name(database: BaseDatabase, native_table_name: str) 
             "reimport current-shape source records."
         )
     if (
+        native_table_name == "NL_HY"
+        and database.is_connected()
+        and database.table_exists("MEANING")
+        and not database.table_exists(standard_name)
+    ):
+        raise SchemaMigrationError(
+            "Legacy standard table MEANING exists but canonical BAMEIORIGIN does not. "
+            "Automatic HY import is refused; rebuild the standard table as "
+            "BAMEIORIGIN and reimport current-shape source records."
+        )
+    if (
         native_table_name == "NL_DM"
         and database.is_connected()
         and database.table_exists("DATA_MASTER")

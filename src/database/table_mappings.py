@@ -105,6 +105,7 @@ JRAVAN_TO_JLTSQL: Dict[str, str] = {
     "SEISAN": "NL_BR",  # 生産者マスタ
     "MINING": "NL_DM",  # タイム型データマイニング予想
     "TAISENGATA_MINING": "NL_TM",  # 対戦型データマイニング予想
+    "BAMEIORIGIN": "NL_HY",  # 馬名の意味由来
 }
 
 # レコード種別コード → テーブル名 (Record Type Code -> Table Name)

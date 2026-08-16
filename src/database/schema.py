@@ -707,11 +707,10 @@ SCHEMAS = {
             RecordSpec TEXT,
             DataKubun TEXT,
             MakeDate TEXT,
+            KettoNum TEXT,
             Bamei TEXT,
-            Field5 TEXT,
-            Field6 TEXT,
-            Field7 TEXT,
-            PRIMARY KEY (Bamei)
+            Origin TEXT,
+            PRIMARY KEY (KettoNum)
         )
     """,
     "NL_JG": """

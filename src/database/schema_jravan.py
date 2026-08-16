@@ -17,7 +17,10 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             RecordSpec                     CHAR(2)             ,  -- レコード種別ID
             DataKubun                      CHAR(1)             ,  -- データ区分
             MakeDate                       DATE                ,  -- YYYYMMDD形式の日付
-            Bamei                          VARCHAR(36)           -- 文字列(36)
+            KettoNum                       VARCHAR(10)         ,  -- 血統登録番号
+            Bamei                          VARCHAR(36)         ,  -- 馬名
+            Origin                         VARCHAR(64)         ,  -- 馬名の意味由来
+            PRIMARY KEY (KettoNum)
         )
     """,
     "BANUSI": """

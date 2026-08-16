@@ -1001,3 +1001,92 @@
   gates, commit and push one clean candidate, then perform the single final
   exact-SHA gate (checks, unresolved threads, review evidence, and clean
   worktree) before merging PR #194.
+
+## Iteration: HY official semantics and storage contract (2026-08-17 JST)
+
+- Objective and minimum scope: correct only the HY record's current official
+  field semantics and its native plus standard-schema persistence contract.
+  The required official byte layout is `KettoNum` at 12-21, `Bamei` at 22-57,
+  and `Origin` at 58-121, with the horse registration number as the durable
+  identity. CK expansion, unrelated standard routes, global metadata repair,
+  and the strict fresh-acquisition release gate remain separate iterations.
+- Repository: `miyamamoto/jrvltsql`.
+- Worktree: `/home/keiba/scratch/20260817_jrvltsql_hy_official`.
+- Branch: `agent/hy-official-20260817`.
+- Base / initial HEAD / `origin/master` full SHA:
+  `3a0b108cfca22d9c2741aed96942178f4d475f90`.
+- Dependency and production state: PR #194 merged as
+  `3a0b108cfca22d9c2741aed96942178f4d475f90`; the release remains v1.6.10 and
+  no version, tag, release lock, or support statement changes in this
+  iteration. The dependency order remains HY, CK, remaining standard routes,
+  metadata integrity, strict fresh acquisition/storage E2E, documentation and
+  open-PR audit, then the jrvltsql release before downstream NAR and MCP work.
+- Official evidence remains the pinned SDK 5.0.0 Python structure source with
+  SHA-256
+  `8994f985fce846f1b4fcbc3ddf2a5c6394c586a458478346891222b3b61e4ee3`
+  and the merged official manifest generated from it. Proprietary source and
+  provider records are not copied into the repository.
+- Red-first requirement: before changing parser/schema/import code, add the
+  smallest paired contract that fails on the current implementation for all
+  three semantic fields, the native primary key, the standard BAMEIORIGIN
+  owner/schema, and SQLite/PostgreSQL-equivalent round-trip behavior. A passing
+  parser-only test is insufficient. Do not infer a data migration or silently
+  preserve the old misnamed columns without an explicit compatibility
+  decision supported by schema-migration behavior.
+- STOP conditions: do not merge if either storage mode drops HY, if duplicate
+  horse identifiers do not deterministically upsert, if the schema migration
+  can destroy existing rows, if official byte boundaries are not independently
+  bound, or if any required test/review/thread/clean-worktree gate is missing.
+- Next safe action: inspect the merged HY parser, native schema, standard
+  BAMEIORIGIN schema/routing, importer mappings, migration behavior, and all HY
+  tests; then write and execute the grouped red contract before implementation.
+
+### HY implementation and pre-candidate verification (2026-08-17 JST)
+
+- Read-only comparison against the pinned SDK 5.0.0 manifest confirmed the
+  complete 123-byte `JV_HY_BAMEIORIGIN` layout: the 11-byte record header,
+  `KettoNum` 12-21, `Bamei` 22-57, `Origin` 58-121, and `crlf` 122-123. The
+  previous parser incorrectly exposed the registration number as `Bamei` and
+  the two following official fields as anonymous `Field5`/`Field6`; the native
+  schema consequently used the misnamed value as its primary key, while the
+  standard BAMEIORIGIN schema had no durable identity and the reverse mapping
+  selected an absent legacy table name.
+- Red-first evidence before implementation: the grouped parser, schema,
+  routing, migration-safety, SQLite round-trip/upsert, and PostgreSQL-equivalent
+  contract produced `12 failed, 4 passed, 1 skipped`. This demonstrated that
+  the new checks could reject the old implementation rather than only blessing
+  a green path.
+- Implemented the official parser names and boundaries; made `KettoNum` the
+  native and BAMEIORIGIN primary key; added `Bamei` and `Origin` to the standard
+  schema; selected canonical BAMEIORIGIN for HY standard storage while keeping
+  MEANING as a lookup-only compatibility alias; and made legacy-only MEANING
+  storage fail closed without changing existing rows. Existing obsolete native
+  and keyless BAMEIORIGIN schemas are also rejected without destructive
+  migration.
+- SQLite verification after the implementation: `16 passed, 1 skipped` in
+  `tests/test_hy_official_contract.py`, covering both `DataImporter` and
+  `OptimizedDataImporter`, native and standard schema, deterministic upsert,
+  and all fail-closed row-preservation paths.
+- Real PostgreSQL verification used a disposable PostgreSQL 16 container bound
+  only to `127.0.0.1:55440`, with a unique test schema. With
+  `JLTSQL_RUN_POSTGRESQL_INTEGRATION=1` and the PostgreSQL extra installed, the
+  same contract completed `17 passed in 0.47s`; both importers stored and
+  updated the official HY row in native NL_HY and standard BAMEIORIGIN. The
+  fixture dropped its schema and the disposable container was stopped and
+  auto-removed; a subsequent container-name lookup was empty. No shared KPS or
+  production database was mutated.
+- Broader affected verification on CPython 3.12 covered the HY contract,
+  reconstructed binary fixtures, current-record validation, the official
+  manifest oracle, mappings, indexes, all schemas, migrations, and both
+  importers: `336 passed, 1 skipped in 2.77s`. The skip was the explicitly
+  gated PostgreSQL case already executed separately above.
+- Local mechanical gates passed: `scripts/validate_test_gate.py` (`TEST GATE
+  PASS`), fatal flake8 E9/F63/F7/F82 (`0`), Ruff and Black for the new contract,
+  and `git diff --check`.
+- Current state is still an uncommitted candidate derived from full base SHA
+  `3a0b108cfca22d9c2741aed96942178f4d475f90`; these results must be rerun or
+  bound to the committed full candidate SHA before merge. Next safe action:
+  review the complete diff, commit the grouped HY iteration, push one PR, then
+  run the single exact-SHA final gate and resolve all review threads before
+  merge. STOP if the committed diff differs from the tested implementation or
+  any exact-SHA gate fails.
