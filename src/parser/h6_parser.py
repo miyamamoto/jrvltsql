@@ -50,6 +50,14 @@ class H6Parser:
         except Exception:
             return ""
 
+    @staticmethod
+    def decode_fixed_flags(data: bytes) -> str:
+        """Decode positional one-byte flags without shifting blank entries."""
+        try:
+            return data.decode("cp932", errors="replace")
+        except Exception:
+            return " " * len(data)
+
     def _parse_header(self, data: bytes) -> Dict[str, str]:
         """Parse common header fields (first 50 bytes)."""
         h = {}
@@ -65,7 +73,7 @@ class H6Parser:
         h["TorokuTosu"] = self.decode_field(data[27:29])
         h["SyussoTosu"] = self.decode_field(data[29:31])
         h["HatubaiFlag"] = self.decode_field(data[31:32])
-        h["HenkanUma"] = self.decode_field(data[32:50])
+        h["HenkanUma"] = self.decode_fixed_flags(data[32:50])
         return h
 
     def parse(self, data: bytes) -> Optional[Union[Dict[str, str], List[Dict[str, str]]]]:

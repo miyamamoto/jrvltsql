@@ -80,6 +80,14 @@ class H1Parser:
         except Exception:
             return ""
 
+    @staticmethod
+    def decode_fixed_flags(data: bytes) -> str:
+        """Decode positional one-byte flags without shifting blank entries."""
+        try:
+            return data.decode("cp932", errors="replace")
+        except Exception:
+            return " " * len(data)
+
     def _parse_header(self, data: bytes) -> Dict[str, str]:
         """Parse common header fields (first 83 bytes)."""
         h = {}
@@ -98,9 +106,9 @@ class H1Parser:
             h[f"HatubaiFlag{i+1}"] = self.decode_field(data[31+i:32+i])
         h["FukuChakuBaraiKey"] = self.decode_field(data[38:39])
         # HenkanUma[28], HenkanWaku[8], HenkanDoWaku[8] — stored as concatenated strings
-        h["HenkanUma"] = self.decode_field(data[39:67])
-        h["HenkanWaku"] = self.decode_field(data[67:75])
-        h["HenkanDoWaku"] = self.decode_field(data[75:83])
+        h["HenkanUma"] = self.decode_fixed_flags(data[39:67])
+        h["HenkanWaku"] = self.decode_fixed_flags(data[67:75])
+        h["HenkanDoWaku"] = self.decode_fixed_flags(data[75:83])
         return h
 
     def parse(self, data: bytes) -> Optional[Union[Dict[str, str], List[Dict[str, str]]]]:

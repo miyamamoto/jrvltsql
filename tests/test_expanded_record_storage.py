@@ -1114,6 +1114,50 @@ def test_h6_empty_full_record_retains_physical_totals_on_header():
 
 
 @pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_sqlite_standard_vote_refund_arrays_keep_blank_positions(
+    sqlite_db, importer_class
+):
+    _create_jravan_tables(
+        sqlite_db, (*_STANDARD_H1_TABLES, *_STANDARD_H6_TABLES)
+    )
+    h1_raw = bytearray(_make_h1_vote_record(populated=False))
+    h1_raw[39:67] = b" 1" + (b" " * 26)
+    h1_raw[67:75] = b" 1" + (b" " * 6)
+    h1_raw[75:83] = b"  1" + (b" " * 5)
+    h1_raw[28799 + (7 * 11) : 28799 + (8 * 11)] = b" " * 11
+    h6_raw = bytearray(_make_h6_vote_record(populated=False))
+    h6_raw[32:50] = b"  1" + (b" " * 15)
+    h1_rows = _flatten(H1Parser().parse(bytes(h1_raw)))
+    h6_rows = _flatten(H6Parser().parse(bytes(h6_raw)))
+
+    assert len(h1_rows[0]["HenkanUma"]) == 28
+    assert len(h1_rows[0]["HenkanWaku"]) == 8
+    assert len(h1_rows[0]["HenkanDoWaku"]) == 8
+    assert len(h6_rows[0]["HenkanUma"]) == 18
+    importer = importer_class(sqlite_db, use_jravan_schema=True)
+    assert importer.import_records(iter(h1_rows))["records_failed"] == 0
+    assert importer.import_records(iter(h6_rows))["records_failed"] == 0
+
+    assert sqlite_db.fetch_one(
+        "SELECT HenkanUma1 AS uma1, HenkanUma2 AS uma2, "
+        "HenkanWaku1 AS waku1, HenkanWaku2 AS waku2, "
+        "HenkanDoWaku2 AS dowaku2, HenkanDoWaku3 AS dowaku3, "
+        "HyoTotal8 AS refund_total FROM HYOSU"
+    ) == {
+        "uma1": None,
+        "uma2": "1",
+        "waku1": None,
+        "waku2": "1",
+        "dowaku2": None,
+        "dowaku3": "1",
+        "refund_total": None,
+    }
+    assert sqlite_db.fetch_one(
+        "SELECT HenkanUma2 AS uma2, HenkanUma3 AS uma3 FROM HYOSU2"
+    ) == {"uma2": None, "uma3": "1"}
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
 def test_sqlite_standard_vote_flat_compatibility_layouts(
     sqlite_db, importer_class
 ):

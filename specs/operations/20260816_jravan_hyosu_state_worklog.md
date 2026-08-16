@@ -189,10 +189,34 @@
   replay. This is stored-data evidence only; a new provider acquisition remains
   a mandatory repository release gate.
 
+## Pre-PR Codex review repair
+
+- The first frozen implementation SHA was
+  `941c783fb90dcc36b6cbed314e1158895475dfa2`. Exact-SHA Python 3.12 affected
+  tests passed `796 passed, 22 skipped, 12 subtests`; the workflow test list
+  passed `893 passed, 2 skipped, 12 subtests`; fresh PostgreSQL 16 passed all
+  65 expanded-storage cases; distribution contents passed. The blocking
+  flake8 selection reported zero findings. The broader warning-only flake8 run
+  retained repository-wide legacy warnings and was non-blocking, matching the
+  workflow policy.
+- A subsequent Codex boundary review found one historical positional bug before
+  PR creation: full H1/H6 refund arrays used the generic trimmed decoder. If an
+  early one-byte flag was blank while a later flag was populated, trimming
+  shifted the later value into the wrong horse/bracket slot. A new pre-repair
+  regression failed twice with `assert 1 == 28` for the ordinary and optimized
+  standard paths.
+- H1 now preserves all 28 horse, eight bracket, and eight same-bracket bytes;
+  H6 preserves all 18 horse bytes. Standard conversion maps positional blanks
+  to nullable numbered columns, including pre-introduction refund totals,
+  without changing the flat compatibility layout. The focused repaired set
+  passed `16 passed, 6 skipped`, and expanded storage/mapping/parser
+  compatibility passed `257 passed, 20 skipped`. Because this repair changes
+  source after the first freeze, SHA `941c783...` is not the PR candidate.
+
 ## Next safe action
 
-- Review the complete uncommitted diff for correctness and minimize any
-  duplicated or over-broad surface. Replay one registered acquired H1 and H6
-  physical snapshot through both standard importers without recording race
-  identity, then freeze the first candidate commit. Run the exact-SHA affected,
-  Python 3.12, and PostgreSQL gates before opening the PR.
+- Commit the positional-array review repair and this evidence, freeze the new
+  full candidate SHA, and rerun the focused Python 3.12 and PostgreSQL gates
+  required by the source change. Then push once, open the PR, collect the
+  single GitHub-native Copilot review plus configured automated reviewers,
+  aggregate findings, and repair once if necessary.
