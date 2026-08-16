@@ -11,6 +11,7 @@ from src.database.base import BaseDatabase
 from src.database.schema import create_all_tables
 from src.fetcher.historical import HistoricalFetcher
 from src.importer.importer import DataImporter, ImporterError
+from src.jvlink.constants import validate_jvopen_combination
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -138,6 +139,9 @@ class BatchProcessor:
         Returns:
             Dictionary with processing statistics
 
+        Raises:
+            ValueError: If data_spec or option violates the JVOpen contract
+
         Note:
             JV-Link fetches all data from from_date onwards, then filters
             records client-side to only import those with dates <= to_date.
@@ -151,6 +155,9 @@ class BatchProcessor:
             >>> stats = processor.process_date_range("RACE", "20240601", "20240630")
             >>> print(f"Imported {stats['records_imported']} records")
         """
+        # Stop before schema creation or transaction state for invalid input.
+        validate_jvopen_combination(data_spec, option)
+
         logger.info(
             "Starting batch processing",
             data_spec=data_spec,

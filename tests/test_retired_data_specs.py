@@ -31,6 +31,7 @@ from src.jvlink.constants import (
     is_retired_data_spec,
     is_valid_jvopen_combination,
     retired_data_spec_message,
+    validate_jvopen_combination,
 )
 from src.jvlink.wrapper import JVLinkWrapper
 
@@ -143,6 +144,10 @@ class TestJVOpenCombinations:
     )
     def test_concatenated_current_dataspecs_are_valid(self, data_spec, option):
         assert is_valid_jvopen_combination(data_spec, option) is True
+
+    def test_validator_rejects_unhashable_option_without_crashing(self):
+        with pytest.raises(ValueError, match="option"):
+            validate_jvopen_combination("RACE", [])
 
 
 class TestRejectionMessage:

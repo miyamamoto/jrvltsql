@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Iterator, Optional
 
 from src.fetcher.base import BaseFetcher, FetcherError
-from src.jvlink.constants import is_retired_data_spec, retired_data_spec_message
+from src.jvlink.constants import validate_jvopen_combination
 from src.utils.logger import get_logger
 from src.utils.progress import JVLinkProgressDisplay
 
@@ -190,7 +190,7 @@ class HistoricalFetcher(BaseFetcher):
             Dictionary of parsed record data with dates <= to_date
 
         Raises:
-            ValueError: If data_spec selects an unsupported legacy layout
+            ValueError: If data_spec or option violates the JVOpen contract
             FetcherError: If fetching fails
 
         Note:
@@ -209,9 +209,8 @@ class HistoricalFetcher(BaseFetcher):
             ...     # Process all records up to 20240630
             ...     pass
         """
-        # 非対応の旧仕様 dataspec は JV-Link に触れる前に弾く。
-        if is_retired_data_spec(data_spec):
-            raise ValueError(retired_data_spec_message(data_spec))
+        # Validate every four-character component before JV-Link/cache state.
+        validate_jvopen_combination(data_spec, option)
 
         # Fetcher instances are reused across data specs and setup chunks.
         # Reset before JVOpen so no-data/error early exits cannot expose
@@ -479,7 +478,7 @@ class HistoricalFetcher(BaseFetcher):
             Dictionary of parsed record data with dates <= end_date
 
         Raises:
-            ValueError: If data_spec selects an unsupported legacy layout
+            ValueError: If data_spec or option violates the JVOpen contract
 
         Note:
             Records are filtered client-side to include only those with
@@ -516,12 +515,10 @@ class HistoricalFetcher(BaseFetcher):
             Dictionary of parsed record data
 
         Raises:
-            ValueError: If data_spec selects an unsupported legacy layout
+            ValueError: If data_spec or option violates the JVOpen contract
         """
-        # キャッシュヒット時は fetch() を通らないので、ここでも弾く。旧仕様の
-        # バイト列が過去のキャッシュに残っていても取り込みに到達させない。
-        if is_retired_data_spec(data_spec):
-            raise ValueError(retired_data_spec_message(data_spec))
+        # A cache hit bypasses fetch(), so validate before reading cache state.
+        validate_jvopen_combination(data_spec, option)
 
         if option == 2:
             # Do not trust old false-complete markers created by earlier

@@ -68,6 +68,32 @@ def test_schema_preparation_failure_stops_before_fetch(monkeypatch):
     processor.importer.import_records.assert_not_called()
 
 
+def test_invalid_dataspec_stops_before_schema_preparation(monkeypatch):
+    processor = BatchProcessor.__new__(BatchProcessor)
+    processor.database = MagicMock()
+    processor.cache_manager = None
+    processor.fetcher = MagicMock()
+    processor.fetcher.fetch.return_value = iter([])
+    processor.fetcher.get_statistics.return_value = {
+        "records_fetched": 0,
+        "records_parsed": 0,
+        "records_failed": 0,
+    }
+    processor.importer = MagicMock()
+    processor.importer.import_records.return_value = {
+        "records_imported": 0,
+        "records_failed": 0,
+    }
+    prepare_schema = MagicMock()
+    monkeypatch.setattr("src.importer.batch.create_all_tables", prepare_schema)
+
+    with pytest.raises(ValueError, match="four-character"):
+        processor.process_date_range("O1", "20260701", "20260714")
+
+    prepare_schema.assert_not_called()
+    processor.fetcher.fetch.assert_not_called()
+
+
 def test_import_rejection_fails_batch_and_rolls_back(monkeypatch):
     processor = BatchProcessor.__new__(BatchProcessor)
     processor.database = MagicMock()

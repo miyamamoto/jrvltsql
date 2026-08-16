@@ -359,7 +359,6 @@ JVOPEN_VALID_COMBINATIONS = {
         "HOYU",          # 馬名の意味由来
         "COMM",          # コメント情報
         "SNPN",          # 出馬表
-        "O1", "O2", "O3", "O4", "O5", "O6",  # オッズ
     ],
     # Option 2 (今週データ): TOKU, RACE, SNPN, TCVN, RCVN のみ
     2: [
@@ -377,7 +376,6 @@ JVOPEN_VALID_COMBINATIONS = {
         "MING", "SLOP", "WOOD", "YSCH",
         "HOSN", "HOYU", "COMM",
         "SNPN",
-        "O1", "O2", "O3", "O4", "O5", "O6",
     ],
     4: [
         "TOKU", "RACE",
@@ -386,9 +384,25 @@ JVOPEN_VALID_COMBINATIONS = {
         "MING", "SLOP", "WOOD", "YSCH",
         "HOSN", "HOYU", "COMM",
         "SNPN",
-        "O1", "O2", "O3", "O4", "O5", "O6",
     ],
 }
+
+
+def _split_jvopen_data_specs(data_spec: str) -> tuple[str, ...]:
+    """Split an official JVOpen dataspec string into four-character IDs."""
+    if not isinstance(data_spec, str) or not data_spec or len(data_spec) % 4:
+        return ()
+    return tuple(data_spec[index:index + 4] for index in range(0, len(data_spec), 4))
+
+
+def _retired_jvopen_components(data_spec: str) -> tuple[tuple[str, str], ...]:
+    if not isinstance(data_spec, str):
+        return ()
+    return tuple(
+        (component, RETIRED_DATA_SPECS[component])
+        for component in _split_jvopen_data_specs(data_spec.upper())
+        if component in RETIRED_DATA_SPECS
+    )
 
 
 def is_retired_data_spec(data_spec: str) -> bool:
@@ -403,7 +417,7 @@ def is_retired_data_spec(data_spec: str) -> bool:
     Returns:
         True if the code selects a legacy layout jrvltsql must not request
     """
-    return data_spec.upper() in RETIRED_DATA_SPECS
+    return bool(_retired_jvopen_components(data_spec))
 
 
 def retired_data_spec_message(data_spec: str) -> str:
@@ -418,17 +432,21 @@ def retired_data_spec_message(data_spec: str) -> str:
     Raises:
         ValueError: If data_spec is not an unsupported legacy code
     """
-    replacement = RETIRED_DATA_SPECS.get(data_spec.upper())
-    if replacement is None:
+    retired_components = _retired_jvopen_components(data_spec)
+    if not retired_components:
         raise ValueError(f"'{data_spec}' は jrvltsql で非対応の旧仕様 dataspec ではありません")
 
+    replacements = "、".join(
+        f"'{legacy}'→'{current}'" for legacy, current in retired_components
+    )
+
     return (
-        f"データ種別 '{data_spec}' は {RETIRED_DATA_SPEC_CHANGED_AT} より前の "
-        f"JV-Data レイアウトを要求するため、jrvltsql ではサポートしていません。"
-        f"対応する現行レイアウトの種別は '{replacement}' です。"
-        f"旧名は '{replacement}' の別名ではなく、要求すると桁数の異なる旧仕様の"
+        f"データ種別指定 '{data_spec}' には {RETIRED_DATA_SPEC_CHANGED_AT} より前の "
+        f"JV-Data レイアウトを要求する旧仕様 ID（{replacements}）が含まれるため、"
+        f"jrvltsql ではサポートしていません。旧名は現行 ID の別名ではなく、"
+        f"要求すると桁数の異なる旧仕様の"
         f"データが返るため、現行のパーサでは正しく取り込めません。"
-        f"'--spec {replacement}' で取得し直してください。"
+        f"旧仕様 ID を対応する現行 ID へ置き換えて取得し直してください。"
     )
 
 
@@ -444,9 +462,34 @@ def is_valid_jvopen_combination(data_spec: str, option: int) -> bool:
     Returns:
         True if the combination is valid, False otherwise
     """
-    if option not in JVOPEN_VALID_COMBINATIONS:
+    if type(option) is not int or option not in JVOPEN_VALID_COMBINATIONS:
         return False
-    return data_spec in JVOPEN_VALID_COMBINATIONS[option]
+    components = _split_jvopen_data_specs(data_spec)
+    if not components:
+        return False
+    allowed = set(JVOPEN_VALID_COMBINATIONS[option])
+    return all(component in allowed for component in components)
+
+
+def validate_jvopen_combination(data_spec: str, option: int) -> None:
+    """Reject malformed, legacy, or option-incompatible JVOpen requests."""
+    if is_retired_data_spec(data_spec):
+        raise ValueError(retired_data_spec_message(data_spec))
+    if type(option) is not int or option not in JVOPEN_VALID_COMBINATIONS:
+        raise ValueError("JVOpen option must be one of: 1, 2, 3, 4")
+    if is_valid_jvopen_combination(data_spec, option):
+        return
+
+    if not isinstance(data_spec, str) or not data_spec or len(data_spec) % 4:
+        raise ValueError(
+            "JVOpen dataspec must contain one or more concatenated "
+            "four-character data specification IDs"
+        )
+    valid_specs = ", ".join(JVOPEN_VALID_COMBINATIONS[option])
+    raise ValueError(
+        f"JVOpen dataspec {data_spec!r} is not valid for option={option}; "
+        f"valid current IDs: {valid_specs or 'none'}"
+    )
 
 
 # Record Type Codes (レコード種別)

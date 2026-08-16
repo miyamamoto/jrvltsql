@@ -29,8 +29,7 @@ from src.jvlink.constants import (
     BUFFER_SIZE_JVREAD,
     JV_READ_NO_MORE_DATA,
     JV_READ_SUCCESS,
-    is_retired_data_spec,
-    retired_data_spec_message,
+    validate_jvopen_combination,
 )
 from src.utils.logger import get_logger
 
@@ -584,10 +583,9 @@ class JVLinkBridge:
         fromtime: str,
         option: int = 1,
     ) -> Tuple[int, int, int, str]:
-        # 非対応の旧仕様 dataspec はブリッジへ送信する前に弾く（wrapper 側と同じ
-        # fail-closed 境界。JVRTOpen の realtime spec は別名前空間なので対象外）。
-        if is_retired_data_spec(data_spec):
-            raise ValueError(retired_data_spec_message(data_spec))
+        # JVRTOpen realtime IDs are a separate namespace; this guard applies
+        # the official four-character JVOpen contract before transmission.
+        validate_jvopen_combination(data_spec, option)
 
         response = self._send_command(
             {"cmd": "open", "dataspec": data_spec, "fromtime": fromtime, "option": option},

@@ -115,9 +115,58 @@
   the changed check can say no and the positive harness still reaches the
   current valid path before production implementation.
 
+## Implementation and second red boundary
+
+- Test-only red evidence was committed as full SHA
+  `09a7b31076f33097c33dbccd8425cb7ff1bf2acb`; the worklog-start commit is
+  `23ce078d10eb77045da5dbe13fc59117a40bd4df`.
+- Implemented a four-character component splitter and shared validator. The
+  option matrix now contains only current JVOpen selectors; every component
+  must be valid for the selected option, and a legacy component anywhere in a
+  concatenated request is rejected with its current replacement named.
+- Applied the validator before JV-Link/bridge transmission, cache lookup,
+  batch schema creation, and quickstart database setup. The command entry point
+  continues to consume the same shared matrix and component-aware retirement
+  predicate before database setup. Public docs now distinguish `O1`-`O6`
+  record types from `RACE`, the JVOpen selector that contains them.
+- Added one minimal batch-side-effect assertion after inventorying that public
+  boundary. With the batch validator temporarily absent, ran only
+  `test_invalid_dataspec_stops_before_schema_preparation`; result: **1 failed**
+  (`DID NOT RAISE ValueError`), and the captured flow reached schema preparation
+  and completed the batch. Restoring the guard made the same test green.
+- Strict self-review found a second fail-open class in the new validator:
+  an unhashable `option` caused `dict.get()` to raise `TypeError` while forming
+  the rejection message. Added one existing-suite test and ran it before the
+  repair; result: **1 failed**, with `TypeError: unhashable type: 'list'`.
+  The validator now checks the option type/domain first and returns a stable
+  `ValueError`, so malformed input is a rejection rather than a crash.
+- Removed the obsolete quickstart allowlist that described record IDs and
+  non-selectors as setup specs. The retained `--no-odds` compatibility flag is
+  now documented honestly: final odds are records inside `RACE` and cannot be
+  removed by filtering JVOpen selectors.
+
+## Local verification before candidate freeze
+
+- Central red/green set after both repairs:
+  `tests/test_retired_data_specs.py tests/test_quickstart_cli.py
+  tests/test_batch_processor.py`: **220 passed**.
+- Transport/fetcher/wrapper/bridge/error integration set: **287 passed,
+  24 skipped**. Skips are the existing platform-specific cases.
+- CLI/cache/batch set run serially: **133 passed**. An earlier attempt ran this
+  concurrently with `compileall` over the same files and produced two
+  non-repeatable import-time CLI failures; both commands passed immediately in
+  isolation and the complete set passed when rerun without concurrent
+  `compileall`. A bytecode-write race is a plausible explanation, not an
+  observed cause. This concurrent run is not counted as gate evidence.
+- `compileall`, fatal-only flake8 (`E9,F63,F7,F82`), and `git diff --check`
+  pass on the current working tree.
+- Strict MkDocs build passes. A public-doc privacy scan found none of the
+  prohibited internal collector/runtime names. Remaining `O1`-`O6` mentions
+  were inspected and all describe record types inside `RACE` or JVRTOpen
+  streams rather than standalone JVOpen selectors.
+
 ## Next safe command
 
-- Commit the test-only red evidence, then implement a four-character component
-  parser and one shared fail-closed JVOpen validator. Reuse it before JV-Link,
-  cache/database, and quickstart side effects; remove record IDs from the
-  option matrix and correct the public dataspec documentation.
+- Run strict documentation build and remaining contract searches, inspect the
+  complete diff once more, commit the implementation/worklog, then freeze the
+  candidate for the necessary full local suite and GitHub review gate.

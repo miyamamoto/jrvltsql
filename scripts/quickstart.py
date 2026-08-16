@@ -2109,9 +2109,9 @@ class QuickstartRunner:
         else:  # full
             specs = self.FULL_SPECS.copy()
 
-        # --no-odds: オッズ系スペック(O1-O6)を除外
-        if self.settings.get('no_odds'):
-            specs = [(s, d, o) for s, d, o in specs if not s.startswith('O')]
+        # --no-odds is retained for CLI compatibility. Final odds are record
+        # types inside RACE, not independent JVOpen specs, so they cannot be
+        # excluded by filtering this dataspec list.
 
         return specs
 
@@ -3283,23 +3283,13 @@ class QuickstartRunner:
             logger.error(details['error_message'])
             return ("failed", details)
 
-        # option=2 は中央の JVOpen 契約を正本にする。独自 allow-list を持つと
-        # SNPN のような有効な組合せが入口ごとに食い違う。
-        if option == 2 and not is_valid_jvopen_combination(spec, option):
+        # Use the shared official JVOpen contract for every option before
+        # database/schema side effects.
+        if not is_valid_jvopen_combination(spec, option):
             details['error_type'] = 'invalid_option'
-            details['error_message'] = f'option=2 (今週データ) は {spec} に対応していません'
+            details['error_message'] = f'option={option} は {spec} に対応していません'
             logger.warning(details['error_message'])
             return ("skipped", details)
-
-        # option=3/4（セットアップモード）は一部のスペックのみ対応
-        # RACE, DIFN, BLDN等の主要スペックはoption=2対応
-        # COMM, PARA等の補助スペックはoption=1のみ対応
-        # DIFN（マスタデータ: UM, KS, CH）はoption=4が必要（差分では不十分）
-        OPTION_4_SUPPORTED_SPECS = {
-            "RACE", "DIFN", "BLDN", "SNPN", "SLOP", "WOOD",
-            "YSCH", "HOSN", "HOYU", "CHOK", "KISI", "BRDR",
-            "TOKU", "MING", "O1", "O2", "O3", "O4", "O5", "O6",
-        }
 
         # option=1（差分データ）はJV-Link側の「最終取得時刻」以降のデータのみ返す
         # 初回セットアップや全データ取得にはoption=2（セットアップモード）を使用
@@ -3312,7 +3302,7 @@ class QuickstartRunner:
         from_date_str = self.settings['from_date']
         from_date_dt = datetime.strptime(from_date_str, "%Y%m%d")
         months_ago = (datetime.now().year * 12 + datetime.now().month) - (from_date_dt.year * 12 + from_date_dt.month)
-        if option == 1 and spec in OPTION_4_SUPPORTED_SPECS and months_ago > 11:
+        if option == 1 and is_valid_jvopen_combination(spec, 4) and months_ago > 11:
             option = 4  # 11ヶ月以上前 → セットアップモード
 
         try:
@@ -3374,11 +3364,7 @@ class QuickstartRunner:
             # エラーコード別の判定
             if _is_subscription_error(e):
                 details['error_type'] = 'contract'
-                # オッズ系(O1-O6)は別契約が必要な場合がある
-                if spec.startswith('O'):
-                    details['error_message'] = 'オッズデータは別途契約が必要です'
-                else:
-                    details['error_message'] = 'データ提供サービス契約外です'
+                details['error_message'] = 'データ提供サービス契約外です'
                 self.warnings.append(f"{spec}: {details['error_message']}")
                 return ("skipped", details)
             elif error_code in (-100, -101, -102, -103):
@@ -3526,7 +3512,7 @@ def main():
     parser.add_argument("--years", type=int, default=None,
                         help="取得期間（年数）。指定すると--from-dateは無視される")
     parser.add_argument("--no-odds", action="store_true",
-                        help="オッズデータ(O1-O6)を除外")
+                        help="後方互換指定（RACE内の確定オッズは除外できません）")
     parser.add_argument("--no-monitor", action="store_true",
                         help="バックグラウンド監視を無効化")
     parser.add_argument("--log-file", type=str, default=None,
