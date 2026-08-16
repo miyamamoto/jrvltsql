@@ -84,10 +84,44 @@
   checker/test, and `git diff --check` passed. These are pre-candidate results;
   exact-SHA workflow-equivalent/full validation remains required after commit.
 
+## Candidate validation
+
+- Candidate full SHA: `fb6c131e3defa6eb44a24282050a1a7c90b96cdd`.
+  `git fetch origin master` confirmed `origin/master` and the merge base both
+  remained `3fbd5272a3375e3422f47335bc4a98f98c9f6e2b`; there was no base drift.
+- A first full-suite attempt was intentionally discarded after a concurrent
+  source-tree build rewrote package metadata while CLI tests were running; it
+  reported two CLI failures, and both passed immediately when reproduced after
+  the build completed. A second attempt in a newly created environment stopped
+  at collection because optional PostgreSQL and test helper dependencies were
+  absent; this was also discarded as invalid environment evidence.
+- The clean serial full run used the supported `>=3.12` interpreter line with
+  development and PostgreSQL extras plus the existing dotenv test helper. It
+  passed: `2314 passed, 67 skipped, 3 warnings, 6 subtests passed`.
+- The exact GitHub Actions focused selection, including the new distribution
+  test and coverage, passed: `871 passed, 2 skipped, 3 warnings, 3 subtests
+  passed`; source coverage was 53%.
+- `python -m build` produced `jltsql-1.6.10-py3-none-any.whl` and
+  `jltsql-1.6.10.tar.gz`. The fail-closed checker accepted both; independent
+  member enumeration confirmed `specs=0 docs=0` in each artifact.
+- `mkdocs build --strict`, compileall for changed Python paths, fatal flake8
+  checks over `src`, `tests`, and the checker, and `git diff --check` passed.
+  The workflow's non-blocking mypy check was also executed without treating its
+  existing advisory result as a merge gate.
+- The sanitized public-document scan covered 51 tracked documentation-bearing
+  files and reported `public_document_scan=PASS`. Outside the intentional
+  regression-test constants, no tracked reference to the deleted page paths
+  remains. The worktree was clean at this candidate.
+
+The worklog evidence update changes only this tracked `specs/` file. Because
+`specs/` is excluded from both release formats, the final evidence commit will
+rerun the changed-surface distribution tests, actual artifact inspection,
+strict documentation build, disclosure scan, and clean-tree check. The full
+and workflow-equivalent suites above remain the code-tree evidence and are not
+repeated for a documentation-only SHA update.
+
 ## Next safe command
 
-- Commit the implementation as one logical repair batch, fetch `origin/master`,
-  then run the full and workflow-equivalent suites, actual wheel+sdist build and
-  inspection, strict MkDocs, lint/compile, privacy scan, and clean-tree check on
-  the resulting exact full SHA. Do not edit release version or publish artifacts
-  in this iteration.
+- Commit this evidence-only worklog update, run the proportional final-SHA
+  checks described above, then push and open the documentation/distribution PR.
+  Do not edit the release version or publish artifacts in this iteration.
