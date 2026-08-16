@@ -96,6 +96,8 @@ class H6Parser:
         # Parse HyoTotal[2] × 11 bytes at position 102866
         total_hyo = self.decode_field(data[102866:102877])
         henkan_hyo = self.decode_field(data[102877:102888])
+        header["SanrentanHyoTotal"] = total_hyo
+        header["SanrentanHenkanHyoTotal"] = henkan_hyo
 
         rows = []
         # HyoSanrentan[4896] × 21 bytes starting at position 50
@@ -113,8 +115,6 @@ class H6Parser:
             row["SanrentanKumi"] = kumi
             row["SanrentanHyo"] = hyo
             row["SanrentanNinki"] = ninki
-            row["SanrentanHyoTotal"] = total_hyo
-            row["SanrentanHenkanHyoTotal"] = henkan_hyo
             rows.append(row)
 
         return rows if rows else [header]

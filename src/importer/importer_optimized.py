@@ -17,6 +17,7 @@ from src.importer.importer import (
     _PREPARED_KS_SEISEKI_ROWS_KEY,
     _RC_STORAGE_TABLES,
     _STANDARD_ODDS_CONFIG_BY_OWNER,
+    _STANDARD_VOTE_CONFIG_BY_OWNER,
     _TK_CHILD_STORAGE_TABLES,
     _YS_STORAGE_TABLES,
     _delete_mining_race_rows,
@@ -26,16 +27,20 @@ from src.importer.importer import (
     _is_mining_snapshot_follower,
     _is_official_record_erase,
     _is_standard_odds_record_erase,
+    _is_standard_vote_record_erase,
     _mining_native_snapshot_rows,
     _record_type_from_record,
     _standard_odds_physical_fingerprint,
+    _standard_vote_physical_fingerprint,
     apply_rc_batch,
     apply_ys_batch,
     clean_record_metadata,
     delete_standard_odds_record,
+    delete_standard_vote_record,
     insert_ch_coupled_batch,
     insert_ks_coupled_batch,
     insert_standard_odds_batch,
+    insert_standard_vote_batch,
     insert_tk_coupled_batch,
     prepare_ch_coupled_rows,
     prepare_ks_coupled_rows,
@@ -88,6 +93,7 @@ class OptimizedDataImporter:
         self._verified_ys_tables: set[str] = set()
         self._verified_tk_header_tables: dict[str, str] = {}
         self._verified_standard_odds_configs: dict[str, tuple[str, dict]] = {}
+        self._verified_standard_vote_configs: dict[str, tuple[str, dict]] = {}
 
         # Detect database type for optimization
         self.db_type = self._detect_database_type()
@@ -261,6 +267,7 @@ class OptimizedDataImporter:
         # Group records by type for batch insertion
         batch_buffers: Dict[str, List[dict]] = {}
         standard_odds_fingerprints: dict[str, tuple] = {}
+        standard_vote_fingerprints: dict[str, tuple] = {}
         verified_ch_result_tables: Dict[str, str] = {}
         verified_ks_result_tables: Dict[str, str] = {}
         last_expanded_record_fingerprint = None
@@ -296,6 +303,28 @@ class OptimizedDataImporter:
                 if table_name not in self._verified_mining_native_tables:
                     if verify_mining_native_schema(self.database, record, table_name):
                         self._verified_mining_native_tables.add(table_name)
+
+                if _is_standard_vote_record_erase(record, table_name):
+                    pending = batch_buffers.setdefault(table_name, [])
+                    if pending:
+                        self._flush_batch_optimized(
+                            table_name,
+                            pending,
+                            commit_batch=auto_commit,
+                        )
+                        batch_buffers[table_name] = []
+                    delete_standard_vote_record(
+                        self.database,
+                        record,
+                        table_name,
+                        commit_batch=auto_commit,
+                        verification_cache=self._verified_standard_vote_configs,
+                    )
+                    standard_vote_fingerprints.pop(table_name, None)
+                    self._records_imported += 1
+                    self._batches_processed += 1
+                    last_expanded_record_fingerprint = None
+                    continue
 
                 if _is_standard_odds_record_erase(record, table_name):
                     pending = batch_buffers.setdefault(table_name, [])
@@ -392,6 +421,25 @@ class OptimizedDataImporter:
                             commit_batch=auto_commit,
                         )
                         batch_buffers[table_name] = []
+                    continue
+
+                if table_name in _STANDARD_VOTE_CONFIG_BY_OWNER:
+                    fingerprint = _standard_vote_physical_fingerprint(
+                        record,
+                        table_name,
+                    )
+                    pending = batch_buffers.setdefault(table_name, [])
+                    previous = standard_vote_fingerprints.get(table_name)
+                    if pending and previous != fingerprint:
+                        self._flush_batch_optimized(
+                            table_name,
+                            pending,
+                            commit_batch=auto_commit,
+                        )
+                        pending = []
+                        batch_buffers[table_name] = pending
+                    pending.append(record)
+                    standard_vote_fingerprints[table_name] = fingerprint
                     continue
 
                 if table_name in _STANDARD_ODDS_CONFIG_BY_OWNER:
@@ -555,6 +603,19 @@ class OptimizedDataImporter:
                 batch,
                 commit_batch=commit_batch,
                 optimized=True,
+            )
+            self._records_imported += rows
+            if rows:
+                self._batches_processed += 1
+            return
+
+        if table_name in _STANDARD_VOTE_CONFIG_BY_OWNER:
+            rows = insert_standard_vote_batch(
+                self.database,
+                table_name,
+                batch,
+                commit_batch=commit_batch,
+                verification_cache=self._verified_standard_vote_configs,
             )
             self._records_imported += rows
             if rows:

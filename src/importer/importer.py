@@ -1141,6 +1141,463 @@ def delete_standard_odds_record(
         raise
 
 
+_STANDARD_VOTE_RACE_KEY_COLUMNS = _MINING_RACE_KEY_COLUMNS
+_STANDARD_VOTE_CONFIG: dict[str, dict[str, Any]] = {
+    "H1": {
+        "owner": "HYOSU",
+        "children": {
+            "HYOSU_TANPUKU": (*_STANDARD_VOTE_RACE_KEY_COLUMNS, "Umaban"),
+            "HYOSU_WAKU": (*_STANDARD_VOTE_RACE_KEY_COLUMNS, "Kumi"),
+            "HYOSU_UMARENWIDE": (*_STANDARD_VOTE_RACE_KEY_COLUMNS, "Kumi"),
+            "HYOSU_UMATAN": (*_STANDARD_VOTE_RACE_KEY_COLUMNS, "Kumi"),
+            "HYOSU_SANREN": (*_STANDARD_VOTE_RACE_KEY_COLUMNS, "Kumi"),
+        },
+    },
+    "H6": {
+        "owner": "HYOSU2",
+        "children": {
+            "HYOSU_SANRENTAN": (*_STANDARD_VOTE_RACE_KEY_COLUMNS, "Kumi"),
+        },
+    },
+}
+_STANDARD_VOTE_CONFIG_BY_OWNER = {
+    config["owner"]: (record_type, config)
+    for record_type, config in _STANDARD_VOTE_CONFIG.items()
+}
+_H1_TOTAL_NAMES = (
+    "TanHyoTotal",
+    "FukuHyoTotal",
+    "WakuHyoTotal",
+    "UmarenHyoTotal",
+    "WideHyoTotal",
+    "UmatanHyoTotal",
+    "SanrenfukuHyoTotal",
+    "TanHenkanHyoTotal",
+    "FukuHenkanHyoTotal",
+    "WakuHenkanHyoTotal",
+    "UmarenHenkanHyoTotal",
+    "WideHenkanHyoTotal",
+    "UmatanHenkanHyoTotal",
+    "SanrenfukuHenkanHyoTotal",
+)
+
+
+def _standard_vote_config(
+    record: dict,
+    table_name: str,
+) -> tuple[str, dict[str, Any]] | None:
+    """Resolve a split standard vote owner for one normalized parser row."""
+    configured = _STANDARD_VOTE_CONFIG_BY_OWNER.get(table_name)
+    if configured is None:
+        return None
+    record_type, config = configured
+    if _record_type_from_record(record) != record_type:
+        raise SchemaMigrationError(
+            f"{table_name} received a non-{record_type} standard vote row"
+        )
+    return record_type, config
+
+
+def _standard_vote_physical_fingerprint(
+    record: dict,
+    owner_table_name: str,
+) -> tuple:
+    """Identify all normalized rows emitted from one physical H1/H6 record."""
+    configured = _standard_vote_config(record, owner_table_name)
+    if configured is None:
+        raise SchemaMigrationError(
+            f"{owner_table_name} is not a standard vote owner table"
+        )
+    raw = record.get("_raw")
+    if isinstance(raw, (bytes, bytearray, memoryview)):
+        return owner_table_name, "raw", id(raw)
+    if "RecordDelimiter" in record or "RecordSeparator" in record:
+        # The compatibility layouts contain one complete physical record per
+        # parser row, so adjacent revisions must not be coalesced.
+        return owner_table_name, "flat", id(record)
+    return (
+        owner_table_name,
+        "header",
+        _record_type_from_record(record),
+        resolve_record_data_kubun(record),
+        record.get("MakeDate"),
+        *(record.get(column) for column in _STANDARD_VOTE_RACE_KEY_COLUMNS),
+    )
+
+
+def verify_standard_vote_tables(
+    database: BaseDatabase,
+    owner_table_name: str,
+) -> tuple[str, dict[str, Any]]:
+    """Require all vote header/child tables and fail closed on duplicate keys."""
+    configured = _STANDARD_VOTE_CONFIG_BY_OWNER.get(owner_table_name)
+    if configured is None:
+        raise SchemaMigrationError(
+            f"Unknown standard vote owner table: {owner_table_name}"
+        )
+
+    from src.database.migration import migrate_table_if_needed, verify_table_schema
+    from src.database.schema_jravan import JRAVAN_SCHEMAS
+
+    record_type, config = configured
+    table_keys = {
+        owner_table_name: _STANDARD_VOTE_RACE_KEY_COLUMNS,
+        **config["children"],
+    }
+    for table_name, key_columns in table_keys.items():
+        schema_sql = JRAVAN_SCHEMAS.get(table_name)
+        if not schema_sql or not database.table_exists_strict(table_name):
+            raise SchemaMigrationError(
+                f"{record_type} standard vote import requires table {table_name}"
+            )
+        migrate_table_if_needed(database, table_name, schema_sql, commit=False)
+        verify_table_schema(database, table_name, schema_sql)
+        index_name = f"jltsql_uq_{table_name.lower()}"
+        columns = ", ".join(key_columns)
+        try:
+            database.execute(
+                f"CREATE UNIQUE INDEX IF NOT EXISTS {index_name} "
+                f"ON {table_name} ({columns})"
+            )
+        except DatabaseError as error:
+            raise SchemaMigrationError(
+                f"{table_name} contains duplicate official keys; "
+                "deduplicate or rebuild it before standard vote import"
+            ) from error
+    return record_type, config
+
+
+def _expand_standard_vote_flags(
+    source: dict,
+    field_name: str,
+    count: int,
+) -> None:
+    if field_name not in source:
+        return
+    packed = str(source.get(field_name) or "")
+    for index in range(count):
+        source[f"{field_name}{index + 1}"] = (
+            packed[index : index + 1] or None
+        )
+
+
+def _standard_vote_header_source(record_type: str, record: dict) -> dict:
+    """Translate normalized H1/H6 header fields to standard-schema columns."""
+    source = clean_record_metadata(record)
+    if record_type == "H1":
+        _expand_standard_vote_flags(source, "HenkanUma", 28)
+        _expand_standard_vote_flags(source, "HenkanWaku", 8)
+        _expand_standard_vote_flags(source, "HenkanDoWaku", 8)
+        for index, field_name in enumerate(_H1_TOTAL_NAMES, start=1):
+            source[f"HyoTotal{index}"] = source.get(field_name)
+    else:
+        source["HatubaiFlag1"] = source.get("HatubaiFlag")
+        _expand_standard_vote_flags(source, "HenkanUma", 18)
+        source["HyoTotal1"] = source.get("SanrentanHyoTotal")
+        source["HyoTotal2"] = source.get("SanrentanHenkanHyoTotal")
+    return source
+
+
+def _valid_vote_combination(value: Any) -> bool:
+    text = str(value or "").strip()
+    return bool(text) and text != "TOTAL" and bool(text.strip("0"))
+
+
+def prepare_standard_vote_record(
+    record: dict,
+    owner_table_name: str,
+) -> tuple[dict, list[tuple[str, dict]]]:
+    """Build one standard vote header and its routed partial child rows."""
+    configured = _standard_vote_config(record, owner_table_name)
+    if configured is None:
+        raise SchemaMigrationError(
+            f"{owner_table_name} is not a standard vote owner table"
+        )
+    record_type, config = configured
+    source = _standard_vote_header_source(record_type, record)
+    header = convert_record_types(source, owner_table_name)
+    missing_header_key = [
+        column
+        for column in _STANDARD_VOTE_RACE_KEY_COLUMNS
+        if header.get(column) in (None, "")
+    ]
+    if missing_header_key:
+        raise SchemaMigrationError(
+            f"{record_type} standard vote header has incomplete key: "
+            f"{missing_header_key}"
+        )
+    if resolve_record_data_kubun(record) == "0":
+        return header, []
+
+    base = {
+        column: source.get(column)
+        for column in ("MakeDate", *_STANDARD_VOTE_RACE_KEY_COLUMNS)
+    }
+    child_sources: list[tuple[str, dict]] = []
+
+    def append_child(table_name: str, key_name: str, key_value: Any, **values: Any) -> None:
+        if not _valid_vote_combination(key_value):
+            return
+        child_sources.append(
+            (table_name, {**base, key_name: key_value, **values})
+        )
+
+    if record_type == "H1":
+        bet_type = source.get("BetType")
+        if bet_type == "Tansyo":
+            append_child(
+                "HYOSU_TANPUKU",
+                "Umaban",
+                source.get("Kumi"),
+                TanHyo=source.get("Hyo"),
+                TanNinki=source.get("Ninki"),
+            )
+        elif bet_type == "Fukusyo":
+            append_child(
+                "HYOSU_TANPUKU",
+                "Umaban",
+                source.get("Kumi"),
+                FukuHyo=source.get("Hyo"),
+                FukuNinki=source.get("Ninki"),
+            )
+        elif bet_type == "Wakuren":
+            append_child(
+                "HYOSU_WAKU", "Kumi", source.get("Kumi"),
+                Hyo=source.get("Hyo"), Ninki=source.get("Ninki")
+            )
+        elif bet_type == "Umaren":
+            append_child(
+                "HYOSU_UMARENWIDE", "Kumi", source.get("Kumi"),
+                UmarenHyo=source.get("Hyo"), UmarenNinki=source.get("Ninki")
+            )
+        elif bet_type == "Wide":
+            append_child(
+                "HYOSU_UMARENWIDE", "Kumi", source.get("Kumi"),
+                WideHyo=source.get("Hyo"), WideNinki=source.get("Ninki")
+            )
+        elif bet_type == "Umatan":
+            append_child(
+                "HYOSU_UMATAN", "Kumi", source.get("Kumi"),
+                Hyo=source.get("Hyo"), Ninki=source.get("Ninki")
+            )
+        elif bet_type == "Sanrenpuku":
+            append_child(
+                "HYOSU_SANREN", "Kumi", source.get("Kumi"),
+                Hyo=source.get("Hyo"), Ninki=source.get("Ninki")
+            )
+        elif bet_type not in (None, "", "Total"):
+            raise SchemaMigrationError(
+                f"H1 standard vote row has unsupported BetType: {bet_type!r}"
+            )
+
+        if bet_type in (None, ""):
+            append_child(
+                "HYOSU_TANPUKU", "Umaban", source.get("TanUma"),
+                TanHyo=source.get("TanHyo"), TanNinki=source.get("TanNinki")
+            )
+            append_child(
+                "HYOSU_TANPUKU", "Umaban", source.get("FukuUma"),
+                FukuHyo=source.get("FukuHyo"), FukuNinki=source.get("FukuNinki")
+            )
+            append_child(
+                "HYOSU_WAKU", "Kumi", source.get("WakuKumi"),
+                Hyo=source.get("WakuHyo"), Ninki=source.get("WakuNinki")
+            )
+            append_child(
+                "HYOSU_UMARENWIDE", "Kumi", source.get("UmarenKumi"),
+                UmarenHyo=source.get("UmarenHyo"),
+                UmarenNinki=source.get("UmarenNinki")
+            )
+            append_child(
+                "HYOSU_UMARENWIDE", "Kumi", source.get("WideKumi"),
+                WideHyo=source.get("WideHyo"), WideNinki=source.get("WideNinki")
+            )
+            append_child(
+                "HYOSU_UMATAN", "Kumi", source.get("UmatanKumi"),
+                Hyo=source.get("UmatanHyo"), Ninki=source.get("UmatanNinki")
+            )
+            append_child(
+                "HYOSU_SANREN", "Kumi", source.get("SanrenfukuKumi"),
+                Hyo=source.get("SanrenfukuHyo"),
+                Ninki=source.get("SanrenfukuNinki")
+            )
+    else:
+        append_child(
+            "HYOSU_SANRENTAN", "Kumi", source.get("SanrentanKumi"),
+            Hyo=source.get("SanrentanHyo"), Ninki=source.get("SanrentanNinki")
+        )
+
+    children: list[tuple[str, dict]] = []
+    for child_table, child_source in child_sources:
+        child = convert_record_types(child_source, child_table)
+        child_keys = config["children"][child_table]
+        missing_child_key = [
+            column for column in child_keys if child.get(column) in (None, "")
+        ]
+        if missing_child_key:
+            raise SchemaMigrationError(
+                f"{record_type} standard vote child has incomplete key: "
+                f"{missing_child_key}"
+            )
+        children.append((child_table, child))
+    return header, children
+
+
+def insert_standard_vote_batch(
+    database: BaseDatabase,
+    owner_table_name: str,
+    records: list[dict],
+    *,
+    commit_batch: bool,
+    verification_cache: dict[str, tuple[str, dict[str, Any]]] | None = None,
+) -> int:
+    """Atomically replace one complete H1/H6 standard-schema snapshot."""
+    if not records:
+        return 0
+    try:
+        if commit_batch:
+            database.begin_transaction()
+        verified = (
+            verification_cache.get(owner_table_name)
+            if verification_cache is not None
+            else None
+        )
+        if verified is None:
+            verified = verify_standard_vote_tables(database, owner_table_name)
+        _, config = verified
+        fingerprints = {
+            _standard_vote_physical_fingerprint(record, owner_table_name)
+            for record in records
+        }
+        if len(fingerprints) != 1:
+            raise SchemaMigrationError(
+                "standard vote batch spans multiple physical records"
+            )
+
+        header_by_key: dict[tuple, dict] = {}
+        child_by_table: dict[str, dict[tuple, dict]] = {
+            table_name: {} for table_name in config["children"]
+        }
+        for record in records:
+            header, children = prepare_standard_vote_record(record, owner_table_name)
+            if header.get("DataKubun") == "0":
+                raise SchemaMigrationError(
+                    "standard vote erase must be applied at the physical-record boundary"
+                )
+            header_key = tuple(
+                header[column] for column in _STANDARD_VOTE_RACE_KEY_COLUMNS
+            )
+            existing_header = header_by_key.get(header_key)
+            if existing_header is None:
+                header_by_key[header_key] = header
+            else:
+                existing_header.update(
+                    {column: value for column, value in header.items() if value is not None}
+                )
+            for child_table, child in children:
+                child_keys = config["children"][child_table]
+                child_key = tuple(child[column] for column in child_keys)
+                existing_child = child_by_table[child_table].get(child_key)
+                if existing_child is None:
+                    child_by_table[child_table][child_key] = child
+                else:
+                    existing_child.update(
+                        {column: value for column, value in child.items() if value is not None}
+                    )
+
+        if len(header_by_key) != 1:
+            raise SchemaMigrationError(
+                "standard vote physical record spans multiple race keys"
+            )
+        current_header = next(iter(header_by_key.values()))
+        where = " AND ".join(
+            f"{column} = ?" for column in _STANDARD_VOTE_RACE_KEY_COLUMNS
+        )
+        race_key_values = tuple(
+            current_header[column] for column in _STANDARD_VOTE_RACE_KEY_COLUMNS
+        )
+        for child_table in config["children"]:
+            database.execute(
+                f"DELETE FROM {child_table} WHERE {where}", race_key_values
+            )
+        _upsert_rows_by_official_key(
+            database,
+            owner_table_name,
+            list(header_by_key.values()),
+            _STANDARD_VOTE_RACE_KEY_COLUMNS,
+            preserve_existing_on_null=True,
+        )
+        for child_table, keyed_rows in child_by_table.items():
+            _upsert_rows_by_official_key(
+                database,
+                child_table,
+                list(keyed_rows.values()),
+                config["children"][child_table],
+            )
+        if commit_batch:
+            database.commit()
+            if verification_cache is not None:
+                verification_cache[owner_table_name] = verified
+        return len(records)
+    except (DatabaseError, SchemaMigrationError):
+        if verification_cache is not None:
+            verification_cache.pop(owner_table_name, None)
+        _rollback_coupled_odds(database)
+        raise
+
+
+def delete_standard_vote_record(
+    database: BaseDatabase,
+    record: dict,
+    owner_table_name: str,
+    *,
+    commit_batch: bool,
+    verification_cache: dict[str, tuple[str, dict[str, Any]]] | None = None,
+) -> int:
+    """Atomically erase a complete split H1/H6 standard physical record."""
+    if resolve_record_data_kubun(record) != "0":
+        raise SchemaMigrationError("standard vote physical erase requires DataKubun=0")
+    try:
+        if commit_batch:
+            database.begin_transaction()
+        verified = (
+            verification_cache.get(owner_table_name)
+            if verification_cache is not None
+            else None
+        )
+        if verified is None:
+            verified = verify_standard_vote_tables(database, owner_table_name)
+        _, config = verified
+        header, _ = prepare_standard_vote_record(record, owner_table_name)
+        where = " AND ".join(
+            f"{column} = ?" for column in _STANDARD_VOTE_RACE_KEY_COLUMNS
+        )
+        values = tuple(
+            header[column] for column in _STANDARD_VOTE_RACE_KEY_COLUMNS
+        )
+        deleted = 0
+        for table_name in (*config["children"], owner_table_name):
+            deleted += max(
+                database.execute(f"DELETE FROM {table_name} WHERE {where}", values),
+                0,
+            )
+        if commit_batch:
+            database.commit()
+            if verification_cache is not None:
+                verification_cache[owner_table_name] = verified
+        return deleted
+    except (DatabaseError, SchemaMigrationError):
+        if verification_cache is not None:
+            verification_cache.pop(owner_table_name, None)
+        _rollback_coupled_odds(database)
+        raise
+
+
+def _is_standard_vote_record_erase(record: dict, table_name: str) -> bool:
+    configured = _standard_vote_config(record, table_name)
+    return configured is not None and resolve_record_data_kubun(record) == "0"
+
+
 def _is_standard_odds_record_erase(record: dict, table_name: str) -> bool:
     configured = _standard_odds_config(record, table_name)
     return configured is not None and resolve_record_data_kubun(record) == "0"
@@ -1939,6 +2396,10 @@ class DataImporter:
             str,
             tuple[str, dict[str, Any]],
         ] = {}
+        self._verified_standard_vote_configs: dict[
+            str,
+            tuple[str, dict[str, Any]],
+        ] = {}
 
         # Map record types to table names
         # Note: Table names match schema.py table definitions (e.g. NL_RA, not NL_RA_RACE)
@@ -2149,6 +2610,7 @@ class DataImporter:
         # Group records by type for batch insertion
         batch_buffers: Dict[str, List[dict]] = {}
         standard_odds_fingerprints: dict[str, tuple] = {}
+        standard_vote_fingerprints: dict[str, tuple] = {}
         last_expanded_record_fingerprint = None
 
         try:
@@ -2176,6 +2638,24 @@ class DataImporter:
                 if table_name not in self._verified_mining_native_tables:
                     if verify_mining_native_schema(self.database, record, table_name):
                         self._verified_mining_native_tables.add(table_name)
+
+                if _is_standard_vote_record_erase(record, table_name):
+                    pending = batch_buffers.setdefault(table_name, [])
+                    if pending:
+                        self._flush_batch(table_name, pending, auto_commit)
+                        batch_buffers[table_name] = []
+                    delete_standard_vote_record(
+                        self.database,
+                        record,
+                        table_name,
+                        commit_batch=auto_commit,
+                        verification_cache=self._verified_standard_vote_configs,
+                    )
+                    standard_vote_fingerprints.pop(table_name, None)
+                    self._records_imported += 1
+                    self._batches_processed += 1
+                    last_expanded_record_fingerprint = None
+                    continue
 
                 if _is_standard_odds_record_erase(record, table_name):
                     pending = batch_buffers.setdefault(table_name, [])
@@ -2243,6 +2723,21 @@ class DataImporter:
                         raise
                     self._records_imported += rows
                     self._batches_processed += 1
+                    continue
+
+                if table_name in _STANDARD_VOTE_CONFIG_BY_OWNER:
+                    fingerprint = _standard_vote_physical_fingerprint(
+                        record,
+                        table_name,
+                    )
+                    pending = batch_buffers.setdefault(table_name, [])
+                    previous = standard_vote_fingerprints.get(table_name)
+                    if pending and previous != fingerprint:
+                        self._flush_batch(table_name, pending, auto_commit)
+                        pending = []
+                        batch_buffers[table_name] = pending
+                    pending.append(record)
+                    standard_vote_fingerprints[table_name] = fingerprint
                     continue
 
                 if table_name in _STANDARD_ODDS_CONFIG_BY_OWNER:
@@ -2320,6 +2815,19 @@ class DataImporter:
         if table_name not in self._verified_ys_tables:
             if verify_ys_storage_schema(self.database, table_name):
                 self._verified_ys_tables.add(table_name)
+
+        if table_name in _STANDARD_VOTE_CONFIG_BY_OWNER:
+            rows = insert_standard_vote_batch(
+                self.database,
+                table_name,
+                batch,
+                commit_batch=auto_commit,
+                verification_cache=self._verified_standard_vote_configs,
+            )
+            self._records_imported += rows
+            if rows:
+                self._batches_processed += 1
+            return
 
         if table_name in _STANDARD_ODDS_CONFIG_BY_OWNER:
             rows = insert_standard_odds_batch(
@@ -2659,6 +3167,17 @@ class DataImporter:
             if table_name not in self._verified_mining_native_tables:
                 if verify_mining_native_schema(self.database, record, table_name):
                     self._verified_mining_native_tables.add(table_name)
+            if _is_standard_vote_record_erase(record, table_name):
+                delete_standard_vote_record(
+                    self.database,
+                    record,
+                    table_name,
+                    commit_batch=auto_commit,
+                    verification_cache=self._verified_standard_vote_configs,
+                )
+                self._records_imported += 1
+                self._batches_processed += 1
+                return True
             if _is_standard_odds_record_erase(record, table_name):
                 delete_standard_odds_record(
                     self.database,
@@ -2697,6 +3216,18 @@ class DataImporter:
                 self._records_imported += rows
                 self._batches_processed += 1
                 return True
+            if table_name in _STANDARD_VOTE_CONFIG_BY_OWNER:
+                rows = insert_standard_vote_batch(
+                    self.database,
+                    table_name,
+                    [record],
+                    commit_batch=auto_commit,
+                    verification_cache=self._verified_standard_vote_configs,
+                )
+                self._records_imported += rows
+                if rows:
+                    self._batches_processed += 1
+                return rows == 1
             if table_name in _STANDARD_ODDS_CONFIG_BY_OWNER:
                 rows = insert_standard_odds_batch(
                     self.database,

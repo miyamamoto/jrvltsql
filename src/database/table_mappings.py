@@ -53,9 +53,20 @@ JRAVAN_TO_JLTSQL: Dict[str, str] = {
     "ODDS_SANRENTAN_HEAD": "NL_O6",
     "ODDS_SANRENTAN": "NL_O6",
 
-    # 票数 (Vote Counts)
-    "HYO_TANPUKU": "NL_H1",   # 単複票数 (Win/Place Votes)
-    "HYO_SANRENTAN": "NL_H6", # 三連単票数 (Trifecta Votes)
+    # 票数 (Vote Counts). One physical H1/H6 record owns a header and
+    # multiple child tables. Keep every physical standard table addressable,
+    # followed by the historical aliases so the public reverse mapping stays
+    # backward compatible.
+    "HYOSU": "NL_H1",
+    "HYOSU_TANPUKU": "NL_H1",
+    "HYOSU_WAKU": "NL_H1",
+    "HYOSU_UMARENWIDE": "NL_H1",
+    "HYOSU_UMATAN": "NL_H1",
+    "HYOSU_SANREN": "NL_H1",
+    "HYOSU2": "NL_H6",
+    "HYOSU_SANRENTAN": "NL_H6",
+    "HYO_TANPUKU": "NL_H1",   # historical API alias
+    "HYO_SANRENTAN": "NL_H6", # historical API alias
 
     # スケジュール・その他 (Schedule & Others)
     "SCHEDULE": "NL_YS",      # 開催スケジュール (Race Schedule)
@@ -145,7 +156,7 @@ JLTSQL_TO_JRAVAN: Dict[str, str] = {
 }
 
 # Importer-only physical-record owners for standard schemas that split one
-# normalized NL_O* stream across a header and one or more child tables.
+# normalized stream across a header and one or more child tables.
 STANDARD_EXPANDED_RECORD_OWNER: dict[str, str] = {
     "NL_O1": "ODDS_TANPUKUWAKU_HEAD",
     "NL_O2": "ODDS_UMAREN_HEAD",
@@ -153,6 +164,8 @@ STANDARD_EXPANDED_RECORD_OWNER: dict[str, str] = {
     "NL_O4": "ODDS_UMATAN_HEAD",
     "NL_O5": "ODDS_SANREN_HEAD",
     "NL_O6": "ODDS_SANRENTAN_HEAD",
+    "NL_H1": "HYOSU",
+    "NL_H6": "HYOSU2",
 }
 
 # テーブル名 → レコード種別コード逆マッピング
