@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from copy import deepcopy
 from pathlib import Path
@@ -20,6 +21,56 @@ FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "official_layout"
 MANIFEST_PATH = FIXTURE_ROOT / "jvdata_sdk500_manifest.json"
 HISTORY_PATH = FIXTURE_ROOT / "jvdata_layout_history.json"
 OFFICIAL_SOURCE_SHA256 = "8994f985fce846f1b4fcbc3ddf2a5c6394c586a458478346891222b3b61e4ee3"
+OFFICIAL_MANIFEST_CONTRACT_SHA256 = (
+    "f35859d252fd20e4d7e38ee8d0a224deae87a62bae9db1995ed897bdccef6c45"
+)
+OFFICIAL_HISTORY_CONTRACT_SHA256 = (
+    "e697a97c2730099239f432203d56fea2869e11264e483b39f953257f9dc60d66"
+)
+
+
+def _canonical_contract_sha256(value) -> str:
+    payload = json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _extractor_fixture(root_field: str, set_data_methods: str) -> str:
+    return f"""
+from dataclasses import dataclass
+
+@dataclass
+class YMD:
+    Year: str
+    Month: str
+    Day: str
+    @classmethod
+    def SetDataB(cls, b):
+        return cls(MidB2S(b, 1, 4), MidB2S(b, 5, 2), MidB2S(b, 7, 2))
+
+@dataclass
+class RECORD_ID:
+    RecordSpec: str
+    DataKubun: str
+    MakeDate: YMD
+    @classmethod
+    def SetDataB(cls, b):
+        return cls(
+            MidB2S(b, 1, 2),
+            MidB2S(b, 3, 1),
+            YMD.SetDataB(MidB2B(b, 4, 8)),
+        )
+
+@dataclass
+class JV_ZZ_ROOT:
+    head: RECORD_ID
+    {root_field}
+{set_data_methods}
+"""
 
 
 def _valid_manifest() -> dict:
@@ -481,9 +532,129 @@ class Scalar:
         )
 
 
-def test_tracked_official_manifest_is_complete_and_matches_dispatch():
-    manifest = load_manifest(MANIFEST_PATH)
+@pytest.mark.parametrize(
+    ("root_field", "field_expression"),
+    (
+        ("value: str", "MidB2S(b, 11 + True, 1)"),
+        ("value: str", "MidB2S(b, 12, True + 0)"),
+        (
+            "values: list[str]",
+            "[MidB2S(b, 12 + i, 1) for i in range(1 + True)]",
+        ),
+        (
+            "values: list[str]",
+            "[MidB2S(b, 12 + True * i, 1) for i in range(2)]",
+        ),
+    ),
+)
+def test_extractor_rejects_boolean_integer_expressions(root_field, field_expression):
+    source = _extractor_fixture(
+        root_field,
+        f"""    @classmethod
+    def SetDataB(cls, b):
+        return cls(
+            RECORD_ID.SetDataB(MidB2B(b, 1, 11)),
+            {field_expression},
+        )
+""",
+    )
 
+    with pytest.raises(OracleExtractionError):
+        extract_manifest_from_source(
+            source,
+            artifact="synthetic oracle unit fixture",
+            jvdata_version="test",
+        )
+
+
+@pytest.mark.parametrize(
+    "set_data_methods",
+    (
+        """    @classmethod
+    def SetDataB(cls, b):
+        return cls(
+            RECORD_ID.SetDataB(MidB2B(b, 1, 11)),
+            MidB2S(other, 12, 1),
+        )
+""",
+        """    @classmethod
+    def SetDataB(cls, b):
+        return cls(
+            RECORD_ID.SetDataB(MidB2B(b, 1, 11)),
+            MidB2S(transform(b), 12, 1),
+        )
+""",
+        """    def SetDataB(cls, b):
+        return cls(
+            RECORD_ID.SetDataB(MidB2B(b, 1, 11)),
+            MidB2S(b, 12, 1),
+        )
+""",
+        """    @classmethod
+    def SetDataB(cls, payload):
+        return cls(
+            RECORD_ID.SetDataB(MidB2B(payload, 1, 11)),
+            MidB2S(payload, 12, 1),
+        )
+""",
+        """    @classmethod
+    def SetDataB(cls, b):
+        if b:
+            return cls(
+                RECORD_ID.SetDataB(MidB2B(b, 1, 11)),
+                MidB2S(b, 12, 1),
+            )
+""",
+        """    @classmethod
+    def SetDataB(cls, b):
+        return cls(
+            RECORD_ID.SetDataB(MidB2B(b, 1, 11)),
+            MidB2S(b, 12, 1),
+        )
+    @classmethod
+    def SetDataB(cls, b):
+        return cls(
+            RECORD_ID.SetDataB(MidB2B(b, 1, 11)),
+            MidB2S(b, 99, 1),
+        )
+""",
+        """    @classmethod
+    async def SetDataB(cls, b):
+        return cls(
+            RECORD_ID.SetDataB(MidB2B(b, 1, 11)),
+            MidB2S(b, 12, 1),
+        )
+""",
+        """    @classmethod
+    def SetDataB(cls, b):
+        return cls(
+            RECORD_ID.SetDataB(MidB2B(b, 1, 11, unexpected=True)),
+            MidB2S(b, 12, 1),
+        )
+""",
+        """    @classmethod
+    def SetDataB(cls, b):
+        return cls(
+            RECORD_ID.SetDataB(MidB2B(b, 1, 11)),
+            [MidB2S(b, 12 + i, 1) for i in range(1, unexpected=True)],
+        )
+""",
+    ),
+)
+def test_extractor_rejects_unreviewed_method_and_source_grammar(set_data_methods):
+    root_field = "values: list[str]" if "for i in range" in set_data_methods else "value: str"
+    source = _extractor_fixture(root_field, set_data_methods)
+
+    with pytest.raises(OracleExtractionError):
+        extract_manifest_from_source(
+            source,
+            artifact="synthetic oracle unit fixture",
+            jvdata_version="test",
+        )
+
+
+def _assert_manifest_truth_contract(manifest):
+    assert _canonical_contract_sha256(manifest) == OFFICIAL_MANIFEST_CONTRACT_SHA256
     assert validate_manifest(manifest) == []
     assert manifest["source"]["sha256"] == OFFICIAL_SOURCE_SHA256
     assert manifest["source"]["jvdata_version"] == "4.9.0.1"
@@ -495,9 +666,24 @@ def test_tracked_official_manifest_is_complete_and_matches_dispatch():
     }
     assert set(manifest["root_records"]) == set(ALL_RECORD_TYPES)
 
+
+def test_tracked_official_manifest_is_complete_and_matches_dispatch():
+    manifest = load_manifest(MANIFEST_PATH)
+
+    _assert_manifest_truth_contract(manifest)
+
     factory = ParserFactory()
     for record_type, contract in manifest["root_records"].items():
         assert factory.get_parser(record_type).RECORD_LENGTH == contract["length"]
+
+
+def test_manifest_truth_contract_rejects_same_shape_content_drift():
+    manifest = load_manifest(MANIFEST_PATH)
+    manifest["structures"]["HMS"]["fields"][0]["name"] = "InventedHour"
+    manifest["structures"]["HMS"]["fields"][0]["decoder"] = "bytes"
+
+    with pytest.raises(AssertionError):
+        _assert_manifest_truth_contract(manifest)
 
 
 def test_official_hy_and_ck_sentinels_cannot_follow_current_implementation_drift():
@@ -538,10 +724,10 @@ def _assert_history_cardinality(history):
     assert len(history["same_length_semantic_changes"]) == 1
 
 
-def test_official_layout_history_is_provenanced_and_continuous_to_current():
-    history = json.loads(HISTORY_PATH.read_text(encoding="utf-8"))
-    current = load_manifest(MANIFEST_PATH)
-
+def _assert_history_truth_contract(history):
+    assert _canonical_contract_sha256(history) == OFFICIAL_HISTORY_CONTRACT_SHA256
+    assert isinstance(history["ledger_schema_version"], int)
+    assert not isinstance(history["ledger_schema_version"], bool)
     assert history["ledger_schema_version"] == 1
     _assert_history_cardinality(history)
     assert {(source["jvdata_version"], source["sha256"]) for source in history["sources"]} == {
@@ -573,16 +759,6 @@ def test_official_layout_history_is_provenanced_and_continuous_to_current():
         for change in changes
     } == expected_changes
 
-    by_record = {}
-    for change in sorted(changes, key=lambda item: item["effective_date"]):
-        record_type = change["record_type"]
-        previous = by_record.get(record_type)
-        if previous is not None:
-            assert change["before_length"] == previous
-        by_record[record_type] = change["after_length"]
-    for record_type, latest_length in by_record.items():
-        assert current["root_records"][record_type]["length"] == latest_length
-
     assert history["record_type_changes"] == [
         {
             "effective_date": "2003-04-22",
@@ -596,6 +772,25 @@ def test_official_layout_history_is_provenanced_and_continuous_to_current():
     assert semantic_change["record_type"] == "UM"
     assert semantic_change["length_unchanged"] is True
     assert semantic_change["provenance_required"] is True
+
+
+def test_official_layout_history_is_provenanced_and_continuous_to_current():
+    history = json.loads(HISTORY_PATH.read_text(encoding="utf-8"))
+    current = load_manifest(MANIFEST_PATH)
+
+    _assert_history_truth_contract(history)
+
+    changes = history["physical_length_changes"]
+    by_record = {}
+    for change in sorted(changes, key=lambda item: item["effective_date"]):
+        record_type = change["record_type"]
+        previous = by_record.get(record_type)
+        if previous is not None:
+            assert change["before_length"] == previous
+        by_record[record_type] = change["after_length"]
+    for record_type, latest_length in by_record.items():
+        assert current["root_records"][record_type]["length"] == latest_length
+
     um_fields = {
         field["name"]: (field["start"], field["width"])
         for field in current["structures"]["JV_UM_UMA"]["fields"]
@@ -603,6 +798,26 @@ def test_official_layout_history_is_provenanced_and_continuous_to_current():
     assert um_fields["BameiEng"] == (119, 60)
     assert um_fields["ZaikyuFlag"] == (179, 1)
     assert um_fields["Reserved"] == (180, 19)
+
+
+@pytest.mark.parametrize(
+    ("path", "value"),
+    (
+        (("ledger_schema_version",), True),
+        (("sources", 0, "artifact"), "wrong.xlsx"),
+        (("physical_length_changes", 0, "source"), "wrong:999"),
+        (("physical_length_changes", 0, "official_spec_version"), "wrong"),
+        (("physical_length_changes", 0, "effective_date"), "1900-01-01"),
+        (("same_length_semantic_changes", 0, "before_fields"), []),
+        (("same_length_semantic_changes", 0, "reason"), "wrong"),
+    ),
+)
+def test_history_truth_contract_rejects_content_and_provenance_drift(path, value):
+    history = json.loads(HISTORY_PATH.read_text(encoding="utf-8"))
+    _set(path, value)(history)
+
+    with pytest.raises(AssertionError):
+        _assert_history_truth_contract(history)
 
 
 @pytest.mark.parametrize(

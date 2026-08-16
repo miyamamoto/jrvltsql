@@ -957,3 +957,47 @@
   affected parser/fixture contracts; commit a clean candidate; obtain one
   grouped Fable critical review and GitHub review on that exact candidate; then
   fix any independently reproduced findings together before merge.
+- On 2026-08-17 the user explicitly authorized a Codex critical agent as the
+  substitute review gate when the same Claude Code session remained blocked by
+  its account limit. A read-only reviewer ran with `gpt-5.6-sol` at `xhigh`
+  reasoning because this iteration changes an inspector whose failure mode is
+  false release confidence. It reviewed exact full SHA
+  `857533a3c1f29b899d2ce34fb076dc9c44afef09` and returned `NEEDS_CHANGES`.
+  The independently reproduced grouped findings were: Boolean AST constants
+  accepted as integer layout expressions; unreviewed `SetDataB` method shapes
+  and non-`b` slice sources accepted; and official manifest/history fixtures
+  structurally validated without binding every official fact and provenance
+  field. The reviewer also independently confirmed the three official source
+  hashes, all 38 current lengths, all 10 physical history changes, the PR-to-BR
+  transition, the UM same-length semantic split, and distribution exclusion of
+  `specs/`, the oracle fixtures, and the extraction script.
+- Before changing the inspector implementation, the grouped regression matrix
+  was run against the implementation at full SHA
+  `857533a3c1f29b899d2ce34fb076dc9c44afef09`. It produced the required red
+  result of 19 failed and 2 passed: four Boolean arithmetic paths, seven
+  method/source-buffer paths, one same-shape manifest drift, and seven history
+  content/provenance drifts failed to say no; the two already-covered
+  nested/range keyword branches remained green.
+- The extractor now excludes Boolean constants from both integer evaluators,
+  requires exactly one synchronous direct `@classmethod SetDataB(cls, b)` with
+  one unconditional constructor return, and requires every scalar or nested
+  slice to read that reviewed byte parameter. The official manifest and history
+  ledger are now bound in CI by canonical JSON SHA-256 in addition to the
+  readable semantic assertions; strict ledger schema-version typing prevents
+  `True` from impersonating version 1. All 21 grouped negative/paired cases are
+  green, and the complete oracle plus current-record selection is 166 passed.
+  Ruff, Black, and `git diff --check` pass.
+- Regeneration after the grouped repair from the pinned official SDK source is
+  still byte-for-byte identical to the tracked manifest: 38 records, 94
+  structures, 46,985 expanded leaves, raw-file SHA-256
+  `437a21ea582315f807609dbee809c581518b31d6b48bddc96fd57b92c84e366a`.
+  The broader affected selection on CPython 3.12.11 is 251 passed, the
+  repository fail-closed self-check reports `TEST GATE PASS`, and isolated
+  fatal flake8 reports zero findings.
+  A broader pre-existing packaging condition remains for release audit: the
+  sdist ships some tests whose excluded script/fixture dependencies are absent.
+  It is not a PR #194-specific oracle defect and was not mixed into this repair.
+- Next safe action: run the affected broader selection and CI-equivalent local
+  gates, commit and push one clean candidate, then perform the single final
+  exact-SHA gate (checks, unresolved threads, review evidence, and clean
+  worktree) before merging PR #194.

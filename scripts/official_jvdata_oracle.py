@@ -56,7 +56,11 @@ class OracleExtractionError(ValueError):
 
 def _integer(expression: ast.expr, environment: dict[str, int] | None = None) -> int:
     environment = environment or {}
-    if isinstance(expression, ast.Constant) and isinstance(expression.value, int):
+    if (
+        isinstance(expression, ast.Constant)
+        and isinstance(expression.value, int)
+        and not isinstance(expression.value, bool)
+    ):
         return expression.value
     if isinstance(expression, ast.Name) and expression.id in environment:
         return environment[expression.id]
@@ -77,7 +81,11 @@ def _integer(expression: ast.expr, environment: dict[str, int] | None = None) ->
 def _affine_integer(expression: ast.expr, variable: str) -> tuple[int, int]:
     """Return the constant and coefficient for a reviewed affine expression."""
 
-    if isinstance(expression, ast.Constant) and isinstance(expression.value, int):
+    if (
+        isinstance(expression, ast.Constant)
+        and isinstance(expression.value, int)
+        and not isinstance(expression.value, bool)
+    ):
         return expression.value, 0
     if isinstance(expression, ast.Name) and expression.id == variable:
         return 0, 1
@@ -110,6 +118,7 @@ def _affine_integer(expression: ast.expr, variable: str) -> tuple[int, int]:
 def _slice_call(
     expression: ast.expr,
     *,
+    source_parameter: str,
     loop_variable: str | None = None,
 ) -> dict[str, Any]:
     environment_zero = {loop_variable: 0} if loop_variable else {}
@@ -122,6 +131,13 @@ def _slice_call(
         and expression.func.id in {"MidB2S", "MidB2B"}
         and len(expression.args) == 3
     ):
+        source_expression = expression.args[0]
+        if not (
+            isinstance(source_expression, ast.Name) and source_expression.id == source_parameter
+        ):
+            raise OracleExtractionError(
+                "slice source must be the reviewed byte parameter " f"{source_parameter}"
+            )
         start_expression = expression.args[1]
         width_expression = expression.args[2]
         result = {
@@ -150,6 +166,13 @@ def _slice_call(
         ):
             raise OracleExtractionError(
                 f"nested structure without MidB2B: {ast.unparse(expression)}"
+            )
+        source_expression = inner.args[0]
+        if not (
+            isinstance(source_expression, ast.Name) and source_expression.id == source_parameter
+        ):
+            raise OracleExtractionError(
+                "slice source must be the reviewed byte parameter " f"{source_parameter}"
             )
         start_expression = inner.args[1]
         width_expression = inner.args[2]
@@ -188,9 +211,12 @@ def _slice_call(
     return result
 
 
-def _field(expression: ast.expr, name: str) -> dict[str, Any]:
+def _field(expression: ast.expr, name: str, *, source_parameter: str) -> dict[str, Any]:
     if not isinstance(expression, ast.ListComp):
-        return {"name": name, **_slice_call(expression)}
+        return {
+            "name": name,
+            **_slice_call(expression, source_parameter=source_parameter),
+        }
 
     if len(expression.generators) != 1:
         raise OracleExtractionError(f"repeat must have one generator: {name}")
@@ -210,7 +236,11 @@ def _field(expression: ast.expr, name: str) -> dict[str, Any]:
     ):
         raise OracleExtractionError(f"repeat must use range(count): {name}")
 
-    element = _slice_call(expression.elt, loop_variable=generator.target.id)
+    element = _slice_call(
+        expression.elt,
+        source_parameter=source_parameter,
+        loop_variable=generator.target.id,
+    )
     result: dict[str, Any] = {
         "name": name,
         "kind": "repeat",
@@ -224,26 +254,45 @@ def _field(expression: ast.expr, name: str) -> dict[str, Any]:
     return result
 
 
-def _set_data_return(class_node: ast.ClassDef) -> ast.Call:
-    method = next(
-        (
-            node
-            for node in class_node.body
-            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and node.name == "SetDataB"
-        ),
-        None,
-    )
-    if method is None:
-        raise OracleExtractionError(f"{class_node.name}: SetDataB is missing")
-    returns = [node for node in ast.walk(method) if isinstance(node, ast.Return)]
-    if len(returns) != 1:
-        raise OracleExtractionError(f"{class_node.name}: expected one return")
-    value = returns[0].value
+def _set_data_return(class_node: ast.ClassDef) -> tuple[ast.Call, str]:
+    methods = [
+        node
+        for node in class_node.body
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and node.name == "SetDataB"
+    ]
+    if len(methods) != 1:
+        raise OracleExtractionError(f"{class_node.name}: expected exactly one SetDataB")
+    method = methods[0]
+    if not isinstance(method, ast.FunctionDef):
+        raise OracleExtractionError(f"{class_node.name}: SetDataB must be synchronous")
+    if not (
+        len(method.decorator_list) == 1
+        and isinstance(method.decorator_list[0], ast.Name)
+        and method.decorator_list[0].id == "classmethod"
+    ):
+        raise OracleExtractionError(f"{class_node.name}: SetDataB must be a classmethod")
+
+    arguments = method.args
+    if not (
+        not arguments.posonlyargs
+        and [argument.arg for argument in arguments.args] == ["cls", "b"]
+        and arguments.vararg is None
+        and not arguments.kwonlyargs
+        and not arguments.kw_defaults
+        and arguments.kwarg is None
+        and not arguments.defaults
+    ):
+        raise OracleExtractionError(
+            f"{class_node.name}: SetDataB signature must be exactly (cls, b)"
+        )
+    if len(method.body) != 1 or not isinstance(method.body[0], ast.Return):
+        raise OracleExtractionError(f"{class_node.name}: SetDataB must contain one direct return")
+    value = method.body[0].value
     if not (
         isinstance(value, ast.Call) and isinstance(value.func, ast.Name) and value.func.id == "cls"
     ):
         raise OracleExtractionError(f"{class_node.name}: return must construct cls")
-    return value
+    return value, arguments.args[1].arg
 
 
 def _field_end(field: dict[str, Any]) -> int:
@@ -299,7 +348,7 @@ def extract_manifest_from_source(
         ]
         if not annotations:
             continue
-        constructor = _set_data_return(class_node)
+        constructor, source_parameter = _set_data_return(class_node)
         if constructor.keywords:
             raise OracleExtractionError(
                 f"{class_node.name}: keyword arguments are outside the reviewed grammar"
@@ -309,7 +358,11 @@ def extract_manifest_from_source(
                 f"{class_node.name}: {len(annotations)} fields != {len(constructor.args)} values"
             )
         fields = [
-            _field(expression, annotation.target.id)
+            _field(
+                expression,
+                annotation.target.id,
+                source_parameter=source_parameter,
+            )
             for annotation, expression in zip(annotations, constructor.args, strict=True)
         ]
         structures[class_node.name] = {
