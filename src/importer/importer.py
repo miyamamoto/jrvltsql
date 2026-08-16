@@ -16,17 +16,22 @@ from src.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-def resolve_standard_table_name(database: BaseDatabase, native_table_name: str) -> str:
-    """Resolve a canonical standard table and reject unsupported legacy-only storage."""
+def resolve_standard_storage_table_name(native_table_name: str) -> str:
+    """Resolve the canonical standard storage owner without database checks."""
     from src.database.table_mappings import (
         JLTSQL_TO_JRAVAN,
         STANDARD_EXPANDED_RECORD_OWNER,
     )
 
-    standard_name = STANDARD_EXPANDED_RECORD_OWNER.get(
+    return STANDARD_EXPANDED_RECORD_OWNER.get(
         native_table_name,
         JLTSQL_TO_JRAVAN.get(native_table_name, native_table_name),
     )
+
+
+def resolve_standard_table_name(database: BaseDatabase, native_table_name: str) -> str:
+    """Resolve a canonical standard table and reject unsupported legacy-only storage."""
+    standard_name = resolve_standard_storage_table_name(native_table_name)
     if (
         native_table_name == "NL_SK"
         and database.is_connected()
@@ -735,6 +740,33 @@ def _standard_odds_config(
     return record_type, config
 
 
+def _standard_odds_physical_fingerprint(
+    record: dict,
+    owner_table_name: str,
+) -> tuple:
+    """Identify all normalized rows emitted from one physical odds record."""
+    configured = _standard_odds_config(record, owner_table_name)
+    if configured is None:
+        raise SchemaMigrationError(
+            f"{owner_table_name} is not a standard odds owner table"
+        )
+    raw = record.get("_raw")
+    if isinstance(raw, (bytes, bytearray, memoryview)):
+        # Fetchers attach the same raw buffer object to every expanded row.
+        # Object identity avoids re-hashing an O6 buffer thousands of times;
+        # the pending rows keep it alive until the boundary is flushed.
+        return owner_table_name, "raw", id(raw)
+    return (
+        owner_table_name,
+        "header",
+        _record_type_from_record(record),
+        resolve_record_data_kubun(record),
+        record.get("MakeDate"),
+        *(record.get(column) for column in _STANDARD_ODDS_RACE_KEY_COLUMNS),
+        record.get("HassoTime") or record.get("HappyoTime"),
+    )
+
+
 def verify_standard_odds_tables(
     database: BaseDatabase,
     owner_table_name: str,
@@ -746,7 +778,7 @@ def verify_standard_odds_tables(
             f"Unknown standard odds owner table: {owner_table_name}"
         )
 
-    from src.database.migration import verify_table_schema
+    from src.database.migration import migrate_table_if_needed, verify_table_schema
     from src.database.schema_jravan import JRAVAN_SCHEMAS
 
     record_type, config = configured
@@ -760,6 +792,12 @@ def verify_standard_odds_tables(
             raise SchemaMigrationError(
                 f"{record_type} standard odds import requires table {table_name}"
             )
+        migrate_table_if_needed(
+            database,
+            table_name,
+            schema_sql,
+            commit=False,
+        )
         verify_table_schema(database, table_name, schema_sql)
         index_name = f"jltsql_uq_{table_name.lower()}"
         columns = ", ".join(key_columns)
@@ -961,6 +999,7 @@ def insert_standard_odds_batch(
     records: list[dict],
     *,
     commit_batch: bool,
+    verification_cache: dict[str, tuple[str, dict[str, Any]]] | None = None,
 ) -> int:
     """Atomically materialize split standard odds headers and children."""
     if not records:
@@ -968,7 +1007,22 @@ def insert_standard_odds_batch(
     try:
         if commit_batch:
             database.begin_transaction()
-        _, config = verify_standard_odds_tables(database, owner_table_name)
+        verified = (
+            verification_cache.get(owner_table_name)
+            if verification_cache is not None
+            else None
+        )
+        if verified is None:
+            verified = verify_standard_odds_tables(database, owner_table_name)
+        _, config = verified
+        fingerprints = {
+            _standard_odds_physical_fingerprint(record, owner_table_name)
+            for record in records
+        }
+        if len(fingerprints) != 1:
+            raise SchemaMigrationError(
+                "standard odds batch spans multiple physical records"
+            )
         header_by_key: dict[tuple, dict] = {}
         child_by_table: dict[str, dict[tuple, dict]] = {
             table_name: {} for table_name in config["children"]
@@ -1001,6 +1055,22 @@ def insert_standard_odds_batch(
                 child_key = tuple(child[column] for column in child_keys)
                 child_by_table[child_table][child_key] = child
 
+        if len(header_by_key) != 1:
+            raise SchemaMigrationError(
+                "standard odds physical record spans multiple race keys"
+            )
+        current_header = next(iter(header_by_key.values()))
+        where = " AND ".join(
+            f"{column} = ?" for column in _STANDARD_ODDS_RACE_KEY_COLUMNS
+        )
+        race_key_values = tuple(
+            current_header[column] for column in _STANDARD_ODDS_RACE_KEY_COLUMNS
+        )
+        for child_table in config["children"]:
+            database.execute(
+                f"DELETE FROM {child_table} WHERE {where}",
+                race_key_values,
+            )
         _upsert_rows_by_official_key(
             database,
             owner_table_name,
@@ -1017,8 +1087,12 @@ def insert_standard_odds_batch(
             )
         if commit_batch:
             database.commit()
+            if verification_cache is not None:
+                verification_cache[owner_table_name] = verified
         return len(records)
     except (DatabaseError, SchemaMigrationError):
+        if verification_cache is not None:
+            verification_cache.pop(owner_table_name, None)
         _rollback_coupled_odds(database)
         raise
 
@@ -1029,6 +1103,7 @@ def delete_standard_odds_record(
     owner_table_name: str,
     *,
     commit_batch: bool,
+    verification_cache: dict[str, tuple[str, dict[str, Any]]] | None = None,
 ) -> int:
     """Atomically erase a complete split standard odds physical record."""
     if resolve_record_data_kubun(record) != "0":
@@ -1036,7 +1111,14 @@ def delete_standard_odds_record(
     try:
         if commit_batch:
             database.begin_transaction()
-        _, config = verify_standard_odds_tables(database, owner_table_name)
+        verified = (
+            verification_cache.get(owner_table_name)
+            if verification_cache is not None
+            else None
+        )
+        if verified is None:
+            verified = verify_standard_odds_tables(database, owner_table_name)
+        _, config = verified
         header, _, _ = prepare_standard_odds_record(record, owner_table_name)
         where = " AND ".join(
             f"{column} = ?" for column in _STANDARD_ODDS_RACE_KEY_COLUMNS
@@ -1049,8 +1131,12 @@ def delete_standard_odds_record(
             deleted += max(database.execute(f"DELETE FROM {table_name} WHERE {where}", values), 0)
         if commit_batch:
             database.commit()
+            if verification_cache is not None:
+                verification_cache[owner_table_name] = verified
         return deleted
     except (DatabaseError, SchemaMigrationError):
+        if verification_cache is not None:
+            verification_cache.pop(owner_table_name, None)
         _rollback_coupled_odds(database)
         raise
 
@@ -1849,6 +1935,10 @@ class DataImporter:
         self._verified_rc_tables: set[str] = set()
         self._verified_ys_tables: set[str] = set()
         self._verified_tk_header_tables: dict[str, str] = {}
+        self._verified_standard_odds_configs: dict[
+            str,
+            tuple[str, dict[str, Any]],
+        ] = {}
 
         # Map record types to table names
         # Note: Table names match schema.py table definitions (e.g. NL_RA, not NL_RA_RACE)
@@ -1959,15 +2049,7 @@ class DataImporter:
 
     @staticmethod
     def _get_table_name_for_native(table_name: str) -> str:
-        from src.database.table_mappings import (
-            JLTSQL_TO_JRAVAN,
-            STANDARD_EXPANDED_RECORD_OWNER,
-        )
-
-        return STANDARD_EXPANDED_RECORD_OWNER.get(
-            table_name,
-            JLTSQL_TO_JRAVAN.get(table_name, table_name),
-        )
+        return resolve_standard_storage_table_name(table_name)
 
     def _get_table_name(self, record_type: str) -> Optional[str]:
         """Get table name for record type.
@@ -2066,6 +2148,7 @@ class DataImporter:
 
         # Group records by type for batch insertion
         batch_buffers: Dict[str, List[dict]] = {}
+        standard_odds_fingerprints: dict[str, tuple] = {}
         last_expanded_record_fingerprint = None
 
         try:
@@ -2104,7 +2187,9 @@ class DataImporter:
                         record,
                         table_name,
                         commit_batch=auto_commit,
+                        verification_cache=self._verified_standard_odds_configs,
                     )
+                    standard_odds_fingerprints.pop(table_name, None)
                     self._records_imported += 1
                     self._batches_processed += 1
                     last_expanded_record_fingerprint = None
@@ -2158,6 +2243,21 @@ class DataImporter:
                         raise
                     self._records_imported += rows
                     self._batches_processed += 1
+                    continue
+
+                if table_name in _STANDARD_ODDS_CONFIG_BY_OWNER:
+                    fingerprint = _standard_odds_physical_fingerprint(
+                        record,
+                        table_name,
+                    )
+                    pending = batch_buffers.setdefault(table_name, [])
+                    previous = standard_odds_fingerprints.get(table_name)
+                    if pending and previous != fingerprint:
+                        self._flush_batch(table_name, pending, auto_commit)
+                        pending = []
+                        batch_buffers[table_name] = pending
+                    pending.append(record)
+                    standard_odds_fingerprints[table_name] = fingerprint
                     continue
 
                 fingerprint = _expanded_record_fingerprint(record, table_name)
@@ -2227,6 +2327,7 @@ class DataImporter:
                 table_name,
                 batch,
                 commit_batch=auto_commit,
+                verification_cache=self._verified_standard_odds_configs,
             )
             self._records_imported += rows
             if rows:
@@ -2564,6 +2665,7 @@ class DataImporter:
                     record,
                     table_name,
                     commit_batch=auto_commit,
+                    verification_cache=self._verified_standard_odds_configs,
                 )
                 self._records_imported += 1
                 self._batches_processed += 1
@@ -2601,6 +2703,7 @@ class DataImporter:
                     table_name,
                     [record],
                     commit_batch=auto_commit,
+                    verification_cache=self._verified_standard_odds_configs,
                 )
                 self._records_imported += rows
                 if rows:

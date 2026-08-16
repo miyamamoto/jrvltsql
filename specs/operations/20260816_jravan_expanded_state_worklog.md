@@ -154,5 +154,66 @@
 
 ## Next safe command
 
-- Complete Codex diff review and static checks, then freeze a candidate and run
-  exact-SHA focused/PostgreSQL/acquired-snapshot evidence before PR creation.
+- PR #189 was opened at candidate
+  `eb327da65d23b44679285deb9e293652ac913955`; exact-SHA Python 3.12 focused,
+  455-test affected, 35-test PostgreSQL 16, and acquired-snapshot replay gates
+  passed, as did GitHub test/lint.
+- One requested GitHub-native Copilot review, the automatic GitHub Codex
+  review, and CodeRabbit were collected before repair. Codex found two
+  actionable boundaries: later complete snapshots upserted only present child
+  combinations and left absent old combinations stale, and migration now
+  upgraded only the new owner while an old child table could still lack a
+  nullable expected column. Both were independently reproduced.
+- Copilot and CodeRabbit independently found repeated schema/index verification
+  on every flush; CodeRabbit also noted that ordinary and optimized initial
+  migration used different resolution guards. The duplicate performance
+  finding and the consistency finding are accepted into the same aggregated
+  repair.
+- New pre-repair regressions combine physical snapshot replacement with
+  per-importer verification reuse, and separately require additive migration
+  of an old child table. Before the production repair, the combined regression
+  failed for both importers because verification ran three times instead of
+  once; the independently reproduced snapshot assertion also found two child
+  combinations where only one remained in the later complete snapshot. The
+  old-child regression failed for both importers with `SchemaMigrationError`
+  because nullable `Ninki` had not been added.
+
+## Aggregated review repair
+
+- Complete O1-O6 physical records are now the batching boundary regardless of
+  configured row batch size. Before inserting a replacement, every owned child
+  table is cleared for that race inside the same transaction, then the current
+  header and current child set are upserted. A forced child rejection after a
+  previously committed snapshot rolls back the clear and header change, so the
+  previous complete state remains visible.
+- Owner and child schemas are additively migrated and verified together. The
+  ordinary and optimized initial migration paths now use the same mapping-only
+  owner resolver; runtime-only legacy guards are no longer allowed to change
+  which physical table receives migration.
+- Successful per-importer verification is cached only after its transaction
+  commits. Failed or externally managed uncommitted attempts remain uncached,
+  preserving fail-closed verification while removing repeated schema and
+  index DDL from every ordinary flush.
+- An additional Codex boundary check found that an empty complete O2 snapshot
+  correctly removed old children but its physical total vote existed only on
+  expanded child rows. Before repair, both importers retained the previous
+  `00000123456` total instead of the empty record's `00000000999`. O1 now puts
+  all three physical totals on its base header and O2-O6 put `Vote` on their
+  base header before child expansion, so empty complete records preserve their
+  own totals while clearing children.
+- The repaired SQLite expanded-storage file passed 31 tests with 14
+  environment-gated skips. A fresh PostgreSQL 16 run then passed all 45 tests,
+  including both importers' snapshot replacement, single verification,
+  additive old-child migration, rollback preservation, and existing duplicate
+  rejection cases. The wider affected set passed 475 tests with 34 skips
+  before PostgreSQL variants were added; it must be rerun against the frozen
+  review-repair candidate.
+
+## Next safe command after review repair
+
+- Run diff/static checks, freeze the repair commit, then rerun the affected
+  local set, Python 3.12 focused set, PostgreSQL 16 storage set, and acquired
+  snapshot replay against that exact full SHA. Push once, record evidence on
+  PR #189, reply to and resolve all accepted review threads, confirm final
+  checks and clean worktree, then merge before starting H1/H6 from fresh
+  `master`.

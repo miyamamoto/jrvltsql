@@ -13,6 +13,7 @@ from src.database.migration import SchemaMigrationError
 from src.database.schema import SCHEMAS
 from src.database.schema_jravan import JRAVAN_SCHEMAS
 from src.database.sqlite_handler import SQLiteDatabase
+from src.importer import importer as importer_module
 from src.importer.importer import DataImporter, ImporterError
 from src.importer.importer_optimized import OptimizedDataImporter
 from src.parser.av_parser import AVParser
@@ -579,21 +580,86 @@ def test_postgresql_standard_odds_duplicate_existing_keys_fail_closed(postgresql
     _assert_standard_odds_duplicate_existing_keys_fail_closed(postgresql_db)
 
 
-@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
-def test_sqlite_standard_odds_child_failure_rolls_back_header(
-    sqlite_db,
-    importer_class,
+def _assert_standard_odds_replaces_snapshot_and_reuses_verification(
+    db, importer_class, monkeypatch
 ):
-    _create_jravan_tables(sqlite_db, ["ODDS_UMAREN_HEAD", "ODDS_UMAREN"])
-    sqlite_db.execute(
-        "CREATE TRIGGER reject_standard_odds_child "
-        "BEFORE INSERT ON ODDS_UMAREN "
-        "BEGIN SELECT RAISE(ABORT, 'child rejected'); END"
+    _create_jravan_tables(db, ["ODDS_UMAREN_HEAD", "ODDS_UMAREN"])
+    verification_calls = 0
+    original_verify = importer_module.verify_standard_odds_tables
+
+    def counted_verify(*args, **kwargs):
+        nonlocal verification_calls
+        verification_calls += 1
+        return original_verify(*args, **kwargs)
+
+    monkeypatch.setattr(importer_module, "verify_standard_odds_tables", counted_verify)
+    base = {
+        "RecordSpec": "O2",
+        "DataKubun": "2",
+        "MakeDate": "20260419",
+        "Year": "2026",
+        "MonthDay": "0419",
+        "JyoCD": "06",
+        "Kaiji": "03",
+        "Nichiji": "08",
+        "RaceNum": "11",
+        "UmarenFlag": "1",
+        "Vote": "00000123456",
+        "Odds": "012340",
+        "Ninki": "001",
+    }
+    records = [
+        {**base, "HassoTime": "04191549", "Kumi": "0102", "_raw": b"first"},
+        {**base, "HassoTime": "04191549", "Kumi": "0103", "_raw": b"first"},
+        {**base, "HassoTime": "04191550", "Kumi": "0102", "_raw": b"second"},
+    ]
+
+    stats = importer_class(
+        db,
+        use_jravan_schema=True,
+        batch_size=1,
+    ).import_records(iter(records))
+
+    assert stats["records_failed"] == 0
+    assert verification_calls == 1
+    assert db.fetch_all(
+        "SELECT Kumi AS kumi FROM ODDS_UMAREN ORDER BY Kumi"
+    ) == [{"kumi": "0102"}]
+    assert db.fetch_one(
+        "SELECT HappyoTime AS happyo_time FROM ODDS_UMAREN_HEAD"
+    ) == {"happyo_time": "04191550"}
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_sqlite_standard_odds_replaces_snapshot_and_reuses_verification(
+    sqlite_db, importer_class, monkeypatch
+):
+    _assert_standard_odds_replaces_snapshot_and_reuses_verification(
+        sqlite_db, importer_class, monkeypatch
     )
-    sqlite_db.commit()
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_postgresql_standard_odds_replaces_snapshot_and_reuses_verification(
+    postgresql_db, importer_class, monkeypatch
+):
+    _assert_standard_odds_replaces_snapshot_and_reuses_verification(
+        postgresql_db, importer_class, monkeypatch
+    )
+
+
+def _assert_standard_odds_migrates_existing_child_columns(db, importer_class):
+    _create_jravan_tables(db, ["ODDS_UMAREN_HEAD"])
+    db.execute(
+        "CREATE TABLE ODDS_UMAREN ("
+        "MakeDate DATE, Year SMALLINT, MonthDay SMALLINT, JyoCD CHAR(2), "
+        "Kaiji SMALLINT, Nichiji SMALLINT, RaceNum SMALLINT, "
+        "Kumi VARCHAR(4), Odds DECIMAL(6,1))"
+    )
+    db.commit()
     record = {
         "RecordSpec": "O2",
-        "DataKubun": "9",
+        "DataKubun": "2",
         "MakeDate": "20260419",
         "Year": "2026",
         "MonthDay": "0419",
@@ -609,17 +675,118 @@ def test_sqlite_standard_odds_child_failure_rolls_back_header(
         "Ninki": "001",
     }
 
-    with pytest.raises(ImporterError, match="child rejected"):
-        importer_class(sqlite_db, use_jravan_schema=True).import_records(
-            iter([record])
-        )
+    stats = importer_class(db, use_jravan_schema=True).import_records(
+        iter([record])
+    )
+
+    assert stats["records_failed"] == 0
+    assert db.fetch_one(
+        "SELECT Ninki AS ninki FROM ODDS_UMAREN"
+    ) == {"ninki": 1}
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_sqlite_standard_odds_migrates_existing_child_columns(
+    sqlite_db, importer_class
+):
+    _assert_standard_odds_migrates_existing_child_columns(sqlite_db, importer_class)
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_postgresql_standard_odds_migrates_existing_child_columns(
+    postgresql_db, importer_class
+):
+    _assert_standard_odds_migrates_existing_child_columns(
+        postgresql_db, importer_class
+    )
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_sqlite_standard_o2_empty_snapshot_preserves_total_and_clears_children(
+    sqlite_db,
+    importer_class,
+):
+    _create_jravan_tables(sqlite_db, ["ODDS_UMAREN_HEAD", "ODDS_UMAREN"])
+    importer = importer_class(sqlite_db, use_jravan_schema=True)
+    populated = {
+        "RecordSpec": "O2",
+        "DataKubun": "2",
+        "MakeDate": "20260419",
+        "Year": "2026",
+        "MonthDay": "0419",
+        "JyoCD": "06",
+        "Kaiji": "03",
+        "Nichiji": "08",
+        "RaceNum": "11",
+        "HassoTime": "04191548",
+        "UmarenFlag": "1",
+        "Vote": "00000123456",
+        "Kumi": "0102",
+        "Odds": "012340",
+        "Ninki": "001",
+    }
+    assert importer.import_records(iter([populated]))["records_failed"] == 0
+    empty_snapshot = _flatten(O2Parser().parse(_make_empty_o2_record()))
+
+    assert importer.import_records(iter(empty_snapshot))["records_failed"] == 0
 
     assert sqlite_db.fetch_one(
-        "SELECT COUNT(*) AS cnt FROM ODDS_UMAREN_HEAD"
-    )["cnt"] == 0
+        "SELECT DataKubun AS status, TotalHyosuUmaren AS total "
+        "FROM ODDS_UMAREN_HEAD"
+    ) == {"status": "4", "total": "00000000999"}
     assert sqlite_db.fetch_one("SELECT COUNT(*) AS cnt FROM ODDS_UMAREN")[
         "cnt"
     ] == 0
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_sqlite_standard_odds_child_failure_rolls_back_header(
+    sqlite_db,
+    importer_class,
+):
+    _create_jravan_tables(sqlite_db, ["ODDS_UMAREN_HEAD", "ODDS_UMAREN"])
+    record = {
+        "RecordSpec": "O2",
+        "DataKubun": "2",
+        "MakeDate": "20260419",
+        "Year": "2026",
+        "MonthDay": "0419",
+        "JyoCD": "06",
+        "Kaiji": "03",
+        "Nichiji": "08",
+        "RaceNum": "11",
+        "HassoTime": "04191549",
+        "UmarenFlag": "1",
+        "Vote": "00000123456",
+        "Kumi": "0102",
+        "Odds": "012340",
+        "Ninki": "001",
+    }
+    importer = importer_class(sqlite_db, use_jravan_schema=True)
+    assert importer.import_records(iter([record]))["records_failed"] == 0
+    sqlite_db.execute(
+        "CREATE TRIGGER reject_standard_odds_child "
+        "BEFORE INSERT ON ODDS_UMAREN "
+        "BEGIN SELECT RAISE(ABORT, 'child rejected'); END"
+    )
+    sqlite_db.commit()
+    replacement = {
+        **record,
+        "DataKubun": "9",
+        "HassoTime": "04191550",
+        "Kumi": "0103",
+    }
+
+    with pytest.raises(ImporterError, match="child rejected"):
+        importer.import_records(iter([replacement]))
+
+    assert sqlite_db.fetch_one(
+        "SELECT DataKubun AS status, HappyoTime AS happyo_time "
+        "FROM ODDS_UMAREN_HEAD"
+    ) == {"status": "2", "happyo_time": "04191549"}
+    assert sqlite_db.fetch_all(
+        "SELECT Kumi AS kumi FROM ODDS_UMAREN"
+    ) == [{"kumi": "0102"}]
 
 
 def test_sqlite_importer_stores_official_av_record(sqlite_db):
