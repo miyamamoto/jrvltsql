@@ -1781,8 +1781,9 @@
   safe action: commit one clean candidate and run one independent exact-SHA
   Codex critical review plus an exact-SHA PostgreSQL replay. STOP if either
   finds a correctness/data-integrity blocker.
-- Candidate `f16463cf7c076721e142bae7abdd5c68104c960b` was clean and based
-  directly on `a53eed6c24cbb4cbb8ebc0edc845ae67849b76b2`. Its exact-SHA
+- Candidate `f16463cf7c076721e142bae7abdd5c68104c960b` was clean. Its
+  code/test base was `a53eed6c24cbb4cbb8ebc0edc845ae67849b76b2`; its direct Git
+  parent was the worklog-only `78056df7c6584e4cc9b8a4d3ba88f35b03d77300`. Its exact-SHA
   PostgreSQL 16 replay completed `46 passed`, and the disposable container was
   removed. Independent Codex review returned `NEEDS_CHANGES` (P0=0, P1=3,
   P2=2) after `526 passed, 1 skipped` focused tests, an independent PostgreSQL
@@ -1823,3 +1824,19 @@
   small static/oracle/document gate, amend the candidate, confirm exact SHA and
   clean state, then obtain one review-delta verdict. STOP on any failed gate or
   non-worklog drift.
+- Independent repair-delta review is GREEN for exact code candidate
+  `ab30322abc6532cb194feb9fcedfa0c722241b36` (P0=0, P1=0). Independent
+  probes covered both importers, native/canonical schemas, single-record and
+  both commit modes, all record-type alias precedence directions, status
+  aliases, JyoCD rejection, and canonical-only standard fields; the focused
+  repair selection completed `29 passed`. The reviewer confirmed the two topic
+  links and ended on the same clean SHA. Its two non-blocking P2 observations
+  are closed in a test/worklog-only follow-up: the canonical-only regression
+  now queries and asserts all three physical alias columns, and this worklog
+  distinguishes the logical code base from the worklog-only Git parent.
+  Production code is unchanged by this final delta. The exact code candidate
+  also passed `TEST GATE PASS`, `OFFICIAL ORACLE PASS`, fatal flake8, fresh
+  wheel/sdist build, and the two-artifact distribution-content gate. Next safe
+  action: commit this test/worklog-only child, obtain a carry-forward exact-SHA
+  confirmation, then push and open the iteration PR. STOP if the delta contains
+  anything outside these two files or the worktree is not clean.

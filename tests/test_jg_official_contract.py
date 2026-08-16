@@ -372,6 +372,15 @@ def test_jg_direct_invalid_status_or_incomplete_delete_cannot_mutate_rows(
             canonical_only["ShussoKubun"] = canonical_only.pop("SyussoKubun")
             canonical_only["JogaiJotaiKubun"] = canonical_only.pop("JyogaiStateKubun")
             assert importer.import_records(iter([canonical_only]))["records_imported"] == 1
+            assert database.fetch_one(
+                "SELECT ShutsubaTohyoJun, ShussoKubun, JogaiJotaiKubun "
+                "FROM JOGAIBA WHERE ShutsubaTohyoJun = ?",
+                (5,),
+            ) == {
+                "ShutsubaTohyoJun": 5,
+                "ShussoKubun": "1",
+                "JogaiJotaiKubun": "0",
+            }
 
         num_column = "ShutsubaTohyoJun" if standard else "Num"
         assert database.fetch_one(
