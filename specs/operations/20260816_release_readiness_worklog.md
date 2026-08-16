@@ -293,8 +293,11 @@
   audit worktree; its first current-base commit is
   `3c958876e9761b9650948f5811c9aca009ef5e07`.
 - This is a fail-closed validator change, so the planned independent coding
-  review uses Claude Code `--model fable` in a new session for this worktree
-  and iteration. The session ID will be recorded when that review starts.
+  review uses Claude Code 2.1.226 with `--model fable --effort high` in session
+  `81f08480-ef14-435c-9a06-1f7592fbfac5` for this worktree and iteration. The
+  first read-only attempt hit the subscription session limit before producing
+  a review, so it is not evidence; resume this same session after the reported
+  20:10 JST reset rather than starting a new one.
 - Audited all 38 current record IDs against their current physical lengths,
   record identifiers, CP932 decoding, and CRLF terminators. Several custom
   parsers and inherited fixed-field parsers accepted adjacent or truncated
@@ -334,6 +337,22 @@
   passed 2,448 tests with 90 environment-specific skips, 15 subtests, and only
   three pre-existing pytest return-value warnings. The previously observed CLI
   failures were green in the complete rerun.
+- On clean full SHA `7b6c853cf5eb86aa9c2bad184eb2df2ebda846d6`, the
+  independent length/factory parity check plus the focused parser/envelope
+  selection passed 483 tests. The complete suite then passed 2,449 tests with
+  90 environment-specific skips, 15 subtests, and the same three pre-existing
+  warnings. Fatal flake8 syntax/undefined-name checks reported zero, and mypy
+  with imports skipped reported zero issues in all 38 changed parser files.
+- Repository-wide mypy is not green: the direct workflow command reports 79
+  pre-existing errors in 20 files. The workflow's `continue-on-error` setting
+  makes the job look successful, so neither PR #191 nor this iteration treats
+  that status as a zero-error type gate. PR #191 received a public evidence
+  correction. This debt remains explicit for the release audit rather than
+  being misreported or silently attributed to the fixed-record change.
+- A local distribution rebuild was attempted on the exact SHA but the current
+  environment lacks the `build` module. That missing optional local tool is
+  not waived as release evidence: wheel/sdist generation plus the content gate
+  must run in the PR workflow on the final pushed SHA.
 - A separate static pass found an obsolete `RT_RC` route that is not part of
   the official current realtime record list. Real jockey changes use the
   current `JC` route; the stale route is incompatible with normal `RC` parser
@@ -342,11 +361,11 @@
 
 ## Next safe action
 
-- Run the fixed-record focused and compatibility suites on the current-base
-  candidate, reconcile every declared length with current parser constants,
-  then perform the independent Fable review. Create and merge a dedicated PR
-  only after exact-SHA checks, all actionable findings, unresolved threads
-  zero, and clean worktree are complete. Then repair the fail-open real-data
+- Push the fixed-record candidate and open its dedicated PR so exact-SHA Linux
+  and distribution checks can run. After 20:10 JST, resume the recorded Fable
+  session for the independent critical review. Merge only after exact-SHA
+  checks, all actionable findings, unresolved threads zero, and clean worktree
+  are complete. Then repair the fail-open real-data
   E2E harness and remove the obsolete realtime route as separate red-first
   iterations. Stop before version changes or authenticated acquisition until
   all audit iterations are merged.
