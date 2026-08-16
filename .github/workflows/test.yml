@@ -40,6 +40,7 @@ jobs:
           tests/test_distribution_contents.py \
           tests/test_retired_data_specs.py \
           tests/test_jvlink_transport_contract.py \
+          tests/test_quickstart_cli.py \
           tests/unit/test_jvlink_bridge.py \
           -v --cov=src --cov-report=xml --cov-report=term
 
@@ -55,6 +56,24 @@ jobs:
         flags: unittests
         name: codecov-umbrella
         fail_ci_if_error: false
+
+  windows-batch-syntax:
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up 32-bit Python 3.12
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        architecture: 'x86'
+
+    - name: Install test dependency
+      run: python -m pip install pytest
+
+    - name: Exercise Windows launcher contracts
+      run: pytest tests/test_windows_launchers.py -v
 
   performance-test:
     runs-on: ubuntu-latest

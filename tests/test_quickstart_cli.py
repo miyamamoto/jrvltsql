@@ -107,14 +107,22 @@ class TestQuickstartArgParsing:
             parser.parse_args(["--mode", "ultra"])
 
     def test_postgresql_options(self, parser):
-        args = parser.parse_args([
-            "--db-type", "postgresql",
-            "--pg-host", "db.example.com",
-            "--pg-port", "5433",
-            "--pg-database", "testdb",
-            "--pg-user", "testuser",
-            "--pg-password", "secret",
-        ])
+        args = parser.parse_args(
+            [
+                "--db-type",
+                "postgresql",
+                "--pg-host",
+                "db.example.com",
+                "--pg-port",
+                "5433",
+                "--pg-database",
+                "testdb",
+                "--pg-user",
+                "testuser",
+                "--pg-password",
+                "secret",
+            ]
+        )
         assert args.db_type == "postgresql"
         assert args.pg_host == "db.example.com"
         assert args.pg_port == 5433
@@ -139,16 +147,23 @@ class TestQuickstartArgParsing:
         assert args.interactive is True
 
     def test_combined_flags(self, parser):
-        args = parser.parse_args([
-            "--mode", "standard",
-            "--source", "jra",
-            "--from-date", "20230101",
-            "-y",
-            "--include-timeseries",
-            "--timeseries-months", "6",
-            "--no-odds",
-            "--log-file", "/tmp/test.log",
-        ])
+        args = parser.parse_args(
+            [
+                "--mode",
+                "standard",
+                "--source",
+                "jra",
+                "--from-date",
+                "20230101",
+                "-y",
+                "--include-timeseries",
+                "--timeseries-months",
+                "6",
+                "--no-odds",
+                "--log-file",
+                "/tmp/test.log",
+            ]
+        )
         assert args.mode == "standard"
         assert args.source == "jra"
         assert args.from_date == "20230101"
@@ -282,15 +297,82 @@ class TestQuickstartBatchRoles:
             assert "64-bit Python may not support JV-Link" not in text
             assert "Python 3.10+" not in text
 
+    def test_launchers_validate_python_override_and_respect_active_venv(self):
+        """Explicit interpreter selection must be safe, loud, and consistent."""
+        root = Path(__file__).resolve().parents[1]
+        launchers = [
+            root / "quickstart.bat",
+            root / "quickstart_timeseries.bat",
+            root / "quickstart_postgres_timeseries.bat",
+            root / "daily_sync.bat",
+            root / "fetch_timeseries_postgres.bat",
+            root / "scripts/quickstart.bat",
+        ]
+
+        for launcher in launchers:
+            text = launcher.read_text(encoding="utf-8")
+            assert "PYTHON must be a full path to python.exe" in text, launcher.name
+            assert "if defined VIRTUAL_ENV" in text, launcher.name
+            assert 'set "PYTHON_CMD=%PYTHON%"' not in text, launcher.name
+
+    def test_launcher_command_assignment_defers_paths_until_execution(self):
+        """Parentheses in Program Files paths must not close an IF block early."""
+        root = Path(__file__).resolve().parents[1]
+        command_builders = [
+            root / "quickstart.bat",
+            root / "quickstart_timeseries.bat",
+            root / "quickstart_postgres_timeseries.bat",
+            root / "fetch_timeseries_postgres.bat",
+            root / "scripts/quickstart.bat",
+            root / "install.bat",
+        ]
+
+        for launcher in command_builders:
+            text = launcher.read_text(encoding="utf-8")
+            assert "!PYTHON!" in text, launcher.name
+            assert '"%PYTHON%""' not in text, launcher.name
+
+    def test_installers_recreate_virtual_environment_on_bitness_mismatch(self):
+        """A selected 32-bit interpreter must not silently reuse a 64-bit venv."""
+        root = Path(__file__).resolve().parents[1]
+        batch = (root / "install.bat").read_text(encoding="utf-8")
+        powershell = (root / "install.ps1").read_text(encoding="utf-8")
+
+        assert "VENV_BITS" in batch
+        assert '"!VENV_BITS!"=="!PYTHON_BITS!"' in batch
+        assert "Existing virtual environment bitness does not match" in batch
+        assert "$venvBits" in powershell
+        assert "$venvBits -ne $pythonBits" in powershell
+        assert "Existing virtual environment bitness does not match" in powershell
+
+    def test_installers_fail_loud_for_invalid_python_override(self):
+        """An invalid explicit override must not fall through to another Python."""
+        root = Path(__file__).resolve().parents[1]
+        batch = (root / "install.bat").read_text(encoding="utf-8")
+        powershell = (root / "install.ps1").read_text(encoding="utf-8")
+
+        assert "PYTHON must be a full path to python.exe" in batch
+        assert "PYTHON must be a full path to python.exe" in powershell
+
+    def test_timeseries_fetch_prefers_installed_cli_before_global_python(self):
+        """A working PATH installation must win over an unrelated global Python."""
+        batch = Path(__file__).resolve().parents[1] / "fetch_timeseries_postgres.bat"
+        text = batch.read_text(encoding="utf-8")
+
+        assert "where jltsql" in text
+        assert text.index("if defined PYTHON") < text.index("if defined VIRTUAL_ENV")
+        assert text.index("if defined VIRTUAL_ENV") < text.index("venv32\\Scripts")
+        assert text.index("venv32\\Scripts") < text.index(".venv\\Scripts")
+        assert text.index(".venv\\Scripts") < text.index("where jltsql")
+        assert text.index("where jltsql") < text.index("py -3.12-32 --version")
+
     def test_installers_default_to_release_validated_32bit_python(self):
         root = Path(__file__).resolve().parents[1]
         batch = (root / "install.bat").read_text(encoding="utf-8")
         powershell = (root / "install.ps1").read_text(encoding="utf-8")
 
         assert "Checking Python 3.12" in batch
-        assert batch.index("py -3.12-32 --version") < batch.index(
-            "py -3.12 --version"
-        )
+        assert batch.index("py -3.12-32 --version") < batch.index("py -3.12 --version")
         assert "Checking 32-bit Python" not in batch
         assert "32-bit Python 3.12 not found" not in batch
 
@@ -353,6 +435,12 @@ class TestQuickstartBatchRoles:
         assert "--timeseries-to-date" in text
         assert "-DbType postgresql" in text
 
+    def test_daily_sync_quotes_postgresql_password(self):
+        batch = Path(__file__).resolve().parents[1] / "daily_sync.bat"
+        text = batch.read_text(encoding="utf-8")
+
+        assert '--pg-password "!POSTGRES_PASSWORD!"' in text
+
     def test_unified_timeseries_batch_supports_sqlite_and_postgresql(self):
         batch = Path(__file__).resolve().parents[1] / "quickstart_timeseries.bat"
         text = batch.read_text(encoding="utf-8")
@@ -382,10 +470,7 @@ class TestQuickstartBatchRoles:
         assert "SYNC_SCRIPT=scripts/quickstart.py" in text
         assert "SYNC_SCRIPT=scripts/daily_update.py" in text
         assert "--days-forward %DAYS_FORWARD%" in text
-        assert (
-            "JRA_DAILY_UPDATE_SPECS="
-            "RACE,DIFN,SLOP,WOOD,MING,0B12,0B15,0B14,0B51"
-        ) in text
+        assert ("JRA_DAILY_UPDATE_SPECS=" "RACE,DIFN,SLOP,WOOD,MING,0B12,0B15,0B14,0B51") in text
         assert "JRA_DAILY_UPDATE_SPECS=RACE,DIFN,SLOP,WOOD,MING,0B12,0B15,0B14,0B16" not in text
         assert "--specs !JRA_DAILY_UPDATE_SPECS!" in text
         assert "--force-incremental" in text
@@ -535,9 +620,7 @@ class TestAnalyzeErrorJVInitCodes:
     def test_jvinit_sid_errors_are_labeled_as_internal_not_service_key(
         self, runner, code, expected_fragment
     ):
-        error_type, message = runner._analyze_error(
-            f"JVInit failed with code {code}", returncode=1
-        )
+        error_type, message = runner._analyze_error(f"JVInit failed with code {code}", returncode=1)
         assert error_type == "auth"
         assert expected_fragment in message
         # Must not resurrect the fabricated pre-fix framing of these codes as
@@ -555,9 +638,7 @@ class TestAnalyzeErrorJVInitCodes:
     def test_jvopen_service_key_errors_are_distinct_from_jvinit(
         self, runner, code, expected_fragment
     ):
-        error_type, message = runner._analyze_error(
-            f"JVOpen failed with code {code}", returncode=1
-        )
+        error_type, message = runner._analyze_error(f"JVOpen failed with code {code}", returncode=1)
         assert error_type == "auth"
         assert "サービスキー" in message
         assert expected_fragment in message

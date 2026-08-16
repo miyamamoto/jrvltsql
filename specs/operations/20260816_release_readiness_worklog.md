@@ -144,6 +144,42 @@
   Markdown privacy/path scans passed. The final candidate SHA is recorded in
   PR metadata after this worklog update rather than by a self-referential
   follow-up commit.
+- PR #191 GitHub review on the implementation predecessor produced eight
+  unresolved threads which collapsed into three actionable defect classes:
+  an existing virtual environment could be reused with bitness different from
+  the selected interpreter; an activated/PATH installation could be bypassed
+  by an unrelated global launcher; and explicit `PYTHON` override quoting was
+  inconsistent across Windows entry points. All findings were accepted and
+  repaired together rather than triggering one review cycle per comment.
+- The explicit override contract is now one executable path, Python 3.12 or
+  later. Invalid or compound command values fail loudly and never fall through
+  to a different interpreter. An activated virtual environment precedes
+  repository and global automatic discovery, and the time-series fetch helper
+  restores its PATH-installed CLI fallback before global Python launchers.
+  Installers recreate an existing virtual environment when its architecture
+  differs from the selected interpreter.
+- Red-first evidence on pre-repair PR head
+  `694832ea05b312a9143854c43196518eacacc7fc`: four focused contract tests all
+  failed, respectively exposing missing override validation/active-environment
+  selection, missing virtual-environment bitness comparison, silent invalid
+  override fallback, and missing PATH CLI selection. A fifth test failed on an
+  unquoted PostgreSQL password argument.
+- Resumed the same Claude Code Fable session
+  `bd9ea27f-29c0-4d9e-b829-419498a41712` for the grouped review fix, preserving
+  the original model/reasoning context. Its post-implementation read-only
+  review found two additional cmd.exe parsing blockers: early expansion of a
+  parenthesized interpreter path inside an IF block, and a password quoting
+  form that exposed command metacharacters. Two focused tests failed on the
+  intermediate implementation before both paths were changed to delayed
+  expansion. The adjacent host/port/database/user arguments were quoted in the
+  same already-open command construction.
+- Green evidence after the grouped repair: all 15 launcher static contracts
+  pass; the broader quickstart plus Windows-runtime selection reports 51
+  passed and 3 expected non-Windows skips; workflow YAML parses; and
+  `git diff --check` is clean. A dedicated Windows job now exercises an
+  interpreter path containing spaces/parentheses, invalid compound override
+  rejection, and PATH CLI precedence. That job is a launcher parser check only
+  and is not SDK architecture or provider-acquisition evidence.
 
 ## Audit iteration: fixed-record envelope
 
@@ -178,7 +214,7 @@
 
 - Complete PR #191 at its final exact SHA with proportional local tests, strict
   docs, disclosure/distribution checks, aggregated review findings, unresolved
-  threads zero, green applicable checks, and a clean worktree. Merge it before
+  threads zero, green Linux and Windows checks, and a clean worktree. Merge it before
   rebasing the fixed-record envelope iteration onto the resulting
   `origin/master`. Then repair the fail-open real-data E2E harness and remove
   the obsolete realtime route as separate red-first iterations. Stop before

@@ -15,16 +15,23 @@ set "REPO_URL=https://github.com/miyamamoto/jrvltsql.git"
 set "VENV_DIR=%INSTALL_DIR%\.venv"
 set "PYTHON_CMD="
 set "PYTHON_BITS="
+set "VENV_BITS="
 
 REM === Step 1: Find Python 3.12+ ===
 echo   Step 1/7: Checking Python 3.12 or later...
 
 if defined PYTHON (
-    "%PYTHON%" -c "import sys; raise SystemExit(sys.version_info ^< (3, 12))" >nul 2>&1
-    if !errorlevel!==0 (
-        set "PYTHON_CMD="%PYTHON%""
-        goto :found_python
+    if not exist "%PYTHON%" (
+        echo   [NG] PYTHON must be a full path to python.exe.
+        exit /b 1
     )
+    "%PYTHON%" -c "import sys; raise SystemExit(sys.version_info ^< (3, 12))" >nul 2>&1
+    if !errorlevel! neq 0 (
+        echo   [NG] PYTHON must point to Python 3.12 or later.
+        exit /b 1
+    )
+    set "PYTHON_CMD="!PYTHON!""
+    goto :found_python
 )
 
 REM Keep the release-validated 32-bit JV-Link path as the automatic default.
@@ -69,9 +76,20 @@ pause
 exit /b 1
 
 :found_python
-for /f "tokens=*" %%v in ('%PYTHON_CMD% --version 2^>^&1') do set "PYVER=%%v"
-for /f %%a in ('%PYTHON_CMD% -c "import struct; print(struct.calcsize('P') * 8)" 2^>nul') do set "PYTHON_BITS=%%a"
-echo   [OK] Found: !PYVER! ^(!PYTHON_BITS!-bit^)
+set "BITS_FILE=%TEMP%\jltsql_python_bits_!RANDOM!_!RANDOM!.txt"
+%PYTHON_CMD% -c "import struct; print(struct.calcsize('P') * 8)" > "!BITS_FILE!" 2>nul
+if !errorlevel! neq 0 (
+    if exist "!BITS_FILE!" del /q "!BITS_FILE!"
+    echo   [NG] Failed to inspect selected Python architecture.
+    exit /b 1
+)
+set /p PYTHON_BITS=<"!BITS_FILE!"
+del /q "!BITS_FILE!"
+if not "!PYTHON_BITS!"=="32" if not "!PYTHON_BITS!"=="64" (
+    echo   [NG] Selected Python returned an invalid architecture.
+    exit /b 1
+)
+echo   [OK] Found: %PYTHON_CMD% ^(!PYTHON_BITS!-bit^)
 if "!PYTHON_BITS!"=="64" echo   [!!] 64-bit execution is not release-validated; use only for explicit SDK validation.
 
 REM === Step 2: Check Git ===
@@ -127,10 +145,16 @@ if exist "%INSTALL_DIR%\.venv\Scripts\python.exe" (
 if exist "%VENV_DIR%\Scripts\python.exe" (
     "%VENV_DIR%\Scripts\python.exe" -c "import sys; raise SystemExit(sys.version_info ^< (3, 12))" >nul 2>&1
     if !errorlevel!==0 (
-        echo   [OK] Compatible virtual environment exists
-        goto :venv_ready
+        "%VENV_DIR%\Scripts\python.exe" -c "import struct; raise SystemExit(struct.calcsize('P') * 8 != int('!PYTHON_BITS!'))" >nul 2>&1
+        if !errorlevel!==0 set "VENV_BITS=!PYTHON_BITS!"
+        if "!VENV_BITS!"=="!PYTHON_BITS!" (
+            echo   [OK] Compatible virtual environment exists
+            goto :venv_ready
+        )
+        echo   [!!] Existing virtual environment bitness does not match selected Python; recreating...
+    ) else (
+        echo   [!!] Existing venv uses unsupported Python; recreating...
     )
-    echo   [!!] Existing venv uses unsupported Python; recreating...
     rmdir /s /q "%VENV_DIR%"
 )
 

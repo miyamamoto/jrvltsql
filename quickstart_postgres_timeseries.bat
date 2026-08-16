@@ -43,7 +43,19 @@ echo.
 
 set "SCRIPT_EXIT_CODE=0"
 set "PYTHON_CMD="
-if defined PYTHON set "PYTHON_CMD="%PYTHON%""
+if defined PYTHON (
+    if not exist "%PYTHON%" (
+        echo [ERROR] PYTHON must be a full path to python.exe.
+        exit /b 1
+    )
+    "%PYTHON%" -c "import sys; raise SystemExit(sys.version_info ^< (3, 12))" >nul 2>&1
+    if !errorlevel! neq 0 (
+        echo [ERROR] PYTHON must point to Python 3.12 or later.
+        exit /b 1
+    )
+    set "PYTHON_CMD="!PYTHON!""
+)
+if not defined PYTHON_CMD if defined VIRTUAL_ENV if exist "%VIRTUAL_ENV%\Scripts\python.exe" set "PYTHON_CMD="!VIRTUAL_ENV!\Scripts\python.exe""
 if not defined PYTHON_CMD if exist "%~dp0venv32\Scripts\python.exe" set "PYTHON_CMD="%~dp0venv32\Scripts\python.exe""
 if not defined PYTHON_CMD if exist "%~dp0.venv\Scripts\python.exe" set "PYTHON_CMD="%~dp0.venv\Scripts\python.exe""
 if not defined PYTHON_CMD (

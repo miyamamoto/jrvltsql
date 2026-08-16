@@ -61,14 +61,19 @@ $pythonBits = $null
 
 $candidates = @()
 if ($env:PYTHON) {
+    if (-not (Test-Path -LiteralPath $env:PYTHON -PathType Leaf)) {
+        Write-Fail "PYTHON must be a full path to python.exe."
+        exit 1
+    }
     $candidates += @{ Command = $env:PYTHON; Arguments = @(); Display = $env:PYTHON }
+} else {
+    $candidates += @(
+        @{ Command = "py"; Arguments = @("-$PYTHON_VERSION-32"); Display = "py -$PYTHON_VERSION-32" },
+        @{ Command = "py"; Arguments = @("-$PYTHON_VERSION"); Display = "py -$PYTHON_VERSION" },
+        @{ Command = "py"; Arguments = @("-3"); Display = "py -3" },
+        @{ Command = "python"; Arguments = @(); Display = "python" }
+    )
 }
-$candidates += @(
-    @{ Command = "py"; Arguments = @("-$PYTHON_VERSION-32"); Display = "py -$PYTHON_VERSION-32" },
-    @{ Command = "py"; Arguments = @("-$PYTHON_VERSION"); Display = "py -$PYTHON_VERSION" },
-    @{ Command = "py"; Arguments = @("-3"); Display = "py -3" },
-    @{ Command = "python"; Arguments = @(); Display = "python" }
-)
 
 foreach ($candidate in $candidates) {
     try {
@@ -90,6 +95,10 @@ foreach ($candidate in $candidates) {
 }
 
 if (-not $pythonCommand) {
+    if ($env:PYTHON) {
+        Write-Fail "PYTHON must be a full path to Python 3.12 or later."
+        exit 1
+    }
     Write-Fail "Python $PYTHON_VERSION or later not found."
     Write-Host ""
     Write-Host "  Install Python with the same bitness as JV-Link:" -ForegroundColor Yellow
@@ -154,7 +163,13 @@ $venvPython = "$venvDir\Scripts\python.exe"
 if (Test-Path $venvPython) {
     & $venvPython -c "import sys; raise SystemExit(sys.version_info < (3, 12))" 2>$null
     if ($LASTEXITCODE -eq 0) {
-        Write-Ok "Compatible virtual environment exists"
+        $venvBits = [int](& $venvPython -c "import struct; print(struct.calcsize('P') * 8)")
+        if ($LASTEXITCODE -ne 0 -or $venvBits -ne $pythonBits) {
+            Write-Warn "Existing virtual environment bitness does not match selected Python; recreating..."
+            Remove-Item -Recurse -Force $venvDir
+        } else {
+            Write-Ok "Compatible virtual environment exists"
+        }
     } else {
         Write-Warn "Existing venv uses unsupported Python; recreating..."
         Remove-Item -Recurse -Force $venvDir

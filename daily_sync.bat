@@ -84,7 +84,7 @@ if /I "%DB_TYPE%"=="postgresql" (
         echo [ERROR] POSTGRES_PASSWORD is required for PostgreSQL sync.
         exit /b 1
     )
-    set "DB_ARGS=--db-type postgresql --pg-host %POSTGRES_HOST% --pg-port %POSTGRES_PORT% --pg-database %POSTGRES_DATABASE% --pg-user %POSTGRES_USER% --pg-password %POSTGRES_PASSWORD%"
+    set "DB_ARGS=--db-type postgresql --pg-host "!POSTGRES_HOST!" --pg-port "!POSTGRES_PORT!" --pg-database "!POSTGRES_DATABASE!" --pg-user "!POSTGRES_USER!" --pg-password "!POSTGRES_PASSWORD!""
 ) else (
     set "DB_ARGS=--db-type sqlite"
 )
@@ -106,7 +106,22 @@ if "%INCLUDE_TIMESERIES%"=="0" if "%INCLUDE_REALTIME%"=="0" (
 )
 
 if defined PYTHON (
+    if not exist "%PYTHON%" (
+        echo [ERROR] PYTHON must be a full path to python.exe.
+        exit /b 1
+    )
+    "%PYTHON%" -c "import sys; raise SystemExit(sys.version_info ^< (3, 12))" >nul 2>&1
+    if !errorlevel! neq 0 (
+        echo [ERROR] PYTHON must point to Python 3.12 or later.
+        exit /b 1
+    )
     "%PYTHON%" %SYNC_SCRIPT% !SYNC_ARGS!
+    set "SCRIPT_EXIT_CODE=!errorlevel!"
+    goto :check_result
+)
+
+if defined VIRTUAL_ENV if exist "%VIRTUAL_ENV%\Scripts\python.exe" (
+    "%VIRTUAL_ENV%\Scripts\python.exe" %SYNC_SCRIPT% !SYNC_ARGS!
     set "SCRIPT_EXIT_CODE=!errorlevel!"
     goto :check_result
 )

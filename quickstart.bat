@@ -28,7 +28,21 @@ set "PYTHON_CMD="
 REM An explicit interpreter permits a bounded x64 validation. Automatic
 REM discovery keeps the release-validated 32-bit path first.
 if defined PYTHON (
-    set "PYTHON_CMD="%PYTHON%""
+    if not exist "%PYTHON%" (
+        echo ERROR: PYTHON must be a full path to python.exe.
+        exit /b 1
+    )
+    "%PYTHON%" -c "import sys; raise SystemExit(sys.version_info ^< (3, 12))" >nul 2>&1
+    if !errorlevel! neq 0 (
+        echo ERROR: PYTHON must point to Python 3.12 or later.
+        exit /b 1
+    )
+    set "PYTHON_CMD="!PYTHON!""
+    goto :run
+)
+
+if defined VIRTUAL_ENV if exist "%VIRTUAL_ENV%\Scripts\python.exe" (
+    set "PYTHON_CMD="!VIRTUAL_ENV!\Scripts\python.exe""
     goto :run
 )
 

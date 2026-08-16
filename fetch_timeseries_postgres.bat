@@ -30,28 +30,43 @@ if not exist "config\config.yaml" (
     exit /b 1
 )
 
+set "JLTSQL="
 if defined PYTHON (
-    set "JLTSQL="%PYTHON%" -m src.cli.main"
-) else if exist "venv32\Scripts\jltsql.exe" (
-    set "JLTSQL=venv32\Scripts\jltsql.exe"
-) else if exist "venv32\Scripts\python.exe" (
-    set "JLTSQL=venv32\Scripts\python.exe -m src.cli.main"
-) else if exist ".venv\Scripts\jltsql.exe" (
-    set "JLTSQL=.venv\Scripts\jltsql.exe"
-) else if exist ".venv\Scripts\python.exe" (
-    set "JLTSQL=.venv\Scripts\python.exe -m src.cli.main"
-) else (
-    py -3.12-32 --version >nul 2>&1
-    if !errorlevel!==0 (
-        set "JLTSQL=py -3.12-32 -m src.cli.main"
-    ) else (
-        py -3.12 --version >nul 2>&1
-        if !errorlevel!==0 (
-            set "JLTSQL=py -3.12 -m src.cli.main"
-        ) else (
-            set "JLTSQL=python -m src.cli.main"
-        )
+    if not exist "%PYTHON%" (
+        echo [ERROR] PYTHON must be a full path to python.exe.
+        exit /b 1
     )
+    "%PYTHON%" -c "import sys; raise SystemExit(sys.version_info ^< (3, 12))" >nul 2>&1
+    if !errorlevel! neq 0 (
+        echo [ERROR] PYTHON must point to Python 3.12 or later.
+        exit /b 1
+    )
+    set "JLTSQL="!PYTHON!" -m src.cli.main"
+)
+if not defined JLTSQL if defined VIRTUAL_ENV if exist "%VIRTUAL_ENV%\Scripts\python.exe" set "JLTSQL="!VIRTUAL_ENV!\Scripts\python.exe" -m src.cli.main"
+if not defined JLTSQL if exist "venv32\Scripts\jltsql.exe" set "JLTSQL=venv32\Scripts\jltsql.exe"
+if not defined JLTSQL if exist "venv32\Scripts\python.exe" set "JLTSQL=venv32\Scripts\python.exe -m src.cli.main"
+if not defined JLTSQL if exist ".venv\Scripts\jltsql.exe" set "JLTSQL=.venv\Scripts\jltsql.exe"
+if not defined JLTSQL if exist ".venv\Scripts\python.exe" set "JLTSQL=.venv\Scripts\python.exe -m src.cli.main"
+if not defined JLTSQL (
+    where jltsql >nul 2>&1
+    if !errorlevel!==0 set "JLTSQL=jltsql"
+)
+if not defined JLTSQL (
+    py -3.12-32 --version >nul 2>&1
+    if !errorlevel!==0 set "JLTSQL=py -3.12-32 -m src.cli.main"
+)
+if not defined JLTSQL (
+    py -3.12 --version >nul 2>&1
+    if !errorlevel!==0 set "JLTSQL=py -3.12 -m src.cli.main"
+)
+if not defined JLTSQL (
+    python --version >nul 2>&1
+    if !errorlevel!==0 set "JLTSQL=python -m src.cli.main"
+)
+if not defined JLTSQL (
+    echo [ERROR] Python or jltsql not found.
+    exit /b 1
 )
 
 echo Command: %JLTSQL% realtime odds-timeseries --from %FROM_DATE% --to %TO_DATE% --db postgresql
