@@ -1401,3 +1401,22 @@
   PostgreSQL gate followed by one final independent review. STOP on any
   parser/signature ambiguity, inactive FK path, failed test, dirty tree, or
   review finding.
+- The final enforcement repair was committed as full SHA
+  `5c0d86c1b4097a5636ef3cd2960ff9891b2868f2`. On that clean exact SHA, the
+  complete local suite passed `2431 passed, 112 skipped, 15 subtests passed in
+  52.57s`; the complete disposable PostgreSQL 16 CK contract passed `65 passed
+  in 5.09s`; and the test gate, fatal/new-file lint, compileall, `git diff
+  --check`, strict MkDocs, wheel/sdist build and content gate, public-document
+  scan, retired-document absence, container cleanup, and clean-tree checks all
+  passed. The final independent `gpt-5.6-sol` `xhigh` Codex review of that exact
+  SHA returned `GREEN` with no correctness, data-integrity, or release blocker.
+- PR `#196` was opened from the same exact code SHA with the above evidence.
+  GitHub Actions `test`, `lint`, and `windows-batch-syntax` passed; the optional
+  performance job was intentionally skipped; and CodeRabbit completed. Copilot
+  was requested once but explicitly reported that its review quota was
+  exhausted, so it supplied no review evidence. This evidence closes the CK
+  native-complete-storage iteration only. The repository release remains **not
+  ready** until the remaining official-contract/storage iterations, final
+  documentation and open-PR audit, actual fresh acquisition, and SQLite plus
+  PostgreSQL persistence/readback gates are complete. No 64-bit SDK support
+  claim is made without an installed-SDK end-to-end run.
