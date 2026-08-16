@@ -40,6 +40,9 @@ class _SqliteDB:
     def commit(self):
         self.conn.commit()
 
+    def close(self):
+        self.conn.close()
+
 
 def _old_nl_hr_schema() -> str:
     """numbered 列追加前の旧 NL_HR 定義 (1件目のみ) を再現。"""
@@ -65,8 +68,9 @@ def _old_nl_hr_schema() -> str:
     return "\n".join(lines)
 
 
-def test_numbered_payout_columns_added_by_migration(tmp_path):
+def test_numbered_payout_columns_added_by_migration(tmp_path, request):
     db = _SqliteDB(tmp_path / "old.db")
+    request.addfinalizer(db.close)
     db.execute(_old_nl_hr_schema())
     db.execute(
         "INSERT INTO NL_HR (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, FukuUmaban, FukuPay)"

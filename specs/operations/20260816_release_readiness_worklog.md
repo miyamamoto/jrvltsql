@@ -1420,3 +1420,27 @@
   documentation and open-PR audit, actual fresh acquisition, and SQLite plus
   PostgreSQL persistence/readback gates are complete. No 64-bit SDK support
   claim is made without an installed-SDK end-to-end run.
+
+### 2026-08-17 — deterministic SQLite test cleanup iteration
+
+- Objective and minimum scope: repair one independently traced test-only
+  SQLite connection leak which makes the complete release suite fail
+  nondeterministically under Python 3.13 warning enforcement. Repository:
+  `miyamamoto/jrvltsql`; dedicated worktree:
+  `/home/keiba/scratch/20260817_jrvltsql_test_resource`; branch:
+  `agent/test-resource-cleanup-20260817`; base and initial HEAD:
+  `1b66f45629b9ede51fc2f4415e688784b2f55a2c`.
+- The leak is independent of the in-progress BT standard-schema iteration and
+  is therefore isolated in this smaller prerequisite PR. Claude Code first
+  identified `tests/test_hr_schema_migration.py` as the likely allocation;
+  Codex then reproduced it with tracemalloc. Running that test immediately
+  before the HY official contract with `-W error::ResourceWarning` failed in
+  HY while the allocation traceback pointed exactly to `_SqliteDB.__init__`
+  line 21. The complete BT candidate suite likewise failed once after 2,463
+  passes when the same connection was garbage-collected.
+- The minimal repair gives the test wrapper an explicit `close` method and
+  registers it immediately as a pytest finalizer. Next safe action: rerun the
+  same red command, the focused migration test, and the complete suite on a
+  clean committed full SHA; then open and merge this prerequisite before
+  rebasing the BT work. STOP if any resource warning remains, migration behavior
+  changes, or the finalizer does not execute after a test assertion failure.
