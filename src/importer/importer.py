@@ -104,6 +104,23 @@ _STANDARD_FIELD_ALIASES = {
             )
         }
     },
+    "TOKU": {
+        "RenbanNum": "Num",
+    },
+    "TOKU_RACE": {
+        "RaceRyakusyo10": "Ryakusyo10",
+        "RaceRyakusyo6": "Ryakusyo6",
+        "RaceRyakusyo3": "Ryakusyo3",
+        "RaceMeiKubun": "Kubun",
+        "JyusyoKaiji": "Nkai",
+        "JyokenCD2": "JyokenCD1",
+        "JyokenCD3": "JyokenCD2",
+        "JyokenCD4": "JyokenCD3",
+        "JyokenCD5": "JyokenCD4",
+        "JyokenCDYoung": "JyokenCD5",
+        "CourseKubun": "CourseKubunCD",
+        "HandeHappyoDate": "HandiDate",
+    },
 }
 
 
@@ -136,7 +153,12 @@ _RC_KEY_COLUMNS = (
 
 _YS_STORAGE_TABLES = frozenset({"NL_YS", "SCHEDULE"})
 _YS_KEY_COLUMNS = ("Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji")
-_ORDERED_MASTER_STORAGE_TABLES = _RC_STORAGE_TABLES | _YS_STORAGE_TABLES
+_TK_CHILD_STORAGE_TABLES = frozenset({"NL_TK", "TOKU"})
+_TK_KEY_COLUMNS = ("Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum")
+_TK_ROWS_KEY = "_tk_registered_horse_rows"
+_ORDERED_MASTER_STORAGE_TABLES = (
+    _RC_STORAGE_TABLES | _YS_STORAGE_TABLES | _TK_CHILD_STORAGE_TABLES
+)
 
 
 def verify_rc_storage_schema(database: BaseDatabase, table_name: str) -> bool:
@@ -322,6 +344,216 @@ def apply_ys_batch(
         rollback_or_invalidate()
         raise
     return len(rows)
+
+
+def _tk_header_table_name(child_table_name: str) -> str | None:
+    """Return the coupled TK header table for a native or standard child table."""
+    return {
+        "NL_TK": "NL_TK_RACE",
+        "TOKU": "TOKU_RACE",
+    }.get(child_table_name)
+
+
+def verify_tk_coupled_tables(
+    database: BaseDatabase,
+    child_table_name: str,
+) -> str | None:
+    """Fail closed unless both normalized TK tables have their required keys."""
+    header_table_name = _tk_header_table_name(child_table_name)
+    if header_table_name is None:
+        return None
+
+    from src.database.migration import verify_table_schema
+    from src.database.schema import SCHEMAS
+    from src.database.schema_jravan import JRAVAN_SCHEMAS
+
+    header_schema = SCHEMAS.get(header_table_name) or JRAVAN_SCHEMAS.get(header_table_name)
+    child_schema = SCHEMAS.get(child_table_name) or JRAVAN_SCHEMAS.get(child_table_name)
+    if not header_schema or not database.table_exists_strict(header_table_name):
+        raise SchemaMigrationError(
+            f"TK import requires header table {header_table_name} before mutation"
+        )
+    verify_table_schema(database, header_table_name, header_schema)
+    if not child_schema or not database.table_exists_strict(child_table_name):
+        raise SchemaMigrationError(
+            f"TK import requires registered-horse table {child_table_name} before mutation"
+        )
+    verify_table_schema(database, child_table_name, child_schema)
+    return header_table_name
+
+
+def prepare_tk_coupled_record(
+    database: BaseDatabase,
+    record: dict,
+    child_table_name: str,
+    *,
+    verified_header_table: str | None = None,
+) -> tuple[dict, str, list[dict]] | None:
+    """Validate and convert a complete TK physical snapshot before writes."""
+    expected_header_table = _tk_header_table_name(child_table_name)
+    if expected_header_table is None:
+        return None
+    header_table = verified_header_table or verify_tk_coupled_tables(
+        database, child_table_name
+    )
+    if header_table != expected_header_table:
+        raise SchemaMigrationError(
+            f"TK import expected header table {expected_header_table}"
+        )
+    if _record_type_from_record(record) != "TK":
+        raise SchemaMigrationError("TK storage received a non-TK record")
+
+    status = record.get("DataKubun")
+    if status not in {"0", "1", "2"}:
+        raise SchemaMigrationError(f"TK record has unsupported DataKubun: {status!r}")
+    missing_key = [column for column in _TK_KEY_COLUMNS if record.get(column) in (None, "")]
+    if missing_key:
+        raise SchemaMigrationError(f"TK record has incomplete official key: {missing_key}")
+
+    try:
+        expected_count = int(str(record.get("TorokuTosu")))
+    except (TypeError, ValueError) as error:
+        raise SchemaMigrationError("TK record has a non-numeric registration count") from error
+    if not 0 <= expected_count <= 300:
+        raise SchemaMigrationError(
+            f"TK record registration count is outside 0..300: {expected_count}"
+        )
+
+    rows = record.get(_TK_ROWS_KEY)
+    if not isinstance(rows, list):
+        raise SchemaMigrationError("TK record is missing its registered-horse rows")
+    if len(rows) != expected_count:
+        raise SchemaMigrationError(
+            "TK registered-horse row count does not match TorokuTosu: "
+            f"expected={expected_count}, actual={len(rows)}"
+        )
+
+    header_fields = set(get_table_column_types(header_table))
+    translated_header = translate_standard_field_names(record, header_table)
+    missing_header = sorted(field for field in header_fields if field not in translated_header)
+    if missing_header:
+        raise SchemaMigrationError(f"TK header is missing fields: {missing_header}")
+    header_record = {
+        field: translated_header[field]
+        for field in get_table_column_types(header_table)
+    }
+    converted_header = convert_record_types(header_record, header_table)
+    if not DataImporter._has_complete_primary_key(header_table, converted_header):
+        raise SchemaMigrationError("TK header has an incomplete normalized key")
+
+    expected_child_fields = set(get_table_column_types(child_table_name))
+    sequence_field = "Num" if child_table_name == "TOKU" else "RenbanNum"
+    converted_rows: list[dict] = []
+    seen_sequences: set[int] = set()
+    for expected_sequence, row in enumerate(rows, start=1):
+        if not isinstance(row, dict):
+            raise SchemaMigrationError(
+                f"TK registered-horse row {expected_sequence} is not a dictionary"
+            )
+        translated_row = translate_standard_field_names(row, child_table_name)
+        if set(translated_row) != expected_child_fields:
+            raise SchemaMigrationError(
+                f"TK registered-horse row {expected_sequence} does not match "
+                f"{child_table_name} fields"
+            )
+        for parent_field in ("MakeDate", *_TK_KEY_COLUMNS):
+            if str(row.get(parent_field)) != str(record.get(parent_field)):
+                raise SchemaMigrationError(
+                    f"TK registered-horse row {expected_sequence} has an inconsistent "
+                    f"parent field: {parent_field}"
+                )
+        try:
+            sequence = int(str(translated_row.get(sequence_field)))
+        except (TypeError, ValueError) as error:
+            raise SchemaMigrationError(
+                f"TK registered-horse row {expected_sequence} has a non-numeric sequence"
+            ) from error
+        if sequence != expected_sequence or sequence in seen_sequences:
+            raise SchemaMigrationError(
+                "TK registered-horse sequence must be unique and contiguous from 001"
+            )
+        seen_sequences.add(sequence)
+        converted = convert_record_types(translated_row, child_table_name)
+        if not DataImporter._has_complete_primary_key(child_table_name, converted):
+            raise SchemaMigrationError(
+                f"TK registered-horse row {expected_sequence} has an incomplete key"
+            )
+        converted_rows.append(converted)
+
+    if status == "0" and (expected_count != 0 or converted_rows):
+        raise SchemaMigrationError("TK delete record must not contain registered-horse rows")
+    return converted_header, header_table, converted_rows
+
+
+def insert_tk_coupled_batch(
+    database: BaseDatabase,
+    child_table_name: str,
+    prepared: list[tuple[dict, str, list[dict]]],
+    *,
+    commit_batch: bool,
+    optimized: bool,
+) -> tuple[int, int]:
+    """Atomically apply complete TK snapshots and deletes in provider order."""
+    if not prepared:
+        return 0, 0
+    header_tables = {header_table for _, header_table, _ in prepared}
+    if len(header_tables) != 1:
+        raise SchemaMigrationError("TK batch contains inconsistent header tables")
+
+    def begin_if_owned() -> None:
+        if commit_batch:
+            begin = getattr(database, "begin_transaction", None)
+            if begin is not None:
+                begin()
+
+    def rollback_or_invalidate() -> None:
+        try:
+            database.rollback()
+        except DatabaseError:
+            try:
+                database.invalidate_connection()
+            except Exception as disconnect_error:
+                logger.error(
+                    "Failed to invalidate database after TK rollback failure",
+                    table=child_table_name,
+                    error=str(disconnect_error),
+                )
+            raise
+
+    def insert_rows(table_name: str, rows: list[dict]) -> int:
+        if not rows:
+            return 0
+        if optimized and hasattr(database, "insert_many_optimized"):
+            return database.insert_many_optimized(table_name, rows)
+        return database.insert_many(table_name, rows, use_replace=True)
+
+    try:
+        begin_if_owned()
+        for header, header_table, child_rows in prepared:
+            where = " AND ".join(f"{column} = ?" for column in _TK_KEY_COLUMNS)
+            key_values = tuple(header[column] for column in _TK_KEY_COLUMNS)
+            database.execute(
+                f"DELETE FROM {child_table_name} WHERE {where}",
+                key_values,
+            )
+            if header.get("DataKubun") == "0":
+                database.execute(
+                    f"DELETE FROM {header_table} WHERE {where}",
+                    key_values,
+                )
+                continue
+            if insert_rows(header_table, [header]) != 1:
+                raise DatabaseError(f"TK header insert failed for {header_table}")
+            if insert_rows(child_table_name, child_rows) != len(child_rows):
+                raise DatabaseError(
+                    f"TK child insert count mismatch for {child_table_name}"
+                )
+        if commit_batch:
+            database.commit()
+        return len(prepared), 0
+    except DatabaseError:
+        rollback_or_invalidate()
+        raise
 
 
 def _expanded_record_fingerprint(record: dict, table_name: str) -> Optional[tuple]:
@@ -1117,6 +1349,7 @@ class DataImporter:
         self._verified_mining_native_tables: set[str] = set()
         self._verified_rc_tables: set[str] = set()
         self._verified_ys_tables: set[str] = set()
+        self._verified_tk_header_tables: dict[str, str] = {}
 
         # Map record types to table names
         # Note: Table names match schema.py table definitions (e.g. NL_RA, not NL_RA_RACE)
@@ -1466,6 +1699,40 @@ class DataImporter:
             if verify_ys_storage_schema(self.database, table_name):
                 self._verified_ys_tables.add(table_name)
 
+        if table_name in _TK_CHILD_STORAGE_TABLES:
+            header_table = self._verified_tk_header_tables.get(table_name)
+            if header_table is None:
+                verified = verify_tk_coupled_tables(self.database, table_name)
+                if verified is None:
+                    raise SchemaMigrationError(
+                        f"TK import could not resolve header table for {table_name}"
+                    )
+                header_table = verified
+                self._verified_tk_header_tables[table_name] = header_table
+            prepared_tk = [
+                prepare_tk_coupled_record(
+                    self.database,
+                    record,
+                    table_name,
+                    verified_header_table=header_table,
+                )
+                for record in batch
+            ]
+            if any(item is None for item in prepared_tk):
+                raise SchemaMigrationError("TK batch lost its coupled snapshot metadata")
+            succeeded, failed = insert_tk_coupled_batch(
+                self.database,
+                table_name,
+                [item for item in prepared_tk if item is not None],
+                commit_batch=auto_commit,
+                optimized=False,
+            )
+            self._records_imported += succeeded
+            self._records_failed += failed
+            if succeeded:
+                self._batches_processed += 1
+            return
+
         verified_ch_result_table = None
         if _ch_result_table_name(table_name) is not None:
             try:
@@ -1724,6 +1991,36 @@ class DataImporter:
             if table_name not in self._verified_ys_tables:
                 if verify_ys_storage_schema(self.database, table_name):
                     self._verified_ys_tables.add(table_name)
+            if table_name in _TK_CHILD_STORAGE_TABLES:
+                header_table = self._verified_tk_header_tables.get(table_name)
+                if header_table is None:
+                    verified = verify_tk_coupled_tables(self.database, table_name)
+                    if verified is None:
+                        raise SchemaMigrationError(
+                            f"TK import could not resolve header table for {table_name}"
+                        )
+                    header_table = verified
+                    self._verified_tk_header_tables[table_name] = header_table
+                prepared = prepare_tk_coupled_record(
+                    self.database,
+                    record,
+                    table_name,
+                    verified_header_table=header_table,
+                )
+                if prepared is None:
+                    raise SchemaMigrationError("TK single record lost its snapshot metadata")
+                succeeded, failed = insert_tk_coupled_batch(
+                    self.database,
+                    table_name,
+                    [prepared],
+                    commit_batch=auto_commit,
+                    optimized=False,
+                )
+                self._records_imported += succeeded
+                self._records_failed += failed
+                if succeeded:
+                    self._batches_processed += 1
+                return succeeded == 1
             if table_name not in self._verified_mining_native_tables:
                 if verify_mining_native_schema(self.database, record, table_name):
                     self._verified_mining_native_tables.add(table_name)

@@ -176,10 +176,17 @@ INDEXES = {
 
     "NL_TK": [
         # 特別登録馬 (Special Registration Horse)
-        # 実際のスキーマにはMakeDateが存在しない
         "CREATE INDEX IF NOT EXISTS idx_nl_tk_date ON NL_TK(Year, MonthDay)",
         "CREATE INDEX IF NOT EXISTS idx_nl_tk_venue ON NL_TK(JyoCD)",
         "CREATE INDEX IF NOT EXISTS idx_nl_tk_race ON NL_TK(RaceNum)",
+        "CREATE INDEX IF NOT EXISTS idx_nl_tk_horse ON NL_TK(KettoNum)",
+    ],
+
+    "NL_TK_RACE": [
+        # 特別登録馬レースヘッダー (Special Registration Race)
+        "CREATE INDEX IF NOT EXISTS idx_nl_tk_race_date ON NL_TK_RACE(Year, MonthDay)",
+        "CREATE INDEX IF NOT EXISTS idx_nl_tk_race_venue ON NL_TK_RACE(JyoCD)",
+        "CREATE INDEX IF NOT EXISTS idx_nl_tk_race_number ON NL_TK_RACE(RaceNum)",
     ],
 
     "NL_TM": [

@@ -49,7 +49,8 @@ JRAVAN_TO_JLTSQL: Dict[str, str] = {
 
     # スケジュール・その他 (Schedule & Others)
     "SCHEDULE": "NL_YS",      # 開催スケジュール (Race Schedule)
-    "TOKUBETSU": "NL_TK",     # 特別登録馬 (Special Registration)
+    "TOKU": "NL_TK",          # 特別登録馬・登録馬行 (Special Registration)
+    "TOKU_RACE": "NL_TK_RACE",  # 特別登録馬・レースヘッダー
     "COURSE": "NL_CS",        # コース情報 (Course Information)
     "WEATHER": "NL_WE",       # 天候情報 (Weather Information)
     "BATAIJYU": "NL_WH",      # 速報馬体重 (Horse Weight)

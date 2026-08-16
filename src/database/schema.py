@@ -28,7 +28,8 @@ Race-related Tables:
         RecInfoKubun, Year, MonthDay, JyoCD, Kaiji, Nichiji,
         RaceNum, TokuNum, SyubetuCD, Kyori, TrackCD
     )
-    NL_TK: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, KettoNum)
+    NL_TK_RACE: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
+    NL_TK: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, RenbanNum)
     NL_YS: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji)
 
 Master Tables:
@@ -1250,8 +1251,8 @@ SCHEMAS = {
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
         )
     """,
-    "NL_TK": """
-        CREATE TABLE IF NOT EXISTS NL_TK (
+    "NL_TK_RACE": """
+        CREATE TABLE IF NOT EXISTS NL_TK_RACE (
             RecordSpec TEXT,
             DataKubun TEXT,
             MakeDate TEXT,
@@ -1288,6 +1289,18 @@ SCHEMAS = {
             CourseKubun TEXT,
             HandeHappyoDate TEXT,
             TorokuTosu INTEGER,
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
+        )
+    """,
+    "NL_TK": """
+        CREATE TABLE IF NOT EXISTS NL_TK (
+            MakeDate TEXT,
+            Year INTEGER,
+            MonthDay INTEGER,
+            JyoCD TEXT,
+            Kaiji INTEGER,
+            Nichiji INTEGER,
+            RaceNum INTEGER,
             RenbanNum INTEGER,
             KettoNum TEXT,
             Bamei TEXT,
@@ -1298,8 +1311,7 @@ SCHEMAS = {
             ChokyosiRyakusyo TEXT,
             Futan REAL,
             Koryu TEXT,
-            RecordBreak TEXT,
-            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, KettoNum)
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, RenbanNum)
         )
     """,
     "NL_TM": """

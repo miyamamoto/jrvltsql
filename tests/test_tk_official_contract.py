@@ -1,11 +1,12 @@
 """Official 21,657-byte TK parser and coupled-storage contract tests."""
 
-from copy import deepcopy
 import os
+from copy import deepcopy
 from uuid import uuid4
 
 import pytest
 
+from src.database.base import DatabaseError
 from src.database.migration import SchemaMigrationError
 from src.database.schema import SCHEMAS
 from src.database.schema_jravan import JRAVAN_SCHEMAS
@@ -16,10 +17,9 @@ from src.database.schema_types import (
 )
 from src.database.sqlite_handler import SQLiteDatabase
 from src.database.table_mappings import JLTSQL_TO_JRAVAN
-from src.importer.importer import DataImporter
+from src.importer.importer import DataImporter, ImporterError
 from src.importer.importer_optimized import OptimizedDataImporter
 from src.parser.tk_parser import TKParser
-
 
 TK_OFFICIAL_LENGTH = 21657
 TK_RACE_KEY = ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum"]
@@ -243,8 +243,11 @@ def _keyless_schema(schema: str) -> str:
     lines = [line for line in schema.splitlines() if "PRIMARY KEY" not in line]
     for index in range(len(lines) - 1, -1, -1):
         stripped = lines[index].rstrip()
-        if stripped and not stripped.endswith(("(", ")")):
-            lines[index] = stripped.rstrip(",")
+        if stripped and not stripped.lstrip().startswith(")"):
+            definition, separator, comment = stripped.partition("--")
+            lines[index] = definition.rstrip().rstrip(",")
+            if separator:
+                lines[index] += f"  --{comment}"
             break
     return "\n".join(lines)
 
@@ -325,9 +328,7 @@ def test_tk_status_two_replaces_the_entire_snapshot_and_zero_deletes_it(
 ) -> None:
     database = SQLiteDatabase({"path": str(tmp_path / f"status-{standard}.db")})
     first = TKParser().parse(build_tk_record(horse_count=3, title="BEFORE")[0])
-    second = TKParser().parse(
-        build_tk_record(data_kubun="2", horse_count=2, title="AFTER")[0]
-    )
+    second = TKParser().parse(build_tk_record(data_kubun="2", horse_count=2, title="AFTER")[0])
     other = TKParser().parse(
         build_tk_record(
             horse_count=1,
@@ -355,11 +356,15 @@ def test_tk_status_two_replaces_the_entire_snapshot_and_zero_deletes_it(
             f"SELECT RaceNum, Bamei FROM {child_table} ORDER BY RaceNum"
         )
 
-    assert update_stats == {"records_imported": 2, "records_failed": 0, "batches_processed": 1}
+    assert update_stats["records_imported"] == 2
+    assert update_stats["records_failed"] == 0
+    assert update_stats["batches_processed"] == 1
     assert updated_header == {"DataKubun": "2", "Hondai": "AFTER", "TorokuTosu": 2}
     assert len(updated_children) == 2
     assert [row["Bamei"] for row in updated_children] == ["HORSE001", "HORSE002"]
-    assert final_stats == {"records_imported": 2, "records_failed": 0, "batches_processed": 1}
+    assert final_stats["records_imported"] == 2
+    assert final_stats["records_failed"] == 0
+    assert final_stats["batches_processed"] == 1
     assert final_headers == [{"RaceNum": 12, "Hondai": "OTHER"}]
     assert final_children == [{"RaceNum": 12, "Bamei": "HORSE001"}]
 
@@ -387,9 +392,7 @@ def test_tk_importer_revalidates_private_snapshot_before_any_mutation(
             importer_class(database, use_jravan_schema=standard).import_records(iter([malformed]))
 
         header = database.fetch_one(f"SELECT DataKubun, Hondai FROM {header_table}")
-        child_count = database.fetch_one(
-            f"SELECT COUNT(*) AS count FROM {child_table}"
-        )["count"]
+        child_count = database.fetch_one(f"SELECT COUNT(*) AS count FROM {child_table}")["count"]
 
     assert header == {"DataKubun": "1", "Hondai": "ORIGINAL"}
     assert child_count == 2
@@ -405,6 +408,49 @@ def test_tk_single_record_path_writes_both_tables_atomically(tmp_path) -> None:
         assert DataImporter(database).import_single_record(parsed)
         assert database.fetch_one("SELECT COUNT(*) AS count FROM NL_TK_RACE")["count"] == 1
         assert database.fetch_one("SELECT COUNT(*) AS count FROM NL_TK")["count"] == 2
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_tk_child_write_failure_rolls_back_header_and_stale_child_delete(
+    tmp_path,
+    monkeypatch,
+    importer_class,
+) -> None:
+    database = SQLiteDatabase({"path": str(tmp_path / "rollback.db")})
+    original = TKParser().parse(build_tk_record(horse_count=2, title="ORIGINAL")[0])
+    replacement = TKParser().parse(
+        build_tk_record(data_kubun="2", horse_count=1, title="REPLACEMENT")[0]
+    )
+    assert original is not None and replacement is not None
+
+    with database:
+        _create_current_tables(database, standard=False)
+        importer_class(database).import_records(iter([original]))
+        method_name = (
+            "insert_many_optimized"
+            if importer_class is OptimizedDataImporter
+            and hasattr(database, "insert_many_optimized")
+            else "insert_many"
+        )
+        original_insert = getattr(database, method_name)
+
+        def fail_child(table_name, rows, *args, **kwargs):
+            if table_name == "NL_TK":
+                raise DatabaseError("injected TK child failure")
+            return original_insert(table_name, rows, *args, **kwargs)
+
+        monkeypatch.setattr(database, method_name, fail_child)
+        with pytest.raises(ImporterError, match="injected TK child failure"):
+            importer_class(database).import_records(iter([replacement]))
+
+        assert database.fetch_one("SELECT DataKubun, Hondai FROM NL_TK_RACE") == {
+            "DataKubun": "1",
+            "Hondai": "ORIGINAL",
+        }
+        assert database.fetch_all("SELECT Bamei FROM NL_TK ORDER BY RenbanNum") == [
+            {"Bamei": "HORSE001"},
+            {"Bamei": "HORSE002"},
+        ]
 
 
 @pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
@@ -507,12 +553,12 @@ def test_tk_postgresql_native_and_standard_preserve_snapshot_semantics(
     assert native["records_imported"] == standard["records_imported"] == 4
     assert native["records_failed"] == standard["records_failed"] == 0
     for header_table, child_table in (("NL_TK_RACE", "NL_TK"), ("TOKU_RACE", "TOKU")):
-        assert postgresql_db.fetch_one(
-            f'SELECT COUNT(*) AS "count" FROM {header_table}'
-        )["count"] == 1
-        assert postgresql_db.fetch_one(
-            f'SELECT COUNT(*) AS "count" FROM {child_table}'
-        )["count"] == 1
+        assert (
+            postgresql_db.fetch_one(f'SELECT COUNT(*) AS "count" FROM {header_table}')["count"] == 1
+        )
+        assert (
+            postgresql_db.fetch_one(f'SELECT COUNT(*) AS "count" FROM {child_table}')["count"] == 1
+        )
         assert postgresql_db.fetch_one(
             f'SELECT RaceNum AS "RaceNum", Bamei AS "Bamei" FROM {child_table}'
         ) == {"RaceNum": 12, "Bamei": "HORSE001"}

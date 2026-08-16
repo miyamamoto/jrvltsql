@@ -100,7 +100,7 @@
   existing rows for explicit rebuild/reimport. Unrelated standard-table imports
   must remain usable when an obsolete TK table is present but unused.
 
-## Next safe command
+## Red-first evidence
 
 - Added `tests/test_tk_official_contract.py` before production changes. The
   pre-implementation command
@@ -114,3 +114,46 @@
   variants.
 - Implement the parser/schema/coupled-writer batch once, then rerun this same
   contract. Do not weaken the red assertions to fit the old layout.
+
+## Implementation and pre-candidate validation
+
+- Replaced the permissive 727-byte parser with an exact 21,657-byte CP932
+  parser. It validates record type, CR/LF, official status/key/count fields,
+  every physical slot number, contiguous 001..N sequencing, empty-slot
+  initialization, and `TorokuTosu` agreement. It exposes one header plus the
+  private `_tk_registered_horse_rows` list and does not store the delimiter.
+- Added native `NL_TK_RACE` and normalized `NL_TK`; corrected standard routing
+  to `TOKU_RACE` and `TOKU`; added official compound keys and field aliases;
+  regenerated schema-backed metadata and indexes. Historical 727-byte test
+  fixtures are explicitly synthesized into a current record with one horse and
+  are not accepted by production parsing.
+- Added one dedicated coupled writer shared by both importers. It verifies both
+  schemas before mutation, revalidates parser-private rows, applies status 1/2
+  as complete snapshot replacement and status 0 as coupled deletion, preserves
+  provider order, and rolls back header insertion plus stale-child deletion if
+  a child write fails. Existing incomplete/keyless TK storage fails closed;
+  unused obsolete standard TK storage does not block unrelated imports.
+- Updated the executable schema counts, index inventory, raceday schema/check
+  labels, public data-support table, and the tracked compatibility matrix.
+- Focused SQLite regression after implementation:
+  `842 passed, 10 skipped`; the expanded TK contract alone is now
+  `29 passed, 2 skipped`.
+- Disposable PostgreSQL 16 (`postgres:16-alpine`, local ephemeral port) ran the
+  complete TK contract with integration enabled: `31 passed`. This covered
+  native/standard names and both importers. The disposable container was
+  stopped and removed after the run.
+- Pre-candidate full suite produced `2305 passed, 67 skipped, 3 warnings,
+  6 subtests passed` plus two unchanged CLI tests that exited 1 only in that
+  full-suite process. Both exact failing tests passed immediately in isolation
+  (`2 passed`) without a code change, matching the previously observed
+  order-dependent CLI flake. A clean full rerun remains required on the frozen
+  candidate SHA; it is not waived.
+- `compileall`, `git diff --check`, and fatal flake8
+  (`E9,F63,F7,F82`) pass.
+
+## Next safe command
+
+- Review the complete diff for schema/writer edge cases, commit the candidate,
+  then run focused, workflow-equivalent, full, PostgreSQL, docs, lint, and
+  clean-tree gates against that exact full SHA. Stop if the full rerun retains
+  any failure.

@@ -1145,22 +1145,20 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
         "indexes": ["血統登録番号", "父馬繁殖登録番号", "母馬繁殖登録番号"]
     },
 
-    "NL_TK": {
-        "table_name": "NL_TK",
-        "record_type": "TK",
-        "description": "登録馬情報",
-        "purpose": "レース登録時の馬情報（出馬投票段階）を格納",
-        "columns": [
-            {"name": "レコード種別ID", "type": "TEXT", "description": "レコード種別識別子（'TK'）", "example": "TK", "nullable": False},
-            {"name": "開催年月日", "type": "TEXT", "description": "レース開催日", "example": "20240601", "nullable": False},
-            {"name": "競馬場コード", "type": "TEXT", "description": "競馬場コード", "example": "05", "nullable": False},
-            {"name": "レース番号", "type": "TEXT", "description": "レース番号", "example": "11", "nullable": False},
-            {"name": "登録頭数", "type": "TEXT", "description": "登録馬頭数", "example": "18", "nullable": True},
-            {"name": "登録馬毎情報", "type": "TEXT", "description": "各登録馬の詳細情報（ネスト構造）", "example": "...", "nullable": True}
-        ],
-        "primary_key": ["開催年月日", "競馬場コード", "レース番号"],
-        "indexes": ["開催年月日"]
-    },
+    "NL_TK_RACE": _schema_backed_metadata(
+        "NL_TK_RACE",
+        record_type="TK",
+        description="特別登録馬レースヘッダー",
+        purpose="ハンデ発表前後の特別登録レース情報と登録頭数を格納",
+        indexes=["Year", "MonthDay", "JyoCD", "RaceNum"],
+    ),
+    "NL_TK": _schema_backed_metadata(
+        "NL_TK",
+        record_type="TK",
+        description="特別登録馬明細",
+        purpose="特別登録レースごとの全登録馬を公式連番単位で格納",
+        indexes=["Year", "MonthDay", "JyoCD", "RaceNum", "KettoNum"],
+    ),
 
     "NL_TM": {
         "table_name": "NL_TM",

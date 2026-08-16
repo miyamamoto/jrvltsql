@@ -48,7 +48,7 @@ jrvltsql は JRA / 中央競馬専用です。NAR / 地方競馬はこのリポ�
 
 | データ種別 | jrvltsqlで非対応の旧仕様名 | 内容 | 主なレコード種別 | 保存先テーブル | option 1 | option 2 | option 3/4 | 備考 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `TOKU` | - | 特別登録馬 | `TK` | `NL_TK` | はい | はい | はい | standard / full quickstart に含めています。 |
+| `TOKU` | - | 特別登録馬 | `TK` | `NL_TK_RACE`（レース）、`NL_TK`（登録馬） | はい | はい | はい | 21,657バイトの300頭枠を全て扱います。standard / full quickstart に含めています。 |
 | `RACE` | - | レース、出走馬、払戻、確定オッズ、票数、WIN5、除外情報 | `RA`, `SE`, `HR`, `H1`, `H6`, `O1`〜`O6`, `WF`, `JG` | `NL_RA`, `NL_SE`, `NL_HR`, `NL_H1`, `NL_H6`, `NL_O1`〜`NL_O6`, `NL_WF`, `NL_JG` | はい | はい | はい | 中核データです。`NL_O*` は確定オッズで、投資判断時点のオッズではありません。 |
 | `DIFN` | `DIFF` | 蓄積系マスタ差分 | `UM`, `KS`, `CH`, `BR`, `BN`, `RC` | `NL_UM`, `NL_KS`, `NL_KS_SEISEKI`, `NL_CH`, `NL_CH_SEISEKI`, `NL_BR`, `NL_BN`, `NL_RC` | はい | いいえ | はい | 旧名 `DIFF` は受け付けません（下記参照）。 |
 | `BLDN` | `BLOD` | 血統情報 | `HN`, `SK`, `BT` | `NL_HN`, `NL_SK`, `NL_BT` | はい | いいえ | はい | 旧名 `BLOD` は受け付けません（下記参照）。 |
@@ -166,7 +166,7 @@ jrvltsql は現在、以下 38 種類の JRA レコード種別に対してパ�
 | `HN`, `SK`, `BT`, `RC` | `NL_HN`, `NL_SK`, `NL_BT`, `NL_RC` |
 | `O1`, `O2`, `O3`, `O4`, `O5`, `O6` | `NL_O1`, `NL_O2`, `NL_O3`, `NL_O4`, `NL_O5`, `NL_O6` |
 | `H1`, `H6` | `NL_H1`, `NL_H6` |
-| `YS`, `TK`, `CS` | `NL_YS`, `NL_TK`, `NL_CS` |
+| `YS`, `TK`, `CS` | `NL_YS`、`NL_TK_RACE`＋`NL_TK`、`NL_CS` |
 | `WE`, `WH`, `AV`, `JC`, `TC`, `CC` | `NL_WE`, `NL_WH`, `NL_AV`, `NL_JC`, `NL_TC`, `NL_CC` |
 | `DM`, `TM`, `WF`, `JG` | `NL_DM`, `NL_TM`, `NL_WF`, `NL_JG` |
 | `HC`, `HS`, `HY`, `WC`, `CK` | `NL_HC`, `NL_HS`, `NL_HY`, `NL_WC`, `NL_CK` |

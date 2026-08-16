@@ -12,10 +12,11 @@ from typing import Dict, Iterator, List, Optional, Union
 from src.database.base import BaseDatabase, DatabaseError
 from src.database.migration import SchemaMigrationError
 from src.importer.importer import (
+    _ORDERED_MASTER_STORAGE_TABLES,
     _PREPARED_CH_SEISEKI_ROWS_KEY,
     _PREPARED_KS_SEISEKI_ROWS_KEY,
-    _ORDERED_MASTER_STORAGE_TABLES,
     _RC_STORAGE_TABLES,
+    _TK_CHILD_STORAGE_TABLES,
     _YS_STORAGE_TABLES,
     _delete_mining_race_rows,
     _expanded_record_fingerprint,
@@ -27,14 +28,17 @@ from src.importer.importer import (
     apply_ys_batch,
     insert_ch_coupled_batch,
     insert_ks_coupled_batch,
+    insert_tk_coupled_batch,
     prepare_ch_coupled_rows,
     prepare_ks_coupled_rows,
+    prepare_tk_coupled_record,
     replace_mining_native_snapshot,
     resolve_standard_table_name,
     verify_ch_coupled_table,
     verify_ks_coupled_table,
     verify_mining_native_schema,
     verify_rc_storage_schema,
+    verify_tk_coupled_tables,
     verify_ys_storage_schema,
 )
 from src.utils.logger import get_logger
@@ -73,6 +77,7 @@ class OptimizedDataImporter:
         self._verified_mining_native_tables: set[str] = set()
         self._verified_rc_tables: set[str] = set()
         self._verified_ys_tables: set[str] = set()
+        self._verified_tk_header_tables: dict[str, str] = {}
 
         # Detect database type for optimization
         self.db_type = self._detect_database_type()
@@ -339,6 +344,19 @@ class OptimizedDataImporter:
                     self._batches_processed += 1
                     continue
 
+                if table_name in _TK_CHILD_STORAGE_TABLES:
+                    if table_name not in batch_buffers:
+                        batch_buffers[table_name] = []
+                    batch_buffers[table_name].append(record)
+                    if len(batch_buffers[table_name]) >= self.batch_size:
+                        self._flush_batch_optimized(
+                            table_name,
+                            batch_buffers[table_name],
+                            commit_batch=auto_commit,
+                        )
+                        batch_buffers[table_name] = []
+                    continue
+
                 fingerprint = _expanded_record_fingerprint(record, table_name)
                 if fingerprint is not None:
                     if fingerprint == last_expanded_record_fingerprint:
@@ -484,6 +502,40 @@ class OptimizedDataImporter:
             )
             self._records_imported += rows
             if rows:
+                self._batches_processed += 1
+            return
+
+        if table_name in _TK_CHILD_STORAGE_TABLES:
+            header_table = self._verified_tk_header_tables.get(table_name)
+            if header_table is None:
+                verified = verify_tk_coupled_tables(self.database, table_name)
+                if verified is None:
+                    raise SchemaMigrationError(
+                        f"TK import could not resolve header table for {table_name}"
+                    )
+                header_table = verified
+                self._verified_tk_header_tables[table_name] = header_table
+            prepared_tk = [
+                prepare_tk_coupled_record(
+                    self.database,
+                    record,
+                    table_name,
+                    verified_header_table=header_table,
+                )
+                for record in batch
+            ]
+            if any(item is None for item in prepared_tk):
+                raise SchemaMigrationError("TK batch lost its coupled snapshot metadata")
+            succeeded, failed = insert_tk_coupled_batch(
+                self.database,
+                table_name,
+                [item for item in prepared_tk if item is not None],
+                commit_batch=commit_batch,
+                optimized=True,
+            )
+            self._records_imported += succeeded
+            self._records_failed += failed
+            if succeeded:
                 self._batches_processed += 1
             return
 

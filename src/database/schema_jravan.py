@@ -1436,7 +1436,8 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             ChokyosiCode                   VARCHAR(5)          ,  -- 文字列(5)
             ChokyosiRyakusyo               VARCHAR(8)          ,  -- 文字列(8)
             Futan                          DECIMAL(4,1)        ,  -- 斤量(kg)
-            Koryu                          VARCHAR(1)            -- 文字列(1)
+            Koryu                          VARCHAR(1)          ,  -- 文字列(1)
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Num)
         )
     """,
     "TOKU_RACE": """
@@ -1476,7 +1477,8 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             TrackCD                        VARCHAR(2)          ,  -- 文字列(2)
             CourseKubunCD                  VARCHAR(2)          ,  -- 文字列(2)
             HandiDate                      VARCHAR(8)          ,  -- 文字列(8)
-            TorokuTosu                     SMALLINT              -- 登録頭数
+            TorokuTosu                     SMALLINT            ,  -- 登録頭数
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
         )
     """,
     "TORIKESI_JYOGAI": """

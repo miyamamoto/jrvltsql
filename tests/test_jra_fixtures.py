@@ -67,7 +67,7 @@ PARSER_MAP = {
     "RC": (RCParser, RCParser.RECORD_LENGTH),
     "SE": (SEParser, 463),
     "SK": (SKParser, SKParser.RECORD_LENGTH),
-    "TK": (TKParser, 727),
+    "TK": (TKParser, TKParser.RECORD_LENGTH),
     "TM": (TMParser, TMParser.RECORD_LENGTH),
     "WF": (WFParser, 169),  # Historical fixture uses the obsolete compact layout.
     "YS": (YSParser, YSParser.RECORD_LENGTH),
@@ -82,6 +82,7 @@ LEGACY_RECONSTRUCTED_LENGTHS = {
     "RA": 856,
     "RC": 241,
     "SK": 78,
+    "TK": 727,
     "TM": 39,
     "YS": 146,
 }
@@ -164,6 +165,15 @@ def load_fixture_records(record_type, record_length):
                 # as a synthetic current-shape record; the exact 208-byte
                 # contract is covered by test_sk_parser_layout.py.
                 chunk = chunk[:76].ljust(SKParser.RECORD_LENGTH - 2, b" ") + b"\r\n"
+            if record_type == "TK" and len(chunk) == 727:
+                # The historical fixture was reconstructed through the former
+                # one-entry parser. Preserve the position-compatible header and
+                # first 70-byte registered horse in a synthetic current record.
+                current = bytearray(b" " * TKParser.RECORD_LENGTH)
+                current[:725] = chunk[:725]
+                current[652:655] = b"001"
+                current[-2:] = b"\r\n"
+                chunk = bytes(current)
             if record_type == "RA" and len(chunk) == 856:
                 # This fixture was reconstructed with the repository's former
                 # non-official 856-byte parser. Only its pre-array 713-byte

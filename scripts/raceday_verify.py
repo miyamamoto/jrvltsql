@@ -131,7 +131,7 @@ def check_schema(con, issues):
     nl_required = [
         "NL_RA", "NL_SE", "NL_HR", "NL_H1", "NL_H6",
         "NL_O1", "NL_O2", "NL_O3", "NL_O4", "NL_O5", "NL_O6",
-        "NL_WE", "NL_WH", "NL_TK",
+        "NL_WE", "NL_WH", "NL_TK_RACE", "NL_TK",
         "NL_UM", "NL_KS", "NL_KS_SEISEKI", "NL_CH", "NL_CH_SEISEKI", "NL_BR", "NL_BN", "NL_RC",
         "NL_JC", "NL_TC",
     ]
@@ -232,7 +232,8 @@ def check_nl_today(con, year, monthday, issues, label="NL_ 蓄積系"):
         "NL_O5  (3連複odds)   ": q(con, "SELECT COUNT(*) FROM NL_O5 WHERE Year=? AND MonthDay=?", (y, m)),
         "NL_O6  (3連単odds)   ": q(con, "SELECT COUNT(*) FROM NL_O6 WHERE Year=? AND MonthDay=?", (y, m)),
         "NL_WH  (track cond)  ": q(con, "SELECT COUNT(*) FROM NL_WH WHERE Year=? AND MonthDay=?", (y, m)),
-        "NL_TK  (track info)  ": q(con, "SELECT COUNT(*) FROM NL_TK WHERE Year=? AND MonthDay=?", (y, m)),
+        "NL_TK_RACE (special) ": q(con, "SELECT COUNT(*) FROM NL_TK_RACE WHERE Year=? AND MonthDay=?", (y, m)),
+        "NL_TK  (registrants) ": q(con, "SELECT COUNT(*) FROM NL_TK WHERE Year=? AND MonthDay=?", (y, m)),
     }
 
     for name, count in checks.items():

@@ -94,19 +94,13 @@ race identityと`Umaban`を複合主キーに持ち、馬名、馬体重、増�
 保存する。0B11の置換・取消経路、native/standard import、schema migrationは
 `tests/test_wh_official_contract.py`で固定されており、`WE`とは別契約になっている。
 
-### B-04 現行38種のうち複数が公式配列を途中で切る
+### B-04 解消済み: 公式配列を途中で切る公開契約
 
-明らかに短い公開契約は、WH、SK、RA、BN、BR、CH、DM、TM、KS、RC、YSの修正後、
-次の1種である。
-
-```text
-TK 727/21657
-```
-
-左が実装上の公開長または終端、右が公式現行長。TK の300頭配列を
-1件だけ取り、公式レコード内部に `RecordDelimiter` を置いている。
-これは「不要列を捨てる」だけではなく、繰返し要素のデータ損失と key collision を
-固定する schema になっている。
+監査で明らかに短いと判定した12種（WH、SK、RA、BN、BR、CH、DM、TM、KS、RC、YS、TK）は
+全て現行公式長へ修正した。TK は4.8.0.2、4.9.0.1、SDK 5.0.0に共通する
+21657バイトを厳密検査し、70バイト×300枠を全て解析する。race headerは
+`NL_TK_RACE`、登録馬は`NL_TK`へ公式連番単位で正規化し、ハンデ発表前後の
+snapshot置換と削除を2表へ原子的に反映する。旧727バイトは公式旧仕様ではないため拒否する。
 
 RAはこのイテレーションで4.8.0.2、4.9.0.1、SDK 5.0.0に共通する1272バイトへ統一した。
 賞金4配列、25ラップ、4コーナー、更新区分を全展開し、CRLFを厳密検証して、native/standard schemaと
@@ -283,7 +277,7 @@ skip の扱いに関する実運用上の質問が繰り返されている:
 
 | ID | 公式長 | 実装判定 | 主要根拠 |
 |---|---:|---|---|
-| TK | 21657 | partial | 300頭配列の先頭付近、公開長727 |
+| TK | 21657 | current-shape / normalized | 300頭全枠、厳密長/type/CRLF、header/登録馬2表を原子的に置換・削除 |
 | RA | 1272 | current-shape | 全配列、現行長/CRLFを厳密検査、856byteを拒否 |
 | SE | 555 | current-shape | byte slice、現行長とCRLFを厳密検査 |
 | HR | 719 | current-shape / weak gate | 払戻全配列を展開するが100byte以上を受理 |
