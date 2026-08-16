@@ -9,10 +9,11 @@ from uuid import uuid4
 
 import pytest
 
+from src.database.migration import SchemaMigrationError
 from src.database.schema import SCHEMAS
 from src.database.schema_jravan import JRAVAN_SCHEMAS
 from src.database.sqlite_handler import SQLiteDatabase
-from src.importer.importer import DataImporter
+from src.importer.importer import DataImporter, ImporterError
 from src.importer.importer_optimized import OptimizedDataImporter
 from src.parser.av_parser import AVParser
 from src.parser.o1_parser import O1Parser
@@ -357,6 +358,268 @@ def test_postgresql_standard_race_cancellation_and_erase(postgresql_db, importer
         postgresql_db,
         importer_class,
     )
+
+
+def _assert_standard_o1_preserves_header_and_split_children(db, importer_class):
+    _create_jravan_tables(
+        db,
+        ["ODDS_TANPUKUWAKU_HEAD", "ODDS_TANPUKU", "ODDS_WAKU"],
+    )
+    # The horse and bracket portions cross a flush boundary, so a later
+    # partial header must not erase vote totals from the earlier portion.
+    importer = importer_class(db, use_jravan_schema=True, batch_size=2)
+    cancelled = _flatten(O1Parser().parse(_make_o1_record(data_kubun="9")))
+
+    stats = importer.import_records(iter(cancelled))
+
+    assert stats["records_failed"] == 0
+    header = db.fetch_one(
+        "SELECT COUNT(*) AS cnt, MAX(HappyoTime) AS happyo_time, "
+        "MAX(TotalHyosuTansyo) AS tan_votes, "
+        "MAX(TotalHyosuFukusyo) AS fuku_votes, "
+        "MAX(TotalHyosuWakuren) AS waku_votes "
+        "FROM ODDS_TANPUKUWAKU_HEAD "
+        "WHERE DataKubun = '9'"
+    )
+    assert header == {
+        "cnt": 1,
+        "happyo_time": "04191549",
+        "tan_votes": "00000000123",
+        "fuku_votes": "00000000456",
+        "waku_votes": "00000000789",
+    }
+    assert db.fetch_one("SELECT COUNT(*) AS cnt FROM ODDS_TANPUKU")["cnt"] == 2
+    assert db.fetch_one("SELECT COUNT(*) AS cnt FROM ODDS_WAKU")["cnt"] == 2
+
+    stats = importer.import_records(
+        iter(_flatten(O1Parser().parse(_make_o1_erase_record())))
+    )
+    assert stats["records_failed"] == 0
+    for table_name in (
+        "ODDS_TANPUKUWAKU_HEAD",
+        "ODDS_TANPUKU",
+        "ODDS_WAKU",
+    ):
+        assert db.fetch_one(f"SELECT COUNT(*) AS cnt FROM {table_name}")["cnt"] == 0
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_sqlite_standard_o1_preserves_header_and_split_children(
+    sqlite_db,
+    importer_class,
+):
+    _assert_standard_o1_preserves_header_and_split_children(sqlite_db, importer_class)
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_postgresql_standard_o1_preserves_header_and_split_children(
+    postgresql_db,
+    importer_class,
+):
+    _assert_standard_o1_preserves_header_and_split_children(
+        postgresql_db,
+        importer_class,
+    )
+
+
+_STANDARD_ODDS_CASES = (
+    (
+        "O2",
+        "ODDS_UMAREN_HEAD",
+        "ODDS_UMAREN",
+        {"UmarenFlag": "1", "Kumi": "0102", "Odds": "012340", "Ninki": "001"},
+    ),
+    (
+        "O3",
+        "ODDS_WIDE_HEAD",
+        "ODDS_WIDE",
+        {
+            "WideFlag": "1",
+            "Kumi": "0102",
+            "OddsLow": "00123",
+            "OddsHigh": "00456",
+            "Ninki": "001",
+        },
+    ),
+    (
+        "O4",
+        "ODDS_UMATAN_HEAD",
+        "ODDS_UMATAN",
+        {"UmatanFlag": "1", "Kumi": "0102", "Odds": "012340", "Ninki": "001"},
+    ),
+    (
+        "O5",
+        "ODDS_SANREN_HEAD",
+        "ODDS_SANREN",
+        {
+            "SanrenpukuFlag": "1",
+            "Kumi": "010203",
+            "Odds": "012340",
+            "Ninki": "001",
+        },
+    ),
+    (
+        "O6",
+        "ODDS_SANRENTAN_HEAD",
+        "ODDS_SANRENTAN",
+        {
+            "SanrentanFlag": "1",
+            "Kumi": "010203",
+            "Odds": "012340",
+            "Ninki": "0001",
+        },
+    ),
+)
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+@pytest.mark.parametrize(
+    ("record_type", "header_table", "child_table", "child_fields"),
+    _STANDARD_ODDS_CASES,
+)
+def test_sqlite_standard_o2_o6_header_child_upsert_and_erase(
+    sqlite_db,
+    importer_class,
+    record_type,
+    header_table,
+    child_table,
+    child_fields,
+):
+    _create_jravan_tables(sqlite_db, [header_table, child_table])
+    importer = importer_class(sqlite_db, use_jravan_schema=True, batch_size=100)
+    base = {
+        "RecordSpec": record_type,
+        "MakeDate": "20260419",
+        "Year": "2026",
+        "MonthDay": "0419",
+        "JyoCD": "06",
+        "Kaiji": "03",
+        "Nichiji": "08",
+        "RaceNum": "11",
+        "HassoTime": "04191549",
+        "TorokuTosu": "18",
+        "SyussoTosu": "18",
+        "Vote": "00000123456",
+        **child_fields,
+    }
+
+    assert importer.import_records(iter([{**base, "DataKubun": "9"}]))[
+        "records_failed"
+    ] == 0
+    assert importer.import_records(iter([{**base, "DataKubun": "2"}]))[
+        "records_failed"
+    ] == 0
+    header = sqlite_db.fetch_one(
+        f"SELECT COUNT(*) AS cnt, MAX(DataKubun) AS status, "
+        f"MAX(HappyoTime) AS happyo_time FROM {header_table}"
+    )
+    assert header == {"cnt": 1, "status": "2", "happyo_time": "04191549"}
+    assert sqlite_db.fetch_one(f"SELECT COUNT(*) AS cnt FROM {child_table}")[
+        "cnt"
+    ] == 1
+
+    erase = {
+        key: value
+        for key, value in base.items()
+        if key
+        in {
+            "RecordSpec",
+            "MakeDate",
+            "Year",
+            "MonthDay",
+            "JyoCD",
+            "Kaiji",
+            "Nichiji",
+            "RaceNum",
+        }
+    }
+    erase["DataKubun"] = "0"
+    assert importer.import_records(iter([erase]))["records_failed"] == 0
+    assert sqlite_db.fetch_one(f"SELECT COUNT(*) AS cnt FROM {header_table}")[
+        "cnt"
+    ] == 0
+    assert sqlite_db.fetch_one(f"SELECT COUNT(*) AS cnt FROM {child_table}")[
+        "cnt"
+    ] == 0
+
+
+def _assert_standard_odds_duplicate_existing_keys_fail_closed(db):
+    _create_jravan_tables(db, ["ODDS_UMAREN_HEAD", "ODDS_UMAREN"])
+    duplicate_key = (2026, 419, "06", 3, 8, 11)
+    for status in ("1", "2"):
+        db.execute(
+            "INSERT INTO ODDS_UMAREN_HEAD "
+            "(DataKubun, Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (status, *duplicate_key),
+        )
+    db.commit()
+    record = {
+        "RecordSpec": "O2",
+        "DataKubun": "9",
+        "Year": "2026",
+        "MonthDay": "0419",
+        "JyoCD": "06",
+        "Kaiji": "03",
+        "Nichiji": "08",
+        "RaceNum": "11",
+    }
+
+    with pytest.raises(SchemaMigrationError, match="duplicate official keys"):
+        DataImporter(db, use_jravan_schema=True).import_records(iter([record]))
+
+    assert db.fetch_one("SELECT COUNT(*) AS cnt FROM ODDS_UMAREN_HEAD")["cnt"] == 2
+
+
+def test_sqlite_standard_odds_duplicate_existing_keys_fail_closed(sqlite_db):
+    _assert_standard_odds_duplicate_existing_keys_fail_closed(sqlite_db)
+
+
+def test_postgresql_standard_odds_duplicate_existing_keys_fail_closed(postgresql_db):
+    _assert_standard_odds_duplicate_existing_keys_fail_closed(postgresql_db)
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_sqlite_standard_odds_child_failure_rolls_back_header(
+    sqlite_db,
+    importer_class,
+):
+    _create_jravan_tables(sqlite_db, ["ODDS_UMAREN_HEAD", "ODDS_UMAREN"])
+    sqlite_db.execute(
+        "CREATE TRIGGER reject_standard_odds_child "
+        "BEFORE INSERT ON ODDS_UMAREN "
+        "BEGIN SELECT RAISE(ABORT, 'child rejected'); END"
+    )
+    sqlite_db.commit()
+    record = {
+        "RecordSpec": "O2",
+        "DataKubun": "9",
+        "MakeDate": "20260419",
+        "Year": "2026",
+        "MonthDay": "0419",
+        "JyoCD": "06",
+        "Kaiji": "03",
+        "Nichiji": "08",
+        "RaceNum": "11",
+        "HassoTime": "04191549",
+        "UmarenFlag": "1",
+        "Vote": "00000123456",
+        "Kumi": "0102",
+        "Odds": "012340",
+        "Ninki": "001",
+    }
+
+    with pytest.raises(ImporterError, match="child rejected"):
+        importer_class(sqlite_db, use_jravan_schema=True).import_records(
+            iter([record])
+        )
+
+    assert sqlite_db.fetch_one(
+        "SELECT COUNT(*) AS cnt FROM ODDS_UMAREN_HEAD"
+    )["cnt"] == 0
+    assert sqlite_db.fetch_one("SELECT COUNT(*) AS cnt FROM ODDS_UMAREN")[
+        "cnt"
+    ] == 0
 
 
 def test_sqlite_importer_stores_official_av_record(sqlite_db):

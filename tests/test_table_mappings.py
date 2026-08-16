@@ -6,6 +6,7 @@ from src.database.table_mappings import (
     JLTSQL_TO_JRAVAN,
     JRAVAN_TO_JLTSQL,
     RECORD_TYPE_TO_TABLE,
+    STANDARD_EXPANDED_RECORD_OWNER,
 )
 
 
@@ -20,17 +21,23 @@ def test_training_sale_odds_and_vote_mappings():
     assert JLTSQL_TO_JRAVAN["NL_HS"] == "SALE"
 
     expected_odds = {
-        "O1": ("NL_O1", "ODDS_TANPUKU"),
-        "O2": ("NL_O2", "ODDS_UMAREN"),
-        "O3": ("NL_O3", "ODDS_WIDE"),
-        "O4": ("NL_O4", "ODDS_UMATAN"),
-        "O5": ("NL_O5", "ODDS_SANRENPUKU"),
-        "O6": ("NL_O6", "ODDS_SANRENTAN"),
+        "O1": ("NL_O1", "ODDS_TANPUKU", "ODDS_TANPUKUWAKU_HEAD"),
+        "O2": ("NL_O2", "ODDS_UMAREN", "ODDS_UMAREN_HEAD"),
+        "O3": ("NL_O3", "ODDS_WIDE", "ODDS_WIDE_HEAD"),
+        "O4": ("NL_O4", "ODDS_UMATAN", "ODDS_UMATAN_HEAD"),
+        "O5": ("NL_O5", "ODDS_SANRENPUKU", "ODDS_SANREN_HEAD"),
+        "O6": ("NL_O6", "ODDS_SANRENTAN", "ODDS_SANRENTAN_HEAD"),
     }
-    for record_type, (table_name, jravan_name) in expected_odds.items():
+    for record_type, (table_name, jravan_name, owner_name) in expected_odds.items():
         assert RECORD_TYPE_TO_TABLE[record_type] == table_name
         assert JRAVAN_TO_JLTSQL[jravan_name] == table_name
         assert JLTSQL_TO_JRAVAN[table_name] == jravan_name
+        assert STANDARD_EXPANDED_RECORD_OWNER[table_name] == owner_name
+
+    assert JRAVAN_TO_JLTSQL["ODDS_TANPUKU"] == "NL_O1"
+    assert JRAVAN_TO_JLTSQL["ODDS_WAKU"] == "NL_O1"
+    assert JRAVAN_TO_JLTSQL["ODDS_SANREN"] == "NL_O5"
+    assert JRAVAN_TO_JLTSQL["ODDS_SANRENPUKU"] == "NL_O5"
 
     assert RECORD_TYPE_TO_TABLE["H1"] == "NL_H1"
     assert RECORD_TYPE_TO_TABLE["H6"] == "NL_H6"

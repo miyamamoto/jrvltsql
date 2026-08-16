@@ -16,6 +16,7 @@ from src.importer.importer import (
     _PREPARED_CH_SEISEKI_ROWS_KEY,
     _PREPARED_KS_SEISEKI_ROWS_KEY,
     _RC_STORAGE_TABLES,
+    _STANDARD_ODDS_CONFIG_BY_OWNER,
     _TK_CHILD_STORAGE_TABLES,
     _YS_STORAGE_TABLES,
     _delete_mining_race_rows,
@@ -24,13 +25,16 @@ from src.importer.importer import (
     _is_mining_race_delete,
     _is_mining_snapshot_follower,
     _is_official_record_erase,
+    _is_standard_odds_record_erase,
     _mining_native_snapshot_rows,
     _record_type_from_record,
     apply_rc_batch,
     apply_ys_batch,
     clean_record_metadata,
+    delete_standard_odds_record,
     insert_ch_coupled_batch,
     insert_ks_coupled_batch,
+    insert_standard_odds_batch,
     insert_tk_coupled_batch,
     prepare_ch_coupled_rows,
     prepare_ks_coupled_rows,
@@ -138,10 +142,9 @@ class OptimizedDataImporter:
         """Add newly supported columns to existing standard-name tables."""
         from src.database.migration import migrate_table_if_needed, verify_table_schema
         from src.database.schema_jravan import JRAVAN_SCHEMAS
-        from src.database.table_mappings import JLTSQL_TO_JRAVAN
 
         for native_name in set(self._table_map.values()):
-            standard_name = JLTSQL_TO_JRAVAN.get(native_name, native_name)
+            standard_name = resolve_standard_table_name(self.database, native_name)
             schema_sql = JRAVAN_SCHEMAS.get(standard_name)
             if schema_sql and self.database.table_exists(standard_name):
                 migrate_table_if_needed(self.database, standard_name, schema_sql, commit=commit)
@@ -290,6 +293,26 @@ class OptimizedDataImporter:
                     if verify_mining_native_schema(self.database, record, table_name):
                         self._verified_mining_native_tables.add(table_name)
 
+                if _is_standard_odds_record_erase(record, table_name):
+                    pending = batch_buffers.setdefault(table_name, [])
+                    if pending:
+                        self._flush_batch_optimized(
+                            table_name,
+                            pending,
+                            commit_batch=auto_commit,
+                        )
+                        batch_buffers[table_name] = []
+                    delete_standard_odds_record(
+                        self.database,
+                        record,
+                        table_name,
+                        commit_batch=auto_commit,
+                    )
+                    self._records_imported += 1
+                    self._batches_processed += 1
+                    last_expanded_record_fingerprint = None
+                    continue
+
                 if _is_official_record_erase(record, table_name):
                     pending = batch_buffers.setdefault(table_name, [])
                     if pending:
@@ -353,6 +376,19 @@ class OptimizedDataImporter:
                     continue
 
                 if table_name in _TK_CHILD_STORAGE_TABLES:
+                    if table_name not in batch_buffers:
+                        batch_buffers[table_name] = []
+                    batch_buffers[table_name].append(record)
+                    if len(batch_buffers[table_name]) >= self.batch_size:
+                        self._flush_batch_optimized(
+                            table_name,
+                            batch_buffers[table_name],
+                            commit_batch=auto_commit,
+                        )
+                        batch_buffers[table_name] = []
+                    continue
+
+                if table_name in _STANDARD_ODDS_CONFIG_BY_OWNER:
                     if table_name not in batch_buffers:
                         batch_buffers[table_name] = []
                     batch_buffers[table_name].append(record)
@@ -507,6 +543,18 @@ class OptimizedDataImporter:
                 batch,
                 commit_batch=commit_batch,
                 optimized=True,
+            )
+            self._records_imported += rows
+            if rows:
+                self._batches_processed += 1
+            return
+
+        if table_name in _STANDARD_ODDS_CONFIG_BY_OWNER:
+            rows = insert_standard_odds_batch(
+                self.database,
+                table_name,
+                batch,
+                commit_batch=commit_batch,
             )
             self._records_imported += rows
             if rows:

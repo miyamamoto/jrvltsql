@@ -35,13 +35,23 @@ JRAVAN_TO_JLTSQL: Dict[str, str] = {
     "HARAI": "NL_HR",         # 払戻 (Refund)
     "JOCKEY_CHANGE": "NL_JC", # 騎手変更 (Jockey Change)
 
-    # オッズ (Odds)
-    "ODDS_TANPUKU": "NL_O1",  # 単複オッズ (Win/Place Odds)
-    "ODDS_UMAREN": "NL_O2",   # 馬連オッズ (Quinella Odds)
-    "ODDS_WIDE": "NL_O3",     # ワイドオッズ (Wide Odds)
-    "ODDS_UMATAN": "NL_O4",   # 馬単オッズ (Exacta Odds)
-    "ODDS_SANRENPUKU": "NL_O5", # 三連複オッズ (Trio Odds)
-    "ODDS_SANRENTAN": "NL_O6", # 三連単オッズ (Trifecta Odds)
+    # オッズ (Odds). One physical O1-O6 record owns a header plus one or
+    # more child tables. Keep every standard table addressable while preserving
+    # the long-standing public reverse mapping to its primary child table.
+    "ODDS_WAKU": "NL_O1",
+    "ODDS_TANPUKUWAKU_HEAD": "NL_O1",
+    "ODDS_TANPUKU": "NL_O1",
+    "ODDS_UMAREN_HEAD": "NL_O2",
+    "ODDS_UMAREN": "NL_O2",
+    "ODDS_WIDE_HEAD": "NL_O3",
+    "ODDS_WIDE": "NL_O3",
+    "ODDS_UMATAN_HEAD": "NL_O4",
+    "ODDS_UMATAN": "NL_O4",
+    "ODDS_SANREN_HEAD": "NL_O5",
+    "ODDS_SANREN": "NL_O5",
+    "ODDS_SANRENPUKU": "NL_O5",  # historical API alias (no physical table)
+    "ODDS_SANRENTAN_HEAD": "NL_O6",
+    "ODDS_SANRENTAN": "NL_O6",
 
     # 票数 (Vote Counts)
     "HYO_TANPUKU": "NL_H1",   # 単複票数 (Win/Place Votes)
@@ -132,6 +142,17 @@ RECORD_TYPE_TO_TABLE: Dict[str, str] = {
 # 逆マッピング: jrvltsqlテーブル名 → JRA-VAN標準名
 JLTSQL_TO_JRAVAN: Dict[str, str] = {
     v: k for k, v in JRAVAN_TO_JLTSQL.items()
+}
+
+# Importer-only physical-record owners for standard schemas that split one
+# normalized NL_O* stream across a header and one or more child tables.
+STANDARD_EXPANDED_RECORD_OWNER: dict[str, str] = {
+    "NL_O1": "ODDS_TANPUKUWAKU_HEAD",
+    "NL_O2": "ODDS_UMAREN_HEAD",
+    "NL_O3": "ODDS_WIDE_HEAD",
+    "NL_O4": "ODDS_UMATAN_HEAD",
+    "NL_O5": "ODDS_SANREN_HEAD",
+    "NL_O6": "ODDS_SANRENTAN_HEAD",
 }
 
 # テーブル名 → レコード種別コード逆マッピング

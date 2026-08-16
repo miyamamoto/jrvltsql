@@ -18,9 +18,15 @@ logger = get_logger(__name__)
 
 def resolve_standard_table_name(database: BaseDatabase, native_table_name: str) -> str:
     """Resolve a canonical standard table and reject unsupported legacy-only storage."""
-    from src.database.table_mappings import JLTSQL_TO_JRAVAN
+    from src.database.table_mappings import (
+        JLTSQL_TO_JRAVAN,
+        STANDARD_EXPANDED_RECORD_OWNER,
+    )
 
-    standard_name = JLTSQL_TO_JRAVAN.get(native_table_name, native_table_name)
+    standard_name = STANDARD_EXPANDED_RECORD_OWNER.get(
+        native_table_name,
+        JLTSQL_TO_JRAVAN.get(native_table_name, native_table_name),
+    )
     if (
         native_table_name == "NL_SK"
         and database.is_connected()
@@ -620,13 +626,58 @@ _OFFICIAL_ERASE_STORAGE_TABLES = {
     "HR": {"NL_HR", "RT_HR", "HARAI"},
     "H1": {"NL_H1", "RT_H1", "HYO_TANPUKU"},
     "H6": {"NL_H6", "RT_H6", "HYO_SANRENTAN"},
-    "O1": {"NL_O1", "RT_O1", "ODDS_TANPUKU"},
-    "O2": {"NL_O2", "RT_O2", "ODDS_UMAREN"},
-    "O3": {"NL_O3", "RT_O3", "ODDS_WIDE"},
-    "O4": {"NL_O4", "RT_O4", "ODDS_UMATAN"},
-    "O5": {"NL_O5", "RT_O5", "ODDS_SANRENPUKU"},
-    "O6": {"NL_O6", "RT_O6", "ODDS_SANRENTAN"},
+    "O1": {"NL_O1", "RT_O1", "ODDS_TANPUKUWAKU_HEAD"},
+    "O2": {"NL_O2", "RT_O2", "ODDS_UMAREN_HEAD"},
+    "O3": {"NL_O3", "RT_O3", "ODDS_WIDE_HEAD"},
+    "O4": {"NL_O4", "RT_O4", "ODDS_UMATAN_HEAD"},
+    "O5": {"NL_O5", "RT_O5", "ODDS_SANREN_HEAD"},
+    "O6": {"NL_O6", "RT_O6", "ODDS_SANRENTAN_HEAD"},
     "WF": {"NL_WF", "RT_WF", "WIN5"},
+}
+
+_STANDARD_ODDS_RACE_KEY_COLUMNS = _MINING_RACE_KEY_COLUMNS
+_STANDARD_ODDS_CONFIG: dict[str, dict[str, Any]] = {
+    "O1": {
+        "owner": "ODDS_TANPUKUWAKU_HEAD",
+        "children": {
+            "ODDS_TANPUKU": (*_STANDARD_ODDS_RACE_KEY_COLUMNS, "Umaban"),
+            "ODDS_WAKU": (*_STANDARD_ODDS_RACE_KEY_COLUMNS, "Kumi"),
+        },
+    },
+    "O2": {
+        "owner": "ODDS_UMAREN_HEAD",
+        "children": {
+            "ODDS_UMAREN": (*_STANDARD_ODDS_RACE_KEY_COLUMNS, "Kumi"),
+        },
+    },
+    "O3": {
+        "owner": "ODDS_WIDE_HEAD",
+        "children": {
+            "ODDS_WIDE": (*_STANDARD_ODDS_RACE_KEY_COLUMNS, "Kumi"),
+        },
+    },
+    "O4": {
+        "owner": "ODDS_UMATAN_HEAD",
+        "children": {
+            "ODDS_UMATAN": (*_STANDARD_ODDS_RACE_KEY_COLUMNS, "Kumi"),
+        },
+    },
+    "O5": {
+        "owner": "ODDS_SANREN_HEAD",
+        "children": {
+            "ODDS_SANREN": (*_STANDARD_ODDS_RACE_KEY_COLUMNS, "Kumi"),
+        },
+    },
+    "O6": {
+        "owner": "ODDS_SANRENTAN_HEAD",
+        "children": {
+            "ODDS_SANRENTAN": (*_STANDARD_ODDS_RACE_KEY_COLUMNS, "Kumi"),
+        },
+    },
+}
+_STANDARD_ODDS_CONFIG_BY_OWNER = {
+    config["owner"]: (record_type, config)
+    for record_type, config in _STANDARD_ODDS_CONFIG.items()
 }
 
 
@@ -666,6 +717,347 @@ def clean_record_metadata(record: dict) -> dict:
         cleaned["DataKubun"] = resolve_record_data_kubun(record)
     cleaned.pop("headDataKubun", None)
     return cleaned
+
+
+def _standard_odds_config(
+    record: dict,
+    table_name: str,
+) -> tuple[str, dict[str, Any]] | None:
+    """Resolve a split standard odds owner for one normalized parser row."""
+    configured = _STANDARD_ODDS_CONFIG_BY_OWNER.get(table_name)
+    if configured is None:
+        return None
+    record_type, config = configured
+    if _record_type_from_record(record) != record_type:
+        raise SchemaMigrationError(
+            f"{table_name} received a non-{record_type} standard odds row"
+        )
+    return record_type, config
+
+
+def verify_standard_odds_tables(
+    database: BaseDatabase,
+    owner_table_name: str,
+) -> tuple[str, dict[str, Any]]:
+    """Require every header/child table and add safe uniqueness indexes."""
+    configured = _STANDARD_ODDS_CONFIG_BY_OWNER.get(owner_table_name)
+    if configured is None:
+        raise SchemaMigrationError(
+            f"Unknown standard odds owner table: {owner_table_name}"
+        )
+
+    from src.database.migration import verify_table_schema
+    from src.database.schema_jravan import JRAVAN_SCHEMAS
+
+    record_type, config = configured
+    table_keys = {
+        owner_table_name: _STANDARD_ODDS_RACE_KEY_COLUMNS,
+        **config["children"],
+    }
+    for table_name, key_columns in table_keys.items():
+        schema_sql = JRAVAN_SCHEMAS.get(table_name)
+        if not schema_sql or not database.table_exists_strict(table_name):
+            raise SchemaMigrationError(
+                f"{record_type} standard odds import requires table {table_name}"
+            )
+        verify_table_schema(database, table_name, schema_sql)
+        index_name = f"jltsql_uq_{table_name.lower()}"
+        columns = ", ".join(key_columns)
+        try:
+            database.execute(
+                f"CREATE UNIQUE INDEX IF NOT EXISTS {index_name} "
+                f"ON {table_name} ({columns})"
+            )
+        except DatabaseError as error:
+            raise SchemaMigrationError(
+                f"{table_name} contains duplicate official keys; "
+                "deduplicate or rebuild it before standard odds import"
+            ) from error
+    return record_type, config
+
+
+def _standard_odds_header_source(record_type: str, record: dict) -> dict:
+    """Translate normalized parser header names to VB standard-schema names."""
+    source = clean_record_metadata(record)
+    source["HappyoTime"] = source.get("HassoTime")
+    if record_type == "O1":
+        source.update(
+            {
+                "TansyoFlag": source.get("TanFlag"),
+                "FukusyoFlag": source.get("FukuFlag"),
+                "FukuChakuBaraiKey": source.get("FukuChakubaraiKey"),
+                "TotalHyosuTansyo": source.get("TanVote"),
+                "TotalHyosuFukusyo": source.get("FukuVote"),
+                "TotalHyosuWakuren": source.get("WakurenVote"),
+            }
+        )
+    elif record_type == "O2":
+        source["TotalHyosuUmaren"] = source.get("Vote")
+    elif record_type == "O3":
+        source["TotalHyosuWide"] = source.get("Vote")
+    elif record_type == "O4":
+        source["TotalHyosuUmatan"] = source.get("Vote")
+    elif record_type == "O5":
+        source["SanrenFlag"] = source.get("SanrenpukuFlag")
+        source["TotalHyosuSanren"] = source.get("Vote")
+    elif record_type == "O6":
+        source["TotalHyosuSanrentan"] = source.get("Vote")
+    return source
+
+
+def prepare_standard_odds_record(
+    record: dict,
+    owner_table_name: str,
+) -> tuple[dict, str | None, dict | None]:
+    """Build one standard header and at most one routed child row."""
+    configured = _standard_odds_config(record, owner_table_name)
+    if configured is None:
+        raise SchemaMigrationError(
+            f"{owner_table_name} is not a standard odds owner table"
+        )
+    record_type, config = configured
+    source = _standard_odds_header_source(record_type, record)
+    header = convert_record_types(source, owner_table_name)
+    missing_header_key = [
+        column
+        for column in _STANDARD_ODDS_RACE_KEY_COLUMNS
+        if header.get(column) in (None, "")
+    ]
+    if missing_header_key:
+        raise SchemaMigrationError(
+            f"{record_type} standard odds header has incomplete key: "
+            f"{missing_header_key}"
+        )
+
+    if resolve_record_data_kubun(record) == "0":
+        return header, None, None
+
+    child_source = {
+        column: source.get(column)
+        for column in ("MakeDate", *_STANDARD_ODDS_RACE_KEY_COLUMNS)
+    }
+    child_table: str | None = None
+    if record_type == "O1":
+        umaban = str(source.get("Umaban") or "").strip()
+        kumi = str(source.get("Kumi") or "").strip()
+        if umaban.strip("0"):
+            child_table = "ODDS_TANPUKU"
+            child_source.update(
+                {
+                    "Umaban": source.get("Umaban"),
+                    "TanOdds": source.get("TanOdds"),
+                    "TanNinki": source.get("TanNinki"),
+                    "FukuOddsLow": source.get("FukuOddsLow"),
+                    "FukuOddsHigh": source.get("FukuOddsHigh"),
+                    "FukuNinki": source.get("FukuNinki"),
+                }
+            )
+        elif kumi and kumi != "00":
+            child_table = "ODDS_WAKU"
+            child_source.update(
+                {
+                    "Kumi": source.get("Kumi"),
+                    "Odds": source.get("WakurenOdds"),
+                    "Ninki": source.get("WakurenNinki"),
+                }
+            )
+    else:
+        kumi = str(source.get("Kumi") or "").strip()
+        if kumi:
+            child_table = next(iter(config["children"]))
+            child_source["Kumi"] = source.get("Kumi")
+            if record_type == "O3":
+                child_source.update(
+                    {
+                        "OddsLow": source.get("OddsLow"),
+                        "OddsHigh": source.get("OddsHigh"),
+                        "Ninki": source.get("Ninki"),
+                    }
+                )
+            else:
+                child_source.update(
+                    {
+                        "Odds": source.get("Odds"),
+                        "Ninki": source.get("Ninki"),
+                    }
+                )
+
+    if child_table is None:
+        return header, None, None
+    child = convert_record_types(child_source, child_table)
+    child_keys = config["children"][child_table]
+    missing_child_key = [
+        column for column in child_keys if child.get(column) in (None, "")
+    ]
+    if missing_child_key:
+        raise SchemaMigrationError(
+            f"{record_type} standard odds child has incomplete key: "
+            f"{missing_child_key}"
+        )
+    return header, child_table, child
+
+
+def _upsert_rows_by_official_key(
+    database: BaseDatabase,
+    table_name: str,
+    rows: list[dict],
+    key_columns: tuple[str, ...],
+    *,
+    preserve_existing_on_null: bool = False,
+) -> int:
+    """Upsert partial standard rows against an additive unique index."""
+    grouped_rows: dict[tuple[str, ...], list[tuple]] = {}
+    for row in rows:
+        if preserve_existing_on_null:
+            row = {
+                column: value
+                for column, value in row.items()
+                if column in key_columns or value is not None
+            }
+        columns = tuple(row)
+        grouped_rows.setdefault(columns, []).append(
+            tuple(row[column] for column in columns)
+        )
+
+    total = 0
+    for columns, parameter_rows in grouped_rows.items():
+        placeholders = ", ".join("?" for _ in columns)
+        conflict_columns = ", ".join(key_columns)
+        update_columns = [column for column in columns if column not in key_columns]
+        if update_columns:
+            updates = ", ".join(
+                f"{column} = EXCLUDED.{column}" for column in update_columns
+            )
+            conflict_action = f"DO UPDATE SET {updates}"
+        else:
+            conflict_action = "DO NOTHING"
+        sql = (
+            f"INSERT INTO {table_name} ({', '.join(columns)}) "
+            f"VALUES ({placeholders}) ON CONFLICT ({conflict_columns}) "
+            f"{conflict_action}"
+        )
+        database.executemany(sql, parameter_rows)
+        total += len(parameter_rows)
+    return total
+
+
+def _rollback_coupled_odds(database: BaseDatabase) -> None:
+    try:
+        database.rollback()
+    except DatabaseError:
+        try:
+            database.invalidate_connection()
+        except Exception as invalidation_error:
+            logger.error(
+                "Failed to invalidate database after standard odds rollback failure",
+                error=str(invalidation_error),
+            )
+        raise
+
+
+def insert_standard_odds_batch(
+    database: BaseDatabase,
+    owner_table_name: str,
+    records: list[dict],
+    *,
+    commit_batch: bool,
+) -> int:
+    """Atomically materialize split standard odds headers and children."""
+    if not records:
+        return 0
+    try:
+        if commit_batch:
+            database.begin_transaction()
+        _, config = verify_standard_odds_tables(database, owner_table_name)
+        header_by_key: dict[tuple, dict] = {}
+        child_by_table: dict[str, dict[tuple, dict]] = {
+            table_name: {} for table_name in config["children"]
+        }
+        for record in records:
+            header, child_table, child = prepare_standard_odds_record(
+                record,
+                owner_table_name,
+            )
+            if header.get("DataKubun") == "0":
+                raise SchemaMigrationError(
+                    "standard odds erase must be applied at the physical-record boundary"
+                )
+            header_key = tuple(
+                header[column] for column in _STANDARD_ODDS_RACE_KEY_COLUMNS
+            )
+            existing_header = header_by_key.get(header_key)
+            if existing_header is None:
+                header_by_key[header_key] = header
+            else:
+                existing_header.update(
+                    {
+                        column: value
+                        for column, value in header.items()
+                        if value is not None
+                    }
+                )
+            if child_table is not None and child is not None:
+                child_keys = config["children"][child_table]
+                child_key = tuple(child[column] for column in child_keys)
+                child_by_table[child_table][child_key] = child
+
+        _upsert_rows_by_official_key(
+            database,
+            owner_table_name,
+            list(header_by_key.values()),
+            _STANDARD_ODDS_RACE_KEY_COLUMNS,
+            preserve_existing_on_null=True,
+        )
+        for child_table, keyed_rows in child_by_table.items():
+            _upsert_rows_by_official_key(
+                database,
+                child_table,
+                list(keyed_rows.values()),
+                config["children"][child_table],
+            )
+        if commit_batch:
+            database.commit()
+        return len(records)
+    except (DatabaseError, SchemaMigrationError):
+        _rollback_coupled_odds(database)
+        raise
+
+
+def delete_standard_odds_record(
+    database: BaseDatabase,
+    record: dict,
+    owner_table_name: str,
+    *,
+    commit_batch: bool,
+) -> int:
+    """Atomically erase a complete split standard odds physical record."""
+    if resolve_record_data_kubun(record) != "0":
+        raise SchemaMigrationError("standard odds physical erase requires DataKubun=0")
+    try:
+        if commit_batch:
+            database.begin_transaction()
+        _, config = verify_standard_odds_tables(database, owner_table_name)
+        header, _, _ = prepare_standard_odds_record(record, owner_table_name)
+        where = " AND ".join(
+            f"{column} = ?" for column in _STANDARD_ODDS_RACE_KEY_COLUMNS
+        )
+        values = tuple(
+            header[column] for column in _STANDARD_ODDS_RACE_KEY_COLUMNS
+        )
+        deleted = 0
+        for table_name in (*config["children"], owner_table_name):
+            deleted += max(database.execute(f"DELETE FROM {table_name} WHERE {where}", values), 0)
+        if commit_batch:
+            database.commit()
+        return deleted
+    except (DatabaseError, SchemaMigrationError):
+        _rollback_coupled_odds(database)
+        raise
+
+
+def _is_standard_odds_record_erase(record: dict, table_name: str) -> bool:
+    configured = _standard_odds_config(record, table_name)
+    return configured is not None and resolve_record_data_kubun(record) == "0"
 
 
 def _is_official_record_erase(record: dict, table_name: str) -> bool:
@@ -1567,9 +1959,15 @@ class DataImporter:
 
     @staticmethod
     def _get_table_name_for_native(table_name: str) -> str:
-        from src.database.table_mappings import JLTSQL_TO_JRAVAN
+        from src.database.table_mappings import (
+            JLTSQL_TO_JRAVAN,
+            STANDARD_EXPANDED_RECORD_OWNER,
+        )
 
-        return JLTSQL_TO_JRAVAN.get(table_name, table_name)
+        return STANDARD_EXPANDED_RECORD_OWNER.get(
+            table_name,
+            JLTSQL_TO_JRAVAN.get(table_name, table_name),
+        )
 
     def _get_table_name(self, record_type: str) -> Optional[str]:
         """Get table name for record type.
@@ -1696,6 +2094,22 @@ class DataImporter:
                     if verify_mining_native_schema(self.database, record, table_name):
                         self._verified_mining_native_tables.add(table_name)
 
+                if _is_standard_odds_record_erase(record, table_name):
+                    pending = batch_buffers.setdefault(table_name, [])
+                    if pending:
+                        self._flush_batch(table_name, pending, auto_commit)
+                        batch_buffers[table_name] = []
+                    delete_standard_odds_record(
+                        self.database,
+                        record,
+                        table_name,
+                        commit_batch=auto_commit,
+                    )
+                    self._records_imported += 1
+                    self._batches_processed += 1
+                    last_expanded_record_fingerprint = None
+                    continue
+
                 if _is_official_record_erase(record, table_name):
                     pending = batch_buffers.setdefault(table_name, [])
                     if pending:
@@ -1806,6 +2220,18 @@ class DataImporter:
         if table_name not in self._verified_ys_tables:
             if verify_ys_storage_schema(self.database, table_name):
                 self._verified_ys_tables.add(table_name)
+
+        if table_name in _STANDARD_ODDS_CONFIG_BY_OWNER:
+            rows = insert_standard_odds_batch(
+                self.database,
+                table_name,
+                batch,
+                commit_batch=auto_commit,
+            )
+            self._records_imported += rows
+            if rows:
+                self._batches_processed += 1
+            return
 
         if table_name in _TK_CHILD_STORAGE_TABLES:
             header_table = self._verified_tk_header_tables.get(table_name)
@@ -2132,6 +2558,16 @@ class DataImporter:
             if table_name not in self._verified_mining_native_tables:
                 if verify_mining_native_schema(self.database, record, table_name):
                     self._verified_mining_native_tables.add(table_name)
+            if _is_standard_odds_record_erase(record, table_name):
+                delete_standard_odds_record(
+                    self.database,
+                    record,
+                    table_name,
+                    commit_batch=auto_commit,
+                )
+                self._records_imported += 1
+                self._batches_processed += 1
+                return True
             if _is_official_record_erase(record, table_name):
                 _delete_official_record(self.database, record, table_name)
                 self._records_imported += 1
@@ -2159,6 +2595,17 @@ class DataImporter:
                 self._records_imported += rows
                 self._batches_processed += 1
                 return True
+            if table_name in _STANDARD_ODDS_CONFIG_BY_OWNER:
+                rows = insert_standard_odds_batch(
+                    self.database,
+                    table_name,
+                    [record],
+                    commit_batch=auto_commit,
+                )
+                self._records_imported += rows
+                if rows:
+                    self._batches_processed += 1
+                return rows == 1
             clean_record = self._record_for_table(record, table_name)
             converted_record = self._convert_record(clean_record, table_name)
             if (
