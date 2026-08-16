@@ -113,6 +113,8 @@ def _slice_call(
     loop_variable: str | None = None,
 ) -> dict[str, Any]:
     environment_zero = {loop_variable: 0} if loop_variable else {}
+    if isinstance(expression, ast.Call) and expression.keywords:
+        raise OracleExtractionError("field call keyword arguments are outside the reviewed grammar")
 
     if (
         isinstance(expression, ast.Call)
@@ -136,6 +138,10 @@ def _slice_call(
         and len(expression.args) == 1
     ):
         inner = expression.args[0]
+        if isinstance(inner, ast.Call) and inner.keywords:
+            raise OracleExtractionError(
+                "slice call keyword arguments are outside the reviewed grammar"
+            )
         if not (
             isinstance(inner, ast.Call)
             and isinstance(inner.func, ast.Name)
@@ -192,6 +198,10 @@ def _field(expression: ast.expr, name: str) -> dict[str, Any]:
     if generator.ifs or generator.is_async or not isinstance(generator.target, ast.Name):
         raise OracleExtractionError(f"unsupported repeat generator: {name}")
     iterator = generator.iter
+    if isinstance(iterator, ast.Call) and iterator.keywords:
+        raise OracleExtractionError(
+            f"{name}: range keyword arguments are outside the reviewed grammar"
+        )
     if not (
         isinstance(iterator, ast.Call)
         and isinstance(iterator.func, ast.Name)
@@ -372,11 +382,19 @@ def _validate_manifest(manifest: Any) -> list[str]:
     errors: list[str] = []
     if not isinstance(manifest, dict):
         return ["manifest:not-an-object"]
-    if manifest.get("manifest_schema_version") != MANIFEST_SCHEMA_VERSION:
+    manifest_schema_version = manifest.get("manifest_schema_version")
+    if (
+        not _plain_integer(manifest_schema_version)
+        or manifest_schema_version != MANIFEST_SCHEMA_VERSION
+    ):
         errors.append("manifest:unsupported-schema-version")
 
     source = manifest.get("source")
-    if not isinstance(source, dict) or not SHA256_PATTERN.fullmatch(str(source.get("sha256", ""))):
+    if (
+        not isinstance(source, dict)
+        or not isinstance(source.get("sha256"), str)
+        or not SHA256_PATTERN.fullmatch(source["sha256"])
+    ):
         errors.append("source:invalid-sha256")
     if (
         not isinstance(source, dict)

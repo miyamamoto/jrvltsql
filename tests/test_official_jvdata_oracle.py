@@ -229,6 +229,14 @@ def _empty_oracle(manifest):
             "source:invalid-sha256",
         ),
         (
+            _set(("source", "sha256"), int("1" * 64)),
+            "source:invalid-sha256",
+        ),
+        (
+            _set(("manifest_schema_version",), True),
+            "manifest:unsupported-schema-version",
+        ),
+        (
             _set(("source", "artifact"), ""),
             "source:artifact-missing",
         ),
@@ -437,6 +445,29 @@ class JV_ZZ_ROOT:
             RECORD_ID.SetDataB(MidB2B(b, 1, 11)),
             extra=MidB2S(b, 12, 1),
         )
+"""
+
+    with pytest.raises(
+        OracleExtractionError,
+        match="keyword arguments are outside the reviewed grammar",
+    ):
+        extract_manifest_from_source(
+            source,
+            artifact="synthetic oracle unit fixture",
+            jvdata_version="test",
+        )
+
+
+def test_extractor_rejects_slice_keyword_arguments():
+    source = """
+from dataclasses import dataclass
+
+@dataclass
+class Scalar:
+    value: str
+    @classmethod
+    def SetDataB(cls, b):
+        return cls(MidB2S(b, 1, 1, unexpected=True))
 """
 
     with pytest.raises(

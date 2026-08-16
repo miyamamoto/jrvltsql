@@ -933,6 +933,21 @@
   review evidence. Resume that session against the final pushed full SHA after
   the 01:10 JST reset and do not merge PR #194 before its grouped critical
   review is complete.
+- A final Codex fail-open pass after the first review repair found that Python
+  equality allowed Boolean `manifest_schema_version` to impersonate integer
+  version 1, source SHA validation stringified a non-string 64-digit integer,
+  and field decoder calls could silently ignore unreviewed keyword arguments.
+  The three new tests produced the required red result of 3 failed and 34
+  passed on candidate `3f3905666248776565bc8cb7fdbebafadcd009f7` before the
+  implementation changed.
+- Manifest validation now requires the schema version to be a non-Boolean
+  integer and the source SHA-256 to be a lowercase 64-character string. The
+  extractor rejects keywords on scalar/nested slice calls and repeat `range`
+  calls, including nested slice calls, so a newly introduced argument cannot
+  be silently discarded. The paired oracle module is 37 passed. Regeneration
+  from the exact official source still expands 38 records, 94 structures, and
+  46,985 leaves and remains byte-for-byte identical with SHA-256
+  `437a21ea582315f807609dbee809c581518b31d6b48bddc96fd57b92c84e366a`.
 - Known findings remain release blockers rather than oracle exceptions: HY
   field/primary-key semantics, CK omitted repeats, six standard-schema storage
   routes, schema metadata integrity, obsolete routes, and strict fresh
