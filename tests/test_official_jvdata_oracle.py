@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
 
 from scripts.official_jvdata_oracle import (
+    OracleExtractionError,
     extract_manifest_from_source,
     load_manifest,
     validate_manifest,
@@ -29,6 +31,60 @@ def _valid_manifest() -> dict:
             "sha256": "a" * 64,
         },
         "structures": {
+            "YMD": {
+                "width": 8,
+                "expanded_leaf_count": 3,
+                "fields": [
+                    {
+                        "name": "Year",
+                        "kind": "scalar",
+                        "start": 1,
+                        "width": 4,
+                        "decoder": "text",
+                    },
+                    {
+                        "name": "Month",
+                        "kind": "scalar",
+                        "start": 5,
+                        "width": 2,
+                        "decoder": "text",
+                    },
+                    {
+                        "name": "Day",
+                        "kind": "scalar",
+                        "start": 7,
+                        "width": 2,
+                        "decoder": "text",
+                    },
+                ],
+            },
+            "RECORD_ID": {
+                "width": 11,
+                "expanded_leaf_count": 5,
+                "fields": [
+                    {
+                        "name": "RecordSpec",
+                        "kind": "scalar",
+                        "start": 1,
+                        "width": 2,
+                        "decoder": "text",
+                    },
+                    {
+                        "name": "DataKubun",
+                        "kind": "scalar",
+                        "start": 3,
+                        "width": 1,
+                        "decoder": "text",
+                    },
+                    {
+                        "name": "MakeDate",
+                        "kind": "nested",
+                        "start": 4,
+                        "width": 8,
+                        "struct": "YMD",
+                    },
+                ],
+            },
             "Child": {
                 "width": 2,
                 "expanded_leaf_count": 1,
@@ -43,20 +99,20 @@ def _valid_manifest() -> dict:
                 ],
             },
             "JV_ZZ_ROOT": {
-                "width": 6,
-                "expanded_leaf_count": 3,
+                "width": 15,
+                "expanded_leaf_count": 7,
                 "fields": [
                     {
                         "name": "head",
                         "kind": "nested",
                         "start": 1,
-                        "width": 2,
-                        "struct": "Child",
+                        "width": 11,
+                        "struct": "RECORD_ID",
                     },
                     {
                         "name": "values",
                         "kind": "repeat",
-                        "start": 3,
+                        "start": 12,
                         "width": 2,
                         "stride": 2,
                         "count": 2,
@@ -66,12 +122,12 @@ def _valid_manifest() -> dict:
                 ],
             },
         },
-        "root_records": {"ZZ": {"struct": "JV_ZZ_ROOT", "length": 6}},
+        "root_records": {"ZZ": {"struct": "JV_ZZ_ROOT", "length": 15}},
         "summary": {
-            "structure_count": 2,
+            "structure_count": 4,
             "repeat_template_count": 1,
             "root_record_count": 1,
-            "expanded_leaf_count": 3,
+            "expanded_leaf_count": 7,
         },
     }
 
@@ -101,6 +157,15 @@ def _point_root_at_non_root_child(manifest):
     manifest["summary"]["expanded_leaf_count"] = 1
 
 
+def _point_root_at_prefixed_scalar_head(manifest):
+    fake_root = deepcopy(manifest["structures"]["Child"])
+    fake_root["fields"][0]["name"] = "head"
+    manifest["structures"]["JV_ZZ_CHILD"] = fake_root
+    manifest["root_records"]["ZZ"] = {"struct": "JV_ZZ_CHILD", "length": 2}
+    manifest["summary"]["structure_count"] = 5
+    manifest["summary"]["expanded_leaf_count"] = 1
+
+
 def _remove_child_decoder(manifest):
     manifest["structures"]["Child"]["fields"][0].pop("decoder")
 
@@ -113,8 +178,12 @@ def _make_repeat_nested_without_target(manifest):
     field = manifest["structures"]["JV_ZZ_ROOT"]["fields"][1]
     field.pop("decoder")
     field["element_kind"] = "nested"
-    manifest["structures"]["JV_ZZ_ROOT"]["expanded_leaf_count"] = 1
-    manifest["summary"]["expanded_leaf_count"] = 1
+    manifest["structures"]["JV_ZZ_ROOT"]["expanded_leaf_count"] = 5
+    manifest["summary"]["expanded_leaf_count"] = 5
+
+
+def _corrupt_record_header_semantics(manifest):
+    manifest["structures"]["RECORD_ID"]["fields"][1]["name"] = "WrongKubun"
 
 
 def _empty_oracle(manifest):
@@ -131,10 +200,13 @@ def _empty_oracle(manifest):
 @pytest.mark.parametrize(
     ("mutate", "expected_error"),
     [
-        (_set(("structures", "JV_ZZ_ROOT", "fields", 1, "start"), 4), "JV_ZZ_ROOT:gap:3"),
         (
-            _set(("structures", "JV_ZZ_ROOT", "fields", 1, "start"), 2),
-            "JV_ZZ_ROOT:overlap:2",
+            _set(("structures", "JV_ZZ_ROOT", "fields", 1, "start"), 15),
+            "JV_ZZ_ROOT:gap:12-14",
+        ),
+        (
+            _set(("structures", "JV_ZZ_ROOT", "fields", 1, "start"), 11),
+            "JV_ZZ_ROOT:overlap:11",
         ),
         (
             _set(("structures", "JV_ZZ_ROOT", "fields", 1, "count"), 0),
@@ -146,11 +218,11 @@ def _empty_oracle(manifest):
         ),
         (
             _set(("structures", "JV_ZZ_ROOT", "fields", 0, "width"), 1),
-            "JV_ZZ_ROOT.head:nested-width-mismatch:1!=2",
+            "JV_ZZ_ROOT.head:nested-width-mismatch:1!=11",
         ),
         (
             _set(("summary", "expanded_leaf_count"), 2),
-            "summary:expanded-leaf-count:2!=3",
+            "summary:expanded-leaf-count:2!=7",
         ),
         (
             _set(("source", "sha256"), "not-a-sha256"),
@@ -205,6 +277,14 @@ def _empty_oracle(manifest):
             "root:ZZ:structure-name-mismatch:Child",
         ),
         (
+            _point_root_at_prefixed_scalar_head,
+            "root:ZZ:invalid-head-contract:JV_ZZ_CHILD",
+        ),
+        (
+            _corrupt_record_header_semantics,
+            "record-header:invalid-record-id",
+        ),
+        (
             _empty_oracle,
             "structures:empty",
         ),
@@ -230,6 +310,32 @@ def test_extractor_understands_scalar_nested_and_repeat_templates():
 from dataclasses import dataclass
 
 @dataclass
+class YMD:
+    Year: str
+    Month: str
+    Day: str
+    @classmethod
+    def SetDataB(cls, b):
+        return cls(
+            MidB2S(b, 1, 4),
+            MidB2S(b, 5, 2),
+            MidB2S(b, 7, 2),
+        )
+
+@dataclass
+class RECORD_ID:
+    RecordSpec: str
+    DataKubun: str
+    MakeDate: YMD
+    @classmethod
+    def SetDataB(cls, b):
+        return cls(
+            MidB2S(b, 1, 2),
+            MidB2S(b, 3, 1),
+            YMD.SetDataB(MidB2B(b, 4, 8)),
+        )
+
+@dataclass
 class Child:
     value: str
     @classmethod
@@ -238,13 +344,13 @@ class Child:
 
 @dataclass
 class JV_ZZ_ROOT:
-    head: Child
+    head: RECORD_ID
     values: list[str]
     @classmethod
     def SetDataB(cls, b):
         return cls(
-            Child.SetDataB(MidB2B(b, 1, 2)),
-            [MidB2S(b, 3 + 2 * i, 2) for i in range(2)],
+            RECORD_ID.SetDataB(MidB2B(b, 1, 11)),
+            [MidB2S(b, 12 + 2 * i, 2) for i in range(2)],
         )
 """
 
@@ -255,18 +361,93 @@ class JV_ZZ_ROOT:
     )
 
     assert validate_manifest(manifest) == []
-    assert manifest["root_records"] == {"ZZ": {"struct": "JV_ZZ_ROOT", "length": 6}}
+    assert manifest["root_records"] == {"ZZ": {"struct": "JV_ZZ_ROOT", "length": 15}}
     assert manifest["summary"] == _valid_manifest()["summary"]
     assert manifest["structures"]["JV_ZZ_ROOT"]["fields"][1] == {
         "name": "values",
         "kind": "repeat",
-        "start": 3,
+        "start": 12,
         "width": 2,
         "stride": 2,
         "count": 2,
         "element_kind": "scalar",
         "decoder": "text",
     }
+
+
+@pytest.mark.parametrize(
+    ("start_expression", "width_expression", "error"),
+    (
+        ("12 + i * i", "1", "non-affine repeat offset"),
+        ("12 + 2 * i", "2 + i", "repeat width depends on loop variable"),
+    ),
+)
+def test_extractor_rejects_non_affine_repeat_layouts(
+    start_expression,
+    width_expression,
+    error,
+):
+    source = f"""
+from dataclasses import dataclass
+
+@dataclass
+class RECORD_ID:
+    value: bytes
+    @classmethod
+    def SetDataB(cls, b):
+        return cls(MidB2B(b, 1, 11))
+
+@dataclass
+class JV_ZZ_ROOT:
+    head: RECORD_ID
+    values: list[str]
+    @classmethod
+    def SetDataB(cls, b):
+        return cls(
+            RECORD_ID.SetDataB(MidB2B(b, 1, 11)),
+            [MidB2S(b, {start_expression}, {width_expression}) for i in range(3)],
+        )
+"""
+
+    with pytest.raises(OracleExtractionError, match=error):
+        extract_manifest_from_source(
+            source,
+            artifact="synthetic oracle unit fixture",
+            jvdata_version="test",
+        )
+
+
+def test_extractor_rejects_constructor_keyword_arguments():
+    source = """
+from dataclasses import dataclass
+
+@dataclass
+class RECORD_ID:
+    value: bytes
+    @classmethod
+    def SetDataB(cls, b):
+        return cls(MidB2B(b, 1, 11))
+
+@dataclass
+class JV_ZZ_ROOT:
+    head: RECORD_ID
+    @classmethod
+    def SetDataB(cls, b):
+        return cls(
+            RECORD_ID.SetDataB(MidB2B(b, 1, 11)),
+            extra=MidB2S(b, 12, 1),
+        )
+"""
+
+    with pytest.raises(
+        OracleExtractionError,
+        match="keyword arguments are outside the reviewed grammar",
+    ):
+        extract_manifest_from_source(
+            source,
+            artifact="synthetic oracle unit fixture",
+            jvdata_version="test",
+        )
 
 
 def test_tracked_official_manifest_is_complete_and_matches_dispatch():
@@ -320,11 +501,18 @@ def test_official_hy_and_ck_sentinels_cannot_follow_current_implementation_drift
     }
 
 
+def _assert_history_cardinality(history):
+    assert len(history["sources"]) == 2
+    assert len(history["physical_length_changes"]) == 10
+    assert len(history["same_length_semantic_changes"]) == 1
+
+
 def test_official_layout_history_is_provenanced_and_continuous_to_current():
     history = json.loads(HISTORY_PATH.read_text(encoding="utf-8"))
     current = load_manifest(MANIFEST_PATH)
 
     assert history["ledger_schema_version"] == 1
+    _assert_history_cardinality(history)
     assert {(source["jvdata_version"], source["sha256"]) for source in history["sources"]} == {
         (
             "4.8.0.2",
@@ -384,3 +572,20 @@ def test_official_layout_history_is_provenanced_and_continuous_to_current():
     assert um_fields["BameiEng"] == (119, 60)
     assert um_fields["ZaikyuFlag"] == (179, 1)
     assert um_fields["Reserved"] == (180, 19)
+
+
+@pytest.mark.parametrize(
+    ("collection", "expected_count"),
+    (
+        ("sources", 2),
+        ("physical_length_changes", 10),
+        ("same_length_semantic_changes", 1),
+    ),
+)
+def test_history_contract_rejects_duplicate_entries(collection, expected_count):
+    history = json.loads(HISTORY_PATH.read_text(encoding="utf-8"))
+    history[collection].append(deepcopy(history[collection][0]))
+
+    assert len(history[collection]) == expected_count + 1
+    with pytest.raises(AssertionError):
+        _assert_history_cardinality(history)

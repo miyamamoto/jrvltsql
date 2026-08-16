@@ -20,6 +20,34 @@ from typing import Any
 
 MANIFEST_SCHEMA_VERSION = 1
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
+OFFICIAL_YMD_FIELDS = [
+    {"name": "Year", "kind": "scalar", "start": 1, "width": 4, "decoder": "text"},
+    {"name": "Month", "kind": "scalar", "start": 5, "width": 2, "decoder": "text"},
+    {"name": "Day", "kind": "scalar", "start": 7, "width": 2, "decoder": "text"},
+]
+OFFICIAL_RECORD_ID_FIELDS = [
+    {
+        "name": "RecordSpec",
+        "kind": "scalar",
+        "start": 1,
+        "width": 2,
+        "decoder": "text",
+    },
+    {
+        "name": "DataKubun",
+        "kind": "scalar",
+        "start": 3,
+        "width": 1,
+        "decoder": "text",
+    },
+    {
+        "name": "MakeDate",
+        "kind": "nested",
+        "start": 4,
+        "width": 8,
+        "struct": "YMD",
+    },
+]
 
 
 class OracleExtractionError(ValueError):
@@ -46,13 +74,45 @@ def _integer(expression: ast.expr, environment: dict[str, int] | None = None) ->
     raise OracleExtractionError(f"unsupported integer expression: {ast.unparse(expression)}")
 
 
+def _affine_integer(expression: ast.expr, variable: str) -> tuple[int, int]:
+    """Return the constant and coefficient for a reviewed affine expression."""
+
+    if isinstance(expression, ast.Constant) and isinstance(expression.value, int):
+        return expression.value, 0
+    if isinstance(expression, ast.Name) and expression.id == variable:
+        return 0, 1
+    if isinstance(expression, ast.UnaryOp) and isinstance(expression.op, ast.USub):
+        constant, coefficient = _affine_integer(expression.operand, variable)
+        return -constant, -coefficient
+    if isinstance(expression, ast.BinOp):
+        left_constant, left_coefficient = _affine_integer(expression.left, variable)
+        right_constant, right_coefficient = _affine_integer(expression.right, variable)
+        if isinstance(expression.op, ast.Add):
+            return (
+                left_constant + right_constant,
+                left_coefficient + right_coefficient,
+            )
+        if isinstance(expression.op, ast.Sub):
+            return (
+                left_constant - right_constant,
+                left_coefficient - right_coefficient,
+            )
+        if isinstance(expression.op, ast.Mult):
+            if left_coefficient and right_coefficient:
+                raise OracleExtractionError(f"non-affine expression: {ast.unparse(expression)}")
+            return (
+                left_constant * right_constant,
+                left_constant * right_coefficient + left_coefficient * right_constant,
+            )
+    raise OracleExtractionError(f"non-affine expression: {ast.unparse(expression)}")
+
+
 def _slice_call(
     expression: ast.expr,
     *,
     loop_variable: str | None = None,
 ) -> dict[str, Any]:
     environment_zero = {loop_variable: 0} if loop_variable else {}
-    environment_one = {loop_variable: 1} if loop_variable else {}
 
     if (
         isinstance(expression, ast.Call)
@@ -61,10 +121,11 @@ def _slice_call(
         and len(expression.args) == 3
     ):
         start_expression = expression.args[1]
+        width_expression = expression.args[2]
         result = {
             "kind": "scalar",
             "start": _integer(start_expression, environment_zero),
-            "width": _integer(expression.args[2], environment_zero),
+            "width": _integer(width_expression, environment_zero),
             "decoder": "text" if expression.func.id == "MidB2S" else "bytes",
         }
     elif (
@@ -85,19 +146,39 @@ def _slice_call(
                 f"nested structure without MidB2B: {ast.unparse(expression)}"
             )
         start_expression = inner.args[1]
+        width_expression = inner.args[2]
         result = {
             "kind": "nested",
             "start": _integer(start_expression, environment_zero),
-            "width": _integer(inner.args[2], environment_zero),
+            "width": _integer(width_expression, environment_zero),
             "struct": expression.func.value.id,
         }
     else:
         raise OracleExtractionError(f"unsupported field expression: {ast.unparse(expression)}")
 
     if loop_variable:
-        result["stride"] = _integer(start_expression, environment_one) - _integer(
-            start_expression, environment_zero
-        )
+        try:
+            start, stride = _affine_integer(start_expression, loop_variable)
+        except OracleExtractionError as exc:
+            raise OracleExtractionError(
+                f"non-affine repeat offset: {ast.unparse(start_expression)}"
+            ) from exc
+        try:
+            width, width_coefficient = _affine_integer(
+                width_expression,
+                loop_variable,
+            )
+        except OracleExtractionError as exc:
+            raise OracleExtractionError(
+                f"non-affine repeat width: {ast.unparse(width_expression)}"
+            ) from exc
+        if width_coefficient:
+            raise OracleExtractionError(
+                "repeat width depends on loop variable: " f"{ast.unparse(width_expression)}"
+            )
+        result["start"] = start
+        result["width"] = width
+        result["stride"] = stride
     return result
 
 
@@ -209,6 +290,10 @@ def extract_manifest_from_source(
         if not annotations:
             continue
         constructor = _set_data_return(class_node)
+        if constructor.keywords:
+            raise OracleExtractionError(
+                f"{class_node.name}: keyword arguments are outside the reviewed grammar"
+            )
         if len(annotations) != len(constructor.args):
             raise OracleExtractionError(
                 f"{class_node.name}: {len(annotations)} fields != {len(constructor.args)} values"
@@ -319,6 +404,20 @@ def _validate_manifest(manifest: Any) -> list[str]:
         errors.append("structures:empty")
     if not root_records:
         errors.append("root-records:empty")
+    ymd = structures.get("YMD")
+    if (
+        not isinstance(ymd, dict)
+        or ymd.get("width") != 8
+        or ymd.get("fields") != OFFICIAL_YMD_FIELDS
+    ):
+        errors.append("record-header:invalid-ymd")
+    record_id = structures.get("RECORD_ID")
+    if (
+        not isinstance(record_id, dict)
+        or record_id.get("width") != 11
+        or record_id.get("fields") != OFFICIAL_RECORD_ID_FIELDS
+    ):
+        errors.append("record-header:invalid-record-id")
 
     calculated_repeat_count = 0
     for structure_name, structure in structures.items():
@@ -410,12 +509,12 @@ def _validate_manifest(manifest: Any) -> list[str]:
         cursor = 1
         for start, end in sorted(intervals):
             if start > cursor:
-                errors.extend(f"{structure_name}:gap:{byte}" for byte in range(cursor, start))
+                errors.append(f"{structure_name}:gap:{cursor}-{start - 1}")
             elif start < cursor:
                 errors.append(f"{structure_name}:overlap:{start}")
             cursor = max(cursor, end + 1)
         if cursor <= width:
-            errors.extend(f"{structure_name}:gap:{byte}" for byte in range(cursor, width + 1))
+            errors.append(f"{structure_name}:gap:{cursor}-{width}")
         elif cursor - 1 > width:
             errors.append(f"{structure_name}:extent-exceeds-width:{cursor - 1}>{width}")
 
@@ -490,6 +589,15 @@ def _validate_manifest(manifest: Any) -> list[str]:
             or root_fields[0].get("name") != "head"
         ):
             errors.append(f"{prefix}:head-missing:{structure_name}")
+        else:
+            head = root_fields[0]
+            if (
+                head.get("kind") != "nested"
+                or head.get("start") != 1
+                or head.get("width") != 11
+                or head.get("struct") != "RECORD_ID"
+            ):
+                errors.append(f"{prefix}:invalid-head-contract:{structure_name}")
         length = contract.get("length")
         structure_width = structures[structure_name].get("width")
         if not _plain_integer(length) or length != structure_width:

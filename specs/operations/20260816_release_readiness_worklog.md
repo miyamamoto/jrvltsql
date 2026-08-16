@@ -886,6 +886,53 @@
   80 bytes. The `UMA`/UM standard table is correctly 60 bytes with the 1-byte
   flag and 19-byte reserve, so no UM schema change is warranted from that
   search result.
+- PR #194 was opened from the first pushed candidate
+  `798d4210e00edeb654417eaeaa5f81d6f399e144`. GitHub Actions run
+  `31951212329` executed on that exact SHA and passed the fail-closed CI
+  self-check, Linux deterministic tree (2,322 passed, 79 explicit environment
+  skips, 14 slow deselections, and 15 passing subtests), distribution content,
+  Windows launcher, and fatal lint gates. The optional tokenless coverage
+  upload could not publish but its configured non-gating step and job
+  completed successfully; it is not counted as test evidence. The performance
+  job was a zero-step PR skip by workflow design.
+- The first grouped GitHub review identified three actionable fail-open or
+  incompleteness classes: inferring a repeat stride from only two evaluations,
+  accepting a same-prefix root with an arbitrary field renamed `head`, and
+  comparing history sets without constraining duplicate or extra entries.
+  Two related review nits identified unbounded per-byte gap diagnostics and
+  unreviewed constructor keyword arguments. These findings were aggregated
+  before modifying the candidate.
+- Before the grouped repair, the new negative matrix produced 10 failures and
+  23 passes. Seven failures directly reproduced the review findings; three
+  additional failures were expected-value drift after the synthetic positive
+  fixture was corrected to contain the real common header contract. A separate
+  complete-header semantic negative then produced 1 failure and 33 passes,
+  demonstrating that width and name checks alone still admitted a false
+  header. These are the required red results for this inspector change.
+- The extractor now accepts repeat starts only when they are provably affine in
+  the loop variable, rejects loop-dependent widths and constructor keyword
+  arguments, and reports a contiguous gap as one bounded range. Manifest
+  validation requires the exact 8-byte date and 11-byte common record-header
+  field contracts, and every root must begin at byte 1 with that nested header.
+  The history tests require exact cardinality in addition to exact identity
+  sets, so duplicate or unreviewed entries cannot disappear under set
+  comparison. Paired positive and negative coverage is 34 passed in the oracle
+  module alone.
+- Regeneration with the repaired extractor from the same official source
+  produced 38 records, 94 structures, and 46,985 expanded leaves and was
+  byte-for-byte identical to the tracked manifest; both files had SHA-256
+  `437a21ea582315f807609dbee809c581518b31d6b48bddc96fd57b92c84e366a`.
+  The affected CPython 3.12 selection passed 227 tests. The fail-closed CI
+  self-check reports `TEST GATE PASS`; Ruff, Black, isolated fatal flake8, and
+  `git diff --check` all pass. Pytest emitted best-effort temporary-directory
+  cleanup warnings during the gate self-tests, but no test or gate failed and
+  no repository artifact was created.
+- Claude Code session `365b9699-b517-405f-b567-b6c87fd77266` remains the same
+  Fable session for this iteration. Its prior request reached the account
+  session limit before communication or inspection; therefore it is still not
+  review evidence. Resume that session against the final pushed full SHA after
+  the 01:10 JST reset and do not merge PR #194 before its grouped critical
+  review is complete.
 - Known findings remain release blockers rather than oracle exceptions: HY
   field/primary-key semantics, CK omitted repeats, six standard-schema storage
   routes, schema metadata integrity, obsolete routes, and strict fresh
