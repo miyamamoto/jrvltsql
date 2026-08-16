@@ -30,7 +30,7 @@ class TestIndexDefinitions(unittest.TestCase):
 
     def test_index_count(self):
         """Test that we have indexes for all working tables."""
-        # 39 working tables (27 NL + 12 RT) — normalized TK header included
+        # 39 working tables (26 NL + 13 RT) — normalized TK header included
         expected_tables = {
             'NL_AV', 'NL_BN', 'NL_BR', 'NL_BT', 'NL_CC', 'NL_CH', 'NL_CS', 'NL_DM',
             'NL_HC', 'NL_HS', 'NL_HY', 'NL_JG', 'NL_KS', 'NL_O1', 'NL_O2', 'NL_O3',

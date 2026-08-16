@@ -88,7 +88,8 @@
   registered-horse slot. Standard mode uses the existing official names
   `TOKU_RACE` and `TOKU`.
 - Key headers by the six-field official race key and children by that key plus
-  official `Num`. Preserve the slot payload exactly after ordinary field
+  the official slot sequence number: `RenbanNum` in native `NL_TK` and `Num`
+  in standard `TOKU`. Preserve the slot payload exactly after ordinary field
   padding removal; do not infer or repair trainer values.
 - Parse one physical record into one public header dictionary with private
   `_tk_registered_horse_rows` metadata. Validate framing, key/status, numeric
@@ -173,3 +174,29 @@
   for a documentation-only delta, then push/open the TK PR. Request one native
   Copilot review, resolve every actionable thread, require green CI and a clean
   tree, and merge only if the final tree is unchanged from the reviewed tree.
+
+## Aggregated PR review
+
+- PR #185 was opened against base
+  `b62ba13be49c07e034acab1b5a5b483e10eb365a`; the initially reviewed head was
+  `3747b1bf03f6da53a58f16411ad9fd103d62ac07`. GitHub Actions `lint` and `test`
+  passed for that SHA.
+- The single requested GitHub-native Copilot review covered all 18 changed
+  files. Its only inline suggestion asked to derive the CR/LF slice from
+  `RECORD_LENGTH`. That was answered without a code change and resolved: the
+  official delimiter position and exact physical length are deliberately
+  independent fail-closed assertions, so changing only the length constant
+  must not silently move the delimiter contract.
+- CodeRabbit reported no merge-blocking risk and two minor documentation
+  accuracy findings. Both were accepted together: this worklog now names
+  native `RenbanNum` versus standard `Num`, and the index test comment now
+  states the actual 26 native plus 13 realtime tables. The focused review-delta
+  run passed with `45 passed, 2 skipped`.
+- Three nitpicks do not justify product-code churn in this iteration: renaming
+  an existing index would add an unnecessary installed-database migration;
+  the condition-code cascade is already fixed by the full standard mapping
+  round-trip contract; and the longer public recovery prose belongs to the
+  separately requested documentation scrub/reconciliation iteration.
+- After committing these two accepted review corrections, rerun their focused
+  tests and final SHA checks, push once, confirm all review threads are
+  resolved, and do not request Copilot a second time.
