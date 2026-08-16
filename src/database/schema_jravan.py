@@ -1311,7 +1311,8 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             Jyusyo3KigoCD                  VARCHAR(3)          ,  -- 文字列(3)
             Jyusyo3JyuryoCD                VARCHAR(1)          ,  -- 文字列(1)
             Jyusyo3Kyori                   VARCHAR(4)          ,  -- 文字列(4)
-            Jyusyo3TrackCD                 VARCHAR(2)            -- 文字列(2)
+            Jyusyo3TrackCD                 VARCHAR(2)          ,  -- 文字列(2)
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji)
         )
     """,
     "SEISAN": """

@@ -96,15 +96,15 @@ race identityと`Umaban`を複合主キーに持ち、馬名、馬体重、増�
 
 ### B-04 現行38種のうち複数が公式配列を途中で切る
 
-明らかに短い公開契約は、WH、SK、RA、BN、BR、CH、DM、TM、KS、RCの修正後、次の2種である。
+明らかに短い公開契約は、WH、SK、RA、BN、BR、CH、DM、TM、KS、RC、YSの修正後、
+次の1種である。
 
 ```text
-TK 727/21657  YS 146/382
+TK 727/21657
 ```
 
-左が実装上の公開長または終端、右が公式現行長。TK の300頭配列、
-YS の3競走案内などを
-1件または一部だけ取り、公式レコード内部に `RecordDelimiter` を置くものがある。
+左が実装上の公開長または終端、右が公式現行長。TK の300頭配列を
+1件だけ取り、公式レコード内部に `RecordDelimiter` を置いている。
 これは「不要列を捨てる」だけではなく、繰返し要素のデータ損失と key collision を
 固定する schema になっている。
 
@@ -145,6 +145,15 @@ KSは4.8.0.2、4.9.0.1、SDK 5.0.0に共通する4173バイトへ統一した。
 原子的に保存する。長さ/type/strict CP932/CRLFと全数値領域を厳密検査し、
 DataKubun 0の親子削除と同一batch内の削除→置換順序を保持する。公式履歴に
 物理長変更はなく、旧repository由来772バイトはprovider rawとして拒否する。
+
+YSは4.8.0.2、4.9.0.1、SDK 5.0.0に共通する382バイトへ統一した。開催identityと
+曜日に続く118バイトの重賞案内3件を全展開し、長さ/type/strict CP932/CRLFを
+厳密検査する。native `NL_YS` とstandard `SCHEDULE`は
+`(Year, MonthDay, JyoCD, Kaiji, Nichiji)`を主キーに持ち、DataKubun 1/2/3/9を
+同一キーへ更新し、0だけをexact-key削除としてprovider順に処理する。旧146バイト
+fixtureは先頭144バイトだけを位置互換のrepository regressionとして現行shapeへ合成し、
+provider rawとしては拒否する。既存のpartial native tableやkeyless standard tableは
+データを保持したままfail closedとし、再作成後に現行setupから再取込する。
 
 ### B-05 2023年変更対象7種は新旧両対応ではない
 
@@ -298,7 +307,7 @@ skip の扱いに関する実運用上の質問が繰り返されている:
 | HC | 60 | current-shape / weak gate | 現行末尾まで |
 | HS | 200 | current-shape / weak gate | 2023 current幅 |
 | HY | 123 | current-shape / weak gate | 現行末尾まで |
-| YS | 382 | partial | 競走案内3件の一部、公開長146 |
+| YS | 382 | current-shape | 重賞案内3件を全展開、厳密長/type/CRLF、5項目キーと更新区分/削除順序を検査 |
 | BT | 6889 | current-shape / weak gate | byte-first修正済み、旧長の明示拒否なし |
 | CS | 6829 | current-shape / delimiter caveat | 説明が実質末尾、BaseParserでCRLF検査不能 |
 | DM | 303 | current-shape / expanded | 18頭をnative 18行、standard `MINING` 1行へ保存。厳密長/type/CRLF、訂正upsert、0削除を検査 |

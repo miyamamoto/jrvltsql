@@ -14,7 +14,9 @@ from src.database.migration import SchemaMigrationError
 from src.importer.importer import (
     _PREPARED_CH_SEISEKI_ROWS_KEY,
     _PREPARED_KS_SEISEKI_ROWS_KEY,
+    _ORDERED_MASTER_STORAGE_TABLES,
     _RC_STORAGE_TABLES,
+    _YS_STORAGE_TABLES,
     _delete_mining_race_rows,
     _expanded_record_fingerprint,
     _is_mining_race_delete,
@@ -22,6 +24,7 @@ from src.importer.importer import (
     _mining_native_snapshot_rows,
     _record_type_from_record,
     apply_rc_batch,
+    apply_ys_batch,
     insert_ch_coupled_batch,
     insert_ks_coupled_batch,
     prepare_ch_coupled_rows,
@@ -32,6 +35,7 @@ from src.importer.importer import (
     verify_ks_coupled_table,
     verify_mining_native_schema,
     verify_rc_storage_schema,
+    verify_ys_storage_schema,
 )
 from src.utils.logger import get_logger
 
@@ -68,6 +72,7 @@ class OptimizedDataImporter:
         self._jravan_tables_ready = not use_jravan_schema
         self._verified_mining_native_tables: set[str] = set()
         self._verified_rc_tables: set[str] = set()
+        self._verified_ys_tables: set[str] = set()
 
         # Detect database type for optimization
         self.db_type = self._detect_database_type()
@@ -132,9 +137,9 @@ class OptimizedDataImporter:
             schema_sql = JRAVAN_SCHEMAS.get(standard_name)
             if schema_sql and self.database.table_exists(standard_name):
                 migrate_table_if_needed(self.database, standard_name, schema_sql, commit=commit)
-                # RECORD is verified by the RC-specific writer. Its manual key
-                # migration must not prevent unrelated standard-table imports.
-                if standard_name not in _RC_STORAGE_TABLES:
+                # Ordered masters are verified by their dedicated writers. Their
+                # manual key migrations must not block unrelated imports.
+                if standard_name not in _ORDERED_MASTER_STORAGE_TABLES:
                     verify_table_schema(self.database, standard_name, schema_sql)
         for child_table in ("CHOKYO_SEISEKI", "KISYU_SEISEKI"):
             child_schema = JRAVAN_SCHEMAS.get(child_table)
@@ -281,6 +286,9 @@ class OptimizedDataImporter:
                 if table_name not in self._verified_rc_tables:
                     if verify_rc_storage_schema(self.database, table_name):
                         self._verified_rc_tables.add(table_name)
+                if table_name not in self._verified_ys_tables:
+                    if verify_ys_storage_schema(self.database, table_name):
+                        self._verified_ys_tables.add(table_name)
 
                 if table_name not in self._verified_mining_native_tables:
                     if verify_mining_native_schema(self.database, record, table_name):
@@ -344,7 +352,7 @@ class OptimizedDataImporter:
                 clean_record = self._record_for_table(record, table_name)
                 converted_record = self._convert_record(clean_record, table_name)
                 if (
-                    table_name not in _RC_STORAGE_TABLES
+                    table_name not in _ORDERED_MASTER_STORAGE_TABLES
                     and not self._has_complete_primary_key(table_name, converted_record)
                 ):
                     logger.warning(
@@ -453,6 +461,21 @@ class OptimizedDataImporter:
             # RC validation/write failures propagate directly and never enter
             # the generic per-row fallback below.
             rows = apply_rc_batch(
+                self.database,
+                table_name,
+                batch,
+                commit_batch=commit_batch,
+                optimized=True,
+            )
+            self._records_imported += rows
+            if rows:
+                self._batches_processed += 1
+            return
+
+        if table_name in _YS_STORAGE_TABLES:
+            # YS validation/write failures propagate directly and never enter
+            # the generic per-row fallback below.
+            rows = apply_ys_batch(
                 self.database,
                 table_name,
                 batch,

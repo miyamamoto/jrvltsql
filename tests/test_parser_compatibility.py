@@ -235,7 +235,7 @@ class TestAllParsersBasic:
         'O1': 962, 'O2': 2042, 'O3': 2654, 'O4': 4031, 'O5': 12293, 'O6': 83285,
         'RA': 1272, 'RC': 501, 'SE': 555, 'SK': 208,
         'TK': 727, 'TM': 141,
-        'UM': 1609, 'WF': 7215, 'YS': 146,
+        'UM': 1609, 'WF': 7215, 'YS': 382,
     }
 
     @pytest.mark.parametrize("record_type", ALL_RECORD_TYPES)

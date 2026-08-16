@@ -70,5 +70,55 @@
 
 ## Next safe command
 
-- Commit this starting worklog, inspect every existing YS mapping/fixture, then
-  add and run the official contract red before changing production code.
+- Run the complete local suite on Python 3.12 after installing the locked
+  development dependencies in this worktree. STOP if any existing parser,
+  importer, schema, or migration contract regresses.
+
+## Implementation and validation history
+
+- The starting worklog was committed as
+  `f3315a17d4b56ab71befc7c77f6c020d51970c9f` before production changes.
+- Added one consolidated YS official-contract module covering the exact 46-field
+  physical layout, malformed framing/encoding, both schemas and importers,
+  statuses 1/2/3/9, exact-key status 0 deletion, pre-mutation validation,
+  provider-order batching, obsolete storage, and optional PostgreSQL behavior.
+- Red-first command against the pre-implementation production code:
+  `python3 -m pytest -q --no-cov --basetemp=/home/keiba/scratch/20260816_jrvltsql_ys_red tests/test_ys_official_contract.py`.
+  Result: `29 failed, 2 skipped`; representative failures were `146 != 382`,
+  accepted invalid boundaries, missing guidance 2/3 schema fields, missing
+  standard primary key, unsupported status not rejected, valid rows committed
+  before malformed rows, deletion treated as an upsert, and obsolete storage not
+  failing closed. This demonstrates that the new validator could say no before
+  implementing it.
+- Implemented an exact 382-byte strict parser, complete native/standard schemas,
+  schema-backed schedule metadata, and dedicated YS schema verification/writer
+  paths in both importers. Every logical batch is validated before mutation;
+  statuses 1/2/3/9 are consecutive upserts and status 0 is an ordered exact-key
+  delete. Obsolete ordered-master tables no longer block unrelated standard
+  imports, but fail closed when their own rows are written.
+- Historical 146-byte fixture handling is explicitly synthetic: only its
+  position-compatible 144-byte prefix is padded into a 382-byte current record.
+  Production parsing accepts no legacy length.
+- Focused green command after implementation:
+  `python3 -m pytest -q --no-cov --basetemp=/home/keiba/scratch/20260816_jrvltsql_ys_green2 tests/test_ys_official_contract.py`.
+  Result: `29 passed, 2 skipped`.
+- Broader affected-surface command across parser, fixture, schema, and importer
+  suites: `809 passed, 3 skipped` using system Python 3.10.12. Formal candidate
+  evidence remains pending on the repository-supported Python 3.12 environment.
+- Created a worktree-local Python 3.12.11 environment with `.[dev,postgres]`.
+  The repository dev extra does not declare `python-dotenv` or `flake8`, so both
+  were added to this local environment only for full-suite collection and the
+  workflow-equivalent fatal lint check.
+- A first Python 3.12 full run reached `2276 passed, 65 skipped` but reported two
+  CLI exit-code failures. Both CLI tests immediately passed alone and in their
+  preceding file-order surface without a code or environment change. A complete
+  rerun then passed `2278 passed, 65 skipped, 3 warnings, 6 subtests`; the three
+  warnings are the pre-existing `test_time_series.py` return-value warnings.
+  This transient run is not used as candidate evidence; the exact committed SHA
+  must pass again.
+- Disposable PostgreSQL 16 validation passed all `31` YS tests, including both
+  native/standard storage modes and both importers. The workflow-selected local
+  suite passed `864 passed, 2 skipped, 3 warnings, 3 subtests`, and fatal flake8
+  (`E9,F63,F7,F82`) reported `0`.
+- Current worktree is intentionally dirty with the uncommitted candidate. No PR,
+  merge, release, or provider acquisition has been claimed for this iteration.

@@ -580,86 +580,13 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
         indexes=["KisyuCode", "SetYear"],
     ),
 
-    "NL_YS": {
-        "table_name": "NL_YS",
-        "record_type": "YS",
-        "description": "予想データ",
-        "purpose": "JRA公式の予想データ（調教タイム、追い切り評価、専門家予想など）を格納",
-        "columns": [
-            {
-                "name": "レコード種別ID",
-                "type": "TEXT",
-                "description": "レコード種別識別子（常に'YS'）",
-                "example": "YS",
-                "nullable": False
-            },
-            {
-                "name": "開催年月日",
-                "type": "TEXT",
-                "description": "レース開催日（YYYYMMDD形式）",
-                "example": "20240601",
-                "nullable": False
-            },
-            {
-                "name": "競馬場コード",
-                "type": "TEXT",
-                "description": "競馬場コード",
-                "example": "05",
-                "nullable": False
-            },
-            {
-                "name": "レース番号",
-                "type": "TEXT",
-                "description": "レース番号",
-                "example": "11",
-                "nullable": False
-            },
-            {
-                "name": "馬番",
-                "type": "TEXT",
-                "description": "馬番",
-                "example": "03",
-                "nullable": False
-            },
-            {
-                "name": "調教タイム",
-                "type": "TEXT",
-                "description": "最終追い切りタイム（秒.1/10秒）",
-                "example": "678",
-                "nullable": True
-            },
-            {
-                "name": "調教評価",
-                "type": "TEXT",
-                "description": "調教評価（A-E、A=非常に良い、E=悪い）",
-                "example": "A",
-                "nullable": True
-            },
-            {
-                "name": "馬体評価",
-                "type": "TEXT",
-                "description": "馬体評価（A-E）",
-                "example": "B",
-                "nullable": True
-            },
-            {
-                "name": "気配評価",
-                "type": "TEXT",
-                "description": "気配評価（A-E）",
-                "example": "A",
-                "nullable": True
-            },
-            {
-                "name": "専門家印",
-                "type": "TEXT",
-                "description": "専門家印（◎=本命、○=対抗、▲=単穴、△=連下、×=消し）",
-                "example": "◎",
-                "nullable": True
-            }
-        ],
-        "primary_key": ["開催年月日", "競馬場コード", "レース番号", "馬番"],
-        "indexes": ["開催年月日", "調教評価"]
-    },
+    "NL_YS": _schema_backed_metadata(
+        "NL_YS",
+        record_type="YS",
+        description="開催スケジュール",
+        purpose="開催日・曜日と最大3競走の重賞案内を格納",
+        indexes=["Year", "MonthDay", "JyoCD", "YoubiCD"],
+    ),
 
     # オッズ情報テーブル (Odds Tables)
     "NL_O1": {

@@ -70,7 +70,7 @@ PARSER_MAP = {
     "TK": (TKParser, 727),
     "TM": (TMParser, TMParser.RECORD_LENGTH),
     "WF": (WFParser, 169),  # Historical fixture uses the obsolete compact layout.
-    "YS": (YSParser, 146),
+    "YS": (YSParser, YSParser.RECORD_LENGTH),
 }
 EXPANDED_RECORD_TYPES = {"DM", "TM", "O1", "O2", "O3", "O4", "O5", "O6"}
 LEGACY_RECONSTRUCTED_LENGTHS = {
@@ -83,6 +83,7 @@ LEGACY_RECONSTRUCTED_LENGTHS = {
     "RC": 241,
     "SK": 78,
     "TM": 39,
+    "YS": 146,
 }
 
 
@@ -187,6 +188,11 @@ def load_fixture_records(record_type, record_length):
                 chunk = chunk[:37].ljust(TMParser.RECORD_LENGTH - 2, b" ") + b"\r\n"
             if record_type == "WF" and len(chunk) == 169:
                 chunk = chunk[:11].ljust(WFParser.RECORD_LENGTH - 2, b" ") + b"\r\n"
+            if record_type == "YS" and len(chunk) == 146:
+                # The historical fixture contains the header and first complete
+                # guidance block. Preserve that compatible prefix in a synthetic
+                # current row; exact three-block coverage has its own contract.
+                chunk = chunk[:144].ljust(YSParser.RECORD_LENGTH - 2, b" ") + b"\r\n"
             records.append(chunk)
     return records
 
