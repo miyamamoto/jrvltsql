@@ -1358,3 +1358,46 @@
   aggregated structural repair once, and run one final exact-SHA review/gate.
   STOP if structural signature or exhaustive equivalence validation can be
   bypassed, canonical PostgreSQL is rejected, or final evidence is not clean.
+- The second aggregated repair was committed as full SHA
+  `e7064e5416ed6a15b8062d4176f8ecf5dee39d9c`. Its clean exact-SHA full local
+  suite completed `2429 passed, 104 skipped, 15 subtests passed in 50.01s`;
+  disposable PostgreSQL 16 completed `55 passed in 4.02s`; and the test gate,
+  fatal/new-file lint, compileall, strict MkDocs, wheel/sdist content gate,
+  prohibited-public-document scan, retired-document absence, and clean-tree
+  checks passed. The test container was removed.
+- The continued independent `gpt-5.6-sol` `xhigh` Codex review returned
+  `NEEDS_CHANGES` on clean exact SHA
+  `e7064e5416ed6a15b8062d4176f8ecf5dee39d9c`. It confirmed the prior
+  extra-domain and deferrability repairs, CK parser/storage/docs, and the
+  recorded PostgreSQL/focused suites, then found two remaining enforcement
+  gaps. First, the PostgreSQL `ANY(ARRAY[...])` signature lowercased quoted
+  values and extracted literals from an otherwise unvalidated array body; the
+  behavior cases also sampled only one member of each two-value class. A
+  computed second member and a case-changed second member were therefore both
+  accepted as equivalent while rejecting a valid official child row. Second,
+  canonical FK catalog definitions were accepted when SQLite FK enforcement,
+  PostgreSQL internal FK triggers, or PostgreSQL's session trigger mode had
+  been disabled.
+- Red-first evidence for this final aggregated repair was captured before
+  implementation. With SQLite FK enforcement disabled, both importers failed
+  the new expectation with `DID NOT RAISE SchemaMigrationError` (`2 failed`).
+  In disposable PostgreSQL 16, computed/case-changed array members failed the
+  expectation for both importers (`4 failed`), disabled FK triggers failed for
+  both (`2 failed`), and non-enforcing session trigger mode failed for both
+  (`2 failed`). In every case the old verifier allowed import instead of
+  refusing before parent mutation.
+- The repair preserves quoted-literal case, requires every PostgreSQL array
+  member to match the complete canonical text-or-integer literal grammar, and
+  evaluates every member of each official entity/period class including
+  case-changed negative representatives. SQLite now requires
+  `PRAGMA foreign_keys=1`. PostgreSQL now requires session trigger mode
+  `origin` plus the exact four active internal FK triggers, split two on the
+  parent and two on the child, in addition to the existing exact constraint
+  metadata. The paired regressions now pass for both importers: SQLite
+  `2 passed`; PostgreSQL malformed-contract matrix `24 passed`; complete CK
+  contract `39 passed, 26 skipped` without PostgreSQL and `65 passed` with
+  PostgreSQL 16. Next safe action: commit this single aggregated repair, remove
+  the disposable database container, then run one clean exact-SHA full and
+  PostgreSQL gate followed by one final independent review. STOP on any
+  parser/signature ambiguity, inactive FK path, failed test, dirty tree, or
+  review finding.

@@ -531,7 +531,7 @@ def test_ck_metadata_defects_fail_before_replacing_a_complete_row(
 
 def _weaken_ck_chaku_schema(defect: str) -> str:
     schema = SCHEMAS["NL_CK_CHAKU"]
-    if defect == "not-validated":
+    if defect in {"not-validated", "disabled-fk-triggers", "replica-trigger-mode"}:
         return schema
     if defect == "check-true":
         start = schema.index("CONSTRAINT ck_chaku_domain")
@@ -549,6 +549,18 @@ def _weaken_ck_chaku_schema(defect: str) -> str:
             schema[start:end].replace("CHECK (", "CHECK ((", 1) + " OR EntityKubun = 'EVIL')"
         )
         return schema[:start] + constraint + schema[end:]
+    if defect == "computed-any-member":
+        return schema.replace(
+            "IN ('KISYU', 'CHOKYOSI')",
+            "IN ('KISYU', reverse('CHOKYOSI'))",
+            1,
+        )
+    if defect == "wrong-any-case":
+        return schema.replace(
+            "IN ('KISYU', 'CHOKYOSI')",
+            "IN ('KISYU', 'chokyosi')",
+            1,
+        )
     if defect == "weak-count-shape":
         start = schema.index("CONSTRAINT ck_chaku_count_shape")
         end = schema.index(",\n            PRIMARY KEY", start)
@@ -623,6 +635,29 @@ def test_ck_create_all_tables_reports_malformed_child_contract(tmp_path) -> None
         results = SchemaManager(database).create_all_tables()
         assert results["NL_CK_CHAKU"] is False
         assert results["NL_CK_RUIKEI"] is False
+
+
+@pytest.mark.parametrize("importer_class", [DataImporter, OptimizedDataImporter])
+def test_ck_sqlite_disabled_foreign_keys_fail_before_parent_mutation(
+    tmp_path, importer_class
+) -> None:
+    database = SQLiteDatabase({"path": str(tmp_path / "disabled-foreign-keys.db")})
+    with database:
+        _create_ck_tables(database)
+        database.execute(
+            "INSERT INTO NL_CK "
+            "(Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, KettoNum, Bamei) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (2025, 101, "05", 1, 1, 1, "2025000001", "preserve"),
+        )
+        database.commit()
+        database.execute("PRAGMA foreign_keys = OFF")
+        assert database.fetch_one("PRAGMA foreign_keys") == {"foreign_keys": 0}
+        with pytest.raises(SchemaMigrationError):
+            importer_class(database).import_records(iter([CKParser().parse(build_record()[0])]))
+        assert database.fetch_all("SELECT Bamei, CKStorageVersion FROM NL_CK") == [
+            {"Bamei": "preserve", "CKStorageVersion": None}
+        ]
 
 
 @pytest.mark.parametrize("importer_class", [DataImporter, OptimizedDataImporter])
@@ -735,10 +770,14 @@ def test_ck_postgresql_complete_roundtrip_reconnect_update_delete(
         "check-true",
         "token-tautology",
         "extra-domain-value",
+        "computed-any-member",
+        "wrong-any-case",
         "weak-count-shape",
         "not-validated",
         "restrict-fk",
         "deferrable-fk",
+        "disabled-fk-triggers",
+        "replica-trigger-mode",
         "wrong-fk-order",
     ],
 )
@@ -748,6 +787,10 @@ def test_ck_postgresql_malformed_constraints_fail_before_parent_mutation(
     database, _ = postgresql_db
     database.execute(SCHEMAS["NL_CK"])
     database.execute(_weaken_ck_chaku_schema(defect))
+    if defect == "disabled-fk-triggers":
+        database.execute("ALTER TABLE NL_CK_CHAKU DISABLE TRIGGER ALL")
+    if defect == "replica-trigger-mode":
+        database.execute("SET session_replication_role = replica")
     if defect == "not-validated":
         schema = SCHEMAS["NL_CK_CHAKU"]
         start = schema.index("CONSTRAINT ck_chaku_domain")

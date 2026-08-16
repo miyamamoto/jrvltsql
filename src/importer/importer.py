@@ -2320,6 +2320,10 @@ def _verify_ck_sqlite_constraints(
     table_name: str,
     expected_schema: str,
 ) -> None:
+    enforcement = database.fetch_one("PRAGMA foreign_keys")
+    if not enforcement or int(next(iter(enforcement.values()), 0)) != 1:
+        raise SchemaMigrationError("CK child foreign-key enforcement is disabled for SQLite")
+
     row = database.fetch_one(
         "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?",
         (table_name,),
@@ -2354,9 +2358,18 @@ def _verify_ck_postgresql_constraints(
     table_name: str,
     expected_schema: str,
 ) -> None:
+    trigger_mode = database.fetch_one(
+        "SELECT current_setting('session_replication_role') AS trigger_mode"
+    )
+    if not trigger_mode or str(trigger_mode.get("trigger_mode")) != "origin":
+        raise SchemaMigrationError(
+            "CK child foreign-key enforcement requires PostgreSQL origin trigger mode"
+        )
+
     expected_names = set(_ck_named_constraints(expected_schema))
     rows = database.fetch_all(
-        "SELECT conname AS name, contype AS type, confdeltype AS delete_type, "
+        "SELECT oid AS constraint_oid, conname AS name, contype AS type, "
+        "confdeltype AS delete_type, "
         "confupdtype AS update_type, confmatchtype AS match_type, "
         "condeferrable AS deferrable, condeferred AS initially_deferred, "
         "convalidated AS validated, "
@@ -2424,6 +2437,21 @@ def _verify_ck_postgresql_constraints(
                 raise SchemaMigrationError(
                     f"CK child foreign key columns mismatch for {table_name}"
                 )
+            trigger_rows = database.fetch_all(
+                "SELECT tgenabled AS enabled, tgrelid = to_regclass(?) AS on_child, "
+                "tgrelid = to_regclass('nl_ck') AS on_parent "
+                "FROM pg_trigger WHERE tgconstraint = ? AND tgisinternal ORDER BY oid",
+                (table_name.lower(), int(row["constraint_oid"])),
+            )
+            if (
+                len(trigger_rows) != 4
+                or any(str(trigger["enabled"]) != "O" for trigger in trigger_rows)
+                or sum(bool(trigger["on_child"]) for trigger in trigger_rows) != 2
+                or sum(bool(trigger["on_parent"]) for trigger in trigger_rows) != 2
+            ):
+                raise SchemaMigrationError(
+                    f"CK child foreign-key triggers are not active for {table_name}"
+                )
             continue
 
         if str(row.get("type")) != "c" or not row.get("expression"):
@@ -2455,8 +2483,16 @@ def _ck_postgresql_check_cases(
         )
         buckets = (0, 1, 2, 7, 8, 9, 10, 11, 12, 13)
         cases = []
-        for entity in ("UMA", "KISYU", "BANUSI", "INVALID"):
-            for period in (0, 1, 3):
+        for entity in (
+            "UMA",
+            "KISYU",
+            "CHOKYOSI",
+            "BANUSI",
+            "BREEDER",
+            "INVALID",
+            "chokyosi",
+        ):
+            for period in (0, 1, 2, 3):
                 for metric in metrics:
                     for bucket in buckets:
                         accepted = (
@@ -2465,13 +2501,13 @@ def _ck_postgresql_check_cases(
                             and metric in horse_maximum
                             and 1 <= bucket <= horse_maximum[metric]
                         ) or (
-                            entity == "KISYU"
-                            and period == 1
+                            entity in {"KISYU", "CHOKYOSI"}
+                            and period in {1, 2}
                             and metric in professional_maximum
                             and 1 <= bucket <= professional_maximum[metric]
                         ) or (
-                            entity == "BANUSI"
-                            and period == 1
+                            entity in {"BANUSI", "BREEDER"}
+                            and period in {1, 2}
                             and metric == "ChakuKaisu"
                             and bucket == 1
                         )
@@ -2511,8 +2547,15 @@ def _ck_postgresql_check_cases(
         from itertools import product
 
         cases = []
-        for entity in ("KISYU", "BANUSI", "INVALID"):
-            for period in (0, 1):
+        for entity in (
+            "KISYU",
+            "CHOKYOSI",
+            "BANUSI",
+            "BREEDER",
+            "INVALID",
+            "chokyosi",
+        ):
+            for period in (0, 1, 2):
                 for values in product((None, 1), repeat=6):
                     professional_shape = all(value is not None for value in values[:4]) and all(
                         value is None for value in values[4:]
@@ -2520,9 +2563,9 @@ def _ck_postgresql_check_cases(
                     owner_shape = all(value is None for value in values[:4]) and all(
                         value is not None for value in values[4:]
                     )
-                    accepted = period == 1 and (
-                        (entity == "KISYU" and professional_shape)
-                        or (entity == "BANUSI" and owner_shape)
+                    accepted = period in {1, 2} and (
+                        (entity in {"KISYU", "CHOKYOSI"} and professional_shape)
+                        or (entity in {"BANUSI", "BREEDER"} and owner_shape)
                     )
                     cases.append(((entity, period, *values), accepted))
         return columns, cases
@@ -2539,10 +2582,10 @@ def _ck_postgresql_expected_check_signature(
     operators: Counter[str] = Counter()
 
     def equality(column: str, value: Any) -> None:
-        atoms[f"eq:{column.lower()}:{str(value).lower()}"] += 1
+        atoms[f"eq:{column.lower()}:{value}"] += 1
 
     def any_of(column: str, values: tuple[Any, ...]) -> None:
-        normalized = ",".join(str(value).lower() for value in values)
+        normalized = ",".join(str(value) for value in values)
         atoms[f"any:{column.lower()}:{normalized}"] += 1
 
     def metric_family(metrics: tuple[tuple[str, int], ...]) -> None:
@@ -2627,17 +2670,28 @@ def _ck_postgresql_check_signature(
     from collections import Counter
 
     atoms: Counter[str] = Counter()
-    working = expression.lower()
+    working = expression
 
     def replace_any(match: Any) -> str:
-        column = match.group(1)
+        column = match.group(1).lower()
         raw_values = match.group(2)
-        values = [
-            string_value if string_value else number_value
-            for string_value, number_value in re.findall(
-                r"'([^']*)'(?:\s*::\s*text)?|(-?\d+)", raw_values
+        values = []
+        for raw_value in raw_values.split(","):
+            item = raw_value.strip()
+            string_match = re.fullmatch(
+                r"'([^']*)'(?:\s*::\s*text)?",
+                item,
+                flags=re.IGNORECASE,
             )
-        ]
+            number_match = re.fullmatch(r"-?\d+", item)
+            if string_match:
+                values.append(string_match.group(1))
+            elif number_match:
+                values.append(number_match.group(0))
+            else:
+                raise SchemaMigrationError(
+                    "CK PostgreSQL CHECK array contains a non-literal value"
+                )
         atoms[f"any:{column}:{','.join(values)}"] += 1
         return " atom "
 
@@ -2645,11 +2699,11 @@ def _ck_postgresql_check_signature(
         r"\b([a-z_][a-z0-9_]*)\s*=\s*any\s*\(\s*array\[(.*?)\]\s*\)",
         replace_any,
         working,
-        flags=re.DOTALL,
+        flags=re.DOTALL | re.IGNORECASE,
     )
 
     def replace_null(match: Any) -> str:
-        column = match.group(1)
+        column = match.group(1).lower()
         qualifier = "notnull" if match.group(2) else "null"
         atoms[f"{qualifier}:{column}"] += 1
         return " atom "
@@ -2658,29 +2712,35 @@ def _ck_postgresql_check_signature(
         r"\b([a-z_][a-z0-9_]*)\s+is\s+(not\s+)?null\b",
         replace_null,
         working,
+        flags=re.IGNORECASE,
     )
 
     def replace_text_equality(match: Any) -> str:
-        atoms[f"eq:{match.group(1)}:{match.group(2)}"] += 1
+        atoms[f"eq:{match.group(1).lower()}:{match.group(2)}"] += 1
         return " atom "
 
     working = re.sub(
         r"\b([a-z_][a-z0-9_]*)\s*=\s*'([^']*)'(?:\s*::\s*text)?",
         replace_text_equality,
         working,
+        flags=re.IGNORECASE,
     )
 
     def replace_numeric(match: Any) -> str:
         operator = {"=": "eq", ">=": "ge", "<=": "le"}[match.group(2)]
-        atoms[f"{operator}:{match.group(1)}:{match.group(3)}"] += 1
+        atoms[f"{operator}:{match.group(1).lower()}:{match.group(3)}"] += 1
         return " atom "
 
     working = re.sub(
         r"\b([a-z_][a-z0-9_]*)\s*(>=|<=|=)\s*(-?\d+)\b",
         replace_numeric,
         working,
+        flags=re.IGNORECASE,
     )
-    remaining_words = re.findall(r"[a-z_][a-z0-9_]*|>=|<=|=|-?\d+|'[^']*'|::", working)
+    remaining_words = re.findall(
+        r"[a-z_][a-z0-9_]*|>=|<=|=|-?\d+|'[^']*'|::",
+        working.lower(),
+    )
     operators: Counter[str] = Counter(
         word for word in remaining_words if word in {"and", "or", "not"}
     )
