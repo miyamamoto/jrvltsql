@@ -121,7 +121,7 @@ jobs:
 
     - name: Fatal syntax and undefined-name lint
       run: >-
-        flake8 src tests scripts tools
+        flake8 src tests scripts tools --isolated
         --count --select=E9,F63,F7,F82 --show-source --statistics
 
     - name: Advisory style debt report

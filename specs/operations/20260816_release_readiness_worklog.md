@@ -472,7 +472,7 @@
   selection and the workflow-configured suite must be bound to the pushed full
   SHA before merge.
 
-## Next safe action
+## Fixed-record envelope outcome
 
 - The grouped PR #192 follow-up was committed and pushed as exact candidate
   `5390272ffade21b350d0466cce429c194f0df98a`. Local focused evidence was 511
@@ -654,12 +654,99 @@
   the configuration gate for data-mutating commands. The focused basic/init
   CLI selection then passed 5 tests with coverage enabled. This is a production
   bootstrap repair exposed by the truthful whole-tree CI, not a test waiver.
+- PR #193 review findings were aggregated once against exact HEAD
+  `1364980a137132a0cd2d3c598f7f22a4f77ac5bb` and repaired in the same Fable
+  session `b63e9497-10e4-45d0-bf19-3f369dc6332d` (`--model fable --effort
+  high`). Fable was kept because the change set is a release gate whose
+  failure mode is a false green: every added refusal must be proven against
+  the pre-repair validator, and the shell/YAML/pytest/psycopg surfaces
+  interact. Negative tests were added first. Red evidence on the pre-repair
+  code: `tests/test_ci_test_gate.py` gained one table-driven test
+  (`test_validator_rejects_single_command_masking`, 19 rows) and reported
+  18 failed / 5 passed — the pre-repair validator accepted `true` or `exit 0`
+  on a new line after pytest, `set +e` before it, `bash -c` wrapping, `-c
+  /dev/null`, missing `--ignore=tests/e2e`, `PYTEST_ADDOPTS`/`PYTHONWARNINGS`
+  in workflow/job/step `env`, custom `shell`/`working-directory`, an `echo`
+  or extra-argument self-check step, `true` after the self-check, and an
+  `echo`, newline `true`, `|| true`, or custom-shell fatal flake8 step; only
+  the same-line `; true` row was already refused. `tests/test_postgresql.py`
+  gained one parametrized contract test and one bootstrap-script test, which
+  failed at collection (`ImportError: cannot import name
+  'postgresql_test_config' from 'scripts.setup_pg_test_db'`) because no shared
+  live-PostgreSQL contract existed. The CLI no-config guard was extended in
+  the existing status test to also require `fetch` to exit 1 with the
+  configuration error; a one-off run with `fetch` added to
+  `CONFIG_OPTIONAL_COMMANDS` produced 1 failure, and the committed code passes.
+- Repairs: `scripts/validate_test_gate.py` now treats the self-check, pytest,
+  and fatal flake8 steps as exactly one executed command each — one non-comment
+  logical line, no shell operators (`| & ; < > $ ( ) { }` or backticks), no
+  `if`, `continue-on-error`, `shell`, or `working-directory`; the self-check
+  must be literally `python scripts/validate_test_gate.py`; the pytest command
+  must start `pytest tests`, carry `--ignore=tests/integration`,
+  `--ignore=tests/e2e`, and `-m "not slow"`, and may only add `-v`, `-q`,
+  `-r…`, `--cov=src`, `--cov-report=…`, `--durations=…`; any other option,
+  ini/override, plugin toggle, warning flag, selection flag, extra ignore, or
+  `PYTEST_ADDOPTS`/`PYTHONWARNINGS` env is refused with a stable code; the
+  fatal flake8 step is identified by its `flake8` command token and select
+  set rather than substring, and must cover `src tests scripts tools`.
+  `scripts/setup_pg_test_db.py` now defines the single
+  `postgresql_test_config()` contract (`POSTGRES_*` over `PG*`, default
+  `jltsql_test`/`jltsql`/empty password/5 s), passes psycopg3
+  `connect_timeout` instead of the invalid `timeout` keyword, and quotes the
+  environment-derived database name with `psycopg.sql.Identifier`.
+  `tests/test_e2e_comprehensive.py`, `tests/test_metadata_application.py`,
+  and `tests/test_postgresql.py` import that contract instead of three
+  divergent inline dictionaries. The duplicated `## Next safe action` heading
+  from the envelope iteration was renamed to `## Fixed-record envelope
+  outcome`.
+- Green evidence after the repairs on the working tree above HEAD `1364980`:
+  gate tests 23 passed; repository self-check `TEST GATE PASS`; the validator
+  against the base `89ef8f6` configuration reports 11 refusal codes and
+  against `9b601e6` reports only the flake8 scope gap; focused
+  gate/PostgreSQL/CLI/transport selection 140 passed with 9 explicit
+  environment skips; opted-in PostgreSQL without a server 9 failed and 0
+  skipped; fatal flake8 over `src tests scripts tools` reported 0; workflow
+  YAML parses and `git diff --check` is clean; the whole deterministic tree
+  reported 2,286 passed, 79 explicit environment skips, 14 slow deselections,
+  15 subtests, and zero warnings or failures.
+- Codex then independently reviewed the repaired validator and found three
+  remaining instances of the same false-green class before any review-fix
+  commit or push: workflow/job `defaults.run.shell` could replace every
+  required command with a successful no-op, fatal flake8 accepted an
+  `--exclude` covering all required roots, and the validator did not constrain
+  pytest's `addopts` or collection patterns in `pyproject.toml`. Existing
+  table-driven gate coverage was extended rather than adding one test function
+  per hypothesis. Against the then-current implementation the exact focused
+  run reported the required red result of 6 failed and 23 passed: three custom
+  run-default scopes, one flake8 exclusion, one `-k never` addopts mutation,
+  and one narrowed `python_functions` mutation were all incorrectly accepted.
+- The same Fable session and model were resumed with that red evidence, but
+  Claude Code returned its account session limit before making any further
+  change. Codex completed the already-scoped repair: workflow, test-job, and
+  lint-job custom run defaults now have distinct refusal codes; fatal flake8
+  permits only its current non-selection-changing command tokens; and the
+  deterministic pytest collection/addopts/warning contract is compared
+  exactly with `pyproject.toml`. The paired focused gate run is now 29 passed,
+  the repository self-check reports `TEST GATE PASS`, changed-file fatal lint
+  and `git diff --check` pass, and the combined gate/PostgreSQL/CLI/transport
+  focused selection reports 147 passed with 9 explicit live-environment
+  skips. The prior whole-tree result remains evidence for the pre-follow-up
+  working tree only; GitHub must rerun it on the final pushed full SHA.
+- A final Codex inspection found that flake8 would still read a future
+  repository `.flake8`/`setup.cfg` and could therefore inherit an exclusion
+  outside the validated workflow command. The existing parameter table gained
+  one row; before implementation it produced the required red result of 1
+  failed and 29 passed. Fatal lint now requires `--isolated`, the workflow uses
+  it, and only non-selection-changing tokens are allowed. The paired gate run
+  is 30 passed, the repository self-check is `TEST GATE PASS`, and the exact
+  isolated fatal command reports zero findings across `src tests scripts
+  tools`.
 
 ## Next safe action
 
-- Commit and push the no-config CLI repair, run the affected CLI/gate/fatal
-  checks on its exact SHA, then wait for the automatically rerun whole-tree
-  GitHub workflow. Aggregate PR review findings once, resolve every thread, and
-  merge only if all executed mandatory jobs pass. The compact official oracle
-  and known HY, CK, standard-schema, metadata, obsolete-route, and strict fresh
-  E2E blockers remain separate required iterations after this PR.
+- Commit and push the review repairs, run the affected gate/PostgreSQL/CLI
+  checks and the whole-tree workflow on the exact pushed SHA, resolve every
+  PR #193 thread with that evidence, and merge only if all executed mandatory
+  jobs pass. The compact official oracle and known HY, CK, standard-schema,
+  metadata, obsolete-route, and strict fresh E2E blockers remain separate
+  required iterations after this PR.

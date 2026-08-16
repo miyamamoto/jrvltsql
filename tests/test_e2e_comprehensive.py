@@ -23,6 +23,7 @@ from pathlib import Path
 
 import pytest
 
+from scripts.setup_pg_test_db import postgresql_test_config
 from src.database.schema import SCHEMAS, SchemaManager
 from src.database.sqlite_handler import SQLiteDatabase
 
@@ -189,14 +190,7 @@ class TestPostgreSQLAllTables(unittest.TestCase):
 
     def setUp(self):
         """Set up PostgreSQL test database."""
-        # Try to connect to local test database
-        pg_config = {
-            'host': os.getenv('POSTGRES_HOST', 'localhost'),
-            'port': int(os.getenv('POSTGRES_PORT', 5432)),
-            'database': os.getenv('POSTGRES_DB', 'jltsql_test'),
-            'user': os.getenv('POSTGRES_USER', 'postgres'),
-            'password': os.getenv('POSTGRES_PASSWORD', 'postgres')
-        }
+        pg_config = postgresql_test_config()
 
         if not POSTGRESQL_AVAILABLE:
             self.fail("PostgreSQL integration was requested but no driver is available")

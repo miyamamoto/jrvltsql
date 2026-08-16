@@ -1,50 +1,73 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""PostgreSQLテスト用データベースをセットアップするスクリプト"""
+"""PostgreSQLテスト用データベースをセットアップするスクリプト
+
+live PostgreSQL テスト（``JLTSQL_RUN_POSTGRESQL_INTEGRATION=1``）と同じ
+接続契約を使う。``POSTGRES_*`` が優先、次に ``PG*``、最後に既定値。
+"""
 
 import os
 import sys
 
+DEFAULT_LIVE_DATABASE = "jltsql_test"
+DEFAULT_LIVE_USER = "jltsql"
+LIVE_CONNECT_TIMEOUT_SECONDS = 5
+
+
+def _env(primary: str, fallback: str, default: str) -> str:
+    return os.environ.get(primary) or os.environ.get(fallback) or default
+
+
+def postgresql_test_config() -> dict:
+    """Return the single live-PostgreSQL connection contract shared by tests."""
+    return {
+        "host": _env("POSTGRES_HOST", "PGHOST", "localhost"),
+        "port": int(_env("POSTGRES_PORT", "PGPORT", "5432")),
+        "database": _env("POSTGRES_DB", "PGDATABASE", DEFAULT_LIVE_DATABASE),
+        "user": _env("POSTGRES_USER", "PGUSER", DEFAULT_LIVE_USER),
+        "password": os.environ.get("POSTGRES_PASSWORD") or os.environ.get("PGPASSWORD", ""),
+        "connect_timeout": LIVE_CONNECT_TIMEOUT_SECONDS,
+    }
+
+
 def setup_test_database():
     """テスト用データベースを作成"""
 
-    host = os.environ.get("PGHOST", "localhost")
-    port = int(os.environ.get("PGPORT", 5432))
-    user = os.environ.get("PGUSER", "postgres")
-    password = os.environ.get("PGPASSWORD", "postgres")
-    test_db = os.environ.get("PGDATABASE", "keiba_test")
+    config = postgresql_test_config()
+    test_db = config["database"]
 
-    print(f"PostgreSQL テスト用データベースのセットアップ")
-    print(f"  Host: {host}:{port}")
-    print(f"  User: {user}")
+    print("PostgreSQL テスト用データベースのセットアップ")
+    print(f"  Host: {config['host']}:{config['port']}")
+    print(f"  User: {config['user']}")
     print(f"  Target DB: {test_db}")
 
     try:
         import psycopg
-        print(f"\n  [INFO] psycopgドライバーを使用")
+        from psycopg import sql
+        print("\n  [INFO] psycopgドライバーを使用")
     except ImportError:
-        print(f"\n  [ERROR] psycopgがインストールされていません")
+        print("\n  [ERROR] psycopgがインストールされていません")
         print('  pip install "psycopg[binary]"')
         return False
 
     # まずpostgresデータベースに接続
-    print(f"\npostgresデータベースに接続中...")
+    print("\npostgresデータベースに接続中...")
     try:
         conn = psycopg.connect(
-            user=user,
-            password=password,
-            host=host,
-            port=port,
+            user=config["user"],
+            password=config["password"],
+            host=config["host"],
+            port=config["port"],
             dbname="postgres",  # デフォルトDBに接続
             autocommit=True,
-            timeout=10,
+            connect_timeout=config["connect_timeout"],
         )
-        print(f"  [OK] 接続成功")
+        print("  [OK] 接続成功")
     except Exception as e:
         print(f"  [ERROR] 接続失敗: {e}")
-        print(f"\n  PostgreSQLのパスワードを確認してください:")
-        print(f"    PGPASSWORD環境変数を設定")
-        print(f"    または pg_hba.conf で trust 認証を設定")
+        print("\n  PostgreSQLのパスワードを確認してください:")
+        print("    POSTGRES_PASSWORD または PGPASSWORD 環境変数を設定")
+        print("    または pg_hba.conf で trust 認証を設定")
         return False
 
     # テスト用データベースが存在するか確認
@@ -53,11 +76,13 @@ def setup_test_database():
         with conn.cursor() as cur:
             cur.execute("SELECT datname FROM pg_database WHERE datname = %s", (test_db,))
             if cur.fetchone():
-                print(f"  [INFO] データベースは既に存在します")
+                print("  [INFO] データベースは既に存在します")
             else:
                 # データベースを作成
-                print(f"  データベースを作成中...")
-                cur.execute(f"CREATE DATABASE {test_db}")
+                print("  データベースを作成中...")
+                cur.execute(
+                    sql.SQL("CREATE DATABASE {}").format(sql.Identifier(test_db))
+                )
                 print(f"  [OK] データベース '{test_db}' を作成しました")
     except Exception as e:
         print(f"  [ERROR] データベース作成失敗: {e}")
@@ -65,7 +90,7 @@ def setup_test_database():
         return False
 
     conn.close()
-    print(f"\n[OK] セットアップ完了")
+    print("\n[OK] セットアップ完了")
     return True
 
 

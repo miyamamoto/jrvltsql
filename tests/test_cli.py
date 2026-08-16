@@ -40,12 +40,19 @@ class TestCLIBasic(unittest.TestCase):
         )
 
     def test_status_command(self):
-        """Status is available before a configuration file exists."""
+        """Status is available before a configuration file exists; fetch is not."""
         with patch("src.cli.main.Path.exists", return_value=False):
             result = self.runner.invoke(cli, ['status'])
+            fetch_result = self.runner.invoke(
+                cli,
+                ['fetch', '--from', '2024-01-01', '--to', '2024-01-02', '--spec', 'RACE'],
+            )
         self.assertEqual(result.exit_code, 0)
         self.assertIn('JLTSQL Status', result.output)
         self.assertIn('Version', result.output)
+        # Data-acquiring commands stay behind the configuration gate.
+        self.assertEqual(fetch_result.exit_code, 1)
+        self.assertIn('Configuration file not found', fetch_result.output)
 
 
 class TestInitCommand(unittest.TestCase):

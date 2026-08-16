@@ -20,6 +20,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from scripts.setup_pg_test_db import postgresql_test_config
 from src.database.sqlite_handler import SQLiteDatabase
 from src.database.postgresql_handler import PostgreSQLDatabase
 from src.database.schema import SchemaManager
@@ -233,15 +234,7 @@ class TestPostgreSQLMetadata(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        pg_config = {
-            'host': os.getenv('POSTGRES_HOST', 'localhost'),
-            'port': int(os.getenv('POSTGRES_PORT', 5432)),
-            'database': os.getenv('POSTGRES_DB', 'jltsql_test'),
-            'user': os.getenv('POSTGRES_USER', 'jltsql'),
-            'password': os.getenv('POSTGRES_PASSWORD', 'jltsql_pass')
-        }
-
-        self.database = PostgreSQLDatabase(pg_config)
+        self.database = PostgreSQLDatabase(postgresql_test_config())
         self.database.connect()
 
         self.schema_mgr = SchemaManager(self.database)
