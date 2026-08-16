@@ -2357,6 +2357,8 @@ def _verify_ck_postgresql_constraints(
     expected_names = set(_ck_named_constraints(expected_schema))
     rows = database.fetch_all(
         "SELECT conname AS name, contype AS type, confdeltype AS delete_type, "
+        "confupdtype AS update_type, confmatchtype AS match_type, "
+        "condeferrable AS deferrable, condeferred AS initially_deferred, "
         "convalidated AS validated, "
         "confrelid = to_regclass('nl_ck') AS parent_matches, "
         "pg_get_expr(conbin, conrelid) AS expression "
@@ -2389,6 +2391,10 @@ def _verify_ck_postgresql_constraints(
             if (
                 str(row.get("type")) != "f"
                 or str(row.get("delete_type")) != "c"
+                or str(row.get("update_type")) != "a"
+                or str(row.get("match_type")) != "s"
+                or bool(row.get("deferrable"))
+                or bool(row.get("initially_deferred"))
                 or not bool(row.get("parent_matches"))
             ):
                 raise SchemaMigrationError(
@@ -2442,29 +2448,34 @@ def _ck_postgresql_check_cases(
             ("MetricKubun", "TEXT"),
             ("BucketNum", "INTEGER"),
         )
-        cases = [(dimension, True) for dimension in _CK_EXPECTED_CHAKU_DIMENSIONS]
-        maximums: dict[tuple[str, int, str], int] = {}
-        for entity, period, metric, bucket in _CK_EXPECTED_CHAKU_DIMENSIONS:
-            maximums[(entity, period, metric)] = max(
-                maximums.get((entity, period, metric), 0), bucket
-            )
-        for (entity, period, metric), maximum in maximums.items():
-            cases.append(((entity, period, metric, 0), False))
-            cases.append(((entity, period, metric, maximum + 1), False))
-        cases.extend(
-            [
-                (("INVALID", 0, "ChakuSogo", 1), False),
-                (("UMA", 1, "ChakuSogo", 1), False),
-                (("KISYU", 0, "ChakuKaisuSiba", 1), False),
-                (("CHOKYOSI", 3, "ChakuKaisuSiba", 1), False),
-                (("BANUSI", 0, "ChakuKaisu", 1), False),
-                (("BREEDER", 3, "ChakuKaisu", 1), False),
-                (("UMA", 0, "ChakuKaisuSiba", 1), False),
-                (("KISYU", 1, "ChakuSogo", 1), False),
-                (("BANUSI", 1, "ChakuSogo", 1), False),
-                (("UMA", 0, "INVALID", 1), False),
-            ]
+        horse_maximum = dict(_CK_HORSE_METRICS)
+        professional_maximum = dict(_CK_PROFESSIONAL_METRICS)
+        metrics = tuple(
+            dict.fromkeys((*horse_maximum, *professional_maximum, "ChakuKaisu", "INVALID"))
         )
+        buckets = (0, 1, 2, 7, 8, 9, 10, 11, 12, 13)
+        cases = []
+        for entity in ("UMA", "KISYU", "BANUSI", "INVALID"):
+            for period in (0, 1, 3):
+                for metric in metrics:
+                    for bucket in buckets:
+                        accepted = (
+                            entity == "UMA"
+                            and period == 0
+                            and metric in horse_maximum
+                            and 1 <= bucket <= horse_maximum[metric]
+                        ) or (
+                            entity == "KISYU"
+                            and period == 1
+                            and metric in professional_maximum
+                            and 1 <= bucket <= professional_maximum[metric]
+                        ) or (
+                            entity == "BANUSI"
+                            and period == 1
+                            and metric == "ChakuKaisu"
+                            and bucket == 1
+                        )
+                        cases.append(((entity, period, metric, bucket), accepted))
         return columns, cases
 
     if constraint_name == "ck_chaku_count_shape":
@@ -2474,15 +2485,17 @@ def _ck_postgresql_check_cases(
             ("Count5", "INTEGER"),
             ("Count6", "INTEGER"),
         )
-        return columns, [
-            (("UMA", "Kyakusitu", None, None), True),
-            (("UMA", "Kyakusitu", 1, 1), False),
-            (("UMA", "Kyakusitu", None, 1), False),
-            (("KISYU", "ChakuKaisuSiba", 1, 1), True),
-            (("KISYU", "ChakuKaisuSiba", 0, 999999), True),
-            (("KISYU", "ChakuKaisuSiba", None, None), False),
-            (("KISYU", "ChakuKaisuSiba", 1, None), False),
-        ]
+        cases = []
+        for entity in ("UMA", "OTHER"):
+            for metric in ("Kyakusitu", "OTHER"):
+                for count5 in (None, 1):
+                    for count6 in (None, 1):
+                        running_style = entity == "UMA" and metric == "Kyakusitu"
+                        accepted = (
+                            running_style and count5 is None and count6 is None
+                        ) or (not running_style and count5 is not None and count6 is not None)
+                        cases.append(((entity, metric, count5, count6), accepted))
+        return columns, cases
 
     if constraint_name == "ck_ruikei_shape":
         columns = (
@@ -2495,50 +2508,190 @@ def _ck_postgresql_check_cases(
             ("HonSyokinTotal", "BIGINT"),
             ("FukaSyokin", "BIGINT"),
         )
-        professional = (1, 1, 1, 1, None, None)
-        owner = (None, None, None, None, 1, 1)
-        cases = [
-            ((entity, period, *professional), True)
-            for entity in ("KISYU", "CHOKYOSI")
-            for period in (1, 2)
-        ]
-        cases.extend(
-            ((entity, period, *owner), True)
-            for entity in ("BANUSI", "BREEDER")
-            for period in (1, 2)
-        )
-        cases.extend(
-            [
-                (("KISYU", 1, 0, 9999999999, 0, 9999999999, None, None), True),
-                (("BANUSI", 1, None, None, None, None, 0, 9999999999), True),
-            ]
-        )
-        cases.extend(
-            [
-                (("INVALID", 1, *professional), False),
-                (("KISYU", 0, *professional), False),
-                (("BANUSI", 3, *owner), False),
-            ]
-        )
-        for missing_index in range(4):
-            values = list(professional)
-            values[missing_index] = None
-            cases.append((("KISYU", 1, *values), False))
-        for forbidden_index in (4, 5):
-            values = list(professional)
-            values[forbidden_index] = 1
-            cases.append((("KISYU", 1, *values), False))
-        for missing_index in (4, 5):
-            values = list(owner)
-            values[missing_index] = None
-            cases.append((("BANUSI", 1, *values), False))
-        for forbidden_index in range(4):
-            values = list(owner)
-            values[forbidden_index] = 1
-            cases.append((("BANUSI", 1, *values), False))
+        from itertools import product
+
+        cases = []
+        for entity in ("KISYU", "BANUSI", "INVALID"):
+            for period in (0, 1):
+                for values in product((None, 1), repeat=6):
+                    professional_shape = all(value is not None for value in values[:4]) and all(
+                        value is None for value in values[4:]
+                    )
+                    owner_shape = all(value is None for value in values[:4]) and all(
+                        value is not None for value in values[4:]
+                    )
+                    accepted = period == 1 and (
+                        (entity == "KISYU" and professional_shape)
+                        or (entity == "BANUSI" and owner_shape)
+                    )
+                    cases.append(((entity, period, *values), accepted))
         return columns, cases
 
     raise SchemaMigrationError(f"Unknown CK PostgreSQL CHECK constraint: {constraint_name}")
+
+
+def _ck_postgresql_expected_check_signature(
+    constraint_name: str,
+) -> tuple[dict[str, int], dict[str, int]]:
+    from collections import Counter
+
+    atoms: Counter[str] = Counter()
+    operators: Counter[str] = Counter()
+
+    def equality(column: str, value: Any) -> None:
+        atoms[f"eq:{column.lower()}:{str(value).lower()}"] += 1
+
+    def any_of(column: str, values: tuple[Any, ...]) -> None:
+        normalized = ",".join(str(value).lower() for value in values)
+        atoms[f"any:{column.lower()}:{normalized}"] += 1
+
+    def metric_family(metrics: tuple[tuple[str, int], ...]) -> None:
+        for metric, maximum in metrics:
+            equality("MetricKubun", metric)
+            atoms["ge:bucketnum:1"] += 1
+            atoms[f"le:bucketnum:{maximum}"] += 1
+            operators["and"] += 2
+        operators["or"] += len(metrics) - 1
+
+    if constraint_name == "ck_chaku_domain":
+        equality("EntityKubun", "UMA")
+        equality("PeriodNum", 0)
+        metric_family(_CK_HORSE_METRICS)
+        operators["and"] += 2
+
+        any_of("EntityKubun", ("KISYU", "CHOKYOSI"))
+        any_of("PeriodNum", (1, 2))
+        metric_family(_CK_PROFESSIONAL_METRICS)
+        operators["and"] += 2
+
+        any_of("EntityKubun", ("BANUSI", "BREEDER"))
+        any_of("PeriodNum", (1, 2))
+        equality("MetricKubun", "ChakuKaisu")
+        equality("BucketNum", 1)
+        operators["and"] += 3
+        operators["or"] += 2
+        return dict(atoms), dict(operators)
+
+    if constraint_name == "ck_chaku_count_shape":
+        equality("EntityKubun", "UMA")
+        equality("MetricKubun", "Kyakusitu")
+        atoms["null:count5"] += 1
+        atoms["null:count6"] += 1
+        equality("EntityKubun", "UMA")
+        equality("MetricKubun", "Kyakusitu")
+        atoms["notnull:count5"] += 1
+        atoms["notnull:count6"] += 1
+        operators.update({"and": 6, "or": 1, "not": 1})
+        return dict(atoms), dict(operators)
+
+    if constraint_name == "ck_ruikei_shape":
+        for entities, required, forbidden in (
+            (
+                ("KISYU", "CHOKYOSI"),
+                (
+                    "HonSyokinHeichi",
+                    "HonSyokinSyogai",
+                    "FukaSyokinHeichi",
+                    "FukaSyokinSyogai",
+                ),
+                ("HonSyokinTotal", "FukaSyokin"),
+            ),
+            (
+                ("BANUSI", "BREEDER"),
+                ("HonSyokinTotal", "FukaSyokin"),
+                (
+                    "HonSyokinHeichi",
+                    "HonSyokinSyogai",
+                    "FukaSyokinHeichi",
+                    "FukaSyokinSyogai",
+                ),
+            ),
+        ):
+            any_of("EntityKubun", entities)
+            any_of("PeriodNum", (1, 2))
+            for column in required:
+                atoms[f"notnull:{column.lower()}"] += 1
+            for column in forbidden:
+                atoms[f"null:{column.lower()}"] += 1
+            operators["and"] += 7
+        operators["or"] += 1
+        return dict(atoms), dict(operators)
+
+    raise SchemaMigrationError(f"Unknown CK PostgreSQL CHECK constraint: {constraint_name}")
+
+
+def _ck_postgresql_check_signature(
+    expression: str,
+) -> tuple[dict[str, int], dict[str, int]]:
+    import re
+    from collections import Counter
+
+    atoms: Counter[str] = Counter()
+    working = expression.lower()
+
+    def replace_any(match: Any) -> str:
+        column = match.group(1)
+        raw_values = match.group(2)
+        values = [
+            string_value if string_value else number_value
+            for string_value, number_value in re.findall(
+                r"'([^']*)'(?:\s*::\s*text)?|(-?\d+)", raw_values
+            )
+        ]
+        atoms[f"any:{column}:{','.join(values)}"] += 1
+        return " atom "
+
+    working = re.sub(
+        r"\b([a-z_][a-z0-9_]*)\s*=\s*any\s*\(\s*array\[(.*?)\]\s*\)",
+        replace_any,
+        working,
+        flags=re.DOTALL,
+    )
+
+    def replace_null(match: Any) -> str:
+        column = match.group(1)
+        qualifier = "notnull" if match.group(2) else "null"
+        atoms[f"{qualifier}:{column}"] += 1
+        return " atom "
+
+    working = re.sub(
+        r"\b([a-z_][a-z0-9_]*)\s+is\s+(not\s+)?null\b",
+        replace_null,
+        working,
+    )
+
+    def replace_text_equality(match: Any) -> str:
+        atoms[f"eq:{match.group(1)}:{match.group(2)}"] += 1
+        return " atom "
+
+    working = re.sub(
+        r"\b([a-z_][a-z0-9_]*)\s*=\s*'([^']*)'(?:\s*::\s*text)?",
+        replace_text_equality,
+        working,
+    )
+
+    def replace_numeric(match: Any) -> str:
+        operator = {"=": "eq", ">=": "ge", "<=": "le"}[match.group(2)]
+        atoms[f"{operator}:{match.group(1)}:{match.group(3)}"] += 1
+        return " atom "
+
+    working = re.sub(
+        r"\b([a-z_][a-z0-9_]*)\s*(>=|<=|=)\s*(-?\d+)\b",
+        replace_numeric,
+        working,
+    )
+    remaining_words = re.findall(r"[a-z_][a-z0-9_]*|>=|<=|=|-?\d+|'[^']*'|::", working)
+    operators: Counter[str] = Counter(
+        word for word in remaining_words if word in {"and", "or", "not"}
+    )
+    unrecognized = [
+        word for word in remaining_words if word not in {"atom", "and", "or", "not"}
+    ]
+    if unrecognized:
+        raise SchemaMigrationError(
+            f"CK PostgreSQL CHECK contains unrecognized structure: {unrecognized[:5]}"
+        )
+    return dict(atoms), dict(operators)
 
 
 def _verify_ck_postgresql_check_truth_table(
@@ -2547,6 +2700,13 @@ def _verify_ck_postgresql_check_truth_table(
     constraint_name: str,
     expression: str,
 ) -> None:
+    actual_signature = _ck_postgresql_check_signature(expression)
+    expected_signature = _ck_postgresql_expected_check_signature(constraint_name)
+    if actual_signature != expected_signature:
+        raise SchemaMigrationError(
+            f"CK child CHECK structure mismatch for {table_name}.{constraint_name}"
+        )
+
     columns, cases = _ck_postgresql_check_cases(constraint_name)
     value_rows = []
     parameters: list[Any] = []

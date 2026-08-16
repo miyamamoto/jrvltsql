@@ -1325,3 +1325,36 @@
   mechanical checks, commit this one aggregated review repair, then run one
   clean exact-SHA final review/gate. STOP on any false-green schema result,
   failed test, container residue, source drift, or dirty final worktree.
+- The first aggregated review repair was committed as full SHA
+  `812bbd8105496075ff036782527becf5fef9332b`. Its clean exact-SHA full local
+  suite completed `2429 passed, 100 skipped, 15 subtests passed in 52.35s`;
+  the disposable PostgreSQL contract completed `51 passed in 3.26s`; and all
+  exact mechanical/docs/distribution/clean gates passed. The container and
+  schemas were removed.
+- The continued `gpt-5.6-sol` `xhigh` review of exact SHA `812bbd8105496075ff036782527becf5fef9332b`
+  returned `NEEDS_CHANGES` with one remaining P1 and one P2 before root changed
+  the tree. The P1 demonstrated that finite truth samples alone were not an
+  equivalence proof: canonical `ck_chaku_domain OR EntityKubun='EVIL'` passed
+  verification and PostgreSQL stored the invalid child. The new real-PostgreSQL
+  `extra-domain-value` regression preserves that red. The P2 showed an otherwise
+  canonical `DEFERRABLE INITIALLY DEFERRED` FK was accepted, changing enforcement
+  timing inside caller-owned transactions.
+- The second aggregated repair does not grow the sample list around `EVIL`.
+  Instead it parses the PostgreSQL-canonical expression into a complete
+  structural signature of allowed equality/ANY/range/NULL atoms and exact
+  AND/OR/NOT counts, rejects every unrecognized atom/operator, and then evaluates
+  the expression across the complete equivalence classes induced by that fixed
+  vocabulary: 2,400 entity/period/metric/bucket combinations, all 16 count-shape
+  combinations, and all 384 actor/period/six-nullability summary combinations.
+  Structure prevents new literals/predicates; the truth table prevents regrouping
+  the same atoms into different semantics. The FK catalog gate now also requires
+  non-deferrable, initially immediate, `MATCH SIMPLE`, and `ON UPDATE NO ACTION`
+  in addition to the previously exact keys/parent/delete action/validation.
+- Current second-review repair remains uncommitted. SQLite CK verification is
+  `37 passed, 18 skipped`; disposable PostgreSQL 16 is `55 passed in 3.92s`,
+  including the preserved EVIL and deferrable reds for both importers; broader
+  affected verification is `701 passed, 40 skipped in 4.84s`. The container was
+  removed. Next safe action: finish formatting/mechanical checks, commit the
+  aggregated structural repair once, and run one final exact-SHA review/gate.
+  STOP if structural signature or exhaustive equivalence validation can be
+  bypassed, canonical PostgreSQL is rejected, or final evidence is not clean.

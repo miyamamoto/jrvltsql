@@ -542,6 +542,13 @@ def _weaken_ck_chaku_schema(defect: str) -> str:
         end = schema.index(",\n            CONSTRAINT ck_chaku_count_shape", start)
         constraint = schema[start:end].replace("CHECK (", "CHECK (TRUE OR (", 1) + ")"
         return schema[:start] + constraint + schema[end:]
+    if defect == "extra-domain-value":
+        start = schema.index("CONSTRAINT ck_chaku_domain")
+        end = schema.index(",\n            CONSTRAINT ck_chaku_count_shape", start)
+        constraint = (
+            schema[start:end].replace("CHECK (", "CHECK ((", 1) + " OR EntityKubun = 'EVIL')"
+        )
+        return schema[:start] + constraint + schema[end:]
     if defect == "weak-count-shape":
         start = schema.index("CONSTRAINT ck_chaku_count_shape")
         end = schema.index(",\n            PRIMARY KEY", start)
@@ -552,6 +559,12 @@ def _weaken_ck_chaku_schema(defect: str) -> str:
         return schema[:start] + constraint + schema[end:]
     if defect == "restrict-fk":
         return schema.replace("ON DELETE CASCADE", "ON DELETE RESTRICT", 1)
+    if defect == "deferrable-fk":
+        return schema.replace(
+            "ON DELETE CASCADE",
+            "ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED",
+            1,
+        )
     if defect == "wrong-fk-order":
         return schema.replace(
             "FOREIGN KEY (Year, MonthDay,",
@@ -721,9 +734,11 @@ def test_ck_postgresql_complete_roundtrip_reconnect_update_delete(
     [
         "check-true",
         "token-tautology",
+        "extra-domain-value",
         "weak-count-shape",
         "not-validated",
         "restrict-fk",
+        "deferrable-fk",
         "wrong-fk-order",
     ],
 )
