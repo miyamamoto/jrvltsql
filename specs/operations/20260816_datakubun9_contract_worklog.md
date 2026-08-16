@@ -150,6 +150,14 @@
   passed on the implementation tree. Exact-SHA workflow, PostgreSQL, and actual
   snapshot replay evidence will be attached to the PR after the candidate is
   committed.
+- GitHub-native Copilot reviewed all eight changed files at candidate
+  `451a4ae67df0afa3a97905c001a087e66135f03c` and found one actionable boundary:
+  the ordered time-series mutation fallback did not propagate the one
+  batch-level `CollectedAt`. The new focused test first failed with inserted
+  values `['row-one', 'row-two']` instead of two `batch-capture` values. The
+  ordered path now stamps every validated row with the precomputed capture time
+  before single-row dispatch; the test passed, and the affected set then passed
+  92 tests, 7 skips, and 12 subtests. No other Copilot finding was reported.
 
 ## Boundary discovered for a later iteration
 
@@ -165,6 +173,7 @@
 
 ## Next safe command
 
-- Freeze and commit the reviewed implementation tree, then run the required
-  focused/workflow-equivalent, PostgreSQL, and bounded acquired-snapshot checks
-  against that full candidate SHA before opening or merging the PR.
+- Commit the aggregated review repair, push it to PR #188, then rerun the
+  necessary focused/workflow-equivalent and PostgreSQL checks against the new
+  full candidate SHA. Reply to and resolve the one review thread only after its
+  exact-SHA evidence passes.

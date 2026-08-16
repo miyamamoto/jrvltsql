@@ -366,6 +366,9 @@ class RealtimeUpdater:
             validated_records.append(record)
 
         if ordered_mutation_required:
+            if timeseries and batch_collected_at:
+                for record in validated_records:
+                    record.setdefault("CollectedAt", batch_collected_at)
             results = [
                 self._process_single_record(record, timeseries=timeseries)
                 for record in validated_records

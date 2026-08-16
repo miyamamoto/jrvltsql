@@ -669,6 +669,38 @@ class TestRealtimeUpdater(unittest.TestCase):
         self.assertEqual(inserted_by_table["TS_SOKUHO_O1"][0]["SourceSpec"], "0B30")
         self.assertIn("CollectedAt", inserted_by_table["TS_SOKUHO_O1"][0])
 
+    def test_ordered_timeseries_batch_uses_one_collected_at(self):
+        """A destructive mutation must not split one capture into different timestamps."""
+        base = {
+            "RecordSpec": "O1",
+            "SourceSpec": "0B41",
+            "Year": 2026,
+            "MonthDay": 503,
+            "JyoCD": "05",
+            "Kaiji": 1,
+            "Nichiji": 2,
+            "RaceNum": 11,
+            "HassoTime": "1540",
+        }
+        records = [
+            {**base, "DataKubun": "1", "Umaban": 1, "Kumi": "00"},
+            {**base, "DataKubun": "0"},
+            {**base, "DataKubun": "9", "Umaban": 2, "Kumi": "00"},
+        ]
+        self.updater._current_collected_at = MagicMock(
+            side_effect=("batch-capture", "row-one", "erase", "row-two")
+        )
+
+        result = self.updater.process_parsed_records_batch(records, timeseries=True)
+
+        self.assertTrue(result["success"])
+        inserted = [call.args[1] for call in self.mock_db.insert.call_args_list]
+        self.assertEqual(len(inserted), 2)
+        self.assertEqual(
+            [row["CollectedAt"] for row in inserted],
+            ["batch-capture", "batch-capture"],
+        )
+
     def test_ts_o1_primary_key_fields_are_not_blank(self):
         """O1 horse rows keep a non-null Kumi sentinel for PostgreSQL keys."""
         data = self.updater._prepare_data_for_db(
