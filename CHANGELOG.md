@@ -41,8 +41,8 @@
 
 - `AV`を公式78バイト・7項目キーへ結び付け、native/速報/JRA-VAN標準名の
   主キーを`NOT NULL`で統一。旧status 0はexact delete、現行status 1/2と
-  2021年前後の事由blank/000〜003を両立し、不正key・本文・unsafe schemaを
-  SQLite/PostgreSQLのmutation前に拒否
+  2021年前後の事由blank/000〜003を両立し、旧`AVOIDENCE`単独構成、不正key・
+  本文・unsafe schemaをSQLite/PostgreSQLのmutation前に拒否
 - `SE`の現行555バイト全sliceをSDK 5.0.0 manifestへ結び付け、native/速報/
   JRA-VAN標準名の主キーを公式8項目（末尾`KettoNum`）へ統一。旧7項目・keyless・
   不正型・追加一意制約・deferrable主キーはmutation前に拒否し、個別取消、4予約領域、

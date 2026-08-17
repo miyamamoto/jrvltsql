@@ -13,6 +13,7 @@ from typing import Dict, Iterator, List, Optional, Union
 from src.database.base import BaseDatabase, DatabaseError
 from src.database.migration import SchemaMigrationError
 from src.importer.importer import (
+    _AV_STORAGE_TABLES,
     _ORDERED_MASTER_STORAGE_TABLES,
     _PREPARED_CH_SEISEKI_ROWS_KEY,
     _PREPARED_CK_ROWS_KEY,
@@ -964,10 +965,14 @@ class OptimizedDataImporter:
             # Use optimized insert if available
             if hasattr(self.database, "insert_many_optimized"):
                 # Optimized path
-                rows = self.database.insert_many_optimized(table_name, batch)
+                affected_rows = self.database.insert_many_optimized(table_name, batch)
             else:
                 # Standard insert_many
-                rows = self.database.insert_many(table_name, batch)
+                affected_rows = self.database.insert_many(table_name, batch)
+
+            # PostgreSQL collapses same-key AV operations before one upsert.
+            # Statistics count accepted provider operations, not final rows.
+            rows = len(batch) if table_name in _AV_STORAGE_TABLES else affected_rows
 
             self._records_imported += rows
             self._batches_processed += 1

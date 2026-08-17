@@ -92,6 +92,21 @@ def resolve_standard_table_name(database: BaseDatabase, native_table_name: str) 
             "CK standard-schema storage is not implemented; use native NL_CK until the "
             "canonical CHOKYO_DETAIL parent/child contract is available"
         )
+    if native_table_name == "NL_AV":
+        from src.database.migration import _migration_targets
+
+        for target in _migration_targets(database):
+            if (
+                target.is_connected()
+                and target.table_exists("AVOIDENCE")
+                and not target.table_exists(standard_name)
+            ):
+                raise SchemaMigrationError(
+                    "Legacy standard table AVOIDENCE exists but canonical "
+                    "TORIKESI_JYOGAI does not. Automatic AV import is refused; "
+                    "rebuild the standard table as TORIKESI_JYOGAI and reimport "
+                    "current 78-byte source records."
+                )
     if (
         native_table_name == "NL_BT"
         and database.is_connected()
@@ -6312,7 +6327,16 @@ class DataImporter:
                 return
 
             # Insert batch using INSERT OR REPLACE
-            rows = self.database.insert_many(table_name, converted_batch, use_replace=True)
+            affected_rows = self.database.insert_many(
+                table_name, converted_batch, use_replace=True
+            )
+            # PostgreSQL collapses same-key AV operations before one upsert.
+            # Statistics count accepted provider operations, not final rows.
+            rows = (
+                len(converted_batch)
+                if table_name in _AV_STORAGE_TABLES
+                else affected_rows
+            )
 
             self._records_imported += rows
             self._batches_processed += 1

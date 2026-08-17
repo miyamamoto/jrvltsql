@@ -118,6 +118,38 @@
   `scripts/smoke_distribution_init.py` passed the extracted wheel. The tracked
   `specs/`, this worklog, and official-layout fixtures remain excluded from the
   distributable artifacts.
+- PR #210 was opened as a draft at candidate
+  `219fbd52b2eb612200cd70f74de1aee06d6ee6c6`. GitHub `test`, `lint`, and
+  `windows-batch-syntax` checks succeeded; `performance-test` was intentionally
+  skipped. The one requested Copilot review returned only its quota-exhausted
+  notice and is not counted as correctness evidence.
+- Three independent Codex reviews were aggregated before changing the
+  candidate. They identified: (1) exact-erase tests seeded only the target row
+  and could not reject a whole-table delete; (2) PostgreSQL bulk upsert
+  deduplication made successful AV provider-operation statistics report `2`
+  for three accepted rows; and (3) a legacy standard `AVOIDENCE` table on
+  either DualDatabase target was missed, allowing unrelated additive migration
+  before failure.
+- Added regressions were run before the repair. The legacy-only Dual matrix
+  failed in all six DataImporter/OptimizedDataImporter/single-record and
+  primary/secondary combinations. On fresh PostgreSQL 16, the default-batch
+  provider-order matrix failed in eight batch-import combinations with
+  `records_imported == 2` instead of `3`; single-record controls remained
+  green. These failures bind the actual checks rather than only a happy path.
+- The aggregated repair now checks every concrete migration target for a
+  legacy-only `AVOIDENCE` table before mutation, counts successful AV batch
+  provider operations independently of PostgreSQL's final-row deduplication,
+  and verifies a survivor row plus revision body across exact erase. The same
+  SQLite AV suite passed `55` tests with `18` PostgreSQL skips, and the fresh
+  PostgreSQL 16 suite passed all `73` tests.
+- After restoring the repository's existing manual formatting (a local Black
+  invocation tried to rewrite unrelated lines), the repaired tree replayed the
+  same AV suites with `55 passed, 18 skipped` on SQLite and `73 passed` on
+  actual PostgreSQL 16. The affected existing suite then passed `329` tests,
+  skipped `25` opt-in tests, and passed `10` subtests. `TEST GATE PASS`, fatal
+  flake8, `uv lock --check`, `mkdocs build --strict`, and `git diff --check`
+  also passed. The disposable PostgreSQL container was removed and its
+  exact-name listing was empty.
 
 ## STOP conditions
 

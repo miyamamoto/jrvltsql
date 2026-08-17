@@ -267,14 +267,40 @@ def test_av_storage_revises_one_identity_and_exactly_erases_old_status_zero(
             happyo_time="99999999",
             jiyu_kubun="999",
         )
+        survivor = parsed_av(
+            make_date="20030710",
+            umaban="02",
+            bamei="サバイバー",
+            happyo_time="07090635",
+            jiyu_kubun="002",
+        )
         import_records(
             database,
             entrypoint,
-            [first, revision, delete],
+            [first, revision, survivor],
             standard=standard,
             auto_commit=auto_commit,
         )
-        assert database.fetch_one(f"SELECT COUNT(*) AS n FROM {table_name}") == {"n": 0}
+        assert database.fetch_one(
+            f"SELECT DataKubun, HappyoTime, JiyuKubun FROM {table_name} WHERE Umaban = 1"
+        ) == {"DataKubun": "2", "HappyoTime": "07090710", "JiyuKubun": "003"}
+        import_records(
+            database,
+            entrypoint,
+            [delete],
+            standard=standard,
+            auto_commit=auto_commit,
+        )
+        assert database.fetch_all(
+            f"SELECT Umaban, Bamei, HappyoTime, JiyuKubun FROM {table_name} ORDER BY Umaban"
+        ) == [
+            {
+                "Umaban": 2,
+                "Bamei": "サバイバー",
+                "HappyoTime": "07090635",
+                "JiyuKubun": "002",
+            }
+        ]
 
 
 @pytest.mark.parametrize("standard", (False, True), ids=("native", "standard"))
@@ -344,6 +370,60 @@ def test_av_malformed_caller_is_rejected_before_mutation(tmp_path) -> None:
         assert database.fetch_one("SELECT COUNT(*) AS n FROM NL_AV") == {"n": 0}
 
 
+@pytest.mark.parametrize("entrypoint", ("data-batch", "optimized-batch", "single-record"))
+@pytest.mark.parametrize("legacy_target", ("primary", "secondary"))
+def test_av_legacy_standard_alias_stops_dual_migration_before_any_alter(
+    tmp_path, legacy_target: str, entrypoint: str
+) -> None:
+    race_without_youbi = JRAVAN_SCHEMAS["RACE"].replace(
+        "            YoubiCD                        VARCHAR(1)          ,  -- 文字列(1)\n",
+        "",
+    )
+    assert race_without_youbi != JRAVAN_SCHEMAS["RACE"]
+    legacy_av = JRAVAN_SCHEMAS["TORIKESI_JYOGAI"].replace("TORIKESI_JYOGAI", "AVOIDENCE", 1)
+    primary = SQLiteDatabase({"path": str(tmp_path / "primary.db")})
+    secondary = SQLiteDatabase({"path": str(tmp_path / "secondary.db")})
+    with primary, secondary:
+        for database in (primary, secondary):
+            database.execute(race_without_youbi)
+            database.commit()
+        legacy_database = primary if legacy_target == "primary" else secondary
+        legacy_database.execute(legacy_av)
+        legacy_database.commit()
+        before_primary = primary.fetch_all('PRAGMA table_info("RACE")')
+        before_secondary = secondary.fetch_all('PRAGMA table_info("RACE")')
+
+        with pytest.raises(SchemaMigrationError, match=r"AVOIDENCE.*TORIKESI_JYOGAI"):
+            dual = DualDatabase(primary, secondary)
+            if entrypoint == "data-batch":
+                DataImporter(dual, use_jravan_schema=True).import_records(iter([]))
+            elif entrypoint == "optimized-batch":
+                OptimizedDataImporter(dual, use_jravan_schema=True).import_records(iter([]))
+            else:
+                DataImporter(dual, use_jravan_schema=True).import_single_record(parsed_av())
+
+        assert primary.fetch_all('PRAGMA table_info("RACE")') == before_primary
+        assert secondary.fetch_all('PRAGMA table_info("RACE")') == before_secondary
+
+
+def test_av_canonical_standard_table_takes_precedence_over_legacy_alias(tmp_path) -> None:
+    database = SQLiteDatabase({"path": str(tmp_path / "coexisting-alias.db")})
+    legacy_av = JRAVAN_SCHEMAS["TORIKESI_JYOGAI"].replace("TORIKESI_JYOGAI", "AVOIDENCE", 1)
+    with database:
+        database.execute(legacy_av)
+        database.execute(JRAVAN_SCHEMAS["TORIKESI_JYOGAI"])
+        database.commit()
+        import_records(
+            database,
+            "data-batch",
+            [parsed_av()],
+            standard=True,
+            auto_commit=True,
+        )
+        assert database.fetch_one("SELECT COUNT(*) AS n FROM TORIKESI_JYOGAI") == {"n": 1}
+        assert database.fetch_one("SELECT COUNT(*) AS n FROM AVOIDENCE") == {"n": 0}
+
+
 @pytest.mark.parametrize("changes", ({"Bamei": "😀"}, {"Bamei": "あ" * 19}))
 def test_av_caller_text_must_fit_the_official_cp932_span(changes: dict) -> None:
     record = parsed_av()
@@ -376,6 +456,41 @@ def test_realtime_av_rejects_malformed_rows_and_replaces_complete_date_snapshot(
     assert replaced["success"] is True
     assert replaced["inserted"] == 1
     assert rows == [{"Umaban": 2}]
+
+
+def test_realtime_av_historical_erase_preserves_another_official_identity(tmp_path) -> None:
+    database = SQLiteDatabase({"path": str(tmp_path / "realtime-erase.db")})
+    with database:
+        database.execute(SCHEMAS["RT_AV"])
+        database.commit()
+        updater = RealtimeUpdater(database)
+        inserted = updater.process_parsed_records_batch(
+            [
+                parsed_av(make_date="20030710", umaban="01"),
+                parsed_av(
+                    make_date="20030710",
+                    umaban="02",
+                    bamei="サバイバー",
+                    jiyu_kubun="002",
+                ),
+            ]
+        )
+        erased = updater.process_parsed_records_batch(
+            [
+                parsed_av(
+                    data_kubun="0",
+                    make_date="20030710",
+                    umaban="01",
+                    happyo_time="99999999",
+                    jiyu_kubun="999",
+                )
+            ]
+        )
+        rows = database.fetch_all("SELECT Umaban, Bamei, JiyuKubun FROM RT_AV ORDER BY Umaban")
+
+    assert inserted["success"] is True
+    assert erased["success"] is True
+    assert rows == [{"Umaban": 2, "Bamei": "サバイバー", "JiyuKubun": "002"}]
 
 
 @pytest.mark.parametrize("unsafe_target", ("primary", "secondary"))
@@ -448,12 +563,43 @@ def test_av_postgresql_identity_revision_and_historical_exact_erase(
     import_records(
         postgresql_db,
         entrypoint,
-        [first, revision, delete],
+        [
+            first,
+            revision,
+            parsed_av(
+                make_date="20030710",
+                umaban="02",
+                bamei="サバイバー",
+                happyo_time="07090635",
+                jiyu_kubun="002",
+            ),
+        ],
         standard=standard,
         auto_commit=auto_commit,
-        batch_size=1,
     )
-    assert postgresql_db.fetch_one(f'SELECT COUNT(*) AS "n" FROM {table_name}') == {"n": 0}
+    assert postgresql_db.fetch_one(
+        f'SELECT DataKubun AS "DataKubun", HappyoTime AS "HappyoTime", '
+        f'JiyuKubun AS "JiyuKubun" FROM {table_name} WHERE Umaban = 1'
+    ) == {"DataKubun": "2", "HappyoTime": "07090710", "JiyuKubun": "003"}
+    import_records(
+        postgresql_db,
+        entrypoint,
+        [delete],
+        standard=standard,
+        auto_commit=auto_commit,
+    )
+    assert postgresql_db.fetch_all(
+        f'SELECT Umaban AS "Umaban", Bamei AS "Bamei", '
+        f'HappyoTime AS "HappyoTime", JiyuKubun AS "JiyuKubun" '
+        f"FROM {table_name} ORDER BY Umaban"
+    ) == [
+        {
+            "Umaban": 2,
+            "Bamei": "サバイバー",
+            "HappyoTime": "07090635",
+            "JiyuKubun": "002",
+        }
+    ]
 
 
 @pytest.mark.parametrize("defect", ("wrong-type", "short-text", "extra-unique", "deferrable-pk"))
