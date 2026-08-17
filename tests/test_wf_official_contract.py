@@ -1,0 +1,1359 @@
+"""WF parser and storage contract for the official 7,215-byte layout."""
+
+import json
+import os
+from pathlib import Path
+from uuid import uuid4
+
+import pytest
+
+from src.database.base import DatabaseError
+from src.database.migration import SchemaMigrationError
+from src.database.schema import SCHEMAS, SchemaManager
+from src.database.schema_jravan import JRAVAN_SCHEMAS
+from src.database.schema_metadata import TABLE_METADATA
+from src.database.schema_types import (
+    get_table_column_types,
+    get_table_primary_key_columns,
+)
+from src.database.sqlite_handler import SQLiteDatabase
+from src.database.table_mappings import (
+    JLTSQL_TO_JRAVAN,
+    JRAVAN_TO_JLTSQL,
+    STANDARD_EXPANDED_RECORD_OWNER,
+)
+from src.importer.importer import DataImporter, ImporterError
+from src.importer.importer_optimized import OptimizedDataImporter
+from src.parser.wf_parser import WFParser
+from src.realtime.updater import RealtimeUpdater
+
+
+def _pad(value: str, width: int) -> bytes:
+    encoded = value.encode("cp932")
+    assert len(encoded) <= width
+    return encoded.ljust(width, b" ")
+
+
+def build_record(
+    *,
+    data_kubun: str = "3",
+    make_date: str = "20260817",
+    year: str = "2026",
+    month_day: str = "0816",
+    populate_payload: bool | None = None,
+    field_overrides: dict[str, str] | None = None,
+) -> bytes:
+    """Build one complete current WF record with distinct boundary slots."""
+    if populate_payload is None:
+        populate_payload = data_kubun != "1"
+    values = {
+        "DataKubun": data_kubun,
+        "MakeDate": make_date,
+        "Year": year,
+        "MonthDay": month_day,
+        "Yobi1": "00",
+        "Yobi2": "000000",
+        "HatubaiHyosu": "123456" if populate_payload else "",
+        "HenkanFlag": "0",
+        "FuseirituFlag": "0",
+        "TekichuNasiFlag": "0",
+        "CarryOverStart": "1000",
+        "CarryOverBalance": "2000" if populate_payload else "",
+    }
+    for index in range(1, 6):
+        # Four distinct values per composite so a JyoCD/Kaiji/Nichiji/RaceNum
+        # position swap cannot survive the readback assertions.
+        values[f"RaceInfo{index}"] = f"{index:02d}{index + 1:02d}{index + 3:02d}{index + 7:02d}"
+        values[f"YukoHyosu{index}"] = str(1000 + index) if populate_payload else ""
+    if field_overrides:
+        values.update(field_overrides)
+
+    record = bytearray(b" " * WFParser.RECORD_LENGTH)
+    record[0:2] = b"WF"
+    record[2:3] = _pad(values["DataKubun"], 1)
+    record[3:11] = _pad(values["MakeDate"], 8)
+    record[11:15] = _pad(values["Year"], 4)
+    record[15:19] = _pad(values["MonthDay"], 4)
+    record[19:21] = _pad(values["Yobi1"], 2)
+    for index in range(1, 6):
+        start = 21 + (index - 1) * 8
+        record[start : start + 8] = _pad(values[f"RaceInfo{index}"], 8)
+    record[61:67] = _pad(values["Yobi2"], 6)
+    record[67:78] = _pad(values["HatubaiHyosu"], 11)
+    for index in range(1, 6):
+        start = 78 + (index - 1) * 11
+        record[start : start + 11] = _pad(values[f"YukoHyosu{index}"], 11)
+    record[133:134] = _pad(values["HenkanFlag"], 1)
+    record[134:135] = _pad(values["FuseirituFlag"], 1)
+    record[135:136] = _pad(values["TekichuNasiFlag"], 1)
+    record[136:151] = _pad(values["CarryOverStart"], 15)
+    record[151:166] = _pad(values["CarryOverBalance"], 15)
+    if populate_payload:
+        for index, kumi, pay, votes in (
+            (1, "0102030405", "123456", "7"),
+            (122, "0203040506", "234567", "8"),
+            (243, "0304050607", "345678", "9"),
+        ):
+            start = 166 + (index - 1) * WFParser.PAYOUT_LENGTH
+            record[start : start + 10] = _pad(kumi, 10)
+            record[start + 10 : start + 19] = _pad(pay, 9)
+            record[start + 19 : start + 29] = _pad(votes, 10)
+    record[7213:7215] = b"\r\n"
+    return bytes(record)
+
+
+def parsed_record(**kwargs) -> dict:
+    parsed = WFParser().parse(build_record(**kwargs))
+    assert parsed is not None
+    return parsed
+
+
+def cancellation_record() -> bytes:
+    record = bytearray(build_record(data_kubun="9", populate_payload=False))
+    record[166:176] = b"0000000000"
+    record[176:185] = b"000000100"
+    record[185:195] = b"0000000000"
+    return bytes(record)
+
+
+def _payout_slot_override(
+    index: int, kumi: str, pay: str, votes: str, *, data_kubun: str = "3"
+) -> bytes:
+    """Overwrite one physically bounded payout slot."""
+    record = bytearray(build_record(data_kubun=data_kubun, populate_payload=False))
+    start = 166 + (index - 1) * WFParser.PAYOUT_LENGTH
+    record[start : start + 10] = _pad(kumi, 10)
+    record[start + 10 : start + 19] = _pad(pay, 9)
+    record[start + 19 : start + 29] = _pad(votes, 10)
+    return bytes(record)
+
+
+def test_wf_layout_is_bound_to_the_pinned_sdk_manifest() -> None:
+    manifest = json.loads(
+        Path("tests/fixtures/official_layout/jvdata_sdk500_manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    info = manifest["structures"]["JV_WF_INFO"]
+    repeats = {
+        field["name"]: (field["start"], field["width"], field["stride"], field["count"])
+        for field in info["fields"]
+        if field["kind"] == "repeat"
+    }
+    assert info["width"] == WFParser.RECORD_LENGTH == 7215
+    assert info["expanded_leaf_count"] == 771
+    assert repeats == {
+        "WFRaceInfo": (22, 8, 8, 5),
+        "WFYukoHyoInfo": (79, 11, 11, 5),
+        "WFPayInfo": (167, 29, 29, 243),
+    }
+    assert info["fields"][-1] == {
+        "name": "crlf",
+        "kind": "scalar",
+        "start": 7214,
+        "width": 2,
+        "decoder": "text",
+    }
+
+    parsed = parsed_record()
+    payouts = json.loads(parsed["PayoutsJson"])
+    assert [parsed[f"RaceInfo{index}"] for index in range(1, 6)] == [
+        "01020408",
+        "02030509",
+        "03040610",
+        "04050711",
+        "05060812",
+    ]
+    assert [parsed[f"YukoHyosu{index}"] for index in range(1, 6)] == [
+        "1001",
+        "1002",
+        "1003",
+        "1004",
+        "1005",
+    ]
+    assert [payouts[index - 1] for index in (1, 122, 243)] == [
+        {"Kumi": "0102030405", "PayJyushosiki": "123456", "TekichuHyosu": "7"},
+        {"Kumi": "0203040506", "PayJyushosiki": "234567", "TekichuHyosu": "8"},
+        {"Kumi": "0304050607", "PayJyushosiki": "345678", "TekichuHyosu": "9"},
+    ]
+
+
+def test_wf_parser_reads_every_manifest_scalar_and_repeat_at_the_pinned_offset() -> None:
+    """Fill each SDK field at its manifest offset and read it back by native name."""
+    manifest = json.loads(
+        Path("tests/fixtures/official_layout/jvdata_sdk500_manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    structures = manifest["structures"]
+    fields = {field["name"]: field for field in structures["JV_WF_INFO"]["fields"]}
+    record = bytearray(b" " * manifest["root_records"]["WF"]["length"])
+
+    def put(start: int, width: int, value: str) -> None:
+        encoded = value.encode("ascii")
+        assert len(encoded) == width, (start, width, value)
+        record[start - 1 : start - 1 + width] = encoded
+
+    head = fields["head"]
+    for sub in structures["RECORD_ID"]["fields"]:
+        if sub["name"] == "RecordSpec":
+            put(head["start"] + sub["start"] - 1, sub["width"], "WF")
+        elif sub["name"] == "DataKubun":
+            put(head["start"] + sub["start"] - 1, sub["width"], "3")
+        elif sub["name"] == "MakeDate":
+            put(head["start"] + sub["start"] - 1, sub["width"], "20260817")
+    kaisai = fields["KaisaiDate"]
+    put(kaisai["start"], kaisai["width"], "20260816")
+    scalar_values = {
+        "reserved1": ("Yobi1", "00"),
+        "reserved2": ("Yobi2", "000000"),
+        "Hatsubai_Hyo": ("HatubaiHyosu", "12345678901"),
+        "HenkanFlag": ("HenkanFlag", "1"),
+        "FuseiritsuFlag": ("FuseirituFlag", "0"),
+        "TekichunashiFlag": ("TekichuNasiFlag", "1"),
+        "COShoki": ("CarryOverStart", "100000000000001"),
+        "COZanDaka": ("CarryOverBalance", "100000000000002"),
+    }
+    for sdk_name, (_, value) in scalar_values.items():
+        put(fields[sdk_name]["start"], fields[sdk_name]["width"], value)
+    race = fields["WFRaceInfo"]
+    composites = ["01020408", "02030509", "03040610", "04050711", "05060812"]
+    for slot, composite in enumerate(composites):
+        put(race["start"] + slot * race["stride"], race["width"], composite)
+    yuko = fields["WFYukoHyoInfo"]
+    yuko_values = [f"{20000000000 + slot:011d}" for slot in range(1, 6)]
+    for slot, value in enumerate(yuko_values):
+        put(yuko["start"] + slot * yuko["stride"], yuko["width"], value)
+    pay = fields["WFPayInfo"]
+    pay_struct = {sub["name"]: sub for sub in structures["WF_PAY_INFO"]["fields"]}
+    payout_values = {
+        1: ("0102030405", "000001110", "0000000007"),
+        122: ("0203040506", "000002220", "0000000008"),
+        243: ("0304050607", "000003330", "0000000009"),
+    }
+    for slot, (kumi, amount, votes) in payout_values.items():
+        base = pay["start"] + (slot - 1) * pay["stride"]
+        put(base + pay_struct["Kumiban"]["start"] - 1, 10, kumi)
+        put(base + pay_struct["Pay"]["start"] - 1, 9, amount)
+        put(base + pay_struct["Tekichu_Hyo"]["start"] - 1, 10, votes)
+    put(fields["crlf"]["start"], fields["crlf"]["width"], "\r\n")
+
+    parsed = WFParser().parse(bytes(record))
+    assert parsed is not None
+    assert (parsed["RecordSpec"], parsed["DataKubun"], parsed["MakeDate"]) == (
+        "WF",
+        "3",
+        "20260817",
+    )
+    assert (parsed["Year"], parsed["MonthDay"]) == ("2026", "0816")
+    for native_name, value in scalar_values.values():
+        assert parsed[native_name] == value, native_name
+    assert [parsed[f"RaceInfo{slot}"] for slot in range(1, 6)] == composites
+    assert [parsed[f"YukoHyosu{slot}"] for slot in range(1, 6)] == yuko_values
+    payouts = json.loads(parsed["PayoutsJson"])
+    for slot, (kumi, amount, votes) in payout_values.items():
+        assert payouts[slot - 1] == {
+            "Kumi": kumi,
+            "PayJyushosiki": amount,
+            "TekichuHyosu": votes,
+        }
+    assert sum(1 for slot in payouts if slot["Kumi"]) == 3
+
+
+@pytest.mark.parametrize(
+    "record",
+    (
+        pytest.param(build_record(data_kubun=""), id="blank-status"),
+        pytest.param(build_record(data_kubun="8"), id="unknown-status"),
+        pytest.param(build_record(make_date="20260230"), id="impossible-make-date"),
+        pytest.param(build_record(year="20A6"), id="nondigit-year"),
+        pytest.param(build_record(month_day="0230"), id="impossible-event-date"),
+        pytest.param(
+            build_record(field_overrides={"RaceInfo3": "05A30103"}),
+            id="nondigit-race-info",
+        ),
+        pytest.param(
+            build_record(field_overrides={"HatubaiHyosu": "12X3"}),
+            id="nondigit-sales-votes",
+        ),
+        pytest.param(
+            build_record(field_overrides={"HenkanFlag": "8"}),
+            id="unknown-refund-flag",
+        ),
+        pytest.param(
+            build_record(field_overrides={"CarryOverStart": "9Q8"}),
+            id="nondigit-carryover",
+        ),
+        pytest.param(
+            _payout_slot_override(1, "010203040", "123456", "7"),
+            id="nine-digit-kumi",
+        ),
+        pytest.param(
+            _payout_slot_override(122, "0102030405", "", "7"),
+            id="partial-payout-tuple",
+        ),
+        pytest.param(
+            build_record(data_kubun="2", field_overrides={"HenkanFlag": ""}),
+            id="status2-blank-flag",
+        ),
+        pytest.param(
+            build_record(field_overrides={"Yobi1": "01"}),
+            id="noninitial-reserved1",
+        ),
+        pytest.param(
+            build_record(field_overrides={"Yobi2": "000001"}),
+            id="noninitial-reserved2",
+        ),
+        pytest.param(
+            build_record(
+                data_kubun="1",
+                make_date="20111201",
+                year="2011",
+                month_day="1201",
+                populate_payload=False,
+                field_overrides={"CarryOverStart": "100"},
+            ),
+            id="pre420-status1-noninitial-carryover",
+        ),
+        pytest.param(
+            build_record(
+                data_kubun="2",
+                make_date="20260817",
+                year="2011",
+                month_day="1201",
+                populate_payload=False,
+                field_overrides={"CarryOverStart": ""},
+            ),
+            id="current-format-old-event-missing-carryover",
+        ),
+        pytest.param(
+            _payout_slot_override(
+                1,
+                "0102030405",
+                "000000123",
+                "0000000004",
+                data_kubun="9",
+            ),
+            id="status9-noncancellation-payout",
+        ),
+        pytest.param(
+            build_record(data_kubun="1", populate_payload=True),
+            id="status1-noninitial-payload",
+        ),
+        pytest.param(
+            build_record(data_kubun="3", populate_payload=False),
+            id="status3-missing-required-payload",
+        ),
+        *(
+            pytest.param(
+                build_record(
+                    data_kubun=status,
+                    field_overrides={"CarryOverStart": ""},
+                ),
+                id=f"current-status{status}-missing-initial-carryover",
+            )
+            for status in ("1", "2", "9")
+        ),
+    ),
+)
+def test_wf_rejects_unsupported_status_and_semantically_corrupt_fields(
+    record: bytes,
+) -> None:
+    assert WFParser().parse(record) is None
+
+
+def test_wf_accepts_all_official_accumulated_statuses_and_opaque_delete() -> None:
+    for status in ("0", "1", "2", "3", "7", "9"):
+        overrides = None
+        if status == "0":
+            overrides = {
+                "RaceInfo1": "XXXXXXXX",
+                "HatubaiHyosu": "NOT-NUMERIC",
+                "HenkanFlag": "X",
+                "CarryOverStart": "OPAQUE",
+                "Yobi1": "XX",
+                "Yobi2": "OPAQUE",
+            }
+        parsed = WFParser().parse(
+            build_record(
+                data_kubun=status,
+                populate_payload=False if status == "9" else None,
+                field_overrides=overrides,
+            )
+        )
+        assert parsed is not None
+        assert parsed["DataKubun"] == status
+    for status in ("2", "9"):
+        optional_blank = WFParser().parse(build_record(data_kubun=status, populate_payload=False))
+        assert optional_blank is not None
+
+    for status in ("1", "2", "9"):
+        pre_420 = WFParser().parse(
+            build_record(
+                data_kubun=status,
+                make_date="20111201",
+                year="2011",
+                month_day="1201",
+                populate_payload=False,
+                field_overrides={"CarryOverStart": ""},
+            )
+        )
+        assert pre_420 is not None
+
+    cancelled = WFParser().parse(cancellation_record())
+    assert cancelled is not None
+    assert WFParser.CANCELLATION_PAYOUT == ("0000000000", "000000100", "0000000000")
+    assert json.loads(cancelled["PayoutsJson"])[0] == dict(
+        zip(WFParser.PAYOUT_KEYS, WFParser.CANCELLATION_PAYOUT, strict=True)
+    )
+
+
+def test_wf_native_canonical_and_metadata_schemas_encode_the_official_key() -> None:
+    assert get_table_primary_key_columns("NL_WF") == ["Year", "MonthDay"]
+    assert get_table_primary_key_columns("RT_WF") == ["Year", "MonthDay"]
+    assert STANDARD_EXPANDED_RECORD_OWNER["NL_WF"] == "JYUSYOSIKI_HEAD"
+    assert JRAVAN_TO_JLTSQL["JYUSYOSIKI_HEAD"] == "NL_WF"
+    assert JRAVAN_TO_JLTSQL["JYUSYOSIKI"] == "NL_WF"
+    assert JLTSQL_TO_JRAVAN["NL_WF"] == "JYUSYOSIKI_HEAD"
+    assert "WIN5" not in JRAVAN_SCHEMAS
+
+    head_fields = get_table_column_types("JYUSYOSIKI_HEAD")
+    child_fields = get_table_column_types("JYUSYOSIKI")
+    assert set(head_fields) == {
+        "RecordSpec",
+        "DataKubun",
+        "MakeDate",
+        "Year",
+        "MonthDay",
+        "reserved1",
+        *(
+            f"{name}{index}"
+            for index in range(1, 6)
+            for name in ("JyoCD", "Kaiji", "Nichiji", "RaceNum")
+        ),
+        "reserved2",
+        "HatubaiHyosu",
+        *(f"YukoHyosu{index}" for index in range(1, 6)),
+        "HenkanFlag",
+        "FuseirituFlag",
+        "TekichunashiFlag",
+        "CarryoverSyoki",
+        "CarryoverZandaka",
+    }
+    assert get_table_primary_key_columns("JYUSYOSIKI_HEAD") == ["Year", "MonthDay"]
+    assert set(child_fields) == {
+        "Year",
+        "MonthDay",
+        "Num",
+        "Kumi",
+        "PayJyushosiki",
+        "TekichuHyo",
+    }
+    assert get_table_primary_key_columns("JYUSYOSIKI") == ["Year", "MonthDay", "Num"]
+
+    for table_name in ("NL_WF", "RT_WF"):
+        metadata = TABLE_METADATA[table_name]
+        assert [(column["name"], column["type"]) for column in metadata["columns"]] == list(
+            get_table_column_types(table_name).items()
+        )
+        assert metadata["primary_key"] == ["Year", "MonthDay"]
+
+
+def test_wf_same_length_specification_changes_are_ledgered_without_fake_layout() -> None:
+    history = json.loads(
+        Path("tests/fixtures/official_layout/jvdata_layout_history.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert not any(item["record_type"] == "WF" for item in history["physical_length_changes"])
+    assert [
+        item for item in history["same_length_semantic_changes"] if item["record_type"] == "WF"
+    ] == [
+        {
+            "record_type": "WF",
+            "announced_date": "2011-09-28",
+            "official_spec_version": "4.1.1",
+            "length_unchanged": True,
+            "layout_unchanged": True,
+            "change_kind": "name_initial_value_and_no_hit_clarification",
+            "provenance_required": False,
+            "reason": (
+                "The specification corrected the carryover balance field name, "
+                "documented both carryover initial values, and documented the "
+                "no-hit payout representation without changing the 7,215-byte layout."
+            ),
+            "source": "JV-Data4901.xlsx:変更履歴:107-109",
+        },
+        {
+            "record_type": "WF",
+            "announced_date": "2012-02-21",
+            "official_spec_version": "4.2.0",
+            "length_unchanged": True,
+            "layout_unchanged": True,
+            "change_kind": "status_availability_change",
+            "provenance_required": False,
+            "reason": (
+                "Initial carryover availability for statuses 1, 2, and 9 changed "
+                "to required without changing byte positions or record length."
+            ),
+            "source": "JV-Data4901.xlsx:変更履歴:103-105",
+        },
+    ]
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_wf_caller_rows_are_revalidated_before_native_mutation(tmp_path, importer_class) -> None:
+    database = SQLiteDatabase({"path": str(tmp_path / "caller.db")})
+    with database:
+        database.create_table("NL_WF", SCHEMAS["NL_WF"])
+        importer = importer_class(database)
+        assert importer.import_records(iter([parsed_record()]))["records_imported"] == 1
+        before = database.fetch_all("SELECT * FROM NL_WF")
+
+        invalid = parsed_record()
+        invalid.update(
+            {
+                "Year": "20A6",
+                "MonthDay": "0230",
+                "HatubaiHyosu": "12X3",
+                "CarryOverStart": "9Q8",
+            }
+        )
+        with pytest.raises(SchemaMigrationError):
+            importer.import_records(iter([invalid]))
+        assert database.fetch_all("SELECT * FROM NL_WF") == before
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_wf_wrong_native_key_is_rejected_before_row_mutation(tmp_path, importer_class) -> None:
+    database = SQLiteDatabase({"path": str(tmp_path / "wrong-key.db")})
+    wrong_schema = SCHEMAS["NL_WF"].replace("PRIMARY KEY (Year, MonthDay)", "PRIMARY KEY (Year)")
+    with database:
+        database.execute(wrong_schema)
+        database.execute(
+            "INSERT INTO NL_WF (RecordSpec, DataKubun, Year, MonthDay) " "VALUES (?, ?, ?, ?)",
+            ("WF", "1", 2025, 101),
+        )
+        database.commit()
+        before_schema = database.fetch_one(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='NL_WF'"
+        )
+        before_rows = database.fetch_all("SELECT * FROM NL_WF")
+
+        with pytest.raises(SchemaMigrationError, match="primary key"):
+            importer_class(database).import_records(iter([parsed_record()]))
+
+        assert (
+            database.fetch_one("SELECT sql FROM sqlite_master WHERE type='table' AND name='NL_WF'")
+            == before_schema
+        )
+        assert database.fetch_all("SELECT * FROM NL_WF") == before_rows
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_wf_standard_storage_is_one_parent_and_243_ordered_children(
+    tmp_path, importer_class
+) -> None:
+    database = SQLiteDatabase({"path": str(tmp_path / "standard.db")})
+    with database:
+        database.create_table("JYUSYOSIKI_HEAD", JRAVAN_SCHEMAS["JYUSYOSIKI_HEAD"])
+        database.create_table("JYUSYOSIKI", JRAVAN_SCHEMAS["JYUSYOSIKI"])
+        stats = importer_class(database, use_jravan_schema=True).import_records(
+            iter([parsed_record()])
+        )
+        assert stats["records_imported"] == 1
+        assert stats["records_failed"] == 0
+        assert database.fetch_one("SELECT COUNT(*) AS count FROM JYUSYOSIKI_HEAD") == {"count": 1}
+        assert database.fetch_one("SELECT COUNT(*) AS count FROM JYUSYOSIKI") == {"count": 243}
+        assert database.fetch_all(
+            "SELECT Num, Kumi, PayJyushosiki, TekichuHyo FROM JYUSYOSIKI "
+            "WHERE Num IN (1, 122, 243) ORDER BY Num"
+        ) == [
+            {"Num": 1, "Kumi": "0102030405", "PayJyushosiki": "123456", "TekichuHyo": "7"},
+            {"Num": 122, "Kumi": "0203040506", "PayJyushosiki": "234567", "TekichuHyo": "8"},
+            {"Num": 243, "Kumi": "0304050607", "PayJyushosiki": "345678", "TekichuHyo": "9"},
+        ]
+
+        cancelled = WFParser().parse(cancellation_record())
+        assert cancelled is not None
+        ordered = importer_class(database, use_jravan_schema=True).import_records(
+            iter(
+                [
+                    parsed_record(data_kubun="1"),
+                    parsed_record(data_kubun="2"),
+                    cancelled,
+                ]
+            )
+        )
+        assert ordered["records_imported"] == 3
+        assert database.fetch_one("SELECT DataKubun FROM JYUSYOSIKI_HEAD") == {"DataKubun": "9"}
+        assert database.fetch_one(
+            "SELECT Kumi, PayJyushosiki, TekichuHyo FROM JYUSYOSIKI WHERE Num=1"
+        ) == {
+            "Kumi": "0000000000",
+            "PayJyushosiki": "000000100",
+            "TekichuHyo": "0000000000",
+        }
+        deleted = importer_class(database, use_jravan_schema=True).import_records(
+            iter([parsed_record(data_kubun="0")])
+        )
+        assert deleted["records_imported"] == 1
+        assert database.fetch_one("SELECT COUNT(*) AS count FROM JYUSYOSIKI_HEAD") == {"count": 0}
+        assert database.fetch_one("SELECT COUNT(*) AS count FROM JYUSYOSIKI") == {"count": 0}
+
+        restored = importer_class(database, use_jravan_schema=True).import_records(
+            iter([parsed_record(data_kubun="0"), parsed_record(data_kubun="3")])
+        )
+        assert restored["records_imported"] == 2
+        assert database.fetch_one("SELECT DataKubun FROM JYUSYOSIKI_HEAD") == {"DataKubun": "3"}
+        assert database.fetch_one("SELECT COUNT(*) AS count FROM JYUSYOSIKI") == {"count": 243}
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_wf_standard_missing_child_is_rejected_before_parent_mutation(
+    tmp_path, importer_class
+) -> None:
+    database = SQLiteDatabase({"path": str(tmp_path / "missing-child.db")})
+    with database:
+        database.create_table("JYUSYOSIKI_HEAD", JRAVAN_SCHEMAS["JYUSYOSIKI_HEAD"])
+        with pytest.raises(SchemaMigrationError, match="JYUSYOSIKI"):
+            importer_class(database, use_jravan_schema=True).import_records(iter([parsed_record()]))
+        assert database.fetch_one("SELECT COUNT(*) AS count FROM JYUSYOSIKI_HEAD") == {"count": 0}
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_wf_standard_missing_foreign_key_is_rejected_before_mutation(
+    tmp_path, importer_class
+) -> None:
+    database = SQLiteDatabase({"path": str(tmp_path / "missing-fk.db")})
+    child_without_fk = """
+        CREATE TABLE JYUSYOSIKI (
+            Year SMALLINT,
+            MonthDay SMALLINT,
+            Num SMALLINT,
+            Kumi VARCHAR(10),
+            PayJyushosiki VARCHAR(9),
+            TekichuHyo VARCHAR(10),
+            PRIMARY KEY (Year, MonthDay, Num)
+        )
+    """
+    with database:
+        database.create_table("JYUSYOSIKI_HEAD", JRAVAN_SCHEMAS["JYUSYOSIKI_HEAD"])
+        database.create_table("JYUSYOSIKI", child_without_fk)
+        with pytest.raises(SchemaMigrationError, match="foreign key"):
+            importer_class(database, use_jravan_schema=True).import_records(iter([parsed_record()]))
+        assert database.fetch_one("SELECT COUNT(*) AS count FROM JYUSYOSIKI_HEAD") == {"count": 0}
+        assert database.fetch_one("SELECT COUNT(*) AS count FROM JYUSYOSIKI") == {"count": 0}
+
+
+def test_wf_realtime_rejects_unknown_and_accumulated_only_statuses(tmp_path) -> None:
+    database = SQLiteDatabase({"path": str(tmp_path / "realtime.db")})
+    with database:
+        database.create_table("RT_WF", SCHEMAS["RT_WF"])
+        updater = RealtimeUpdater(database)
+        # The physical parser already refuses status 8, so the unsupported
+        # status arrives only as a caller-built dictionary.
+        unsupported = parsed_record()
+        unsupported["DataKubun"] = "8"
+        result = updater.process_parsed_records_batch([unsupported, parsed_record(data_kubun="7")])
+        assert result["success"] is False
+        assert result["inserted"] == 0
+        assert result["errors"] == 2
+        assert database.fetch_one("SELECT COUNT(*) AS count FROM RT_WF") == {"count": 0}
+
+
+def test_wf_realtime_wrong_key_is_rejected_before_row_mutation(tmp_path) -> None:
+    database = SQLiteDatabase({"path": str(tmp_path / "realtime-wrong-key.db")})
+    wrong_schema = SCHEMAS["RT_WF"].replace("PRIMARY KEY (Year, MonthDay)", "PRIMARY KEY (Year)")
+    with database:
+        database.execute(wrong_schema)
+        database.execute(
+            "INSERT INTO RT_WF (RecordSpec, DataKubun, Year, MonthDay) " "VALUES (?, ?, ?, ?)",
+            ("WF", "1", 2025, 101),
+        )
+        database.commit()
+        before = database.fetch_all("SELECT * FROM RT_WF")
+        result = RealtimeUpdater(database).process_parsed_records_batch(
+            [parsed_record(month_day="0816"), parsed_record(month_day="0817")]
+        )
+        assert result["success"] is False
+        assert result["inserted"] == 0
+        assert database.fetch_all("SELECT * FROM RT_WF") == before
+
+
+def test_wf_rejects_the_repository_only_169_byte_reconstruction() -> None:
+    assert WFParser().parse(build_record()[:169]) is None
+
+
+def _standard_tables(database: SQLiteDatabase) -> None:
+    database.create_table("JYUSYOSIKI_HEAD", JRAVAN_SCHEMAS["JYUSYOSIKI_HEAD"])
+    database.create_table("JYUSYOSIKI", JRAVAN_SCHEMAS["JYUSYOSIKI"])
+
+
+def _count(database, table_name: str) -> int:
+    return database.fetch_one(f"SELECT COUNT(*) AS count FROM {table_name}")["count"]
+
+
+@pytest.fixture
+def postgresql_db():
+    if os.getenv("JLTSQL_RUN_POSTGRESQL_INTEGRATION") != "1":
+        pytest.skip("Set JLTSQL_RUN_POSTGRESQL_INTEGRATION=1 to run PostgreSQL tests")
+
+    from src.database.postgresql_handler import PostgreSQLDatabase
+
+    database = PostgreSQLDatabase(
+        {
+            "host": os.getenv("POSTGRES_HOST") or os.getenv("PGHOST", "localhost"),
+            "port": int(os.getenv("POSTGRES_PORT") or os.getenv("PGPORT", "5432")),
+            "database": os.getenv("POSTGRES_DB") or os.getenv("PGDATABASE", "jltsql_test"),
+            "user": os.getenv("POSTGRES_USER") or os.getenv("PGUSER", "jltsql"),
+            "password": os.getenv("POSTGRES_PASSWORD") or os.getenv("PGPASSWORD", ""),
+            "connect_timeout": 5,
+        }
+    )
+    schema_name = f"jlt_wf_{uuid4().hex[:12]}"
+    database.connect()
+    try:
+        database.execute(f"CREATE SCHEMA {schema_name}")
+        database.execute(f"SET search_path TO {schema_name}")
+        database.commit()
+        yield database
+    finally:
+        try:
+            database.execute(f"DROP SCHEMA IF EXISTS {schema_name} CASCADE")
+            database.commit()
+        finally:
+            database.disconnect()
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+@pytest.mark.parametrize("auto_commit", (True, False))
+def test_wf_native_provider_order_retains_status_nine_and_erases_status_zero(
+    tmp_path, importer_class, auto_commit
+) -> None:
+    database = SQLiteDatabase({"path": str(tmp_path / "native-order.db")})
+    with database:
+        database.create_table("NL_WF", SCHEMAS["NL_WF"])
+        cancelled = WFParser().parse(cancellation_record())
+        assert cancelled is not None
+
+        importer = importer_class(database)
+        ordered = importer.import_records(
+            iter(
+                [
+                    parsed_record(data_kubun="1"),
+                    parsed_record(data_kubun="2"),
+                    cancelled,
+                ]
+            ),
+            auto_commit=auto_commit,
+        )
+        if not auto_commit:
+            database.commit()
+        assert ordered["records_imported"] == 3
+        assert ordered["records_failed"] == 0
+        row = database.fetch_one("SELECT * FROM NL_WF")
+        assert row["DataKubun"] == "9"
+        assert (row["Year"], row["MonthDay"]) == (2026, 816)
+        assert json.loads(row["PayoutsJson"])[0] == {
+            "Kumi": "0000000000",
+            "PayJyushosiki": "000000100",
+            "TekichuHyosu": "0000000000",
+        }
+
+        erased = importer_class(database).import_records(
+            iter([parsed_record(data_kubun="0")]), auto_commit=auto_commit
+        )
+        if not auto_commit:
+            database.commit()
+        assert erased["records_imported"] == 1
+        assert _count(database, "NL_WF") == 0
+
+        restored = importer_class(database).import_records(
+            iter(
+                [
+                    parsed_record(data_kubun="0"),
+                    parsed_record(data_kubun="3"),
+                    parsed_record(data_kubun="7"),
+                ]
+            ),
+            auto_commit=auto_commit,
+        )
+        if not auto_commit:
+            database.commit()
+        assert restored["records_imported"] == 3
+        row = database.fetch_one("SELECT * FROM NL_WF")
+        assert row["DataKubun"] == "7"
+        assert [row[f"RaceInfo{index}"] for index in range(1, 6)] == [
+            "01020408",
+            "02030509",
+            "03040610",
+            "04050711",
+            "05060812",
+        ]
+        assert [row[f"YukoHyosu{index}"] for index in range(1, 6)] == [
+            1001,
+            1002,
+            1003,
+            1004,
+            1005,
+        ]
+        assert (row["HatubaiHyosu"], row["CarryOverStart"], row["CarryOverBalance"]) == (
+            123456,
+            1000,
+            2000,
+        )
+        payouts = json.loads(row["PayoutsJson"])
+        assert len(payouts) == 243
+        assert [payouts[index - 1] for index in (1, 122, 243)] == [
+            {"Kumi": "0102030405", "PayJyushosiki": "123456", "TekichuHyosu": "7"},
+            {"Kumi": "0203040506", "PayJyushosiki": "234567", "TekichuHyosu": "8"},
+            {"Kumi": "0304050607", "PayJyushosiki": "345678", "TekichuHyosu": "9"},
+        ]
+        assert payouts[1] == {"Kumi": "", "PayJyushosiki": "", "TekichuHyosu": ""}
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+@pytest.mark.parametrize("failure_type", (DatabaseError, RuntimeError))
+def test_wf_standard_replacement_is_atomic_when_auto_commit_is_off(
+    tmp_path, importer_class, failure_type
+) -> None:
+    database = SQLiteDatabase({"path": str(tmp_path / "standard-atomic.db")})
+    with database:
+        _standard_tables(database)
+        importer = importer_class(database, use_jravan_schema=True)
+        stats = importer.import_records(iter([parsed_record()]), auto_commit=False)
+        database.commit()
+        assert stats["records_imported"] == 1
+        assert _count(database, "JYUSYOSIKI_HEAD") == 1
+        assert _count(database, "JYUSYOSIKI") == 243
+
+        before_head = database.fetch_all("SELECT * FROM JYUSYOSIKI_HEAD")
+        before_children = database.fetch_all("SELECT * FROM JYUSYOSIKI ORDER BY Num")
+
+        original_insert_many = database.insert_many
+        child_inserts = {"count": 0}
+
+        def failing_insert_many(table_name, rows, *args, **kwargs):
+            if table_name == "JYUSYOSIKI":
+                child_inserts["count"] += 1
+                if child_inserts["count"] == 2:
+                    raise failure_type("simulated child insert failure")
+            return original_insert_many(table_name, rows, *args, **kwargs)
+
+        database.insert_many = failing_insert_many
+        try:
+            with pytest.raises(ImporterError):
+                importer_class(database, use_jravan_schema=True).import_records(
+                    iter([parsed_record(data_kubun="1"), parsed_record(data_kubun="2")]),
+                    auto_commit=False,
+                )
+        finally:
+            database.insert_many = original_insert_many
+
+        assert database.fetch_all("SELECT * FROM JYUSYOSIKI_HEAD") == before_head
+        assert database.fetch_all("SELECT * FROM JYUSYOSIKI ORDER BY Num") == before_children
+
+
+def test_wf_single_record_import_covers_native_and_standard_storage(tmp_path) -> None:
+    database = SQLiteDatabase({"path": str(tmp_path / "single.db")})
+    with database:
+        database.create_table("NL_WF", SCHEMAS["NL_WF"])
+        _standard_tables(database)
+
+        native = DataImporter(database)
+        assert native.import_single_record(parsed_record()) is True
+        assert _count(database, "NL_WF") == 1
+        invalid = parsed_record()
+        invalid["CarryOverStart"] = "9Q8"
+        with pytest.raises(SchemaMigrationError):
+            native.import_single_record(invalid)
+        assert database.fetch_one("SELECT CarryOverStart FROM NL_WF") == {"CarryOverStart": 1000}
+        assert native.import_single_record(parsed_record(data_kubun="0")) is True
+        assert _count(database, "NL_WF") == 0
+
+        standard = DataImporter(database, use_jravan_schema=True)
+        distinct_flags = parsed_record(
+            data_kubun="7",
+            field_overrides={"HenkanFlag": "1", "TekichuNasiFlag": "1"},
+        )
+        distinct_flags["headRecordSpec"] = distinct_flags.pop("RecordSpec")
+        distinct_flags["headDataKubun"] = distinct_flags.pop("DataKubun")
+        assert standard.import_single_record(distinct_flags) is True
+        assert _count(database, "JYUSYOSIKI_HEAD") == 1
+        assert _count(database, "JYUSYOSIKI") == 243
+        head = database.fetch_one("SELECT * FROM JYUSYOSIKI_HEAD")
+        assert {
+            column: head[column]
+            for column in (
+                "RecordSpec",
+                "DataKubun",
+                "MakeDate",
+                "Year",
+                "MonthDay",
+                "reserved1",
+                "reserved2",
+                "HatubaiHyosu",
+                "HenkanFlag",
+                "FuseirituFlag",
+                "TekichunashiFlag",
+                "CarryoverSyoki",
+                "CarryoverZandaka",
+            )
+        } == {
+            "RecordSpec": "WF",
+            "DataKubun": "7",
+            "MakeDate": 20260817,
+            "Year": 2026,
+            "MonthDay": 816,
+            "reserved1": "00",
+            "reserved2": "000000",
+            "HatubaiHyosu": "123456",
+            "HenkanFlag": "1",
+            "FuseirituFlag": "0",
+            "TekichunashiFlag": "1",
+            "CarryoverSyoki": "1000",
+            "CarryoverZandaka": "2000",
+        }
+        assert [
+            (
+                head[f"JyoCD{index}"],
+                head[f"Kaiji{index}"],
+                head[f"Nichiji{index}"],
+                head[f"RaceNum{index}"],
+            )
+            for index in range(1, 6)
+        ] == [
+            ("01", 2, 4, 8),
+            ("02", 3, 5, 9),
+            ("03", 4, 6, 10),
+            ("04", 5, 7, 11),
+            ("05", 6, 8, 12),
+        ]
+        assert [head[f"YukoHyosu{index}"] for index in range(1, 6)] == [
+            "1001",
+            "1002",
+            "1003",
+            "1004",
+            "1005",
+        ]
+        assert database.fetch_all(
+            "SELECT Num, Kumi, PayJyushosiki, TekichuHyo FROM JYUSYOSIKI "
+            "WHERE Num IN (1, 2, 122, 243) ORDER BY Num"
+        ) == [
+            {"Num": 1, "Kumi": "0102030405", "PayJyushosiki": "123456", "TekichuHyo": "7"},
+            {"Num": 2, "Kumi": None, "PayJyushosiki": None, "TekichuHyo": None},
+            {"Num": 122, "Kumi": "0203040506", "PayJyushosiki": "234567", "TekichuHyo": "8"},
+            {"Num": 243, "Kumi": "0304050607", "PayJyushosiki": "345678", "TekichuHyo": "9"},
+        ]
+        native_flags = DataImporter(database)
+        assert native_flags.import_single_record(distinct_flags) is True
+        assert database.fetch_one(
+            "SELECT DataKubun, HenkanFlag, FuseirituFlag, TekichuNasiFlag FROM NL_WF"
+        ) == {
+            "DataKubun": "7",
+            "HenkanFlag": "1",
+            "FuseirituFlag": "0",
+            "TekichuNasiFlag": "1",
+        }
+        assert native_flags.import_single_record(parsed_record(data_kubun="0")) is True
+        assert _count(database, "NL_WF") == 0
+        with pytest.raises(SchemaMigrationError):
+            standard.import_single_record(invalid)
+        assert _count(database, "JYUSYOSIKI") == 243
+        cancelled = WFParser().parse(cancellation_record())
+        assert cancelled is not None
+        assert standard.import_single_record(cancelled) is True
+        assert database.fetch_one("SELECT DataKubun FROM JYUSYOSIKI_HEAD") == {"DataKubun": "9"}
+        assert standard.import_single_record(parsed_record(data_kubun="0")) is True
+        assert _count(database, "JYUSYOSIKI_HEAD") == 0
+        assert _count(database, "JYUSYOSIKI") == 0
+
+
+def _corrupt_caller_records(*, standard: bool) -> list[tuple[str, dict]]:
+    cases = []
+
+    record = parsed_record()
+    record["headRecordSpec"] = "RA"
+    cases.append(("conflicting-record-type-alias", record))
+
+    record = parsed_record()
+    record["headDataKubun"] = "2"
+    cases.append(("conflicting-status-alias", record))
+
+    record = parsed_record()
+    record.pop("DataKubun")
+    cases.append(("missing-status", record))
+
+    if standard:
+        # Native and standard names for the same header field must agree when
+        # a caller supplies both for the standard-name owner table.
+        record = parsed_record()
+        record["DataKubun"] = "7"
+        record["headDataKubun"] = "7"
+        record["TekichunashiFlag"] = "1"
+        cases.append(("conflicting-standard-flag-alias", record))
+        record = parsed_record()
+        record["Kaiji3"] = "9"
+        cases.append(("conflicting-split-race-field", record))
+
+    record = parsed_record()
+    record["PayoutsJson"] = "{not json"
+    cases.append(("malformed-payout-json", record))
+
+    record = parsed_record()
+    record["PayoutsJson"] = json.dumps(json.loads(record["PayoutsJson"])[:242])
+    cases.append(("payout-count-242", record))
+
+    record = parsed_record()
+    payouts = json.loads(record["PayoutsJson"])
+    payouts[121]["PayJyushosiki"] = ""
+    record["PayoutsJson"] = json.dumps(payouts)
+    cases.append(("partial-payout-tuple", record))
+
+    record = parsed_record()
+    payouts = json.loads(record["PayoutsJson"])
+    payouts[242]["Extra"] = "1"
+    record["PayoutsJson"] = json.dumps(payouts)
+    cases.append(("payout-extra-key", record))
+
+    record = parsed_record()
+    payouts = json.loads(record["PayoutsJson"])
+    payouts[0]["Kumi"] = "01020304X5"
+    record["PayoutsJson"] = json.dumps(payouts)
+    cases.append(("payout-nondigit-kumi", record))
+
+    record = parsed_record()
+    payouts = json.loads(record["PayoutsJson"])
+    payouts[0]["Kumi"] = "01020304050"
+    record["PayoutsJson"] = json.dumps(payouts)
+    cases.append(("payout-overwidth-kumi", record))
+
+    record = parsed_record()
+    record["RaceInfo2"] = "0501010"
+    cases.append(("short-race-composite", record))
+    return cases
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+@pytest.mark.parametrize("standard", (False, True), ids=("native", "standard"))
+def test_wf_caller_alias_and_payout_json_corruption_is_rejected_before_mutation(
+    tmp_path, importer_class, standard
+) -> None:
+    database = SQLiteDatabase({"path": str(tmp_path / "corrupt.db")})
+    with database:
+        database.create_table("NL_WF", SCHEMAS["NL_WF"])
+        _standard_tables(database)
+        importer = importer_class(database, use_jravan_schema=standard)
+        assert importer.import_records(iter([parsed_record()]))["records_imported"] == 1
+        tables = ("JYUSYOSIKI_HEAD", "JYUSYOSIKI") if standard else ("NL_WF",)
+        before = {table: database.fetch_all(f"SELECT * FROM {table}") for table in tables}
+
+        for case_id, record in _corrupt_caller_records(standard=standard):
+            with pytest.raises(SchemaMigrationError):
+                importer_class(database, use_jravan_schema=standard).import_records(iter([record]))
+            for table in tables:
+                assert database.fetch_all(f"SELECT * FROM {table}") == before[table], case_id
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+@pytest.mark.parametrize(
+    "child_schema",
+    (
+        pytest.param(
+            """
+            CREATE TABLE JYUSYOSIKI (
+                Year SMALLINT,
+                MonthDay SMALLINT,
+                Num SMALLINT,
+                Kumi VARCHAR(10),
+                PayJyushosiki VARCHAR(9),
+                TekichuHyo VARCHAR(10),
+                PRIMARY KEY (Year, MonthDay, Num),
+                FOREIGN KEY (Year, MonthDay) REFERENCES JYUSYOSIKI_HEAD (Year, MonthDay)
+            )
+            """,
+            id="no-cascade",
+        ),
+        pytest.param(
+            """
+            CREATE TABLE JYUSYOSIKI (
+                Year SMALLINT,
+                MonthDay SMALLINT,
+                Num SMALLINT,
+                Kumi VARCHAR(10),
+                PayJyushosiki VARCHAR(9),
+                TekichuHyo VARCHAR(10),
+                PRIMARY KEY (Year, MonthDay, Num),
+                FOREIGN KEY (Year, MonthDay) REFERENCES JYUSYOSIKI_HEAD (Year, MonthDay)
+                    ON UPDATE CASCADE ON DELETE CASCADE
+            )
+            """,
+            id="update-cascade",
+        ),
+        pytest.param(
+            """
+            CREATE TABLE JYUSYOSIKI (
+                Year SMALLINT,
+                MonthDay SMALLINT,
+                Num SMALLINT,
+                Kumi VARCHAR(10),
+                PayJyushosiki VARCHAR(9),
+                TekichuHyo VARCHAR(10),
+                PRIMARY KEY (Year, MonthDay, Num),
+                FOREIGN KEY (MonthDay, Year) REFERENCES JYUSYOSIKI_HEAD (MonthDay, Year)
+                    ON DELETE CASCADE
+            )
+            """,
+            id="swapped-key-order",
+        ),
+        pytest.param(
+            """
+            CREATE TABLE JYUSYOSIKI (
+                Year SMALLINT,
+                MonthDay SMALLINT,
+                Num SMALLINT,
+                Kumi VARCHAR(10),
+                PayJyushosiki VARCHAR(9),
+                TekichuHyo VARCHAR(10),
+                PRIMARY KEY (Year, MonthDay, Num),
+                FOREIGN KEY (Year, MonthDay) REFERENCES NL_WF (Year, MonthDay)
+                    ON DELETE CASCADE
+            )
+            """,
+            id="wrong-parent-table",
+        ),
+        pytest.param(
+            """
+            CREATE TABLE JYUSYOSIKI (
+                Year SMALLINT,
+                MonthDay SMALLINT,
+                Num SMALLINT,
+                Kumi VARCHAR(10),
+                PayJyushosiki VARCHAR(9),
+                TekichuHyo VARCHAR(10),
+                PRIMARY KEY (Year, MonthDay),
+                FOREIGN KEY (Year, MonthDay) REFERENCES JYUSYOSIKI_HEAD (Year, MonthDay)
+                    ON DELETE CASCADE
+            )
+            """,
+            id="child-key-without-num",
+        ),
+    ),
+)
+def test_wf_standard_malformed_child_contract_is_rejected_before_mutation(
+    tmp_path, importer_class, child_schema
+) -> None:
+    database = SQLiteDatabase({"path": str(tmp_path / "malformed-child.db")})
+    with database:
+        database.create_table("NL_WF", SCHEMAS["NL_WF"])
+        database.create_table("JYUSYOSIKI_HEAD", JRAVAN_SCHEMAS["JYUSYOSIKI_HEAD"])
+        database.create_table("JYUSYOSIKI", child_schema)
+        before = database.fetch_all(
+            "SELECT name, sql FROM sqlite_master WHERE type='table' ORDER BY name"
+        )
+        with pytest.raises(SchemaMigrationError):
+            importer_class(database, use_jravan_schema=True).import_records(iter([parsed_record()]))
+        assert (
+            database.fetch_all(
+                "SELECT name, sql FROM sqlite_master WHERE type='table' ORDER BY name"
+            )
+            == before
+        )
+        assert _count(database, "JYUSYOSIKI_HEAD") == 0
+        assert _count(database, "JYUSYOSIKI") == 0
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_wf_legacy_only_win5_standard_storage_is_refused(tmp_path, importer_class) -> None:
+    database = SQLiteDatabase({"path": str(tmp_path / "legacy-win5.db")})
+    with database:
+        database.execute("CREATE TABLE WIN5 (Year INTEGER, MonthDay INTEGER, PayoutsJson TEXT)")
+        database.commit()
+        with pytest.raises(SchemaMigrationError, match="WIN5"):
+            importer_class(database, use_jravan_schema=True).import_records(iter([parsed_record()]))
+        assert database.table_exists("JYUSYOSIKI_HEAD") is False
+        assert database.table_exists("JYUSYOSIKI") is False
+        assert _count(database, "WIN5") == 0
+
+
+def test_wf_realtime_raw_and_parsed_paths_upsert_retain_and_erase(tmp_path) -> None:
+    database = SQLiteDatabase({"path": str(tmp_path / "realtime-paths.db")})
+    with database:
+        database.create_table("RT_WF", SCHEMAS["RT_WF"])
+        updater = RealtimeUpdater(database)
+
+        raw_new = updater.process_record(build_record(data_kubun="1"))
+        assert raw_new["success"] is True
+        parsed_update = updater.process_parsed_record(parsed_record(data_kubun="2"))
+        assert parsed_update["success"] is True
+
+        alias_only = parsed_record(data_kubun="2")
+        alias_only["headRecordSpec"] = alias_only.pop("RecordSpec")
+        alias_only["headDataKubun"] = alias_only.pop("DataKubun")
+        alias_result = updater.process_parsed_record(alias_only)
+        assert alias_result["success"] is True
+        assert database.fetch_one(
+            "SELECT RecordSpec, DataKubun FROM RT_WF WHERE Year = 2026 AND MonthDay = 816"
+        ) == {"RecordSpec": "WF", "DataKubun": "2"}
+
+        raw_final = updater.process_record(build_record(data_kubun="3"))
+        assert raw_final["success"] is True
+        assert _count(database, "RT_WF") == 1
+        row = database.fetch_one("SELECT * FROM RT_WF")
+        assert row["DataKubun"] == "3"
+        payouts = json.loads(row["PayoutsJson"])
+        assert [payouts[index - 1] for index in (1, 122, 243)] == [
+            {"Kumi": "0102030405", "PayJyushosiki": "123456", "TekichuHyosu": "7"},
+            {"Kumi": "0203040506", "PayJyushosiki": "234567", "TekichuHyosu": "8"},
+            {"Kumi": "0304050607", "PayJyushosiki": "345678", "TekichuHyosu": "9"},
+        ]
+
+        cancelled = updater.process_record(cancellation_record())
+        assert cancelled["success"] is True
+        row = database.fetch_one("SELECT DataKubun, PayoutsJson FROM RT_WF")
+        assert row["DataKubun"] == "9"
+        assert json.loads(row["PayoutsJson"])[0] == {
+            "Kumi": "0000000000",
+            "PayJyushosiki": "000000100",
+            "TekichuHyosu": "0000000000",
+        }
+
+        assert updater.process_record(build_record(data_kubun="8")) is None
+        assert updater.process_record(build_record(month_day="0230")) is None
+        accumulated_only = updater.process_record(build_record(data_kubun="7"))
+        assert accumulated_only["success"] is False
+        parsed_accumulated_only = updater.process_parsed_record(parsed_record(data_kubun="7"))
+        assert parsed_accumulated_only["success"] is False
+        corrupt = parsed_record()
+        corrupt["PayoutsJson"] = "[]"
+        assert updater.process_parsed_record(corrupt)["success"] is False
+        alias_conflict = parsed_record()
+        alias_conflict["headDataKubun"] = "1"
+        conflict_result = updater.process_parsed_record(alias_conflict)
+        assert conflict_result["success"] is False
+        assert conflict_result["operation"] == "validate"
+        batch = updater.process_parsed_records_batch([corrupt, parsed_record(month_day="0817")])
+        assert batch["success"] is False
+        assert batch["errors"] == 1
+        assert batch["inserted"] == 1
+        assert database.fetch_one("SELECT DataKubun FROM RT_WF WHERE MonthDay = 816") == {
+            "DataKubun": "9"
+        }
+        assert _count(database, "RT_WF") == 2
+
+        erased = updater.process_record(build_record(data_kubun="0"))
+        assert erased["success"] is True
+        assert database.fetch_all("SELECT MonthDay FROM RT_WF") == [{"MonthDay": 817}]
+
+
+def test_wf_postgresql_native_standard_and_realtime_contract(postgresql_db) -> None:
+    for table_name in ("NL_WF", "RT_WF"):
+        postgresql_db.execute(SCHEMAS[table_name])
+    postgresql_db.execute(JRAVAN_SCHEMAS["JYUSYOSIKI_HEAD"])
+    postgresql_db.execute(JRAVAN_SCHEMAS["JYUSYOSIKI"])
+    postgresql_db.commit()
+    for table_name in ("NL_WF", "RT_WF"):
+        assert SchemaManager(postgresql_db).apply_metadata_to_table(table_name) is True
+    postgresql_db.commit()
+
+    cancelled = WFParser().parse(cancellation_record())
+    assert cancelled is not None
+    for importer_class in (DataImporter, OptimizedDataImporter):
+        for standard in (False, True):
+            head = "JYUSYOSIKI_HEAD" if standard else "NL_WF"
+            importer = importer_class(postgresql_db, use_jravan_schema=standard)
+            stats = importer.import_records(iter([parsed_record()]))
+            assert stats["records_imported"] == 1
+            assert _count(postgresql_db, head) == 1
+            if standard:
+                assert _count(postgresql_db, "JYUSYOSIKI") == 243
+                assert postgresql_db.fetch_all(
+                    "SELECT Num AS num, Kumi AS kumi, PayJyushosiki AS pay, "
+                    "TekichuHyo AS votes FROM JYUSYOSIKI WHERE Num IN (1, 122, 243) "
+                    "ORDER BY Num"
+                ) == [
+                    {"num": 1, "kumi": "0102030405", "pay": "123456", "votes": "7"},
+                    {"num": 122, "kumi": "0203040506", "pay": "234567", "votes": "8"},
+                    {"num": 243, "kumi": "0304050607", "pay": "345678", "votes": "9"},
+                ]
+            ordered = importer_class(postgresql_db, use_jravan_schema=standard).import_records(
+                iter([parsed_record(data_kubun="1"), parsed_record(data_kubun="2"), cancelled])
+            )
+            assert ordered["records_failed"] == 0
+            if standard:
+                assert ordered["records_imported"] == 3
+            else:
+                # The generic PostgreSQL upsert collapses same-key rows of one
+                # VALUES batch to the last provider row, so only the final
+                # state is a stable contract for native storage.
+                assert ordered["records_imported"] >= 1
+            assert postgresql_db.fetch_one(f"SELECT DataKubun AS status FROM {head}") == {
+                "status": "9"
+            }
+            if standard:
+                assert postgresql_db.fetch_one(
+                    "SELECT Kumi AS kumi, PayJyushosiki AS pay, TekichuHyo AS votes "
+                    "FROM JYUSYOSIKI WHERE Num = 1"
+                ) == {"kumi": "0000000000", "pay": "000000100", "votes": "0000000000"}
+            erased = importer_class(postgresql_db, use_jravan_schema=standard).import_records(
+                iter([parsed_record(data_kubun="0")])
+            )
+            assert erased["records_imported"] == 1
+            assert _count(postgresql_db, head) == 0
+            if standard:
+                assert _count(postgresql_db, "JYUSYOSIKI") == 0
+
+    updater = RealtimeUpdater(postgresql_db)
+    batch = updater.process_parsed_records_batch(
+        [parsed_record(data_kubun="1"), parsed_record(data_kubun="7")]
+    )
+    assert batch["success"] is False
+    assert batch["inserted"] == 1
+    assert batch["errors"] == 1
+    assert updater.process_record(cancellation_record())["success"] is True
+    assert postgresql_db.fetch_one("SELECT DataKubun AS status FROM RT_WF") == {"status": "9"}
+    assert updater.process_record(build_record(data_kubun="0"))["success"] is True
+    assert _count(postgresql_db, "RT_WF") == 0
+    postgresql_db.commit()
+
+    constraint_query = (
+        "SELECT contype AS type, pg_get_constraintdef(oid) AS definition "
+        "FROM pg_constraint WHERE conrelid = to_regclass(?) ORDER BY contype, conname"
+    )
+    postgresql_db.execute("DROP TABLE JYUSYOSIKI")
+    postgresql_db.execute(
+        "CREATE TABLE JYUSYOSIKI (Year SMALLINT, MonthDay SMALLINT, Num SMALLINT, "
+        "Kumi VARCHAR(10), PayJyushosiki VARCHAR(9), TekichuHyo VARCHAR(10), "
+        "PRIMARY KEY (Year, MonthDay, Num), FOREIGN KEY (Year, MonthDay) "
+        "REFERENCES JYUSYOSIKI_HEAD (Year, MonthDay))"
+    )
+    postgresql_db.commit()
+    before = postgresql_db.fetch_all(constraint_query, ("jyusyosiki",))
+    for importer_class in (DataImporter, OptimizedDataImporter):
+        with pytest.raises(SchemaMigrationError, match="foreign key"):
+            importer_class(postgresql_db, use_jravan_schema=True).import_records(
+                iter([parsed_record()])
+            )
+        postgresql_db.rollback()
+        assert postgresql_db.fetch_all(constraint_query, ("jyusyosiki",)) == before
+        assert _count(postgresql_db, "JYUSYOSIKI_HEAD") == 0
+
+    for table_name in ("NL_WF", "RT_WF"):
+        postgresql_db.execute(f"DROP TABLE {table_name}")
+        postgresql_db.execute(
+            SCHEMAS[table_name].replace("PRIMARY KEY (Year, MonthDay)", "PRIMARY KEY (Year)")
+        )
+        postgresql_db.commit()
+    before_key = postgresql_db.fetch_all(constraint_query, ("nl_wf",))
+    for importer_class in (DataImporter, OptimizedDataImporter):
+        with pytest.raises(SchemaMigrationError, match="primary key"):
+            importer_class(postgresql_db).import_records(iter([parsed_record()]))
+        postgresql_db.rollback()
+        assert postgresql_db.fetch_all(constraint_query, ("nl_wf",)) == before_key
+        assert _count(postgresql_db, "NL_WF") == 0
+    result = RealtimeUpdater(postgresql_db).process_parsed_records_batch([parsed_record()])
+    assert result["success"] is False
+    assert result["inserted"] == 0
+    postgresql_db.rollback()
+    assert _count(postgresql_db, "RT_WF") == 0

@@ -178,6 +178,22 @@ class TestIndividualParsers:
                 mutable[25:27] = b"11"
                 mutable[652:655] = b"000"
                 data = bytes(mutable)
+            if record_type == "WF":
+                # WF requires a real event-date key, five race composites,
+                # initial-value flags, and the initial carryover amount even
+                # for the status-1 announcement; blanks are not a positive
+                # fixture. Sales/votes/balance/payouts keep their initial value.
+                mutable = bytearray(data)
+                mutable[11:15] = b"2024"
+                mutable[15:19] = b"0602"
+                mutable[19:21] = b"00"
+                for slot in range(5):
+                    start = 21 + slot * 8
+                    mutable[start:start + 8] = b"05" + b"03" + b"08" + f"{slot + 8:02d}".encode()
+                mutable[61:67] = b"000000"
+                mutable[133:136] = b"000"
+                mutable[136:151] = b"000000000000000"
+                data = bytes(mutable)
             if record_type == "TM":
                 mutable = bytearray(data)
                 mutable[11:15] = b"2024"

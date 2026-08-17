@@ -86,7 +86,7 @@ JRAVAN_TO_JLTSQL: Dict[str, str] = {
     "CHOKYO_DETAIL": "NL_CK", # 調教詳細 (Training Details)
     "TIME_MASTER": "NL_TM",   # 対戦型マイニング予想 (legacy alias)
     "DATA_MASTER": "NL_DM",   # タイム型マイニング予想 (legacy alias)
-    "WIN5": "NL_WF",          # WIN5
+    "WIN5": "NL_WF",          # 重勝式 (legacy public alias; never a physical write target)
     "COURSE_CHANGE": "NL_CC", # コース変更 (Course Change)
     "HAICHI": "NL_HC",        # 坂路調教 (legacy alias)
     "SALE": "NL_HS",          # 競走馬市場取引価格 (Sale)
@@ -108,6 +108,11 @@ JRAVAN_TO_JLTSQL: Dict[str, str] = {
     "BAMEIORIGIN": "NL_HY",  # 馬名の意味由来
     "KEITO": "NL_BT",  # 系統情報
     "JOGAIBA": "NL_JG",  # 競走馬除外情報 (SDK JV_JG_JOGAIBA)
+    # 重勝式(WIN5): one official record is one JYUSYOSIKI_HEAD row plus 243
+    # JYUSYOSIKI payout rows. Keep the header last so the reverse mapping
+    # resolves NL_WF to the physical owner instead of the WIN5 alias.
+    "JYUSYOSIKI": "NL_WF",  # 重勝式払戻情報 (243 slots per record)
+    "JYUSYOSIKI_HEAD": "NL_WF",  # 重勝式ヘッダー (SDK JV_WF_INFO)
 }
 
 # レコード種別コード → テーブル名 (Record Type Code -> Table Name)
@@ -169,6 +174,7 @@ STANDARD_EXPANDED_RECORD_OWNER: dict[str, str] = {
     "NL_O6": "ODDS_SANRENTAN_HEAD",
     "NL_H1": "HYOSU",
     "NL_H6": "HYOSU2",
+    "NL_WF": "JYUSYOSIKI_HEAD",
 }
 
 # テーブル名 → レコード種別コード逆マッピング

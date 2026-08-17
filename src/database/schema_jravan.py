@@ -713,16 +713,6 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, KettoNum, ShutsubaTohyoJun)
         )
     """,
-    "JYUSYOSIKI": """
-        CREATE TABLE IF NOT EXISTS JYUSYOSIKI (
-            MakeDate                       DATE                ,  -- YYYYMMDD形式の日付
-            Year                           SMALLINT            ,  -- 年(4桁)
-            MonthDay                       SMALLINT            ,  -- 月日(MMDD)
-            Kumi                           VARCHAR(10)         ,  -- 文字列(10)
-            PayJyushosiki                  VARCHAR(9)          ,  -- 文字列(9)
-            TekichuHyo                     VARCHAR(10)           -- 文字列(10)
-        )
-    """,
     "JYUSYOSIKI_HEAD": """
         CREATE TABLE IF NOT EXISTS JYUSYOSIKI_HEAD (
             RecordSpec                     CHAR(2)             ,  -- レコード種別ID
@@ -752,6 +742,7 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             Nichiji5                       SMALLINT            ,  -- 開催日目
             RaceNum5                       SMALLINT            ,  -- レース番号
             reserved2                      VARCHAR(6)          ,  -- 文字列(6)
+            HatubaiHyosu                   VARCHAR(11)         ,  -- 重勝式発売票数
             YukoHyosu1                     VARCHAR(11)         ,  -- 文字列(11)
             YukoHyosu2                     VARCHAR(11)         ,  -- 文字列(11)
             YukoHyosu3                     VARCHAR(11)         ,  -- 文字列(11)
@@ -761,7 +752,24 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             FuseirituFlag                  VARCHAR(1)          ,  -- 文字列(1)
             TekichunashiFlag               VARCHAR(1)          ,  -- 文字列(1)
             CarryoverSyoki                 VARCHAR(15)         ,  -- 文字列(15)
-            CarryoverZandaka               VARCHAR(15)           -- 文字列(15)
+            CarryoverZandaka               VARCHAR(15)         ,  -- 文字列(15)
+            PRIMARY KEY (Year, MonthDay)
+        )
+    """,
+    # One official WF record owns exactly 243 payout slots (項番16, 繰返243).
+    # Every ordinal Num=1..243 is stored, including documented blank slots, so
+    # the parent must be created before this child and deletes cascade.
+    "JYUSYOSIKI": """
+        CREATE TABLE IF NOT EXISTS JYUSYOSIKI (
+            Year                           SMALLINT            ,  -- 年(4桁)
+            MonthDay                       SMALLINT            ,  -- 月日(MMDD)
+            Num                            SMALLINT            ,  -- 払戻情報の繰返順(1..243)
+            Kumi                           VARCHAR(10)         ,  -- 組番
+            PayJyushosiki                  VARCHAR(9)          ,  -- 重勝式払戻金
+            TekichuHyo                     VARCHAR(10)         ,  -- 的中票数
+            PRIMARY KEY (Year, MonthDay, Num),
+            CONSTRAINT jyusyosiki_parent_fk FOREIGN KEY (Year, MonthDay)
+                REFERENCES JYUSYOSIKI_HEAD (Year, MonthDay) ON DELETE CASCADE
         )
     """,
     "KEITO": """

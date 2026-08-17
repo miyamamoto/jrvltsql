@@ -199,15 +199,35 @@ def make_hr_record(
     return bytes(data)
 
 
-def make_wf_record(data_kubun="1", make_date="20260101", **kwargs) -> bytes:
-    """Create an official-layout WF record (7,215 bytes)."""
+def make_wf_record(data_kubun="3", make_date="20260101", **kwargs) -> bytes:
+    """Create an official-layout WF record (7,215 bytes).
+
+    The default is a complete status-3 (払戻発表時) record: five race
+    composites, sales/valid-vote counts, flags, both carryover amounts, and
+    populated first/last payout slots. Status 1 keeps its initial values, so
+    callers building a status-1 record must clear the payload themselves.
+    """
     data = bytearray(b" " * 7215)
     data[0:2] = _pad("WF", 2)
     data[2:3] = _pad(data_kubun, 1)
     data[3:11] = _pad(make_date, 8)
     data[11:15] = _pad(kwargs.get("year", "2026"), 4)
     data[15:19] = _pad(kwargs.get("month_day", "0101"), 4)
+    data[19:21] = _pad(kwargs.get("reserved1", "00"), 2)
+    for slot in range(5):
+        start = 21 + slot * 8
+        data[start:start + 8] = _pad(kwargs.get(f"race_info{slot + 1}", f"0501010{slot + 1}"), 8)
+    data[61:67] = _pad(kwargs.get("reserved2", "000000"), 6)
+    data[67:78] = _pad(kwargs.get("hatubai_hyosu", "1234567"), 11)
     data[78:89] = _pad(kwargs.get("yuko_hyosu1", "123"), 11)
+    for slot in range(1, 5):
+        start = 78 + slot * 11
+        data[start:start + 11] = _pad(kwargs.get(f"yuko_hyosu{slot + 1}", "12"), 11)
+    data[133:134] = _pad(kwargs.get("henkan_flag", "0"), 1)
+    data[134:135] = _pad(kwargs.get("fuseiritu_flag", "0"), 1)
+    data[135:136] = _pad(kwargs.get("tekichu_nasi_flag", "0"), 1)
+    data[136:151] = _pad(kwargs.get("carry_over_start", "0"), 15)
+    data[151:166] = _pad(kwargs.get("carry_over_balance", "0"), 15)
     data[166:176] = _pad(kwargs.get("kumi1", "0102030405"), 10)
     data[176:185] = _pad(kwargs.get("pay1", "123456"), 9)
     data[185:195] = _pad(kwargs.get("hit_votes1", "7"), 10)

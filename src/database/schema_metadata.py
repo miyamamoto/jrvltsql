@@ -1176,23 +1176,16 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
         indexes=["KettoNum", "ChokyoDate"],
     ),
 
-    "NL_WF": {
-        "table_name": "NL_WF",
-        "record_type": "WF",
-        "description": "重勝式（Win5等）発売情報",
-        "purpose": "重勝式馬券（複数レース的中予想）の発売・払戻情報を格納",
-        "columns": [
-            {"name": "レコード種別ID", "type": "TEXT", "description": "レコード種別識別子（'WF'）", "example": "WF", "nullable": False},
-            {"name": "開催年", "type": "TEXT", "description": "開催年", "example": "2024", "nullable": False},
-            {"name": "開催月日", "type": "TEXT", "description": "開催月日", "example": "0601", "nullable": False},
-            {"name": "重勝式対象レース情報", "type": "TEXT", "description": "対象レース情報（ネスト構造）", "example": "...", "nullable": True},
-            {"name": "重勝式発売票数", "type": "TEXT", "description": "総投票数", "example": "12345678", "nullable": True},
-            {"name": "キャリーオーバー残高", "type": "TEXT", "description": "繰越金残高（円）", "example": "234567890", "nullable": True},
-            {"name": "重勝式払戻情報", "type": "TEXT", "description": "払戻金額情報（ネスト構造）", "example": "...", "nullable": True}
-        ],
-        "primary_key": ["開催年", "開催月日"],
-        "indexes": ["開催年", "開催月日"]
-    },
+    "NL_WF": _schema_backed_metadata(
+        "NL_WF",
+        record_type="WF",
+        description="重勝式（WIN5）発売・払戻情報",
+        purpose=(
+            "開催年・開催月日を公式キーとして、対象5レース、発売票数、有効票数5件、"
+            "各フラグ、キャリーオーバー金額、払戻情報243枠（PayoutsJson）を1行で格納"
+        ),
+        indexes=["Year", "MonthDay"],
+    ),
 
     # 速報系テーブル (Realtime Tables) - リアルタイム更新用
     "RT_AV": {
@@ -1534,6 +1527,17 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
         "primary_key": ["開催年月日", "競馬場コード"],
         "indexes": ["開催年月日"]
     },
+
+    "RT_WF": _schema_backed_metadata(
+        "RT_WF",
+        record_type="WF",
+        description="重勝式（WIN5）発売・払戻情報（速報）",
+        purpose=(
+            "0B51 速報重勝式を開催年・開催月日をキーに1行で格納（NL_WFと同構造）。"
+            "データ区分9の中止状態は保持し、0のみ物理削除"
+        ),
+        indexes=["Year", "MonthDay"],
+    ),
 
     "RT_WH": {
         "table_name": "RT_WH",

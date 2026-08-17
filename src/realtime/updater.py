@@ -7,11 +7,15 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional, Union
 
 from src.database.base import BaseDatabase
+from src.database.migration import SchemaMigrationError
 from src.database.schema_types import get_table_primary_key_columns
 from src.importer.importer import (
     CANCELLATION_STATE_RECORD_TYPES,
     clean_record_metadata,
     resolve_record_data_kubun,
+    resolve_record_type,
+    validate_wf_record,
+    verify_wf_storage_schema,
 )
 from src.jvlink.constants import (
     DATA_KUBUN_DELETE,
@@ -182,8 +186,62 @@ class RealtimeUpdater:
         self.parser_factory = ParserFactory()
         self.cache_manager = cache_manager
         self._verified_mining_native_tables: set[str] = set()
+        self._verified_wf_tables: set[str] = set()
 
         logger.info("RealtimeUpdater initialized")
+
+    # Realtime tables whose caller-built rows are revalidated against the
+    # official contract before any coercion or mutation.
+    STRICT_RECORD_TABLES = frozenset({"RT_WF"})
+
+    def _canonicalize_strict_record_aliases(
+        self, record: Dict
+    ) -> tuple[Optional[str], Optional[str]]:
+        """Canonicalize aliases needed to route a strict realtime record.
+
+        Returns ``(record_type, error)``. Conflicts and missing WF status stay
+        explicit validation failures; they are never defaulted to a live row.
+        """
+        try:
+            record_type = resolve_record_type(record)
+        except SchemaMigrationError as error:
+            return None, str(error)
+        if record_type != "WF":
+            return record_type, None
+
+        record["RecordSpec"] = record_type
+        has_status = any(
+            record.get(name) not in (None, "")
+            for name in ("DataKubun", "headDataKubun")
+        )
+        if not has_status:
+            return record_type, "WF DataKubun is required"
+        try:
+            record["DataKubun"] = resolve_record_data_kubun(record)
+        except ValueError as error:
+            return record_type, str(error)
+        return record_type, None
+
+    def _reject_strict_record(self, table_name: str, record: Dict) -> Optional[str]:
+        """Return a rejection reason for a strict-contract table, else None.
+
+        The physical WF parser already enforces the official layout, but the
+        parsed and batch entry points accept dictionaries. Schema verification
+        (exact ordered key) and record validation both happen before
+        ``convert_record_types`` could strip characters, and every failure is
+        reported without touching a row.
+        """
+        if table_name not in self.STRICT_RECORD_TABLES:
+            return None
+        try:
+            if table_name not in self._verified_wf_tables:
+                if verify_wf_storage_schema(self.database, table_name):
+                    self._verified_wf_tables.add(table_name)
+            validate_wf_record(record, table_name)
+        except SchemaMigrationError as error:
+            logger.error(f"Rejected realtime {table_name} record: {error}")
+            return str(error)
+        return None
 
     def process_record(
         self,
@@ -351,13 +409,24 @@ class RealtimeUpdater:
         ordered_mutation_required = False
 
         for record in records:
+            record_type, alias_error = self._canonicalize_strict_record_aliases(record)
+            if alias_error is not None:
+                logger.warning(f"Skipping record with conflicting header aliases: {alias_error}")
+                errors += 1
+                continue
             try:
                 data_kubun = resolve_record_data_kubun(record)
             except ValueError as exc:
                 logger.warning(f"Skipping record with conflicting DataKubun aliases: {exc}")
                 errors += 1
                 continue
-            record_type = record.get("RecordSpec")
+            strict_table = self.RECORD_TYPE_TABLE.get(record_type)
+            if (
+                strict_table in self.STRICT_RECORD_TABLES
+                and self._reject_strict_record(strict_table, record) is not None
+            ):
+                errors += 1
+                continue
             if data_kubun == DATA_KUBUN_ERASE or (
                 data_kubun == DATA_KUBUN_DELETE
                 and record_type not in CANCELLATION_STATE_RECORD_TYPES
@@ -518,7 +587,15 @@ class RealtimeUpdater:
     def _process_single_record(self, parsed_data: Dict, timeseries: bool = False) -> Optional[Dict]:
         """Process a single parsed record dict."""
         try:
-            record_type = parsed_data.get("RecordSpec")
+            record_type, alias_error = self._canonicalize_strict_record_aliases(parsed_data)
+            if alias_error is not None:
+                return {
+                    "operation": "validate",
+                    "table": "RT_WF" if record_type == "WF" else None,
+                    "record_type": record_type,
+                    "success": False,
+                    "error": alias_error,
+                }
             if not record_type:
                 logger.warning("Missing RecordSpec in parsed data")
                 return None
@@ -544,6 +621,16 @@ class RealtimeUpdater:
             # For cancellation-capable records, 9 must remain queryable and
             # only the official 0 value requests physical erase.
             record_data_kubun = resolve_record_data_kubun(parsed_data)
+
+            rejection = self._reject_strict_record(table_name, parsed_data)
+            if rejection is not None:
+                return {
+                    "operation": "validate",
+                    "table": table_name,
+                    "record_type": record_type,
+                    "success": False,
+                    "error": rejection,
+                }
             if (
                 record_type in CANCELLATION_STATE_RECORD_TYPES
                 and record_data_kubun not in {

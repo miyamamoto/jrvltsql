@@ -2101,3 +2101,411 @@
   polite final evidence comment and squash-merge #200. STOP on any non-worklog
   delta, remote-head mismatch, executed CI failure, new actionable thread, or
   loss of mergeability.
+- PR [#200](https://github.com/miyamamoto/jrvltsql/pull/200) passed its final
+  gate on exact head `96f251f8a636ba0006706b349df656c6143d580f`.
+  Actions run `31977457281` completed `test`, `lint`, and
+  `windows-batch-syntax` successfully; only the intentionally conditional
+  `performance-test` was skipped. Thread-aware GraphQL returned zero review
+  threads, the remote and local heads matched, the worktree was clean, and the
+  PR was `MERGEABLE` / `CLEAN`. A final evidence comment recorded the review
+  disposition and the non-release/fresh-acquisition boundary. The iteration
+  was squash-merged as
+  `4e052962ca7b3322be7d1025c3151c8d2afcd02a`; GitHub then reported zero open
+  PRs, and the merged worktree and local branch were removed.
+- WF official-storage iteration started from freshly fetched `origin/master`
+  full SHA `4e052962ca7b3322be7d1025c3151c8d2afcd02a`. Repository:
+  `miyamamoto/jrvltsql`; dedicated worktree:
+  `/home/keiba/scratch/20260817_jrvltsql_wf_standard`; branch:
+  `agent/wf-standard-storage-20260817`. Minimal scope is WF only: reconcile
+  the current and prior official layouts and state semantics, all five race
+  slots and 243 payout slots, native `NL_WF` and canonical storage ownership,
+  keys, migration fail-closed behavior, executable metadata, tests, public
+  support documentation, and the official-history oracle. WC is merged; CK
+  and the final fresh-provider release gate remain separate iterations.
+  Dependency order remains jrvltsql specification/storage fixes, final
+  repository audit plus fresh provider acquisition/storage and release, then
+  jrvltsql-nar alignment/release, then jvlink-mcp-server alignment/release.
+  Claude Code Fable is the preferred implementation reviewer because the work
+  crosses nested fixed-width arrays, status semantics, and two importers; if
+  the recorded account limit persists, the operator-authorized Codex critical
+  fallback applies and no unavailable-Claude result will be counted. Next safe
+  action: bind the pinned official workbook/SDK structures and relevant
+  community clarifications to the current parser/schema/import paths, then add
+  one grouped red-first WF contract on this unchanged base. STOP if the
+  official sources do not establish a lossless table/key design, if an old
+  layout cannot be distinguished safely, if a legacy mismatch would mutate
+  before rejection, or if a current PR already owns the same scope.
+- Two independent Codex critical reviews completed read-only against exact
+  base `4e052962ca7b3322be7d1025c3151c8d2afcd02a`; neither changed production or
+  tests. Both returned `NEEDS_CHANGES`. The independently reproduced blockers
+  were: standard WF resolves to undefined physical `WIN5`; the existing
+  `JYUSYOSIKI_HEAD`/`JYUSYOSIKI` schemas lack the official parent key and a
+  lossless 243-row child contract; no WF caller validator exists; generic
+  coercion silently changes non-digits; native/realtime wrong primary keys can
+  silently collapse dates; realtime accepts unsupported `8` and accumulated-
+  only `7`; metadata and history fixtures are false-green. Both audits agreed
+  on the official 7,215-byte layout, `(Year, MonthDay)` key, statuses
+  `0/1/2/3/7/9`, five race slots, five active-vote slots, 243 payout slots,
+  status-0 erase and status-9 retention. The 169-byte repository fixture has
+  no official historical-format provenance. PostgreSQL runtime verification
+  remains explicitly unperformed and mandatory after repair.
+- Added one grouped red-first contract at
+  `tests/test_wf_official_contract.py` without changing production code. On
+  unchanged exact base `4e052962ca7b3322be7d1025c3151c8d2afcd02a`, command
+  `python3 -m pytest -q tests/test_wf_official_contract.py --no-cov
+  --basetemp=/home/keiba/scratch/20260817_jrvltsql_wf_red_tmp7` produced
+  `28 failed, 3 passed` after extending the same grouped contract with native
+  and realtime wrong-primary-key probes plus the absent WF same-length history
+  entries. The red failures demonstrate that current code accepts
+  blank/unknown status, invalid dates, non-digit fixed fields and flags; both
+  importers accept malformed caller dictionaries; standard parent/243-child
+  storage is absent; wrong WF keys do not stop either historical importer or
+  realtime before mutation; and realtime accepts statuses `7` and `8`. The paired
+  green cases bind the pinned SDK 5.0.0 manifest (7,215 bytes, 771 leaves,
+  5/5/243 repeats, CRLF at one-based 7,214), first/middle/last extraction,
+  every official accumulated status, opaque status-0 body, and explicit
+  rejection of the repository-only 169-byte reconstruction. This is the
+  required pre-repair red evidence; do not replace it with a post-fix claim.
+- The official 4.9.0.1 format sheet rows 1296-1330 were then re-read directly.
+  The test builder was corrected before implementation so its complete payload
+  uses status `3`, not status `1`: all statuses require five race composites
+  and initial carryover; status `1` uses initial values for sales/votes/flags,
+  balance, and payouts; status `2`/`9` allow optional values; status `3`/`7`
+  provide the values. Added red cases prove current code incorrectly accepts a
+  non-initial status-1 sales count and a status-3 record missing required
+  payload. It also proves all three current statuses changed by Ver.4.2.0
+  wrongly accept a blank initial-carryover amount, while paired pre-4.2
+  event records and status-2/9 optional non-carryover payload stay green.
+  The final pre-delegation red extension also proves standard import does not
+  raise before mutation when the required child is absent or its composite
+  `ON DELETE CASCADE` foreign key is missing (both importers).
+- As an independent old/current physical check, the normalized 35-row WF
+  format block beginning at workbook row 1296 was serialized from both pinned
+  artifacts. `JV-Data4802.xlsx` and `JV-Data4901.xlsx` produced the identical
+  SHA-256 `dc406a98fd5050b883bd590eb271ac9d064b26eaf61d220be746e11c54f80d4b`
+  over 6,207 UTF-8 JSON bytes. This confirms the supported 4.8.0.2 and 4.9.0.1
+  physical layout is the same; the 4.1.1/4.2.0 differences are semantic
+  availability/history, not a second record length.
+- Claude Code implementation session reserved as
+  `3178b449-85d0-43ef-b671-13a519df1649`, with `--model fable --effort max`.
+  Fable is selected under the operator rule because this repair implements a
+  fail-closed validator, state-dependent old/current semantics, coupled parent/
+  child transactions, two importer orderings, realtime restrictions, and
+  SQLite/PostgreSQL constraint boundaries. The session must be resumed by this
+  ID for findings within this WF iteration; it may edit the current dedicated
+  worktree but must not commit, push, open/merge a PR, release, or claim provider
+  runtime/64-bit verification. Start only after the recorded 08:40 JST quota
+  reset; if the service still refuses it, record that fact and use the
+  operator-approved Codex implementation fallback.
+- At `2026-08-17T08:40:15+09:00`, the recorded reset had passed and session
+  `3178b449-85d0-43ef-b671-13a519df1649` was started with
+  `claude --model fable --effort max`. Its task is the single aggregated WF
+  implementation described above, using the grouped red contract as immutable
+  evidence. Worktree was dirty only with this tracked worklog and the untracked
+  red-first WF test at dispatch; no production file had changed.
+- Aggregated implementation boundary before delegating the repair: retain
+  native `NL_WF` and `RT_WF` as one-row JSON compatibility storage, but add a
+  shared fail-closed WF validator and exact schema/key verification before
+  generic coercion in both historical importers, single-record import, and all
+  realtime parsed/raw/batch paths. Accumulated accepts `0/1/2/3/7/9`; realtime
+  accepts `0/1/2/3/9` and rejects accumulated-only `7`. Status `0` validates
+  only the exact date key and treats its body as opaque before physical delete;
+  status `9` is retained. The validator must reject conflicting/missing record
+  type or status aliases, invalid Gregorian dates, non-ASCII/fixed-width keys
+  and race composites, invalid flags, malformed or non-243 payout JSON, and
+  partial payout tuples before conversion can strip characters.
+- Standard mode will use the existing project-canonical physical owner
+  `JYUSYOSIKI_HEAD` plus child `JYUSYOSIKI`; `WIN5` remains a public mapping
+  alias only and is never a physical write target. Parent key is
+  `(Year, MonthDay)`. The child stores every ordinal `Num=1..243`, including
+  documented blank slots, under key `(Year, MonthDay, Num)` with a composite
+  parent foreign key and `ON DELETE CASCADE`. One provider record replaces the
+  parent plus exactly 243 children atomically and in provider order. Existing
+  malformed parent/child or legacy-only `WIN5` storage is non-additive and must
+  stop before any unrelated DDL/row mutation; do not infer/backfill missing
+  ordinals. Both SQLite and PostgreSQL constraint verification must establish
+  actual ordered PK/FK semantics, not merely constraint names or token samples.
+  Ver.4.1.1 and 4.2.0 are same-length semantic/history entries, not alternate
+  physical layouts; pre/post-4.2 carryover availability must be handled
+  deliberately without accepting a 169-byte source record. Public docs must
+  make these compatibility and operator-rebuild boundaries explicit without a
+  64-bit runtime-support claim.
+- Claude Code session `3178b449-85d0-43ef-b671-13a519df1649` (Fable, effort max)
+  implemented the single aggregated WF repair in
+  `/home/keiba/scratch/20260817_jrvltsql_wf_standard` on unchanged base
+  `4e052962ca7b3322be7d1025c3151c8d2afcd02a`. Before any production change the
+  recorded red evidence was reproduced with `/usr/bin/python3` (3.10.12):
+  `python3 -m pytest -q tests/test_wf_official_contract.py --no-cov
+  --basetemp=/home/keiba/scratch/20260817_jrvltsql_wf_impl_tmp1
+  -p no:cacheprovider` returned `28 failed, 3 passed`. The grouped contract was
+  then extended only where a contract was still missing (native provider order
+  with first/middle/last readback for both importers and both `auto_commit`
+  values, standard atomic rollback with `auto_commit=False`, single-record
+  native/standard import, raw/parsed/batch realtime paths, malformed alias and
+  PayoutsJson caller dictionaries, malformed child foreign keys, legacy-only
+  `WIN5`, and one opt-in disposable PostgreSQL contract) and rerun on the same
+  unchanged base: `46 failed, 7 passed, 1 skipped` (the PostgreSQL opt-in). The
+  four additional passes are the native provider-order/readback regression that
+  protects already-correct native behaviour; every new validator, verifier,
+  standard-storage, and realtime gate was red first.
+- Official sources were re-read directly rather than inferred: `JV-Data4901.xlsx`
+  フォーマット rows 1296-1330 (identical cell-for-cell to `JV-Data4802.xlsx`),
+  変更履歴 rows 103-105 (Ver.4.2.0, item 14 for status 1 `-`→`○`, status 2
+  `△`→`○`, status 9 `△`→`○`) and 107-109 (Ver.4.1.1 item-15 rename, item 14/15
+  initial values, item-16 no-hit note), 特記事項 row 259 (status 9 cancellation
+  tuple `0000000000` / `000000100` / `0000000000`), コード表 2001 (JyoCD includes
+  alphanumeric overseas codes), and SDK 5.0.0 `JV_WF_INFO` (`5/5/243` repeats,
+  `COShoki` 137/15, `COZanDaka` 152/15, CRLF 7214).
+- Parser: `src/parser/wf_parser.py` now validates per fixed field without any
+  generic non-digit stripping: exact 7,215/`WF`/CRLF/CP932 envelope, status in
+  `0/1/2/3/7/9`, `MakeDate` and the `Year`+`MonthDay` key as real Gregorian
+  dates, five race composites (2-character ASCII alphanumeric JyoCD plus
+  2-digit Kaiji/Nichiji/RaceNum), state-dependent availability per the official
+  legend (status 1 keeps initial payload values including flags `0`; 2/9
+  numeric payload may be blank or valid while flags remain `0/1`; 3/7 required
+  with payout slot 1 a complete tuple and later slots blank
+  or complete for dead-heat combinations), flags `0/1`, right-padded numeric
+  text within its physical width, payout tuples that are fully blank or
+  complete (`Kumi` exactly 10 digits). The later review corrected the Ver.4.2.0
+  discriminator from event date to embedded `MakeDate`: before 2012-02-21
+  status 1 requires the blank initial value and status 2/9 allow blank or
+  digits; on and after the boundary every non-delete status requires digits.
+  Status 0 validates header plus exact key only and keeps its body opaque; the
+  official cancellation tuple and the pre-4.2 statuses remain accepted.
+- Shared validator/verifier: `src/importer/importer.py` adds
+  `validate_wf_record` (present and consistent `RecordSpec`/`headRecordSpec`/
+  `レコード種別ID` and `DataKubun`/`headDataKubun` aliases, realtime table
+  domain `0/1/2/3/9`, real dates, body/payout validation via the parser's
+  shared helpers before any coercion; PayoutsJson must be JSON text of exactly
+  243 `Kumi`/`PayJyushosiki`/`TekichuHyosu` dictionaries; caller `None` is
+  treated as blank only for top-level optional body fields because the stored
+  NULL is identical, while payout slot values must be text because the JSON is
+  stored verbatim; native/standard alias and split race-field conflicts are
+  checked for the `JYUSYOSIKI_HEAD` owner and standard-only names fail closed
+  for native tables), `verify_wf_storage_schema` (`NL_WF`/`RT_WF` exact
+  ordered `(Year, MonthDay)` key through `verify_table_schema`;
+  `JYUSYOSIKI_HEAD` requires both parent and child, strict columns and ordered
+  keys, and the composite `(Year, MonthDay)` foreign key with `ON DELETE
+  CASCADE` inspected through `PRAGMA foreign_keys`/`foreign_key_list` on SQLite
+  and `pg_constraint`/`conkey`/`confkey`/internal trigger state on PostgreSQL,
+  never by constraint name), `prepare_wf_standard_record` (one header with
+  every field including `HatubaiHyosu` and split `JyoCDN`..`RaceNumN`, plus
+  exactly 243 child rows `Num=1..243` including blank slots), and
+  `insert_wf_standard_batch` (per record: upsert parent, delete children by
+  key, insert 243 children; status 0 deletes children then parent; one
+  transaction per batch; rollback and raise, never the parent-only fallback;
+  SQLite `INSERT OR REPLACE` on the parent was verified empirically to cascade
+  child deletes, so the explicit delete/insert order is safe on both backends).
+  Both historical importers wire the verifier and validator before buffering,
+  `DataImporter.import_single_record` and `_flush_batch`/`_flush_batch_optimized`
+  route the standard owner through the coupled writer, `_OFFICIAL_ERASE_STORAGE_TABLES["WF"]`
+  is narrowed to the native tables, `resolve_standard_table_name` refuses a
+  legacy-only `WIN5`, `JYUSYOSIKI_HEAD`/`JYUSYOSIKI` are strict non-additive and
+  preflight verifies the pair (including the foreign key) whenever either
+  exists. `RealtimeUpdater` gates `RT_WF` in `_process_single_record` (raw and
+  parsed paths, after the existing DataKubun-alias `ValueError`) and in the
+  batch pre-validation loop, returning failure results/error counts without any
+  row mutation and rejecting accumulated-only status 7.
+- Schema/mapping/metadata/history: `JYUSYOSIKI_HEAD` gains `HatubaiHyosu
+  VARCHAR(11)` and `PRIMARY KEY (Year, MonthDay)` and now precedes
+  `JYUSYOSIKI`, which becomes `(Year, MonthDay, Num, Kumi, PayJyushosiki,
+  TekichuHyo)` with `PRIMARY KEY (Year, MonthDay, Num)` and
+  `CONSTRAINT jyusyosiki_parent_fk ... ON DELETE CASCADE`; `table_mappings`
+  adds `JYUSYOSIKI`/`JYUSYOSIKI_HEAD -> NL_WF` (header last so
+  `JLTSQL_TO_JRAVAN["NL_WF"]` is the physical owner) and
+  `STANDARD_EXPANDED_RECORD_OWNER["NL_WF"] = "JYUSYOSIKI_HEAD"` while `WIN5`
+  stays a read-side alias; `NL_WF`/`RT_WF` metadata is schema-backed;
+  `jvdata_layout_history.json` appends the 4.1.1 and 4.2.0 same-length WF
+  entries (cardinality 5, contract SHA
+  `f0a2485f4eb263643d253ee0eae12b717241841edb3377050ee3f7a7d79a5a8b`) with full
+  oracle assertions, seven new drift-rejection cases, and WF root/scalar offset
+  binds; `docs/data_support.md` documents the contract, the standard pair,
+  status/cancellation semantics, the 4.2.0 boundary, and the operator-rebuild
+  boundaries without any 64-bit runtime claim.
+- Generic fixtures corrected rather than weakening assertions: WF joined
+  `DOMAIN_PAYLOAD_REQUIRED` in `tests/test_current_record_validation.py`; the
+  169-byte `WF` entry and its padding branch were removed from
+  `tests/test_reconstructed_db_fixtures.py` (the orphan `wf_records.bin` stays
+  unreferenced like the O1-O6 files); `tests/test_parsers.py` gained a valid
+  status-1 WF sample; `tests/fixtures/record_factory.py::make_wf_record` now
+  builds a complete status-3 record; the mock-database cancellation loop in
+  `tests/test_realtime.py` no longer includes WF because `RT_WF` verifies a
+  real schema (delegated to the WF contract's SQLite realtime test); the
+  grouped contract's realtime status-8 case became a caller dictionary because
+  the strict parser now refuses status 8; and the PostgreSQL native
+  provider-order assertion checks the final state because the generic
+  PostgreSQL upsert collapses same-key rows of one VALUES batch to the last
+  provider row (`records_imported` 1 for `[1, 2, 9]`; pre-existing generic
+  behaviour, final state correct, unchanged).
+- Verification (all commands with `--no-cov --basetemp` outside the repo and
+  `-p no:cacheprovider`): the grouped WF contract is `53 passed, 1 skipped`
+  (Python 3.10.12) and `54 passed` against a disposable PostgreSQL 16.15
+  container (`docker run -d --rm --name jlt_wf_pg16_20260817 ... -p
+  127.0.0.1:55433:5432 postgres:16`, `JLTSQL_RUN_POSTGRESQL_INTEGRATION=1
+  POSTGRES_HOST=127.0.0.1 POSTGRES_PORT=55433 POSTGRES_USER=jltsql
+  POSTGRES_PASSWORD=jltsql POSTGRES_DB=jltsql_test`), repeated `54 passed`
+  under `uv run --frozen --python 3.12 --extra dev --extra postgres`
+  (CPython 3.12.11); the container's `jlt_wf_%` schemas were dropped and the
+  container was stopped and auto-removed. Affected focused selections:
+  `857 passed, 7 skipped, 11 subtests passed` (WF contract, oracle, current
+  validation, reconstructed fixtures, parsers, parser compatibility, realtime,
+  metadata application, table mappings, all schemas, importer clean record,
+  HappyoTime) and `697 passed, 52 skipped, 3 subtests passed` (every
+  `test_*_official_contract.py`, importer, migration, updater, time series,
+  HR/SE schema migration, RA standard parser, legacy monitor, background
+  updater specs). The PostgreSQL sweep of every official contract plus
+  metadata returned `692 passed, 3 failed`; the three failures are
+  `TestPostgreSQLMetadata` for `NL_RA`/`NL_SE` Japanese-name `COMMENT ON
+  COLUMN` and reproduce identically (`3 failed, 1 passed`) on the stashed
+  unchanged base, so they are pre-existing and unrelated to WF. The
+  CI-equivalent suite under CPython 3.12.11 (`uv run --frozen --python 3.12
+  --extra dev --extra postgres python -m pytest tests --ignore=tests/integration
+  --ignore=tests/e2e -m "not slow" -q --cov=src --cov-report=term
+  --basetemp=/home/keiba/scratch/20260817_jrvltsql_wf_full_tmp
+  -p no:cacheprovider`) completed `2617 passed, 110 skipped, 14 deselected, 14
+  subtests passed`, exit 0 (one fewer subtest because WF left the mock loop).
+  `TEST GATE PASS`, `OFFICIAL ORACLE PASS`, fatal flake8
+  (`--select=E9,F63,F7,F82`) zero findings, Black and Ruff clean for the new
+  parser and contract, `compileall`, strict MkDocs, and `git diff --check` all
+  pass; the advisory flake8 report shows only pre-existing debt outside the
+  changed hunks.
+- Remaining PostgreSQL requirement: the opt-in contract must be repeated by the
+  independent reviewer on a fresh disposable PostgreSQL 16 container for the
+  frozen exact SHA (CI has no PostgreSQL service), covering both importers,
+  native/standard create/update/cancel/erase, realtime batch/raw paths,
+  metadata `COMMENT ON`, missing-cascade child rejection, and wrong native/
+  realtime key rejection with catalog and rows unchanged.
+- State: dirty worktree with this worklog, `docs/data_support.md`,
+  `src/database/{schema_jravan,schema_metadata,table_mappings}.py`,
+  `src/importer/{importer,importer_optimized}.py`, `src/parser/wf_parser.py`,
+  `src/realtime/updater.py`, `tests/fixtures/official_layout/jvdata_layout_history.json`,
+  `tests/fixtures/record_factory.py`, `tests/test_current_record_validation.py`,
+  `tests/test_official_jvdata_oracle.py`, `tests/test_parsers.py`,
+  `tests/test_realtime.py`, `tests/test_reconstructed_db_fixtures.py`, and the
+  untracked `tests/test_wf_official_contract.py`. Nothing was committed,
+  pushed, opened, merged, or released, and no provider runtime or 64-bit
+  support is claimed. Ignored local artifacts: `.venv/` (uv 3.12 environment),
+  `.coverage`, `.tmp/design.md`; disposable directories outside the repository
+  (`/home/keiba/scratch/20260817_jrvltsql_wf_impl_tmp1`..`22`,
+  `..._wf_full_tmp`, `..._wf_full_run.log`, `..._wf_mkdocs_site`,
+  `/home/keiba/scratch/tmp52kxmo3a`) remain because the shell removal command
+  was not permitted; they contain only pytest/MkDocs scratch output. Next safe
+  action: independent exact-SHA critical review of this aggregated delta,
+  including a fresh PostgreSQL replay, before any commit or candidate freeze.
+  STOP on any WF over-rejection of a provider-valid record, any parent-only or
+  partial-child write, or a non-WF regression.
+
+### 2026-08-17 09:52-10:02 JST — aggregated WF review repair
+
+- The continuing Claude Code session
+  `3178b449-85d0-43ef-b671-13a519df1649` (`--model fable --effort max`)
+  received its internal critical review after the long wait. During the
+  resulting repair it mistakenly ran `git checkout -- src/importer/importer.py`
+  while trying to undo whole-file Black output. This also removed the
+  uncommitted WF importer work. The same continuing session immediately
+  reconstructed that file from its recorded implementation transcript;
+  syntax passed and the resulting importer delta was again complete before
+  the process was interrupted. No user change was discarded outside that
+  file, and the recovered importer remains in the dirty worktree. This unsafe
+  checkout and recovery are recorded explicitly; no further checkout,
+  restore, reset, or stash command is permitted in this iteration.
+- A second resume of the same Fable session was attempted with all Claude and
+  Codex review findings aggregated. Claude Code returned its session-limit
+  response (reset time 13:40 JST) before reading or changing a file. Per the
+  operator instruction, implementation continued with Codex rather than
+  treating unavailable Claude as a green review.
+- Additional official-contract gaps were bound to existing grouped tests
+  before production repair. On the then-current implementation,
+  `python3 -m pytest -q tests/test_wf_official_contract.py --no-cov
+  --basetemp=/home/keiba/scratch/20260817_wf_codex_red
+  -p no:cacheprovider` returned `7 failed, 55 passed, 1 skipped`. The seven
+  failures proved that the validator accepted a blank status-2 flag,
+  non-initial reserved fields, a nonblank pre-4.2 status-1 initial carryover,
+  a current-format record with an old event date and missing initial
+  carryover, an arbitrary status-9 payout tuple, and that realtime rejected an
+  otherwise valid alias-only WF record before canonical routing. A separate
+  red-first SQLite FK run returned `2 failed, 63 deselected`: both importers
+  accepted `ON UPDATE CASCADE` although the canonical child requires
+  `ON UPDATE NO ACTION`.
+- The false eleven-character physical `Kumi` negative was removed: byte 11 is
+  physically the first byte of the adjacent payout field and cannot establish
+  an over-width Kumi. The real boundary is now tested through caller
+  `PayoutsJson`, where an eleven-character Kumi must be rejected before
+  mutation. The standard SQLite `MakeDate` readback expectation was corrected
+  to the existing integer representation `20260817`.
+- Codex then implemented the official rules without weakening positives:
+  reserved fields are exactly `00` and `000000` for every non-delete record;
+  all non-delete flags remain literal `0` or `1`; the 4.2 boundary uses
+  `MakeDate`, with old status 1 blank-only, old status 2/9 optional, and current
+  non-delete states required; a nonblank status-9 payout must be the documented
+  cancellation tuple in slot 1 with every later slot blank; realtime
+  canonicalizes consistent record-type/status aliases before routing; and the
+  SQLite child verifier now requires MATCH SIMPLE/NONE, ON UPDATE NO ACTION,
+  and ON DELETE CASCADE. Status 0 continues to validate the header and exact
+  key while leaving all body semantics opaque.
+- First post-repair grouped run:
+  `62 passed, 1 skipped` using
+  `/home/keiba/scratch/20260817_wf_codex_green2`. The complete focused,
+  PostgreSQL, documentation, and exact-candidate gates still have to be rerun;
+  this intermediate green is not a merge or release decision.
+
+### 2026-08-17 10:04-10:10 JST — WF post-repair verification and documentation audit
+
+- The final grouped SQLite WF contract passed `64 passed, 1 skipped`. A fresh
+  disposable PostgreSQL 16 container on loopback port 55434 then passed the
+  same contract with the opt-in PostgreSQL path enabled: `65 passed`. The test
+  exercised both importers, native and standard parent/243-child storage,
+  provider ordering, status-9 retention, status-0 erase, realtime paths,
+  metadata application, malformed FK/key rejection, and transactional row
+  preservation. Its temporary schema was dropped and the auto-remove
+  container was stopped.
+- The affected focused selection passed `868 passed, 7 skipped, 11 subtests
+  passed`. The Python 3.12 CI-equivalent suite passed `2628 passed, 110
+  skipped, 14 deselected, 14 subtests passed` in 67.63 seconds with exit 0.
+  These counts supersede the earlier pre-review/intermediate counts above.
+- Post-repair mechanical and release-surface gates all passed on the same
+  working delta: `TEST GATE PASS`, `OFFICIAL ORACLE PASS`, Python 3.12
+  `compileall`, fatal flake8 (`E9,F63,F7,F82`) with zero findings, Black for
+  the new parser/contract, `git diff --check`, and strict MkDocs to a scratch
+  site directory. A fresh wheel and sdist (`jltsql 1.6.10`) built successfully;
+  the two-artifact content checker passed and confirmed tracked `specs/` and
+  superseded audit documents remain outside both distributions. Build-only
+  setuptools license-deprecation warnings are pre-existing advisory debt and
+  did not weaken the content or build result.
+- Public-document disclosure scan found no prohibited implementation/runtime
+  disclosure. Existing README/architecture/getting-started text states only
+  that SDK 5.0.0 offers an x64 edition and explicitly says this project's x64
+  acquisition/parse/storage path is unverified; no x64-support claim is made.
+  A stale source comment that described WF as a different data category was
+  corrected to `重勝式（WIN5）`. No runtime behavior changed in this final
+  documentation pass.
+- State remains uncommitted on base
+  `4e052962ca7b3322be7d1025c3151c8d2afcd02a`; no push, PR, merge, tag, or
+  release has occurred. Next safe action is one final focused smoke after the
+  comment/worklog-only update, then commit and freeze the exact candidate SHA
+  for two independent read-only Codex critical reviews. STOP on candidate
+  drift or any P0/P1 correctness, data-integrity, or transactional finding.
+
+### 2026-08-17 10:10-10:13 JST — fail-closed WF rollback completion
+
+- Final code inspection found that `insert_wf_standard_batch` rolled back
+  `DatabaseError`/`SchemaMigrationError` but not an unexpected exception from
+  the parent/child database operation. That contradicted the function's atomic
+  write contract and could leave a caller-owned transaction visibly partial.
+  The existing atomicity test was minimally extended across `DatabaseError`
+  and `RuntimeError`, rather than adding a separate reviewer-specific test.
+  Before the production repair its targeted run was `2 failed, 2 passed, 63
+  deselected`: both importers retained the second header state after the
+  injected `RuntimeError`. This is the required red-first evidence.
+- The coupled writer now rolls back on every ordinary exception. If rollback
+  itself fails with any exception, it attempts to invalidate the connection
+  before propagating; it never enters the generic parent-only fallback. The
+  same targeted run then passed `4 passed, 63 deselected`, and the complete WF
+  contract passed `66 passed, 1 skipped`. `TEST GATE PASS`, `OFFICIAL ORACLE
+  PASS`, affected-file fatal flake8 (zero), and `git diff --check` were rerun
+  successfully after this production change.
+- The earlier broader/focused/PostgreSQL/docs/distribution evidence remains
+  applicable to the same source delta except for this strictly stronger
+  exception rollback and its test. The exact candidate is still uncommitted;
+  commit/freeze and independent reviewers are the next step, with no further
+  edits allowed once review begins.

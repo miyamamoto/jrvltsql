@@ -25,7 +25,7 @@ OFFICIAL_MANIFEST_CONTRACT_SHA256 = (
     "f35859d252fd20e4d7e38ee8d0a224deae87a62bae9db1995ed897bdccef6c45"
 )
 OFFICIAL_HISTORY_CONTRACT_SHA256 = (
-    "aee4f1e36d5f8cedfc2c61f53c8a8eb8f131387010e0e9070360dbeceed9ee90"
+    "f0a2485f4eb263643d253ee0eae12b717241841edb3377050ee3f7a7d79a5a8b"
 )
 
 
@@ -721,7 +721,7 @@ def test_official_hy_and_ck_sentinels_cannot_follow_current_implementation_drift
 def _assert_history_cardinality(history):
     assert len(history["sources"]) == 2
     assert len(history["physical_length_changes"]) == 10
-    assert len(history["same_length_semantic_changes"]) == 3
+    assert len(history["same_length_semantic_changes"]) == 5
 
 
 def _assert_history_truth_contract(history):
@@ -802,6 +802,36 @@ def _assert_history_truth_contract(history):
     assert wc_change["provenance_required"] is False
     assert wc_change["source"] == "JV-Data4901.xlsx:変更履歴:56;特記事項:237-240"
 
+    # Ver.4.1.1 renamed item 15 (carryover balance), appended the initial values
+    # of items 14/15, and documented the no-hit payout tuple. Ver.4.2.0 changed
+    # the item-14 availability for statuses 1/2/9 from "-"/"△" to "○". Neither
+    # moved a byte or changed the 7,215-byte length, so no distinct physical WF
+    # generation may be ledgered or parsed.
+    wf_411 = history["same_length_semantic_changes"][3]
+    assert wf_411["record_type"] == "WF"
+    assert wf_411["official_spec_version"] == "4.1.1"
+    assert wf_411["announced_date"] == "2011-09-28"
+    assert wf_411["length_unchanged"] is True
+    assert wf_411["layout_unchanged"] is True
+    assert wf_411["change_kind"] == "name_initial_value_and_no_hit_clarification"
+    assert "before_fields" not in wf_411
+    assert "current_fields" not in wf_411
+    assert wf_411["provenance_required"] is False
+    assert wf_411["source"] == "JV-Data4901.xlsx:変更履歴:107-109"
+
+    wf_420 = history["same_length_semantic_changes"][4]
+    assert wf_420["record_type"] == "WF"
+    assert wf_420["official_spec_version"] == "4.2.0"
+    assert wf_420["announced_date"] == "2012-02-21"
+    assert wf_420["length_unchanged"] is True
+    assert wf_420["layout_unchanged"] is True
+    assert wf_420["change_kind"] == "status_availability_change"
+    assert "before_fields" not in wf_420
+    assert "current_fields" not in wf_420
+    assert wf_420["provenance_required"] is False
+    assert wf_420["source"] == "JV-Data4901.xlsx:変更履歴:103-105"
+    assert wf_420["announced_date"] > wf_411["announced_date"]
+
 
 def test_official_layout_history_is_provenanced_and_continuous_to_current():
     history = json.loads(HISTORY_PATH.read_text(encoding="utf-8"))
@@ -836,6 +866,19 @@ def test_official_layout_history_is_provenanced_and_continuous_to_current():
     }
     assert jg_fields["KettoNum"] == (28, 10)
 
+    wf_root = current["root_records"]["WF"]
+    assert wf_root == {"struct": "JV_WF_INFO", "length": 7215}
+    wf_fields = {
+        field["name"]: (field["start"], field["width"])
+        for field in current["structures"]["JV_WF_INFO"]["fields"]
+        if field["kind"] == "scalar"
+    }
+    assert wf_fields["COShoki"] == (137, 15)
+    assert wf_fields["COZanDaka"] == (152, 15)
+    assert not any(
+        item["record_type"] == "WF" for item in history["physical_length_changes"]
+    )
+
 
 @pytest.mark.parametrize(
     ("path", "value"),
@@ -853,6 +896,13 @@ def test_official_layout_history_is_provenanced_and_continuous_to_current():
         (("same_length_semantic_changes", 1, "source"), "wrong:999"),
         (("same_length_semantic_changes", 2, "layout_unchanged"), False),
         (("same_length_semantic_changes", 2, "source"), "wrong:999"),
+        (("same_length_semantic_changes", 3, "change_kind"), "layout_change"),
+        (("same_length_semantic_changes", 3, "layout_unchanged"), False),
+        (("same_length_semantic_changes", 3, "source"), "wrong:999"),
+        (("same_length_semantic_changes", 4, "announced_date"), "2011-09-28"),
+        (("same_length_semantic_changes", 4, "length_unchanged"), False),
+        (("same_length_semantic_changes", 4, "provenance_required"), True),
+        (("same_length_semantic_changes", 4, "source"), "wrong:999"),
     ),
 )
 def test_history_truth_contract_rejects_content_and_provenance_drift(path, value):
@@ -868,7 +918,7 @@ def test_history_truth_contract_rejects_content_and_provenance_drift(path, value
     (
         ("sources", 2),
         ("physical_length_changes", 10),
-        ("same_length_semantic_changes", 3),
+        ("same_length_semantic_changes", 5),
     ),
 )
 def test_history_contract_rejects_duplicate_entries(collection, expected_count):

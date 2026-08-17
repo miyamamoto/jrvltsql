@@ -1231,9 +1231,13 @@ class TestRealtimeUpdater(unittest.TestCase):
     def test_cancellation_status_is_upserted_for_realtime_state_records(self):
         updater = RealtimeUpdater(self.mock_db)
 
+        # WF is also a cancellation-state record, but RT_WF revalidates the
+        # official schema/key and complete record before any write, which a
+        # MagicMock database cannot satisfy. Its status-9 retention is covered
+        # against a real SQLite table in test_wf_official_contract.py.
         for record_type in (
             "RA", "SE", "HR", "H1", "H6",
-            "O1", "O2", "O3", "O4", "O5", "O6", "WF",
+            "O1", "O2", "O3", "O4", "O5", "O6",
         ):
             with self.subTest(record_type=record_type):
                 self.mock_db.reset_mock()

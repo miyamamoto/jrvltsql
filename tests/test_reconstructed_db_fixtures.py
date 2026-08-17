@@ -29,7 +29,6 @@ from src.parser.se_parser import SEParser
 from src.parser.sk_parser import SKParser
 from src.parser.tk_parser import TKParser
 from src.parser.tm_parser import TMParser
-from src.parser.wf_parser import WFParser
 from src.parser.ys_parser import YSParser
 
 FIXTURES_DIR = os.path.join(
@@ -54,12 +53,14 @@ PARSER_MAP = {
     "SK": (SKParser, SKParser.RECORD_LENGTH),
     "TK": (TKParser, TKParser.RECORD_LENGTH),
     "TM": (TMParser, TMParser.RECORD_LENGTH),
-    "WF": (WFParser, 169),  # Historical fixture uses the obsolete compact layout.
     "YS": (YSParser, YSParser.RECORD_LENGTH),
 }
 # The old O1-O6 fixture files were reconstructed from already-expanded SQL
 # rows, not preserved provider records. They cannot prove a physical parser
 # contract; complete current layouts are covered in test_time_series.py.
+# The 169-byte wf_records.bin is a repository-only compaction of the official
+# 7,215-byte record with no historical-format provenance; it is not a positive
+# WF fixture, and test_wf_official_contract.py proves it is rejected.
 EXPANDED_RECORD_TYPES = {"DM", "TM"}
 LEGACY_RECONSTRUCTED_LENGTHS = {
     "BN": 387,
@@ -184,8 +185,6 @@ def load_fixture_records(record_type, record_length):
                 # six-byte horse block reconstructed through the obsolete
                 # one-entry parser. Fill the other official slots with spaces.
                 chunk = chunk[:37].ljust(TMParser.RECORD_LENGTH - 2, b" ") + b"\r\n"
-            if record_type == "WF" and len(chunk) == 169:
-                chunk = chunk[:11].ljust(WFParser.RECORD_LENGTH - 2, b" ") + b"\r\n"
             if record_type == "YS" and len(chunk) == 146:
                 # The historical fixture contains the header and first complete
                 # guidance block. Preserve that compatible prefix in a synthetic
