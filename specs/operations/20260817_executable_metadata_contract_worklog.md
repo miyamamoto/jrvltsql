@@ -182,3 +182,21 @@
   same fresh PostgreSQL test passes `1 passed, 3 subtests passed`. The extended
   Dual test also passes on fresh PostgreSQL and proves that a drifted secondary
   is rejected before the canonical SQLite metadata description changes.
+
+### Exact candidate verification and PostgreSQL test isolation
+
+- Candidate `99aea9e0743688c0c106943046ca2e909bb04b6b` was frozen clean. Its
+  ordinary full suite passed `2934 passed, 175 skipped, 22 subtests passed`.
+- The first exact-SHA PostgreSQL file run exposed a test-isolation error, not a
+  production failure: the extended Dual test intentionally committed a drifted
+  `NL_RA`, while `tearDown` dropped it without committing; psycopg disconnect
+  rolled the cleanup back and later tests observed the drifted table. The run
+  therefore failed 2 of 34 tests with `NL_RA.year actual=text`.
+- The shared PostgreSQL test teardown now commits its explicit table drops.
+  A new fresh PostgreSQL 16 container then passed the complete metadata file:
+  `34 passed, 3 subtests passed`. This is a test-only isolation correction;
+  production sources remain byte-identical to candidate `99aea9e...`.
+- Next safe command: commit the test/worklog-only isolation correction, run
+  the focused SQLite/PostgreSQL/static/package gates on the resulting clean
+  full SHA (without repeating the unaffected full suite), then begin the two
+  bounded independent closure reviews.

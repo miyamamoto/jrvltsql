@@ -383,6 +383,7 @@ class TestPostgreSQLMetadata(unittest.TestCase):
         self.database.execute("DROP TABLE IF EXISTS NL_RA CASCADE")
         self.database.execute("DROP TABLE IF EXISTS NL_SE CASCADE")
         self.database.execute("DROP TABLE IF EXISTS NL_HR CASCADE")
+        self.database.commit()
         self.database.disconnect()
 
     def test_postgresql_comment_on_table(self):
