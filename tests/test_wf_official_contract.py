@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 from pathlib import Path
 from uuid import uuid4
 
@@ -22,7 +23,11 @@ from src.database.table_mappings import (
     JRAVAN_TO_JLTSQL,
     STANDARD_EXPANDED_RECORD_OWNER,
 )
-from src.importer.importer import DataImporter, ImporterError
+from src.importer.importer import (
+    DataImporter,
+    ImporterError,
+    verify_wf_storage_schema,
+)
 from src.importer.importer_optimized import OptimizedDataImporter
 from src.parser.wf_parser import WFParser
 from src.realtime.updater import RealtimeUpdater
@@ -32,6 +37,15 @@ def _pad(value: str, width: int) -> bytes:
     encoded = value.encode("cp932")
     assert len(encoded) <= width
     return encoded.ljust(width, b" ")
+
+
+def _replace_ddl_fragment(schema: str, expected: str, replacement: str) -> str:
+    """Replace one whitespace-aligned DDL fragment and prove it was present."""
+    pattern = r"\s+".join(re.escape(token) for token in expected.split())
+    replaced, count = re.subn(pattern, replacement, schema, count=1)
+    assert count == 1, expected
+    assert replaced != schema
+    return replaced
 
 
 def build_record(
@@ -60,11 +74,12 @@ def build_record(
         "CarryOverStart": "1000",
         "CarryOverBalance": "2000" if populate_payload else "",
     }
+    remaining_votes = (100, 80, 60, 40, 24)
     for index in range(1, 6):
         # Four distinct values per composite so a JyoCD/Kaiji/Nichiji/RaceNum
         # position swap cannot survive the readback assertions.
         values[f"RaceInfo{index}"] = f"{index:02d}{index + 1:02d}{index + 3:02d}{index + 7:02d}"
-        values[f"YukoHyosu{index}"] = str(1000 + index) if populate_payload else ""
+        values[f"YukoHyosu{index}"] = str(remaining_votes[index - 1]) if populate_payload else ""
     if field_overrides:
         values.update(field_overrides)
 
@@ -113,6 +128,21 @@ def cancellation_record() -> bytes:
     record[166:176] = b"0000000000"
     record[176:185] = b"000000100"
     record[185:195] = b"0000000000"
+    return bytes(record)
+
+
+def no_hit_record(*, data_kubun: str = "3") -> bytes:
+    """Build the official final no-hit representation with zero pay/votes."""
+    record = bytearray(
+        build_record(
+            data_kubun=data_kubun,
+            field_overrides={"TekichuNasiFlag": "1"},
+        )
+    )
+    for index in (1, 122, 243):
+        start = 166 + (index - 1) * WFParser.PAYOUT_LENGTH
+        record[start + 10 : start + 19] = b"000000000"
+        record[start + 19 : start + 29] = b"0000000000"
     return bytes(record)
 
 
@@ -165,17 +195,42 @@ def test_wf_layout_is_bound_to_the_pinned_sdk_manifest() -> None:
         "05060812",
     ]
     assert [parsed[f"YukoHyosu{index}"] for index in range(1, 6)] == [
-        "1001",
-        "1002",
-        "1003",
-        "1004",
-        "1005",
+        "100",
+        "80",
+        "60",
+        "40",
+        "24",
     ]
     assert [payouts[index - 1] for index in (1, 122, 243)] == [
         {"Kumi": "0102030405", "PayJyushosiki": "123456", "TekichuHyosu": "7"},
         {"Kumi": "0203040506", "PayJyushosiki": "234567", "TekichuHyosu": "8"},
         {"Kumi": "0304050607", "PayJyushosiki": "345678", "TekichuHyosu": "9"},
     ]
+
+
+def test_wf_venue_domain_is_bound_to_official_code_table_2001() -> None:
+    contract = json.loads(
+        Path("tests/fixtures/official_layout/wf_jyo_codes_4901.json").read_text(encoding="utf-8")
+    )
+    assert contract["source_artifact"] == "JV-Data4901.xlsx"
+    assert contract["source_sha256"] == (
+        "23bafd375f704acbdd696b5032ac1619f17d47e882587d6e7954b610527a8234"
+    )
+    assert contract["source_sheet"] == "コード表"
+    assert contract["source_rows"] == "10-126"
+    assert contract["code_table"] == "2001.競馬場コード"
+    assert len(contract["active_codes"]) == len(set(contract["active_codes"])) == 108
+    assert WFParser.OFFICIAL_JYO_CODES == frozenset(contract["active_codes"])
+    assert set(contract["excluded_codes"]) == {
+        "00",
+        "C4",
+        "F4",
+        "F6",
+        "G4",
+        "G6",
+        "G8",
+    }
+    assert WFParser.OFFICIAL_JYO_CODES.isdisjoint(contract["excluded_codes"])
 
 
 def test_wf_parser_reads_every_manifest_scalar_and_repeat_at_the_pinned_offset() -> None:
@@ -210,7 +265,7 @@ def test_wf_parser_reads_every_manifest_scalar_and_repeat_at_the_pinned_offset()
         "Hatsubai_Hyo": ("HatubaiHyosu", "12345678901"),
         "HenkanFlag": ("HenkanFlag", "1"),
         "FuseiritsuFlag": ("FuseirituFlag", "0"),
-        "TekichunashiFlag": ("TekichuNasiFlag", "1"),
+        "TekichunashiFlag": ("TekichuNasiFlag", "0"),
         "COShoki": ("CarryOverStart", "100000000000001"),
         "COZanDaka": ("CarryOverBalance", "100000000000002"),
     }
@@ -273,6 +328,14 @@ def test_wf_parser_reads_every_manifest_scalar_and_repeat_at_the_pinned_offset()
             id="nondigit-race-info",
         ),
         pytest.param(
+            build_record(field_overrides={"RaceInfo3": "ZZ030103"}),
+            id="unknown-venue-code",
+        ),
+        pytest.param(
+            build_record(field_overrides={"RaceInfo3": "n6030103"}),
+            id="lowercase-venue-code",
+        ),
+        pytest.param(
             build_record(field_overrides={"HatubaiHyosu": "12X3"}),
             id="nondigit-sales-votes",
         ),
@@ -317,6 +380,17 @@ def test_wf_parser_reads_every_manifest_scalar_and_repeat_at_the_pinned_offset()
         ),
         pytest.param(
             build_record(
+                data_kubun="1",
+                make_date="20120221",
+                year="2012",
+                month_day="0221",
+                populate_payload=False,
+                field_overrides={"CarryOverStart": ""},
+            ),
+            id="ver420-inclusive-boundary-missing-carryover",
+        ),
+        pytest.param(
+            build_record(
                 data_kubun="2",
                 make_date="20260817",
                 year="2011",
@@ -343,6 +417,10 @@ def test_wf_parser_reads_every_manifest_scalar_and_repeat_at_the_pinned_offset()
         pytest.param(
             build_record(data_kubun="3", populate_payload=False),
             id="status3-missing-required-payload",
+        ),
+        pytest.param(
+            build_record(field_overrides={"TekichuNasiFlag": "1"}),
+            id="no-hit-with-positive-pay-and-votes",
         ),
         *(
             pytest.param(
@@ -399,6 +477,30 @@ def test_wf_accepts_all_official_accumulated_statuses_and_opaque_delete() -> Non
             )
         )
         assert pre_420 is not None
+
+    boundary_before = WFParser().parse(
+        build_record(
+            data_kubun="1",
+            make_date="20120220",
+            year="2012",
+            month_day="0220",
+            populate_payload=False,
+            field_overrides={"CarryOverStart": ""},
+        )
+    )
+    assert boundary_before is not None
+    overseas = WFParser().parse(build_record(field_overrides={"RaceInfo3": "N6030103"}))
+    assert overseas is not None
+
+    no_hit = WFParser().parse(no_hit_record())
+    assert no_hit is not None
+    no_hit_payouts = json.loads(no_hit["PayoutsJson"])
+    assert no_hit["TekichuNasiFlag"] == "1"
+    assert all(
+        (slot["PayJyushosiki"], slot["TekichuHyosu"]) == ("000000000", "0000000000")
+        for slot in no_hit_payouts
+        if slot["Kumi"]
+    )
 
     cancelled = WFParser().parse(cancellation_record())
     assert cancelled is not None
@@ -550,6 +652,146 @@ def test_wf_wrong_native_key_is_rejected_before_row_mutation(tmp_path, importer_
         assert database.fetch_all("SELECT * FROM NL_WF") == before_rows
 
 
+@pytest.mark.parametrize("table_name", ("NL_WF", "RT_WF"))
+@pytest.mark.parametrize(
+    ("expected", "malformed"),
+    (
+        pytest.param("Year INTEGER", "Year TEXT", id="numeric-key-as-text"),
+        pytest.param(
+            "HatubaiHyosu BIGINT",
+            "HatubaiHyosu SMALLINT",
+            id="undersized-vote-count",
+        ),
+        pytest.param(
+            "PayoutsJson TEXT",
+            "PayoutsJson VARCHAR(1)",
+            id="bounded-json-text",
+        ),
+    ),
+)
+def test_wf_native_and_realtime_type_drift_is_rejected_before_mutation(
+    tmp_path, table_name, expected, malformed
+) -> None:
+    database = SQLiteDatabase({"path": str(tmp_path / "wrong-native-type.db")})
+    with database:
+        database.execute(SCHEMAS[table_name].replace(expected, malformed))
+        before = database.fetch_one(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name=?",
+            (table_name,),
+        )
+        with pytest.raises(SchemaMigrationError, match="column type"):
+            verify_wf_storage_schema(database, table_name)
+        assert (
+            database.fetch_one(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name=?",
+                (table_name,),
+            )
+            == before
+        )
+        assert _count(database, table_name) == 0
+
+
+@pytest.mark.parametrize(
+    ("table_name", "expected", "malformed"),
+    (
+        pytest.param("JYUSYOSIKI_HEAD", "MakeDate DATE", "MakeDate BLOB", id="head-date"),
+        pytest.param("JYUSYOSIKI_HEAD", "Year SMALLINT", "Year TEXT", id="head-key"),
+        pytest.param("JYUSYOSIKI", "Num SMALLINT", "Num BLOB", id="child-ordinal"),
+    ),
+)
+def test_wf_standard_type_drift_is_rejected_before_mutation(
+    tmp_path, table_name, expected, malformed
+) -> None:
+    database = SQLiteDatabase({"path": str(tmp_path / "wrong-standard-type.db")})
+    head_schema = JRAVAN_SCHEMAS["JYUSYOSIKI_HEAD"]
+    child_schema = JRAVAN_SCHEMAS["JYUSYOSIKI"]
+    if table_name == "JYUSYOSIKI_HEAD":
+        head_schema = _replace_ddl_fragment(head_schema, expected, malformed)
+    else:
+        child_schema = _replace_ddl_fragment(child_schema, expected, malformed)
+    with database:
+        database.execute(head_schema)
+        database.execute(child_schema)
+        before = database.fetch_all(
+            "SELECT name, sql FROM sqlite_master WHERE type='table' ORDER BY name"
+        )
+        with pytest.raises(SchemaMigrationError, match="column type"):
+            verify_wf_storage_schema(database, "JYUSYOSIKI_HEAD")
+        assert (
+            database.fetch_all(
+                "SELECT name, sql FROM sqlite_master WHERE type='table' ORDER BY name"
+            )
+            == before
+        )
+        assert _count(database, "JYUSYOSIKI_HEAD") == 0
+        assert _count(database, "JYUSYOSIKI") == 0
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+@pytest.mark.parametrize("standard", (False, True), ids=("native", "standard"))
+def test_wf_extra_unique_constraint_is_rejected_before_silent_replacement(
+    tmp_path, importer_class, standard
+) -> None:
+    database = SQLiteDatabase({"path": str(tmp_path / "extra-unique.db")})
+    with database:
+        if standard:
+            database.execute(
+                JRAVAN_SCHEMAS["JYUSYOSIKI_HEAD"].replace(
+                    "PRIMARY KEY (Year, MonthDay)",
+                    "PRIMARY KEY (Year, MonthDay), UNIQUE (Year)",
+                )
+            )
+            database.execute(JRAVAN_SCHEMAS["JYUSYOSIKI"])
+        else:
+            database.execute(
+                SCHEMAS["NL_WF"].replace(
+                    "PRIMARY KEY (Year, MonthDay)",
+                    "PRIMARY KEY (Year, MonthDay), UNIQUE (Year)",
+                )
+            )
+        target = "JYUSYOSIKI_HEAD" if standard else "NL_WF"
+        before = database.fetch_all(
+            "SELECT name, sql FROM sqlite_master "
+            "WHERE type IN ('table', 'index') ORDER BY type, name"
+        )
+        with pytest.raises(SchemaMigrationError, match="UNIQUE"):
+            importer_class(database, use_jravan_schema=standard).import_records(
+                iter([parsed_record(), parsed_record(month_day="0817")])
+            )
+        assert (
+            database.fetch_all(
+                "SELECT name, sql FROM sqlite_master "
+                "WHERE type IN ('table', 'index') ORDER BY type, name"
+            )
+            == before
+        )
+        assert _count(database, target) == 0
+        if standard:
+            assert _count(database, "JYUSYOSIKI") == 0
+
+
+def test_wf_nonunique_indexes_remain_compatible(tmp_path) -> None:
+    database = SQLiteDatabase({"path": str(tmp_path / "nonunique-index.db")})
+    with database:
+        database.execute(SCHEMAS["NL_WF"])
+        database.execute("CREATE INDEX nl_wf_year_lookup ON NL_WF (Year)")
+        _standard_tables(database)
+        database.execute("CREATE INDEX jyusyosiki_year_lookup ON JYUSYOSIKI_HEAD (Year)")
+        verify_wf_storage_schema(database, "NL_WF")
+        verify_wf_storage_schema(database, "JYUSYOSIKI_HEAD")
+        native = DataImporter(database).import_records(
+            iter([parsed_record(), parsed_record(month_day="0817")])
+        )
+        standard = DataImporter(database, use_jravan_schema=True).import_records(
+            iter([parsed_record(), parsed_record(month_day="0817")])
+        )
+        assert native["records_imported"] == 2
+        assert standard["records_imported"] == 2
+        assert _count(database, "NL_WF") == 2
+        assert _count(database, "JYUSYOSIKI_HEAD") == 2
+        assert _count(database, "JYUSYOSIKI") == 486
+
+
 @pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
 def test_wf_standard_storage_is_one_parent_and_243_ordered_children(
     tmp_path, importer_class
@@ -594,8 +836,10 @@ def test_wf_standard_storage_is_one_parent_and_243_ordered_children(
             "PayJyushosiki": "000000100",
             "TekichuHyo": "0000000000",
         }
+        opaque_delete = parsed_record(data_kubun="0")
+        opaque_delete["CarryoverSyoki"] = "body-is-not-defined-for-delete"
         deleted = importer_class(database, use_jravan_schema=True).import_records(
-            iter([parsed_record(data_kubun="0")])
+            iter([opaque_delete])
         )
         assert deleted["records_imported"] == 1
         assert database.fetch_one("SELECT COUNT(*) AS count FROM JYUSYOSIKI_HEAD") == {"count": 0}
@@ -692,6 +936,101 @@ def _standard_tables(database: SQLiteDatabase) -> None:
 
 def _count(database, table_name: str) -> int:
     return database.fetch_one(f"SELECT COUNT(*) AS count FROM {table_name}")["count"]
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+@pytest.mark.parametrize("standard", (False, True), ids=("native", "standard"))
+def test_wf_auto_commit_false_rolls_back_an_earlier_flush_on_validation_failure(
+    tmp_path, importer_class, standard
+) -> None:
+    database = SQLiteDatabase({"path": str(tmp_path / "validation-rollback.db")})
+    with database:
+        database.execute(SCHEMAS["NL_WF"])
+        _standard_tables(database)
+        invalid = parsed_record(month_day="0817")
+        invalid["PayoutsJson"] = "[]"
+        with pytest.raises(SchemaMigrationError):
+            importer_class(
+                database,
+                batch_size=1,
+                use_jravan_schema=standard,
+            ).import_records(
+                iter([parsed_record(), invalid]),
+                auto_commit=False,
+            )
+        assert database._connection is not None
+        assert database._connection.in_transaction is False
+        assert _count(database, "JYUSYOSIKI_HEAD" if standard else "NL_WF") == 0
+        if standard:
+            assert _count(database, "JYUSYOSIKI") == 0
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_wf_native_database_failure_never_enters_partial_row_fallback(
+    tmp_path, importer_class
+) -> None:
+    database = SQLiteDatabase({"path": str(tmp_path / "native-db-failure.db")})
+    with database:
+        database.execute(SCHEMAS["NL_WF"])
+        original_insert_many = database.insert_many
+
+        def partially_failing_insert_many(table_name, rows, *args, **kwargs):
+            if table_name == "NL_WF":
+                original_insert_many(table_name, rows[:1], *args, **kwargs)
+                raise DatabaseError("simulated WF batch failure after one row")
+            return original_insert_many(table_name, rows, *args, **kwargs)
+
+        database.insert_many = partially_failing_insert_many
+        try:
+            with pytest.raises(ImporterError):
+                importer_class(database).import_records(
+                    iter([parsed_record(), parsed_record(month_day="0817")])
+                )
+        finally:
+            database.insert_many = original_insert_many
+        assert _count(database, "NL_WF") == 0
+
+
+def test_wf_realtime_database_failure_rolls_back_without_split_success(tmp_path) -> None:
+    database = SQLiteDatabase({"path": str(tmp_path / "realtime-db-failure.db")})
+    with database:
+        database.execute(SCHEMAS["RT_WF"])
+        original_insert_many = database.insert_many
+
+        def partially_failing_insert_many(table_name, rows, *args, **kwargs):
+            if table_name == "RT_WF":
+                original_insert_many(table_name, rows[:1], *args, **kwargs)
+                raise DatabaseError("simulated realtime WF failure after one row")
+            return original_insert_many(table_name, rows, *args, **kwargs)
+
+        database.insert_many = partially_failing_insert_many
+        try:
+            result = RealtimeUpdater(database).process_parsed_records_batch(
+                [parsed_record(), parsed_record(month_day="0817")]
+            )
+        finally:
+            database.insert_many = original_insert_many
+        assert result["success"] is False
+        assert result["inserted"] == 0
+        assert result["errors"] == 2
+        assert _count(database, "RT_WF") == 0
+
+
+def test_wf_realtime_extra_unique_constraint_is_rejected_before_mutation(tmp_path) -> None:
+    database = SQLiteDatabase({"path": str(tmp_path / "realtime-extra-unique.db")})
+    malformed = SCHEMAS["RT_WF"].replace(
+        "PRIMARY KEY (Year, MonthDay)",
+        "PRIMARY KEY (Year, MonthDay), UNIQUE (Year)",
+    )
+    with database:
+        database.execute(malformed)
+        result = RealtimeUpdater(database).process_parsed_records_batch(
+            [parsed_record(), parsed_record(month_day="0817")]
+        )
+        assert result["success"] is False
+        assert result["inserted"] == 0
+        assert result["errors"] == 2
+        assert _count(database, "RT_WF") == 0
 
 
 @pytest.fixture
@@ -792,11 +1131,11 @@ def test_wf_native_provider_order_retains_status_nine_and_erases_status_zero(
             "05060812",
         ]
         assert [row[f"YukoHyosu{index}"] for index in range(1, 6)] == [
-            1001,
-            1002,
-            1003,
-            1004,
-            1005,
+            100,
+            80,
+            60,
+            40,
+            24,
         ]
         assert (row["HatubaiHyosu"], row["CarryOverStart"], row["CarryOverBalance"]) == (
             123456,
@@ -873,10 +1212,9 @@ def test_wf_single_record_import_covers_native_and_standard_storage(tmp_path) ->
         assert _count(database, "NL_WF") == 0
 
         standard = DataImporter(database, use_jravan_schema=True)
-        distinct_flags = parsed_record(
-            data_kubun="7",
-            field_overrides={"HenkanFlag": "1", "TekichuNasiFlag": "1"},
-        )
+        distinct_flags = WFParser().parse(no_hit_record(data_kubun="7"))
+        assert distinct_flags is not None
+        distinct_flags["HenkanFlag"] = "1"
         distinct_flags["headRecordSpec"] = distinct_flags.pop("RecordSpec")
         distinct_flags["headDataKubun"] = distinct_flags.pop("DataKubun")
         assert standard.import_single_record(distinct_flags) is True
@@ -931,20 +1269,35 @@ def test_wf_single_record_import_covers_native_and_standard_storage(tmp_path) ->
             ("05", 6, 8, 12),
         ]
         assert [head[f"YukoHyosu{index}"] for index in range(1, 6)] == [
-            "1001",
-            "1002",
-            "1003",
-            "1004",
-            "1005",
+            "100",
+            "80",
+            "60",
+            "40",
+            "24",
         ]
         assert database.fetch_all(
             "SELECT Num, Kumi, PayJyushosiki, TekichuHyo FROM JYUSYOSIKI "
             "WHERE Num IN (1, 2, 122, 243) ORDER BY Num"
         ) == [
-            {"Num": 1, "Kumi": "0102030405", "PayJyushosiki": "123456", "TekichuHyo": "7"},
+            {
+                "Num": 1,
+                "Kumi": "0102030405",
+                "PayJyushosiki": "000000000",
+                "TekichuHyo": "0000000000",
+            },
             {"Num": 2, "Kumi": None, "PayJyushosiki": None, "TekichuHyo": None},
-            {"Num": 122, "Kumi": "0203040506", "PayJyushosiki": "234567", "TekichuHyo": "8"},
-            {"Num": 243, "Kumi": "0304050607", "PayJyushosiki": "345678", "TekichuHyo": "9"},
+            {
+                "Num": 122,
+                "Kumi": "0203040506",
+                "PayJyushosiki": "000000000",
+                "TekichuHyo": "0000000000",
+            },
+            {
+                "Num": 243,
+                "Kumi": "0304050607",
+                "PayJyushosiki": "000000000",
+                "TekichuHyo": "0000000000",
+            },
         ]
         native_flags = DataImporter(database)
         assert native_flags.import_single_record(distinct_flags) is True
@@ -1357,3 +1710,129 @@ def test_wf_postgresql_native_standard_and_realtime_contract(postgresql_db) -> N
     assert result["inserted"] == 0
     postgresql_db.rollback()
     assert _count(postgresql_db, "RT_WF") == 0
+
+
+@pytest.mark.parametrize(
+    ("expected", "malformed", "message"),
+    (
+        pytest.param(
+            "HatubaiHyosu BIGINT",
+            "HatubaiHyosu SMALLINT",
+            "column type",
+            id="undersized-numeric",
+        ),
+        pytest.param(
+            "PayoutsJson TEXT",
+            "PayoutsJson VARCHAR(1)",
+            "column type",
+            id="bounded-json-text",
+        ),
+        pytest.param(
+            "PRIMARY KEY (Year, MonthDay)",
+            "PRIMARY KEY (Year, MonthDay) DEFERRABLE INITIALLY DEFERRED",
+            "primary key",
+            id="deferrable-primary-key",
+        ),
+        pytest.param(
+            "PRIMARY KEY (Year, MonthDay)",
+            "PRIMARY KEY (Year, MonthDay), UNIQUE (Year)",
+            "UNIQUE",
+            id="extra-unique",
+        ),
+    ),
+)
+def test_wf_postgresql_native_schema_drift_is_rejected(
+    postgresql_db, expected, malformed, message
+) -> None:
+    postgresql_db.execute(SCHEMAS["NL_WF"].replace(expected, malformed))
+    postgresql_db.commit()
+    before = postgresql_db.fetch_all(
+        "SELECT contype AS type, condeferrable AS deferrable, "
+        "condeferred AS deferred, pg_get_constraintdef(oid) AS definition "
+        "FROM pg_constraint WHERE conrelid = to_regclass(?) ORDER BY contype, conname",
+        ("nl_wf",),
+    )
+    with pytest.raises(SchemaMigrationError, match=message):
+        verify_wf_storage_schema(postgresql_db, "NL_WF")
+    postgresql_db.rollback()
+    assert (
+        postgresql_db.fetch_all(
+            "SELECT contype AS type, condeferrable AS deferrable, "
+            "condeferred AS deferred, pg_get_constraintdef(oid) AS definition "
+            "FROM pg_constraint WHERE conrelid = to_regclass(?) ORDER BY contype, conname",
+            ("nl_wf",),
+        )
+        == before
+    )
+    assert _count(postgresql_db, "NL_WF") == 0
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+@pytest.mark.parametrize("standard", (False, True), ids=("native", "standard"))
+def test_wf_postgresql_auto_commit_false_validation_failure_rolls_back(
+    postgresql_db, importer_class, standard
+) -> None:
+    postgresql_db.execute(SCHEMAS["NL_WF"])
+    postgresql_db.execute(JRAVAN_SCHEMAS["JYUSYOSIKI_HEAD"])
+    postgresql_db.execute(JRAVAN_SCHEMAS["JYUSYOSIKI"])
+    postgresql_db.commit()
+    invalid = parsed_record(month_day="0817")
+    invalid["PayoutsJson"] = "[]"
+    with pytest.raises(SchemaMigrationError):
+        importer_class(
+            postgresql_db,
+            batch_size=1,
+            use_jravan_schema=standard,
+        ).import_records(
+            iter([parsed_record(), invalid]),
+            auto_commit=False,
+        )
+    assert _count(postgresql_db, "JYUSYOSIKI_HEAD" if standard else "NL_WF") == 0
+    if standard:
+        assert _count(postgresql_db, "JYUSYOSIKI") == 0
+    postgresql_db.commit()
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_wf_postgresql_native_database_failure_is_atomic(postgresql_db, importer_class) -> None:
+    postgresql_db.execute(SCHEMAS["NL_WF"])
+    postgresql_db.execute(
+        "CREATE FUNCTION reject_second_wf() RETURNS trigger LANGUAGE plpgsql AS $$ "
+        "BEGIN IF NEW.monthday = 817 THEN RAISE EXCEPTION 'simulated WF failure'; "
+        "END IF; RETURN NEW; END $$"
+    )
+    postgresql_db.execute(
+        "CREATE TRIGGER reject_second_wf BEFORE INSERT OR UPDATE ON NL_WF "
+        "FOR EACH ROW EXECUTE FUNCTION reject_second_wf()"
+    )
+    postgresql_db.commit()
+    with pytest.raises(ImporterError):
+        importer_class(postgresql_db).import_records(
+            iter([parsed_record(), parsed_record(month_day="0817")])
+        )
+    assert _count(postgresql_db, "NL_WF") == 0
+    postgresql_db.commit()
+
+
+def test_wf_postgresql_realtime_database_failure_reports_no_success(
+    postgresql_db,
+) -> None:
+    postgresql_db.execute(SCHEMAS["RT_WF"])
+    postgresql_db.execute(
+        "CREATE FUNCTION reject_second_rt_wf() RETURNS trigger LANGUAGE plpgsql AS $$ "
+        "BEGIN IF NEW.monthday = 817 THEN RAISE EXCEPTION 'simulated RT_WF failure'; "
+        "END IF; RETURN NEW; END $$"
+    )
+    postgresql_db.execute(
+        "CREATE TRIGGER reject_second_rt_wf BEFORE INSERT OR UPDATE ON RT_WF "
+        "FOR EACH ROW EXECUTE FUNCTION reject_second_rt_wf()"
+    )
+    postgresql_db.commit()
+    result = RealtimeUpdater(postgresql_db).process_parsed_records_batch(
+        [parsed_record(), parsed_record(month_day="0817")]
+    )
+    assert result["success"] is False
+    assert result["inserted"] == 0
+    assert result["errors"] == 2
+    assert _count(postgresql_db, "RT_WF") == 0
+    postgresql_db.commit()

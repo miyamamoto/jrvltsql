@@ -772,7 +772,7 @@
   green by encoding the current implementation's assumptions here.
 - Repository: `miyamamoto/jrvltsql`.
 - Dedicated worktree:
-  `/home/keiba/scratch/20260816_jrvltsql_official_oracle`.
+  `$WORKSPACE/20260816_jrvltsql_official_oracle`.
 - Branch: `agent/official-oracle-20260816`.
 - Base and initial HEAD:
   `8baf34a79783370f17ac8430151cd212a496965e` (latest fetched
@@ -1011,7 +1011,7 @@
   identity. CK expansion, unrelated standard routes, global metadata repair,
   and the strict fresh-acquisition release gate remain separate iterations.
 - Repository: `miyamamoto/jrvltsql`.
-- Worktree: `/home/keiba/scratch/20260817_jrvltsql_hy_official`.
+- Worktree: `$WORKSPACE/20260817_jrvltsql_hy_official`.
 - Branch: `agent/hy-official-20260817`.
 - Base / initial HEAD / `origin/master` full SHA:
   `3a0b108cfca22d9c2741aed96942178f4d475f90`.
@@ -1164,7 +1164,7 @@
   standard-schema iteration; other record types and release changes are out of
   scope here.
 - Repository: `miyamamoto/jrvltsql`.
-- Worktree: `/home/keiba/scratch/20260817_jrvltsql_ck_official`.
+- Worktree: `$WORKSPACE/20260817_jrvltsql_ck_official`.
 - Branch: `agent/ck-official-20260817`.
 - Base / initial HEAD / `origin/master` full SHA:
   `9f2e2a8c11bae32a76e850c13aa0e112f75ef67a`.
@@ -1208,7 +1208,7 @@
 - Red-first contract executed at unchanged base full SHA
   `9f2e2a8c11bae32a76e850c13aa0e112f75ef67a`:
   `uv run pytest -q tests/test_ck_official_contract.py
-  --basetemp=/home/keiba/scratch/pytest_ck_red --no-cov` returned
+  --basetemp=$WORKSPACE/pytest_ck_red --no-cov` returned
   `9 failed, 1 passed`. The old parser accepted blank/3/9 `DataKubun`, exposed
   none of the required 70 horse, four professional, or four owner/breeder
   normalized rows, and the schema/importers had no child-table contract. Both
@@ -1877,7 +1877,7 @@
 - WC official-storage iteration started from current `origin/master` full SHA
   `b4369f74d2ba236c8b33dbb1e45882ffa7c9aa0f`. Repository:
   `miyamamoto/jrvltsql`; dedicated worktree:
-  `/home/keiba/scratch/20260817_jrvltsql_wc_standard`; branch:
+  `$WORKSPACE/20260817_jrvltsql_wc_standard`; branch:
   `agent/wc-standard-storage-20260817`. Minimal scope is WC only: reconcile the
   current 105-byte official/SDK layout, the documentation-only 4.7.0.1
   availability/measured-distance clarification,
@@ -1913,7 +1913,7 @@
   change and executed on exact code base
   `b4369f74d2ba236c8b33dbb1e45882ffa7c9aa0f` with
   `python3 -m pytest -q tests/test_wc_official_contract.py --no-cov
-  --basetemp=/home/keiba/scratch/20260817_wc_red_pytest`. It produced the
+  --basetemp=$WORKSPACE/20260817_wc_red_pytest`. It produced the
   required red evidence: `42 failed, 1 passed, 1 PostgreSQL opt-in skip`.
   Failures independently exposed the generic parser raising or accepting
   corrupt fields, DATE/delimiter representation drift, the wrong native key,
@@ -2115,7 +2115,7 @@
 - WF official-storage iteration started from freshly fetched `origin/master`
   full SHA `4e052962ca7b3322be7d1025c3151c8d2afcd02a`. Repository:
   `miyamamoto/jrvltsql`; dedicated worktree:
-  `/home/keiba/scratch/20260817_jrvltsql_wf_standard`; branch:
+  `$WORKSPACE/20260817_jrvltsql_wf_standard`; branch:
   `agent/wf-standard-storage-20260817`. Minimal scope is WF only: reconcile
   the current and prior official layouts and state semantics, all five race
   slots and 243 payout slots, native `NL_WF` and canonical storage ownership,
@@ -2153,7 +2153,7 @@
   `tests/test_wf_official_contract.py` without changing production code. On
   unchanged exact base `4e052962ca7b3322be7d1025c3151c8d2afcd02a`, command
   `python3 -m pytest -q tests/test_wf_official_contract.py --no-cov
-  --basetemp=/home/keiba/scratch/20260817_jrvltsql_wf_red_tmp7` produced
+  --basetemp=$WORKSPACE/20260817_jrvltsql_wf_red_tmp7` produced
   `28 failed, 3 passed` after extending the same grouped contract with native
   and realtime wrong-primary-key probes plus the absent WF same-length history
   entries. The red failures demonstrate that current code accepts
@@ -2232,11 +2232,11 @@
   64-bit runtime-support claim.
 - Claude Code session `3178b449-85d0-43ef-b671-13a519df1649` (Fable, effort max)
   implemented the single aggregated WF repair in
-  `/home/keiba/scratch/20260817_jrvltsql_wf_standard` on unchanged base
+  `$WORKSPACE/20260817_jrvltsql_wf_standard` on unchanged base
   `4e052962ca7b3322be7d1025c3151c8d2afcd02a`. Before any production change the
   recorded red evidence was reproduced with `/usr/bin/python3` (3.10.12):
   `python3 -m pytest -q tests/test_wf_official_contract.py --no-cov
-  --basetemp=/home/keiba/scratch/20260817_jrvltsql_wf_impl_tmp1
+  --basetemp=$WORKSPACE/20260817_jrvltsql_wf_impl_tmp1
   -p no:cacheprovider` returned `28 failed, 3 passed`. The grouped contract was
   then extended only where a contract was still missing (native provider order
   with first/middle/last readback for both importers and both `auto_commit`
@@ -2361,7 +2361,7 @@
   CI-equivalent suite under CPython 3.12.11 (`uv run --frozen --python 3.12
   --extra dev --extra postgres python -m pytest tests --ignore=tests/integration
   --ignore=tests/e2e -m "not slow" -q --cov=src --cov-report=term
-  --basetemp=/home/keiba/scratch/20260817_jrvltsql_wf_full_tmp
+  --basetemp=$WORKSPACE/20260817_jrvltsql_wf_full_tmp
   -p no:cacheprovider`) completed `2617 passed, 110 skipped, 14 deselected, 14
   subtests passed`, exit 0 (one fewer subtest because WF left the mock loop).
   `TEST GATE PASS`, `OFFICIAL ORACLE PASS`, fatal flake8
@@ -2386,9 +2386,9 @@
   pushed, opened, merged, or released, and no provider runtime or 64-bit
   support is claimed. Ignored local artifacts: `.venv/` (uv 3.12 environment),
   `.coverage`, `.tmp/design.md`; disposable directories outside the repository
-  (`/home/keiba/scratch/20260817_jrvltsql_wf_impl_tmp1`..`22`,
+  (`$WORKSPACE/20260817_jrvltsql_wf_impl_tmp1`..`22`,
   `..._wf_full_tmp`, `..._wf_full_run.log`, `..._wf_mkdocs_site`,
-  `/home/keiba/scratch/tmp52kxmo3a`) remain because the shell removal command
+  `$WORKSPACE/tmp52kxmo3a`) remain because the shell removal command
   was not permitted; they contain only pytest/MkDocs scratch output. Next safe
   action: independent exact-SHA critical review of this aggregated delta,
   including a fresh PostgreSQL replay, before any commit or candidate freeze.
@@ -2417,7 +2417,7 @@
 - Additional official-contract gaps were bound to existing grouped tests
   before production repair. On the then-current implementation,
   `python3 -m pytest -q tests/test_wf_official_contract.py --no-cov
-  --basetemp=/home/keiba/scratch/20260817_wf_codex_red
+  --basetemp=$WORKSPACE/20260817_wf_codex_red
   -p no:cacheprovider` returned `7 failed, 55 passed, 1 skipped`. The seven
   failures proved that the validator accepted a blank status-2 flag,
   non-initial reserved fields, a nonblank pre-4.2 status-1 initial carryover,
@@ -2445,7 +2445,7 @@
   key while leaving all body semantics opaque.
 - First post-repair grouped run:
   `62 passed, 1 skipped` using
-  `/home/keiba/scratch/20260817_wf_codex_green2`. The complete focused,
+  `$WORKSPACE/20260817_wf_codex_green2`. The complete focused,
   PostgreSQL, documentation, and exact-candidate gates still have to be rerun;
   this intermediate green is not a merge or release decision.
 
@@ -2509,3 +2509,163 @@
   exception rollback and its test. The exact candidate is still uncommitted;
   commit/freeze and independent reviewers are the next step, with no further
   edits allowed once review begins.
+
+### 2026-08-17 10:13-10:32 JST — exact candidate and aggregated independent review
+
+- The complete WF delta was committed as exact candidate
+  `3ab8deaff1b996d143b3e52cf4fbd1f0d154918c` (`Implement official WF storage
+  contract`) on base/origin-master
+  `4e052962ca7b3322be7d1025c3151c8d2afcd02a`; worktree was clean. No push,
+  PR, merge, tag, or release occurred. GitHub had zero open pull requests, so
+  no dependency/conflict was present. The continuing Claude Fable session was
+  still unavailable at its service limit; per operator instruction, two
+  independent Codex critical reviewers were used as the recorded fallback.
+- Both reviewers started and ended on the exact candidate with a clean
+  worktree and made no edits. One independently re-read official 4.8.0.2/
+  4.9.0.1 format/history, SDK 5.0 manifest, community evidence, parser,
+  semantic tests, and docs. The other used SQLite and a fresh disposable
+  PostgreSQL 16 container for schema, transaction, importer, realtime, and
+  distribution probes; the container was removed at the end. Both verdicts
+  were `NEEDS_CHANGES`.
+- Release-blocking findings accepted for one repair batch:
+  (1) additional `UNIQUE(Year)` is not detected, so native and standard
+  imports report two successes while silently deleting the first event and,
+  for standard storage, its 243 children; (2) expected numeric/date families,
+  unbounded text capacity, and PostgreSQL non-deferrable immediate PK semantics
+  are not verified, allowing runtime overflow or unusable `ON CONFLICT`;
+  (3) an importer-owned `auto_commit=False` transaction is not rolled back
+  when a later caller record fails validation, allowing the earlier flush to
+  be committed after the exception; (4) generic DB-error fallback makes
+  native/standard/realtime persisted rows disagree with returned success
+  counts and can partially commit strict WF batches; (5) official no-hit
+  final states (`TekichuNasiFlag=1`) do not bind populated payout amounts and
+  votes to their zero values; and (6) standard status-0 validates conflicting
+  body aliases before its opaque-body early return, preventing an exact-key
+  erase.
+- Nonblocking completeness findings accepted into the same existing tests:
+  pin the inclusive Ver.4.2.0 boundary on 2012-02-20/21; decide and document
+  whether JyoCD uses the pinned official code enum or forward-compatible code
+  shape; and make the primary positive fixture's surviving-vote progression
+  semantically plausible without inventing an unproven arithmetic rejection
+  rule. The implementation policy is current-spec fail-closed for the pinned
+  official venue codes, with an explicit manifest/spec update required before
+  a new provider code is accepted.
+- Next safe action: minimally extend the grouped WF contract first and record
+  the combined red result on this exact candidate. Then implement the six
+  accepted groups once, rerun proportional SQLite/PostgreSQL/CI/docs/build
+  gates, commit one repair candidate, and request one final exact-SHA review.
+  STOP on any loss of legitimate old/current records, unrelated schema
+  rejection, partial parent/child state, or return-count/persistence mismatch.
+
+### 2026-08-17 10:33-10:49 JST — aggregated second-review red-first contract
+
+- The existing grouped WF contract was extended once for the six accepted
+  finding groups rather than adding one test function per reviewer hypothesis.
+  The principal valid fixture now uses a plausible non-increasing surviving
+  vote sequence whose final value reconciles with its three payout vote
+  counts, without adding an unproved arithmetic production rule. The same
+  contract also pins the Ver.4.2.0 boundary on 2012-02-20/21 and the current
+  policy that a race venue must be one of the pinned official code-table
+  values; a future official code requires a reviewed manifest/spec update.
+- Before production repair, on exact candidate
+  `3ab8deaff1b996d143b3e52cf4fbd1f0d154918c`, the aggregate command
+  `uv run --frozen --python 3.12 --extra dev --extra postgres python -m pytest
+  -q tests/test_wf_official_contract.py --no-cov
+  --basetemp=$WORKSPACE/20260817_wf_review_red
+  -p no:cacheprovider` returned `26 failed, 66 passed, 12 skipped`. The failures
+  were confined to the intended pre-repair boundaries: unknown/lowercase
+  venue codes, positive payout/votes under an official final no-hit flag,
+  native/realtime and standard type/capacity drift, harmful additional UNIQUE
+  constraints, status-0 body-alias conflicts, importer-owned transaction
+  rollback, strict native database-error fallback, realtime persisted-count
+  mismatch, and realtime additional-UNIQUE acceptance. PostgreSQL-only cases
+  were skipped until the production repair is ready for one fresh disposable
+  database run. This is the required evidence that the revised checks could
+  say no before implementation.
+- State after the red run: HEAD remains the unchanged exact candidate above;
+  only this tracked worklog and `tests/test_wf_official_contract.py` are dirty.
+  No production file, GitHub state, tag, release, provider runtime, or external
+  database was changed.
+
+### 2026-08-17 10:50-11:04 JST — WF fail-closed repair and real DB replay
+
+- Codex implemented the grouped repair after the continuing Claude Fable
+  session remained at its service limit. WF body validation now requires the
+  pinned active code-table 2001 venue values and the documented zero-pay/
+  zero-vote representation for final no-hit statuses 3/7, while leaving
+  status 9 cancellation semantics separate. Standard status 0 validates only
+  the header and exact key before its opaque-body return.
+- A dedicated WF schema verifier now checks every expected logical column type
+  and text capacity, rejects additional UNIQUE/exclusion indexes that can
+  change replacement semantics, and on PostgreSQL requires one valid, ready,
+  immediate, non-deferrable primary key usable by `ON CONFLICT`. This strict
+  verifier applies to native, realtime, and both standard parent/child tables;
+  unrelated record schemas retain their existing additive compatibility.
+- Native/realtime WF writes now use an atomic no-fallback batch path. Both
+  historical importers roll back importer-owned `auto_commit=False`
+  transactions when startup preflight, later record validation, or database
+  work fails. An unrecoverable rollback invalidates the connection rather than
+  allowing context teardown to commit uncertain state.
+- The first post-repair grouped run exposed a defect in three newly added test
+  cases: their literal DDL replacement did not match the schema's alignment,
+  so they had created canonical tables rather than malformed ones. The helper
+  now replaces whitespace-normalized fragments and asserts exactly one actual
+  change. A disposable detached worktree at the old exact candidate
+  `3ab8deaff1b996d143b3e52cf4fbd1f0d154918c` reran a minimal corrected matrix
+  and returned `3 failed`; each real `DATE -> BLOB`, `SMALLINT -> TEXT`, or
+  `SMALLINT -> BLOB` drift was accepted by the old verifier. The disposable
+  worktree was then removed. This supersedes the invalid setup portion of the
+  earlier 26-failure count while preserving its other red evidence.
+- Running Black over three production files initially reformatted unrelated
+  pre-existing debt and inflated the review diff. No current-file restore,
+  checkout, reset, or stash was used. Instead, a second disposable detached
+  worktree was created from the same exact candidate and the intended logical
+  patches were reconstructed there exclusively with `apply_patch`. AST
+  equivalence was confirmed for optimized/realtime and the only importer
+  difference was a diagnostic string; the reconstructed files were copied as
+  one bounded mechanical replacement, all three SHA-256 pairs matched, and
+  the disposable worktree was removed. The resulting production diff is again
+  limited to the logical repair.
+- Final local SQLite grouped contract after that reconstruction:
+  `92 passed, 12 skipped`. A fresh disposable PostgreSQL 16 container named
+  `jlt_wf_pg16_repair_20260817` on loopback port 55435 then ran the complete
+  opt-in grouped contract and returned `104 passed`. It covered the actual
+  catalog/type/UNIQUE/deferrable-PK negatives, both importers in native and
+  standard modes, caller-owned rollback, trigger-induced mid-batch failure,
+  realtime persisted-count agreement, status ordering, and 243-child
+  readback. The container stopped and auto-removed; a final name-filtered
+  `docker ps -a` returned no row.
+- `docs/data_support.md` now records the venue-code update boundary, final
+  no-hit representation, status-0 opaque body, exact schema/PK/UNIQUE gate,
+  and the no-partial-success transaction contract. It makes no SDK x64 runtime
+  support claim and contains no private runtime provenance.
+- The full code-table claim was then checked against the pinned local official
+  `JV-Data4901.xlsx` rather than inferred from representative values. Workbook
+  SHA-256 `23bafd375f704acbdd696b5032ac1619f17d47e882587d6e7954b610527a8234`,
+  sheet `コード表`, rows 10-126 produced 108 active values exactly equal to
+  `WFParser.OFFICIAL_JYO_CODES` (missing 0, extra 0) and seven excluded values:
+  initial `00` plus six values explicitly marked unused. The artifact hash,
+  source rows, all 108 active values, and exclusions are now tracked in
+  `tests/fixtures/official_layout/wf_jyo_codes_4901.json`, and one grouped
+  test binds the runtime set to that fixture. The grouped SQLite result after
+  the added oracle is `93 passed, 12 skipped`.
+- Broader post-repair verification on the same working delta: the affected
+  parser/oracle/schema/migration/importer/realtime/metadata suite returned
+  `964 passed, 18 skipped, 11 subtests passed`; the Python 3.12.11 CI-equivalent
+  full suite returned `2657 passed, 121 skipped, 14 deselected, 14 subtests
+  passed`, coverage 76%, exit 0. Repository `TEST GATE PASS` and `OFFICIAL
+  ORACLE PASS`; fatal flake8 selection found zero issues; parser and grouped
+  contract pass Black check; JSON validation, full `compileall`, strict
+  MkDocs, and `git diff --check` pass.
+- Fresh `jltsql 1.6.10` wheel and sdist built successfully from the repaired
+  source delta. The fail-closed distribution-content checker passed both
+  artifacts and confirmed tracked `specs/`, official test fixtures, and
+  superseded audit pages are not distributed. Existing setuptools license
+  deprecation messages are advisory build debt and did not weaken the build or
+  content result.
+- A final tracked-Markdown/public-doc scan reports no maintainer-prohibited
+  runtime term, no public `a6` mention, and no maintainer-local home path. All
+  public x64/64-bit references explicitly say the project acquisition/parse/
+  storage path remains unverified and must not be treated as supported. Sixteen
+  historical absolute scratch paths found in this worklog were sanitized to
+  `$WORKSPACE` without changing their evidence.

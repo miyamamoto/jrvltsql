@@ -41,6 +41,83 @@ class WFParser:
     RESERVED_INITIAL_VALUES = {"Yobi1": "00", "Yobi2": "000000"}
     # 特記事項: 重勝式中止時の払戻情報 (組番 / 払戻金 / 的中票数)
     CANCELLATION_PAYOUT = ("0000000000", "000000100", "0000000000")
+    # コード表2001の現行・使用中競馬場コード。00は初期値、C4/F4/F6/
+    # G4/G6/G8は使用しない旨が明記されているため、必須RaceInfoでは
+    # 受理しない。公式追加時はmanifest/specとこの集合を同時に更新する。
+    OFFICIAL_JYO_CODES = frozenset(
+        {f"{value:02d}" for value in range(1, 11)}
+        | {str(value) for value in range(30, 62)}
+        | {
+            "A0",
+            "A2",
+            "A4",
+            "A6",
+            "A8",
+            "B0",
+            "B2",
+            "B4",
+            "B6",
+            "B8",
+            "C0",
+            "C2",
+            "C5",
+            "C6",
+            "C7",
+            "C8",
+            "D0",
+            "D2",
+            "D4",
+            "D6",
+            "D8",
+            "E0",
+            "E2",
+            "E4",
+            "E6",
+            "E8",
+            "F0",
+            "F1",
+            "F2",
+            "F8",
+            "G0",
+            "G2",
+            "H0",
+            "H2",
+            "H4",
+            "H6",
+            "H8",
+            "I0",
+            "I2",
+            "I4",
+            "I6",
+            "I8",
+            "J0",
+            "J2",
+            "J4",
+            "J6",
+            "J8",
+            "K0",
+            "K2",
+            "K4",
+            "K6",
+            "K8",
+            "L0",
+            "L2",
+            "L4",
+            "L6",
+            "L8",
+            "M0",
+            "M2",
+            "M4",
+            "M6",
+            "M8",
+            "N0",
+            "N2",
+            "N4",
+            "N6",
+        }
+    )
+    NO_HIT_PAY = "000000000"
+    NO_HIT_VOTES = "0000000000"
 
     RACE_INFO_FIELDS = tuple(f"RaceInfo{index}" for index in range(1, RACE_COUNT + 1))
     YUKO_HYOSU_FIELDS = tuple(f"YukoHyosu{index}" for index in range(1, RACE_COUNT + 1))
@@ -128,14 +205,16 @@ class WFParser:
         except ValueError as error:
             raise ValueError("WF Year and MonthDay must form a real Gregorian date") from error
 
-    @staticmethod
-    def _require_race_composite(name: str, value: object) -> None:
+    @classmethod
+    def _require_race_composite(cls, name: str, value: object) -> None:
         """Require JyoCD(2 code) + Kaiji(2) + Nichiji(2) + RaceNum(2)."""
         if not isinstance(value, str) or len(value) != 8 or not value.isascii():
             raise ValueError(f"WF {name} must be an 8-character race composite")
         jyo_cd, ordinal = value[:2], value[2:]
-        if not jyo_cd.isalnum() or not ordinal.isdigit():
-            raise ValueError(f"WF {name} must be an 8-character race composite")
+        if jyo_cd not in cls.OFFICIAL_JYO_CODES or not ordinal.isdigit():
+            raise ValueError(
+                f"WF {name} must use a pinned official venue code and six ASCII digits"
+            )
 
     @classmethod
     def _require_flag(cls, name: str, value: object, *, availability: str) -> None:
@@ -258,6 +337,15 @@ class WFParser:
                 raise ValueError(
                     "WF status 9 payout must be the documented cancellation tuple in slot 1"
                 )
+        if status in cls.REQUIRED_PAYLOAD_STATUSES and values.get("TekichuNasiFlag") == "1":
+            for index, (kumi, pay, votes) in enumerate(payouts, start=1):
+                if kumi == "":
+                    continue
+                if pay != cls.NO_HIT_PAY or votes != cls.NO_HIT_VOTES:
+                    raise ValueError(
+                        f"WF final no-hit payout slot {index} must retain Kumi with "
+                        "zero PayJyushosiki and TekichuHyosu"
+                    )
 
     def parse(self, data: bytes) -> dict[str, str] | None:
         try:

@@ -12,6 +12,7 @@ from src.database.schema_types import get_table_primary_key_columns
 from src.importer.importer import (
     CANCELLATION_STATE_RECORD_TYPES,
     clean_record_metadata,
+    insert_wf_native_batch,
     resolve_record_data_kubun,
     resolve_record_type,
     validate_wf_record,
@@ -481,6 +482,21 @@ class RealtimeUpdater:
 
         inserted = 0
         for table_name, rows in grouped.items():
+            if table_name in self.STRICT_RECORD_TABLES:
+                try:
+                    inserted += insert_wf_native_batch(
+                        self.database,
+                        table_name,
+                        rows,
+                        commit_batch=False,
+                        optimized=False,
+                    )
+                except Exception as exc:
+                    logger.error(
+                        f"Atomic realtime insert failed for {table_name}: {exc}"
+                    )
+                    errors += len(rows)
+                continue
             inserted_rows, failed_rows = self._insert_rows_resilient(table_name, rows)
             inserted += inserted_rows
             errors += failed_rows

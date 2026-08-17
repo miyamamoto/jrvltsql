@@ -21,6 +21,7 @@ from src.importer.importer import (
     _STANDARD_VOTE_CONFIG_BY_OWNER,
     _STRICT_NONADDITIVE_STANDARD_TABLES,
     _TK_CHILD_STORAGE_TABLES,
+    _WF_NATIVE_STORAGE_TABLES,
     _WF_STANDARD_STORAGE_TABLES,
     _YS_STORAGE_TABLES,
     _ck_child_tables,
@@ -47,6 +48,7 @@ from src.importer.importer import (
     insert_standard_odds_batch,
     insert_standard_vote_batch,
     insert_tk_coupled_batch,
+    insert_wf_native_batch,
     insert_wf_standard_batch,
     preflight_standard_schema_migrations,
     prepare_ch_coupled_rows,
@@ -57,6 +59,7 @@ from src.importer.importer import (
     replace_mining_native_snapshot,
     resolve_standard_storage_table_name,
     resolve_standard_table_name,
+    rollback_failed_import,
     validate_jg_record,
     validate_wc_record,
     validate_wf_record,
@@ -290,7 +293,15 @@ class OptimizedDataImporter:
         """
         if not auto_commit:
             self.database.begin_transaction()
-        self._ensure_jravan_tables_ready(auto_commit=auto_commit)
+        try:
+            self._ensure_jravan_tables_ready(auto_commit=auto_commit)
+        except Exception:
+            if not auto_commit:
+                rollback_failed_import(
+                    self.database,
+                    context="optimized standard-schema preflight in caller-owned import",
+                )
+            raise
 
         # Reset statistics
         self._records_imported = 0
@@ -637,8 +648,18 @@ class OptimizedDataImporter:
             return stats
 
         except SchemaMigrationError:
+            if not auto_commit:
+                rollback_failed_import(
+                    self.database,
+                    context="validation/schema failure in optimized caller-owned import",
+                )
             raise
         except Exception as e:
+            if not auto_commit:
+                rollback_failed_import(
+                    self.database,
+                    context="unexpected failure in optimized caller-owned import",
+                )
             logger.error("Import failed", error=str(e))
 
             from src.importer.importer import ImporterError
@@ -834,6 +855,19 @@ class OptimizedDataImporter:
             self._records_imported += succeeded
             self._records_failed += failed
             if succeeded:
+                self._batches_processed += 1
+            return
+
+        if table_name in _WF_NATIVE_STORAGE_TABLES:
+            rows = insert_wf_native_batch(
+                self.database,
+                table_name,
+                batch,
+                commit_batch=commit_batch,
+                optimized=True,
+            )
+            self._records_imported += rows
+            if rows:
                 self._batches_processed += 1
             return
 
