@@ -187,8 +187,8 @@
   correctness defect and are not part of this iteration.
 - The final bounded oracle review found no production defect but identified a
   P2 negative-oracle gap: the new missing-column and `attnotnull` tests proved
-  only successful cases. One existing test was minimally expanded rather than
-  creating one test per reviewer hypothesis. It now covers `NL_AV` / `RT_AV`
+  only successful cases. One parameterized test was added rather than creating
+  one test per reviewer hypothesis. It covers `NL_AV` / `RT_AV`
   with a simultaneously missing non-key column plus wrong key, nullable key,
   wrong key type, insufficient text capacity, or extra uniqueness, and verifies
   that neither AV nor an unrelated additive table is altered. A paired actual-
