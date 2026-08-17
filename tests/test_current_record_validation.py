@@ -46,6 +46,7 @@ DOMAIN_PAYLOAD_REQUIRED = {
     "CS",
     "DM",
     "JG",
+    "JC",
     "KS",
     "SE",
     "TK",

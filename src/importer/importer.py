@@ -115,6 +115,17 @@ def resolve_standard_table_name(database: BaseDatabase, native_table_name: str) 
             "and reimport current 80-byte source records."
         )
     if (
+        native_table_name == "NL_JC"
+        and database.is_connected()
+        and database.table_exists("JOCKEY_CHANGE")
+        and not database.table_exists(standard_name)
+    ):
+        raise SchemaMigrationError(
+            "Legacy standard table JOCKEY_CHANGE exists but canonical KISYU_CHANGE "
+            "does not. Automatic JC import is refused; rebuild the standard table "
+            "as KISYU_CHANGE and reimport current 161-byte source records."
+        )
+    if (
         native_table_name == "NL_WF"
         and database.is_connected()
         and database.table_exists(_WF_LEGACY_STANDARD_TABLE)
@@ -455,6 +466,33 @@ _WE_LIVE_BODY_COLUMNS = {
     "RT_WE": _WE_NATIVE_LIVE_BODY_COLUMNS,
     "TENKO_BABA": _WE_STANDARD_LIVE_BODY_COLUMNS,
 }
+_JC_STORAGE_TABLES = frozenset({"NL_JC", "RT_JC", "KISYU_CHANGE"})
+_JC_KEY_COLUMNS = (
+    "Year",
+    "MonthDay",
+    "JyoCD",
+    "Kaiji",
+    "Nichiji",
+    "RaceNum",
+    "HappyoTime",
+    "Umaban",
+)
+_JC_LOSSLESS_TEXT_WIDTHS = {
+    table_name: {
+        "RecordSpec": 2,
+        "DataKubun": 1,
+        "JyoCD": 2,
+        "HappyoTime": 8,
+        "Bamei": 36,
+        "AtoKisyuCode": 5,
+        "AtoKisyuName": 34,
+        "AtoMinaraiCD": 1,
+        "MaeKisyuCode": 5,
+        "MaeKisyuName": 34,
+        "MaeMinaraiCD": 1,
+    }
+    for table_name in _JC_STORAGE_TABLES
+}
 _CS_STORAGE_TABLES = frozenset({"NL_CS", "COURSE"})
 _JG_STORAGE_TABLES = frozenset({"NL_JG", "JOGAIBA"})
 _JG_KEY_COLUMNS = (
@@ -480,11 +518,19 @@ _WF_RACE_SPLIT = (("JyoCD", 0, 2), ("Kaiji", 2, 4), ("Nichiji", 4, 6), ("RaceNum
 # JYUSYOSIKI (the WF child) is never a resolved standard owner name; preflight
 # verifies it strictly through verify_wf_coupled_tables instead.
 _STRICT_NONADDITIVE_STANDARD_TABLES = frozenset(
-    {"KEITO", "JOGAIBA", "TENKO_BABA", "WOOD", _WF_STANDARD_HEAD_TABLE}
+    {
+        "KEITO",
+        "JOGAIBA",
+        "KISYU_CHANGE",
+        "TENKO_BABA",
+        "WOOD",
+        _WF_STANDARD_HEAD_TABLE,
+    }
 )
 _LEGACY_STANDARD_PREFLIGHT_NATIVE_TABLES = (
     "NL_BT",
     "NL_JG",
+    "NL_JC",
     "NL_SK",
     "NL_BR",
     "NL_HY",
@@ -935,6 +981,139 @@ def verify_we_storage_schema(database: BaseDatabase, table_name: str) -> bool:
     _verify_we_key_storage_types(database, table_name)
     _verify_we_key_not_null_constraints(database, table_name)
     _verify_replacement_key_constraints(database, table_name, "WE storage")
+    return True
+
+
+def _verify_jc_key_storage_types(database: BaseDatabase, table_name: str) -> None:
+    """Reject affinities that can coerce or split one JC identity."""
+
+    from src.database.migration import (
+        _get_existing_column_types,
+        _is_lossless_text_type,
+        _migration_targets,
+    )
+
+    targets = _migration_targets(database)
+    if targets != (database,):
+        for target in targets:
+            _verify_jc_key_storage_types(target, table_name)
+        return
+
+    actual_types = _get_existing_column_types(database, table_name)
+    integral = {
+        "smallint",
+        "int2",
+        "integer",
+        "int",
+        "int4",
+        "bigint",
+        "int8",
+    }
+    problems: list[str] = []
+    for column in ("Year", "MonthDay", "Kaiji", "Nichiji", "RaceNum", "Umaban"):
+        actual = actual_types.get(column.lower(), "")
+        if re.sub(r"\s+", " ", actual.strip().lower()) not in integral:
+            problems.append(f"{column} existing={actual or '<unknown>'} expected=integral")
+    for column in ("JyoCD", "HappyoTime"):
+        actual = actual_types.get(column.lower(), "")
+        if not actual or not _is_lossless_text_type(actual):
+            problems.append(f"{column} existing={actual or '<unknown>'} expected=text")
+    if problems:
+        raise SchemaMigrationError(
+            f"JC key type mismatch for {table_name}: {', '.join(problems)}"
+        )
+
+
+def _verify_jc_key_not_null_constraints(
+    database: BaseDatabase, table_name: str
+) -> None:
+    """Require every component of the JC identity to reject NULL."""
+
+    from src.database.migration import _migration_targets
+
+    targets = _migration_targets(database)
+    if targets != (database,):
+        for target in targets:
+            _verify_jc_key_not_null_constraints(target, table_name)
+        return
+
+    db_type = database.get_db_type()
+    if db_type == "sqlite":
+        rows = database.fetch_all(f'PRAGMA table_info("{table_name}")')
+        not_null = {
+            str(row.get("name") or "").lower(): bool(row.get("notnull"))
+            for row in rows
+        }
+    elif db_type == "postgresql":
+        rows = database.fetch_all(
+            "SELECT column_name, is_nullable FROM information_schema.columns "
+            "WHERE table_schema = current_schema() AND table_name = ?",
+            (table_name.lower(),),
+        )
+        not_null = {
+            str(row.get("column_name") or "").lower(): str(
+                row.get("is_nullable") or ""
+            ).upper()
+            == "NO"
+            for row in rows
+        }
+    else:
+        raise SchemaMigrationError(
+            f"JC key nullability cannot be verified for database type {db_type!r}"
+        )
+    missing = [
+        column for column in _JC_KEY_COLUMNS if not not_null.get(column.lower(), False)
+    ]
+    if missing:
+        raise SchemaMigrationError(
+            f"JC storage {table_name} key columns must be NOT NULL: {missing}"
+        )
+
+
+def verify_jc_storage_schema(database: BaseDatabase, table_name: str) -> bool:
+    """Fail closed unless JC storage preserves the official eight-part key."""
+
+    if table_name not in _JC_STORAGE_TABLES:
+        return False
+    from src.database.migration import verify_table_schema
+    from src.database.schema import SCHEMAS
+    from src.database.schema_jravan import JRAVAN_SCHEMAS
+
+    schema_sql = SCHEMAS.get(table_name) or JRAVAN_SCHEMAS.get(table_name)
+    if schema_sql is None:
+        raise SchemaMigrationError(f"JC storage schema is undefined: {table_name}")
+    verify_table_schema(database, table_name, schema_sql)
+    _verify_strict_storage_column_contract(
+        database,
+        table_name,
+        schema_sql,
+        allow_missing_columns=False,
+        storage_label="JC",
+        lossless_text_widths=_JC_LOSSLESS_TEXT_WIDTHS[table_name],
+    )
+    _verify_jc_key_storage_types(database, table_name)
+    _verify_jc_key_not_null_constraints(database, table_name)
+    _verify_replacement_key_constraints(database, table_name, "JC storage")
+    return True
+
+
+def validate_jc_record(record: dict, table_name: str | None = None) -> bool:
+    """Validate one caller-built JC row before any schema or row mutation."""
+
+    if table_name is not None and table_name not in _JC_STORAGE_TABLES:
+        return False
+    if _record_type_from_record(record) != "JC":
+        if table_name is None:
+            return False
+        raise SchemaMigrationError(f"{table_name} received a non-JC record")
+
+    from src.parser.jc_parser import JCParser
+
+    try:
+        data_kubun = resolve_record_data_kubun(record)
+        JCParser.validate_current_fields(record, data_kubun=data_kubun)
+    except ValueError as error:
+        raise SchemaMigrationError(str(error)) from error
     return True
 
 
@@ -1955,6 +2134,8 @@ def preflight_standard_schema_migrations(
             )
         if standard_name == "TENKO_BABA":
             verify_we_storage_schema(database, standard_name)
+        if standard_name == "KISYU_CHANGE":
+            verify_jc_storage_schema(database, standard_name)
         if standard_name in {"UMA", "COURSE"}:
             _verify_replacement_key_constraints(
                 database,
@@ -2460,6 +2641,7 @@ _OFFICIAL_ERASE_KEY_COLUMNS = {
     "RA": _MINING_RACE_KEY_COLUMNS,
     "SE": _SE_KEY_COLUMNS,
     "WE": _WE_KEY_COLUMNS,
+    "JC": _JC_KEY_COLUMNS,
     "HR": _MINING_RACE_KEY_COLUMNS,
     # One physical H1/H6/O1-O6 record expands into multiple child rows.
     "H1": _MINING_RACE_KEY_COLUMNS,
@@ -2481,6 +2663,7 @@ _OFFICIAL_ERASE_STORAGE_TABLES = {
     "RA": {"NL_RA", "RT_RA", "RACE"},
     "SE": {"NL_SE", "RT_SE", "UMA_RACE"},
     "WE": set(_WE_STORAGE_TABLES),
+    "JC": set(_JC_STORAGE_TABLES),
     "HR": {"NL_HR", "RT_HR", "HARAI"},
     "H1": {"NL_H1", "RT_H1", "HYO_TANPUKU"},
     "H6": {"NL_H6", "RT_H6", "HYO_SANRENTAN"},
@@ -2578,6 +2761,8 @@ def validate_import_record_header(record: dict) -> tuple[str, str]:
             SEParser.validate_current_fields(record)
         if record_type == "WE":
             validate_we_record(record)
+        if record_type == "JC":
+            validate_jc_record(record)
         return record_type, data_kubun
     except ValueError as error:
         raise SchemaMigrationError(str(error)) from error
@@ -4932,7 +5117,9 @@ DIVIDE_BY_10_PREFIXES = frozenset(
 )
 
 # 完全一致で10で割るべきフィールド名
-DIVIDE_BY_10_EXACT = frozenset(["Odds", "SyogaiMileTime", "Time"])
+DIVIDE_BY_10_EXACT = frozenset(
+    ["AtoFutan", "MaeFutan", "Odds", "SyogaiMileTime", "Time"]
+)
 
 # Explicit-unit fields are already canonicalized by the parser contract.
 CANONICAL_SE_FIELDS = frozenset(
@@ -5157,6 +5344,7 @@ class DataImporter:
         self._verified_bt_tables: set[str] = set()
         self._verified_se_tables: set[str] = set()
         self._verified_we_tables: set[str] = set()
+        self._verified_jc_tables: set[str] = set()
         self._verified_cs_tables: set[str] = set()
         self._verified_jg_tables: set[str] = set()
         self._verified_wc_tables: set[str] = set()
@@ -5205,7 +5393,7 @@ class DataImporter:
             "CK": "NL_CK",  # 勝利騎手・調教師コメント
             "WC": "NL_WC",  # ウッドチップ調教
             "AV": "NL_AV",  # 出走取消・競走除外
-            "JC": "NL_JC",  # 重量変更情報
+            "JC": "NL_JC",  # 騎手変更情報
             "HC": "NL_HC",  # 坂路調教
             "HS": "NL_HS",  # 競走馬市場取引価格
             "HY": "NL_HY",  # 馬名の意味由来
@@ -5230,7 +5418,7 @@ class DataImporter:
             "RT_H6": "RT_H6",  # 票数6（三連単・速報）
             "RT_WE": "RT_WE",  # 気象情報（速報）
             "RT_WH": "RT_WH",  # 馬体重情報（速報）
-            "RT_JC": "RT_JC",  # 重量変更情報（速報）
+            "RT_JC": "RT_JC",  # 騎手変更情報（速報）
             "RT_CC": "RT_CC",  # コース変更（速報）
             "RT_TC": "RT_TC",  # タイムコメント（速報）
             "RT_TM": "RT_TM",  # 対戦型データマイニング予想（速報）
@@ -5406,6 +5594,7 @@ class DataImporter:
                 if first_table_name is not None:
                     validate_se_record(first_record, first_table_name)
                     validate_we_record(first_record, first_table_name)
+                    validate_jc_record(first_record, first_table_name)
                 records = chain((first_record,), records)
         except Exception:
             if not auto_commit:
@@ -5481,6 +5670,10 @@ class DataImporter:
                     if verify_we_storage_schema(self.database, table_name):
                         self._verified_we_tables.add(table_name)
                 validate_we_record(record, table_name)
+                if table_name not in self._verified_jc_tables:
+                    if verify_jc_storage_schema(self.database, table_name):
+                        self._verified_jc_tables.add(table_name)
+                validate_jc_record(record, table_name)
                 if table_name not in self._verified_cs_tables:
                     if verify_cs_storage_schema(self.database, table_name):
                         self._verified_cs_tables.add(table_name)
@@ -6121,6 +6314,7 @@ class DataImporter:
             if table_name is not None:
                 validate_se_record(record, table_name)
                 validate_we_record(record, table_name)
+                validate_jc_record(record, table_name)
         except SchemaMigrationError:
             if not auto_commit:
                 checkpoint_generation = (
@@ -6190,6 +6384,10 @@ class DataImporter:
                 if verify_we_storage_schema(self.database, table_name):
                     self._verified_we_tables.add(table_name)
             validate_we_record(record, table_name)
+            if table_name not in self._verified_jc_tables:
+                if verify_jc_storage_schema(self.database, table_name):
+                    self._verified_jc_tables.add(table_name)
+            validate_jc_record(record, table_name)
             if table_name not in self._verified_cs_tables:
                 if verify_cs_storage_schema(self.database, table_name):
                     self._verified_cs_tables.add(table_name)

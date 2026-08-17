@@ -256,6 +256,29 @@ class TestIndividualParsers:
                 mutable[76:77] = b"+"
                 mutable[77:80] = b"005"
                 data = bytes(mutable)
+            if record_type == "JC":
+                # JC requires the complete eight-part announcement identity
+                # and both official before/after rider blocks. A blank body is
+                # not a valid current positive fixture.
+                mutable = bytearray(data)
+                mutable[11:15] = b"2024"
+                mutable[15:19] = b"0601"
+                mutable[19:21] = b"05"
+                mutable[21:23] = b"03"
+                mutable[23:25] = b"08"
+                mutable[25:27] = b"11"
+                mutable[27:35] = b"06010930"
+                mutable[35:37] = b"01"
+                mutable[37:73] = "テスト馬".encode("cp932").ljust(36, b" ")
+                mutable[73:76] = b"550"
+                mutable[76:81] = b"01234"
+                mutable[81:115] = "新騎手".encode("cp932").ljust(34, b" ")
+                mutable[115:116] = b"0"
+                mutable[116:119] = b"560"
+                mutable[119:124] = b"05678"
+                mutable[124:158] = "旧騎手".encode("cp932").ljust(34, b" ")
+                mutable[158:159] = b"9"
+                data = bytes(mutable)
             samples[record_type] = data
 
         return samples

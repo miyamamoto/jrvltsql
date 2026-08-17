@@ -66,7 +66,7 @@ Additional Data Tables:
 
 Change Information Tables:
     NL_CC, RT_CC: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
-    NL_JC, RT_JC: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
+    NL_JC, RT_JC: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, HappyoTime, Umaban)
     NL_TC, RT_TC: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
     NL_JG: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, KettoNum, Num)
     RT_RC: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
@@ -196,18 +196,18 @@ SCHEMAS = {
             RecordSpec TEXT,
             DataKubun TEXT,
             MakeDate TEXT,
-            Year INTEGER,
-            MonthDay INTEGER,
-            JyoCD TEXT,
-            Kaiji INTEGER,
-            Nichiji INTEGER,
-            RaceNum INTEGER,
-            HappyoTime TEXT,
-            Umaban INTEGER,
+            Year INTEGER NOT NULL,
+            MonthDay INTEGER NOT NULL,
+            JyoCD TEXT NOT NULL,
+            Kaiji INTEGER NOT NULL,
+            Nichiji INTEGER NOT NULL,
+            RaceNum INTEGER NOT NULL,
+            HappyoTime TEXT NOT NULL,
+            Umaban INTEGER NOT NULL,
             Bamei TEXT,
             JiyuKubun TEXT,
             RecordDelimiter TEXT,
-            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, HappyoTime, Umaban)
         )
     """,
 
@@ -747,14 +747,14 @@ SCHEMAS = {
             RecordSpec TEXT,
             DataKubun TEXT,
             MakeDate TEXT,
-            Year INTEGER,
-            MonthDay INTEGER,
-            JyoCD TEXT,
-            Kaiji INTEGER,
-            Nichiji INTEGER,
-            RaceNum INTEGER,
-            HappyoTime TEXT,
-            Umaban INTEGER,
+            Year INTEGER NOT NULL,
+            MonthDay INTEGER NOT NULL,
+            JyoCD TEXT NOT NULL,
+            Kaiji INTEGER NOT NULL,
+            Nichiji INTEGER NOT NULL,
+            RaceNum INTEGER NOT NULL,
+            HappyoTime TEXT NOT NULL,
+            Umaban INTEGER NOT NULL,
             Bamei TEXT,
             AtoFutan REAL,
             AtoKisyuCode TEXT,
@@ -764,7 +764,7 @@ SCHEMAS = {
             MaeKisyuCode TEXT,
             MaeKisyuName TEXT,
             MaeMinaraiCD TEXT,
-            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, HappyoTime, Umaban)
         )
     """,
     "NL_KS": NL_KS_SCHEMA,
@@ -1931,14 +1931,14 @@ SCHEMAS = {
             RecordSpec TEXT,
             DataKubun TEXT,
             MakeDate TEXT,
-            Year INTEGER,
-            MonthDay INTEGER,
-            JyoCD TEXT,
-            Kaiji INTEGER,
-            Nichiji INTEGER,
-            RaceNum INTEGER,
-            HappyoTime TEXT,
-            Umaban INTEGER,
+            Year INTEGER NOT NULL,
+            MonthDay INTEGER NOT NULL,
+            JyoCD TEXT NOT NULL,
+            Kaiji INTEGER NOT NULL,
+            Nichiji INTEGER NOT NULL,
+            RaceNum INTEGER NOT NULL,
+            HappyoTime TEXT NOT NULL,
+            Umaban INTEGER NOT NULL,
             Bamei TEXT,
             AtoFutan REAL,
             AtoKisyuCode TEXT,
@@ -1948,7 +1948,7 @@ SCHEMAS = {
             MaeKisyuCode TEXT,
             MaeKisyuName TEXT,
             MaeMinaraiCD TEXT,
-            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, HappyoTime, Umaban)
         )
     """,
     "RT_O1": """
@@ -2739,13 +2739,18 @@ SCHEMAS.update(
 STRICT_RECREATE_TABLES = frozenset({"NL_CK_CHAKU", "NL_CK_RUIKEI"})
 STRICT_SE_STORAGE_TABLES = frozenset({"NL_SE", "RT_SE"})
 STRICT_WE_STORAGE_TABLES = frozenset({"NL_WE", "RT_WE"})
+STRICT_JC_STORAGE_TABLES = frozenset({"NL_JC", "RT_JC"})
 
 
 def _preflight_existing_strict_storage(db: BaseDatabase) -> None:
-    """Reject unsafe SE/WE identities before unrelated additive migration."""
+    """Reject unsafe SE/WE/JC identities before unrelated additive migration."""
 
     from src.database.migration import _migration_targets
-    from src.importer.importer import verify_se_storage_schema, verify_we_storage_schema
+    from src.importer.importer import (
+        verify_jc_storage_schema,
+        verify_se_storage_schema,
+        verify_we_storage_schema,
+    )
 
     targets = _migration_targets(db)
     for target in targets:
@@ -2759,6 +2764,9 @@ def _preflight_existing_strict_storage(db: BaseDatabase) -> None:
         for table_name in STRICT_WE_STORAGE_TABLES:
             if target.table_exists_strict(table_name):
                 verify_we_storage_schema(target, table_name)
+        for table_name in STRICT_JC_STORAGE_TABLES:
+            if target.table_exists_strict(table_name):
+                verify_jc_storage_schema(target, table_name)
 
 
 def _normalize_metadata_catalog_type(declared_type: str) -> str | None:
@@ -2834,6 +2842,10 @@ class SchemaManager:
                 from src.importer.importer import verify_we_storage_schema
 
                 verify_we_storage_schema(self.db, table_name)
+            if table_name in STRICT_JC_STORAGE_TABLES:
+                from src.importer.importer import verify_jc_storage_schema
+
+                verify_jc_storage_schema(self.db, table_name)
             if table_name in STRICT_RECREATE_TABLES:
                 from src.importer.importer import verify_ck_child_table
 
@@ -2880,6 +2892,10 @@ class SchemaManager:
                     from src.importer.importer import verify_we_storage_schema
 
                     verify_we_storage_schema(self.db, table_name)
+                if table_name in STRICT_JC_STORAGE_TABLES:
+                    from src.importer.importer import verify_jc_storage_schema
+
+                    verify_jc_storage_schema(self.db, table_name)
                 logger.debug(f"Created table: {table_name}")
                 results[table_name] = True
             except Exception as e:
@@ -3229,6 +3245,10 @@ def create_all_tables(db: BaseDatabase) -> None:
                 from src.importer.importer import verify_we_storage_schema
 
                 verify_we_storage_schema(db, table_name)
+            if table_name in STRICT_JC_STORAGE_TABLES:
+                from src.importer.importer import verify_jc_storage_schema
+
+                verify_jc_storage_schema(db, table_name)
             logger.debug(f"Created table: {table_name}")
         except Exception as e:
             logger.error(f"Failed to create table {table_name}: {e}")

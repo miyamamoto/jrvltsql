@@ -17,6 +17,9 @@ JV-Data. They do not contain provider records or a copy of the SDK source.
 - `we_contract_4901.json` records the WE weather/track announcement layout,
   seven-part key, status history, and code domains independently transcribed
   from both pinned current workbooks.
+- `jc_contract_4901.json` records the JC jockey-change layout, eight-part key,
+  status history, apprentice-code domain, provider specs, and weight unit
+  independently transcribed from both pinned current workbooks.
 
 The manifest is intentionally independent of jrvltsql parser and schema code.
 When the official source changes, regenerate it from a separately obtained SDK

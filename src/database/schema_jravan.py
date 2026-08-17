@@ -792,14 +792,14 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             RecordSpec                     CHAR(2)             ,  -- レコード種別ID
             DataKubun                      CHAR(1)             ,  -- データ区分
             MakeDate                       DATE                ,  -- YYYYMMDD形式の日付
-            Year                           SMALLINT            ,  -- 年(4桁)
-            MonthDay                       SMALLINT            ,  -- 月日(MMDD)
-            JyoCD                          CHAR(2)             ,  -- 競馬場コード
-            Kaiji                          SMALLINT            ,  -- 開催回
-            Nichiji                        SMALLINT            ,  -- 開催日目
-            RaceNum                        SMALLINT            ,  -- レース番号
-            HappyoTime                     VARCHAR(8)          ,  -- 発表月日時分(MMDDhhmm)
-            Umaban                         SMALLINT            ,  -- 馬番
+            Year                           SMALLINT NOT NULL   ,  -- 年(4桁)
+            MonthDay                       SMALLINT NOT NULL   ,  -- 月日(MMDD)
+            JyoCD                          CHAR(2) NOT NULL    ,  -- 競馬場コード
+            Kaiji                          SMALLINT NOT NULL   ,  -- 開催回
+            Nichiji                        SMALLINT NOT NULL   ,  -- 開催日目
+            RaceNum                        SMALLINT NOT NULL   ,  -- レース番号
+            HappyoTime                     VARCHAR(8) NOT NULL ,  -- 発表月日時分(MMDDhhmm)
+            Umaban                         SMALLINT NOT NULL   ,  -- 馬番
             Bamei                          VARCHAR(36)         ,  -- 文字列(36)
             AtoFutan                       VARCHAR(3)          ,  -- 文字列(3)
             AtoKisyuCode                   VARCHAR(5)          ,  -- 文字列(5)
@@ -808,7 +808,8 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             MaeFutan                       VARCHAR(3)          ,  -- 文字列(3)
             MaeKisyuCode                   VARCHAR(5)          ,  -- 文字列(5)
             MaeKisyuName                   VARCHAR(34)         ,  -- 文字列(34)
-            MaeMinaraiCD                   VARCHAR(1)            -- 文字列(1)
+            MaeMinaraiCD                   VARCHAR(1)          ,  -- 文字列(1)
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, HappyoTime, Umaban)
         )
     """,
     "KISYU_SEISEKI": KISYU_SEISEKI_SCHEMA,

@@ -59,6 +59,13 @@ def _record(record_type: str, length: int, announcement_start: int) -> bytes:
     record[announcement_start : announcement_start + 8] = b"06150930"
     if record_type in {"AV", "JC"}:
         record[35:37] = b"01"
+    if record_type == "JC":
+        record[73:76] = b"550"
+        record[76:81] = b"01234"
+        record[115:116] = b"0"
+        record[116:119] = b"560"
+        record[119:124] = b"05678"
+        record[158:159] = b"9"
     if record_type == "WE":
         record[33:40] = b"1111000"
     record[-2:] = b"\r\n"

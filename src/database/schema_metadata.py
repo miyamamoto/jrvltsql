@@ -873,24 +873,16 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
         "indexes": ["開催年月日"]
     },
 
-    "NL_JC": {
-        "table_name": "NL_JC",
-        "record_type": "JC",
-        "description": "騎手変更詳細情報",
-        "purpose": "騎手変更の詳細（馬名、負担重量含む）を格納",
-        "columns": [
-            {"name": "レコード種別ID", "type": "TEXT", "description": "レコード種別識別子（'JC'）", "example": "JC", "nullable": False},
-            {"name": "開催年月日", "type": "TEXT", "description": "レース開催日", "example": "20240601", "nullable": False},
-            {"name": "競馬場コード", "type": "TEXT", "description": "競馬場コード", "example": "05", "nullable": False},
-            {"name": "レース番号", "type": "TEXT", "description": "レース番号", "example": "11", "nullable": False},
-            {"name": "馬番", "type": "TEXT", "description": "馬番", "example": "05", "nullable": False},
-            {"name": "馬名", "type": "TEXT", "description": "馬名", "example": "○○○○", "nullable": True},
-            {"name": "負担重量", "type": "TEXT", "description": "負担重量（kg、0.5kg単位）", "example": "58.0", "nullable": True},
-            {"name": "騎手名", "type": "TEXT", "description": "変更後騎手名", "example": "武豊", "nullable": True}
-        ],
-        "primary_key": ["開催年月日", "競馬場コード", "レース番号", "馬番"],
-        "indexes": ["開催年月日", "騎手名"]
-    },
+    "NL_JC": _schema_backed_metadata(
+        "NL_JC",
+        record_type="JC",
+        description="騎手変更詳細情報",
+        purpose=(
+            "開催6列・発表月日時分・馬番の公式8列キーで複数の騎手変更発表を"
+            "共存させ、負担重量はkgへ正規化して格納"
+        ),
+        indexes=["Year", "MonthDay", "JyoCD", "RaceNum", "HappyoTime"],
+    ),
 
     "NL_JG": _schema_backed_metadata(
         "NL_JG",
@@ -1312,22 +1304,16 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
         "indexes": ["開催年月日"]
     },
 
-    "RT_JC": {
-        "table_name": "RT_JC",
-        "record_type": "JC",
-        "description": "騎手変更詳細情報（速報）",
-        "purpose": "リアルタイムでの騎手変更詳細情報を格納（NL_JCと同構造）",
-        "columns": [
-            {"name": "レコード種別ID", "type": "TEXT", "description": "レコード種別識別子（'JC'）", "example": "JC", "nullable": False},
-            {"name": "開催年月日", "type": "TEXT", "description": "レース開催日", "example": "20240601", "nullable": False},
-            {"name": "競馬場コード", "type": "TEXT", "description": "競馬場コード", "example": "05", "nullable": False},
-            {"name": "レース番号", "type": "TEXT", "description": "レース番号", "example": "11", "nullable": False},
-            {"name": "馬番", "type": "TEXT", "description": "馬番", "example": "05", "nullable": False},
-            {"name": "騎手名", "type": "TEXT", "description": "変更後騎手名", "example": "武豊", "nullable": True}
-        ],
-        "primary_key": ["開催年月日", "競馬場コード", "レース番号", "馬番"],
-        "indexes": ["開催年月日"]
-    },
+    "RT_JC": _schema_backed_metadata(
+        "RT_JC",
+        record_type="JC",
+        description="騎手変更詳細情報（速報）",
+        purpose=(
+            "0B14/0B16の騎手変更発表を公式8列キーで格納し、同一馬の複数発表を"
+            "発表月日時分ごとに保持"
+        ),
+        indexes=["Year", "MonthDay", "JyoCD", "RaceNum", "HappyoTime"],
+    ),
 
     "RT_O1": {
         "table_name": "RT_O1",
@@ -1903,6 +1889,13 @@ def _bind_all_metadata_to_executable_schemas() -> None:
 
 _ensure_all_executable_metadata()
 _bind_all_metadata_to_executable_schemas()
+
+for _jc_table in ("NL_JC", "RT_JC"):
+    for _column in TABLE_METADATA[_jc_table]["columns"]:
+        if _column["name"] in {"AtoFutan", "MaeFutan"}:
+            _column["description"] = (
+                "負担重量（kg。JV-Dataの0.1kg単位整数から正規化）"
+            )
 
 
 def get_table_description(table_name: str) -> str:
