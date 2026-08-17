@@ -30,9 +30,8 @@ def setup_logging(
     # Create logs directory if it doesn't exist
     if log_to_file:
         if log_file is None:
-            project_root = Path(__file__).parent.parent.parent
-            log_dir = project_root / "logs"
-            log_dir.mkdir(exist_ok=True)
+            log_dir = Path.cwd() / "logs"
+            log_dir.mkdir(parents=True, exist_ok=True)
             log_file = str(log_dir / "jltsql.log")
         else:
             log_dir = Path(log_file).parent
@@ -174,8 +173,7 @@ def setup_logging_from_yaml(config_path: Optional[str] = None) -> None:
         yaml.YAMLError: If config file is invalid YAML
     """
     if config_path is None:
-        project_root = Path(__file__).parent.parent.parent
-        config_path = str(project_root / "config" / "logging.yaml")
+        config_path = str(Path.cwd() / "config" / "logging.yaml")
 
     config_file = Path(config_path)
     if not config_file.exists():
@@ -232,12 +230,11 @@ def get_rotation_info() -> dict:
     return rotation_info
 
 
-# Configure default logging on module import
-# Try to load from YAML first, fall back to basic setup
+# Configure console-only logging on module import. File logging is enabled only
+# after an explicit config is loaded, so importing an installed wheel never
+# writes into site-packages or trusts logging configuration from an arbitrary
+# current directory.
 # Skip auto-configuration if JLTSQL_SKIP_AUTO_LOGGING is set (for quickstart.py)
 import os
 if not os.environ.get('JLTSQL_SKIP_AUTO_LOGGING'):
-    try:
-        setup_logging_from_yaml()
-    except (FileNotFoundError, yaml.YAMLError):
-        setup_logging()
+    setup_logging(log_to_file=False)

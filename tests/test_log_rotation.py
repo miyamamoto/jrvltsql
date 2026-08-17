@@ -7,6 +7,7 @@ import logging.handlers
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import yaml
 
@@ -35,6 +36,16 @@ class TestLogRotation(unittest.TestCase):
             logger.removeHandler(handler)
 
         self.temp_dir.cleanup()
+
+    def test_default_log_file_uses_the_writable_current_directory(self):
+        expected = Path(self.temp_dir.name) / "logs" / "jltsql.log"
+        with patch(
+            "src.utils.logger.Path.cwd",
+            return_value=Path(self.temp_dir.name),
+        ):
+            setup_logging(log_to_console=False)
+
+        self.assertTrue(expected.is_file())
 
     def test_rotating_file_handler_created(self):
         """Test that RotatingFileHandler is created with correct settings."""

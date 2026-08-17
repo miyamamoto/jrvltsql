@@ -155,11 +155,12 @@ def cli(ctx, config, verbose):
         Path(config) if config else Path.cwd() / "config" / "config.yaml"
     )
     ctx.obj["config_path"] = requested_config_path
+    ctx.obj["config_explicit"] = config is not None
 
     # Load configuration
-    if ctx.invoked_subcommand in {"config", "init"}:
-        # Bootstrap, --force repair, and config inspection must not parse a
-        # missing or malformed configuration before the command handles it.
+    if ctx.invoked_subcommand == "init":
+        # Bootstrap must work before a configuration exists. An explicit
+        # global path is rejected by the command instead of being ignored.
         config_path = None
     elif config:
         config_path = requested_config_path
@@ -198,7 +199,12 @@ def cli(ctx, config, verbose):
 
             # Auto-update check (if enabled in config)
             auto_check = cfg.get("auto_update_check", True)
-            if auto_check and ctx.invoked_subcommand not in ("update", "version"):
+            if auto_check and ctx.invoked_subcommand not in (
+                "config",
+                "init",
+                "update",
+                "version",
+            ):
                 notice = auto_update_check_notice()
                 if notice:
                     console.print(f"[dim yellow]{notice}[/dim yellow]")
@@ -223,6 +229,14 @@ def init(ctx, force):
 
     Creates configuration files and database directories.
     """
+    if ctx.obj.get("config_explicit"):
+        console.print(
+            "[red]Error:[/red] --config cannot be used with init; "
+            "run init from the directory to initialize.",
+            style="bold",
+        )
+        ctx.exit(2)
+
     console.print("[bold cyan]Initializing JLTSQL project...[/bold cyan]")
 
     project_root = Path.cwd()
@@ -263,7 +277,7 @@ def init(ctx, force):
     console.print("\n[bold green]Initialization complete![/bold green]")
     console.print("\nNext steps:")
     console.print("  1. Register JV-Link in the JRA-VAN DataLab application")
-    console.print("  2. Review config/config.yaml for database settings")
+    console.print("  2. Review the SQLite-only config/config.yaml default")
     console.print("  3. Run: jltsql fetch --help")
 
 
@@ -1330,7 +1344,6 @@ def config(ctx, show, set_value, get_key):
       jltsql config --set database.type=sqlite    # Set value (not implemented yet)
     """
     from pathlib import Path
-    import yaml
 
     # Find config file. The path is captured before the bootstrap command
     # deliberately skips normal configuration loading.
@@ -1345,10 +1358,11 @@ def config(ctx, show, set_value, get_key):
             console.print("[red]Error:[/red] Configuration file not found.")
             console.print("Run 'jltsql init' first.")
             sys.exit(1)
-
-        # Load config manually
-        with open(config_path, "r", encoding="utf-8") as f:
-            config_dict = yaml.safe_load(f)
+        console.print(
+            "[red]Error:[/red] Configuration could not be loaded.",
+            style="bold",
+        )
+        ctx.exit(1)
 
     # Show all configuration
     if show or (not set_value and not get_key):
@@ -1379,7 +1393,10 @@ def config(ctx, show, set_value, get_key):
         log_tree = tree.add("Logging")
         log_config = config_dict.get("logging", {})
         log_tree.add(f"Level: {log_config.get('level', 'INFO')}")
-        log_tree.add(f"File: {log_config.get('file', 'logs/jltsql.log')}")
+        log_file = log_config.get("file", "logs/jltsql.log")
+        if isinstance(log_file, dict):
+            log_file = log_file.get("path", "logs/jltsql.log")
+        log_tree.add(f"File: {log_file}")
 
         console.print(tree)
         console.print()

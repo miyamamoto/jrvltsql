@@ -3281,3 +3281,82 @@
   The MkDocs tool emitted only its upstream 2.0 project warning. The dirty
   candidate remains based on exact `98ec163...`; no release/version claim is
   attached to these pre-commit results.
+- Three independent Codex reviews of exact committed/pushed candidate
+  `9aab8418b15db40c3b2fc91e5c8adeb2d5374ebc` returned NEEDS_CHANGES. The
+  findings were batched before repair: archive scanning skipped common and
+  encoded members, did not sanitize sensitive member names, did not reject
+  Windows-drive paths or archive links, and used a provenance heuristic with
+  both false positives and false negatives; the wheel smoke could import the
+  already editable-installed checkout; config inspection bypassed the normal
+  validator; init silently ignored a global config path; installer manual
+  commands no longer bound the install-directory config; default SQLite
+  bootstrap imported an optional PostgreSQL driver; default log/update state
+  targeted installed package directories; installed version metadata had no
+  fallback; and removed public bridge/setup interfaces lacked a 2.0 migration
+  record. Reviewers independently used fresh built artifacts and writable and
+  read-only installed-wheel probes. No current candidate artifact contained a
+  newly discovered credential/private-project hit, but the gates could not
+  prove that absence for future artifacts.
+- One grouped red-first selection was added before the follow-up production
+  repair. On unchanged production candidate `9aab841...` it returned `22
+  failed, 37 passed`. The failures directly cover the archive encoding/name/
+  path/link cases, public provenance positive, hashed private-token denylist,
+  extracted-wheel origin binding, validated/expanded config, explicit init
+  target rejection, canonical SQLite default, installer config binding,
+  SQLite without PostgreSQL extras, 2.0 removal record, Windows direct branch,
+  writable-CWD default log, installed metadata version fallback, and update
+  state outside the package tree. The Windows direct positive was already
+  green, which confirms the production branch is sound while still binding it
+  against regression. No matched sensitive value is recorded here.
+- The grouped follow-up repair now scans every bounded regular archive member
+  and sanitized member name, normalizes NUL-separated encoded text, rejects
+  Windows-drive paths and archive link/device entries, uses project-scoped
+  private-runtime rules plus a hash-only runner denylist, and never renders a
+  sensitive member/artifact name. The wheel smoke executes with isolated
+  import precedence, asserts the loaded package is under the extracted wheel,
+  blocks optional PostgreSQL drivers, then validates init, config display,
+  installed version, SQLite table creation/readback, and absence of runtime
+  state under the extracted package tree.
+- CLI config inspection again uses the canonical loader and environment
+  expansion; invalid shapes return controlled ConfigError output. Init rejects
+  an otherwise ignored global config path and creates an explicitly
+  SQLite-only valid default. SQLite database construction lazily imports only
+  its backend. Default logs use the writable working directory; update-check
+  state uses platform user state; installed wheels use distribution metadata
+  for their version. Installer manual commands bind the install-directory
+  config. The breaking branch is now `2.0.0.dev0`, with Unreleased changelog
+  and draft release-note migration boundaries; it is not a published release.
+- The formerly red grouped selection passes `60 passed`; the broader affected
+  public/CLI/database/logger/updater/installer/bridge selection passes `414
+  passed, 5 skipped, 11 subtests passed`. A fresh 2.0.0.dev0 wheel and sdist
+  pass the all-member distribution gate and expanded wheel smoke. An
+  independent disposable `python:3.12-slim` container installed the wheel with
+  base dependencies only, made the installed package read-only, and then
+  successfully ran init, config display, SQLite table creation, and version;
+  the SQLite DB was created and no package-tree log/data state appeared. The
+  container was removed automatically.
+- Final diff review found one adjacent version-identity defect before freezing
+  the repair: a source checkout still preferred the latest Git tag over the
+  candidate version in `pyproject.toml`. The existing version test was first
+  tightened against a deliberately stale tag and failed red as
+  `v1.6.10 != 2.0.0.dev0`. The repair now uses source project metadata first,
+  installed distribution metadata second, and a Git tag only as the final
+  compatibility fallback. The focused source/installed/tag matrix passes
+  `3 passed`, and the duplicated installer version contract was updated to the
+  same ordering.
+- The last import-time logging change is now covered by the affected
+  CLI/logger/updater/distribution/public/bridge selection (`127 passed`). The
+  first complete pre-commit suite then reached `2715 passed, 131 skipped, 14
+  subtests passed` with one failure: an older installer unit test still encoded
+  the superseded Git-tag-first expectation. After binding that fallback to an
+  environment with neither source nor installed metadata, the combined
+  version/logger selection passes `16 passed`. This was a stale test oracle,
+  not a production regression; the exact committed candidate will receive one
+  final full-suite run.
+- Static and packaging gates on the final dirty content pass: test-gate
+  self-check, compileall, fatal flake8 (`E9,F63,F7,F82`), strict MkDocs, and
+  `git diff --check`. A fresh PEP 517 `2.0.0.dev0` wheel plus sdist passes the
+  all-member archive scan and the isolated extracted-wheel init/config/version/
+  SQLite-create/readback smoke. The next safe action is one intentional commit,
+  followed by exact-full-SHA tests and the two bounded carry-forward critical
+  reviews; no release or merge is authorized by these pre-commit results.

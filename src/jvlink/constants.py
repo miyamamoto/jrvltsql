@@ -60,8 +60,8 @@ JV_RT_SID_INVALID = -103  # sid が不正（1桁目がスペース）（JVInit�
 #
 # -100 は公式仕様書「3. コード表」上、JVOpen/JVRTOpen の戻り値ではない
 # （それらは -111 以降のパラメータ不正系）。JVSetServiceKey は API 自体が
-# 不安定で -100 を返すことがあるため、wrapper.py はレジストリを直接操作して
-# これを回避している（wrapper.py の JVSetServiceKey 呼び出し箇所を参照）。
+# 不安定で -100 を返すことがある。jrvltsql はこのAPIやレジストリを直接操作せず、
+# DataLabで事前登録された設定を利用する。
 JV_RT_INVALID_PARAMETER = -100  # パラメータが不正、あるいはレジストリへの保存に失敗
 
 # JVRead / JVGets Return Codes
@@ -118,14 +118,6 @@ RETIRED_DATA_SPECS = {
 
 # 仕様変更が行われた年月。拒否メッセージに含める。
 RETIRED_DATA_SPEC_CHANGED_AT = "2023-08"
-
-# Odds Data Specifications
-DATA_SPEC_O1 = "O1"  # 単勝・複勝・枠連オッズ
-DATA_SPEC_O2 = "O2"  # 馬連オッズ
-DATA_SPEC_O3 = "O3"  # ワイドオッズ
-DATA_SPEC_O4 = "O4"  # 馬単オッズ
-DATA_SPEC_O5 = "O5"  # 3連複オッズ
-DATA_SPEC_O6 = "O6"  # 3連単オッズ
 
 # リアルタイムデータ種別 (JVRTOpen用)
 # 速報系データ: レース確定情報（結果が確定したら更新）

@@ -1,3 +1,20 @@
+# jrvltsql v2.0.0 Release Notes (unreleased draft)
+
+This version is not released yet. The repository reports `2.0.0.dev0` until
+the official data-contract repairs, documentation audit, and real acquisition
+and database release gates are complete.
+
+Current migration boundary:
+
+- configure provider registration in DataLab; programmatic registry-writing
+  setup APIs have been removed
+- non-Windows bridge deployments must explicitly configure the externally
+  managed runner with `JVLINK_BRIDGE_RUNNER`
+- `jltsql init` creates a safe SQLite-only configuration in the current
+  directory; installed package directories are no longer configuration or
+  runtime-state targets
+- 64-bit SDK execution remains unverified and is not claimed as supported
+
 # jrvltsql v1.6.10 Release Notes
 
 Everything merged since v1.6.9: PR #149, #150, #151, #152, and #153.

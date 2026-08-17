@@ -47,21 +47,41 @@ class TestGetCurrentVersion:
     """Test getting current version."""
 
     @patch("subprocess.run")
-    def test_from_git_tag(self, mock_run):
+    def test_from_git_tag_when_source_metadata_is_absent(self, mock_run, tmp_path):
         from src.utils.updater import get_current_version
 
         mock_run.return_value = MagicMock(returncode=0, stdout="v2.2.0\n")
-        version = get_current_version()
-        assert version == "v2.2.0"
+        with (
+            patch("src.utils.updater.PROJECT_ROOT", tmp_path),
+            patch("importlib.metadata.version", side_effect=LookupError),
+        ):
+            version = get_current_version()
+            assert version == "v2.2.0"
 
     @patch("subprocess.run")
     def test_fallback_to_pyproject(self, mock_run):
         from src.utils.updater import get_current_version
 
-        mock_run.return_value = MagicMock(returncode=1, stdout="")
+        mock_run.return_value = MagicMock(returncode=0, stdout="v1.6.10\n")
         version = get_current_version()
-        # Should fall back to pyproject.toml
-        assert version != "unknown"
+        # Source metadata is the candidate version; a stale release tag must
+        # not make a development checkout report the previous release.
+        assert version == "2.0.0.dev0"
+
+    @patch("subprocess.run")
+    def test_fallback_to_installed_distribution_metadata(
+        self,
+        mock_run,
+        tmp_path,
+    ):
+        from src.utils.updater import get_current_version
+
+        mock_run.return_value = MagicMock(returncode=1, stdout="")
+        with (
+            patch("src.utils.updater.PROJECT_ROOT", tmp_path),
+            patch("importlib.metadata.version", return_value="9.8.7"),
+        ):
+            assert get_current_version() == "9.8.7"
 
 
 class TestShouldCheckUpdates:
@@ -72,6 +92,11 @@ class TestShouldCheckUpdates:
 
         with patch("src.utils.updater.UPDATE_CHECK_FILE", tmp_path / "nonexistent.json"):
             assert should_check_updates() is True
+
+    def test_default_state_file_is_outside_the_installed_package_tree(self):
+        from src.utils.updater import PROJECT_ROOT, UPDATE_CHECK_FILE
+
+        assert PROJECT_ROOT not in UPDATE_CHECK_FILE.parents
 
     def test_recent_check_should_skip(self, tmp_path):
         from src.utils.updater import should_check_updates

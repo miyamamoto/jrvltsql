@@ -220,7 +220,7 @@ if (Test-Path $configFile) {
     Write-Warn "Review $configFile for database settings"
     Write-Warn "Register JV-Link in the JRA-VAN DataLab application"
 } else {
-    Write-Warn "config.yaml.example not found, run 'jltsql init' later"
+    Write-Warn "config.yaml.example not found; re-run the installer after restoring the checkout"
 }
 
 # Create data and logs directories
@@ -268,8 +268,7 @@ Write-Host "       -> Interactive setup: DB creation, data fetch, all-in-one" -F
 Write-Host ""
 Write-Host "  Or manual setup:" -ForegroundColor Yellow
 Write-Host "    1. Edit config: $configFile" -ForegroundColor White
-Write-Host "    2. Run: jltsql init" -ForegroundColor White
-Write-Host "    3. Run: jltsql fetch --from 20240101 --to 20241231 --spec RACE" -ForegroundColor White
+Write-Host "    2. Run: jltsql --config `"$configFile`" fetch --from 20240101 --to 20241231 --spec RACE" -ForegroundColor White
 Write-Host ""
 Write-Host "  Commands:" -ForegroundColor Yellow
 Write-Host "    jltsql version     Show version info" -ForegroundColor DarkGray

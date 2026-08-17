@@ -100,6 +100,18 @@ class TestJVLinkBridgeInit:
         with pytest.raises(JVLinkBridgeError, match="JVLINK_BRIDGE_RUNNER"):
             bridge._build_command()
 
+    def test_windows_bridge_uses_direct_execution(self, tmp_path, monkeypatch):
+        exe = tmp_path / "JVLinkBridge.exe"
+        exe.touch()
+        monkeypatch.setattr("src.jvlink.bridge.sys.platform", "win32")
+        monkeypatch.setenv("JVLINK_BRIDGE_RUNNER", "external-runner")
+
+        bridge = JVLinkBridge(bridge_path=exe)
+
+        assert bridge.uses_external_runner is False
+        assert bridge._build_command() == [str(exe)]
+        assert bridge._dialog_watcher_enabled() is False
+
     def test_known_update_dialog_is_rejected_instead_of_accepted(
         self, tmp_path, monkeypatch
     ):

@@ -120,21 +120,38 @@ def _validate_config(config: Dict[str, Any]) -> None:
     Raises:
         ConfigError: If configuration is invalid
     """
+    if not isinstance(config, dict):
+        raise ConfigError("Configuration root must be a mapping")
+
     # Check required sections
     if "jvlink" not in config:
         raise ConfigError("Missing required section: jvlink")
+    if not isinstance(config["jvlink"], dict):
+        raise ConfigError("Section jvlink must be a mapping")
 
     if "databases" not in config:
         raise ConfigError("Missing required section: databases")
+    if not isinstance(config["databases"], dict):
+        raise ConfigError("Section databases must be a mapping")
 
     # Check at least one database is enabled
     databases = config.get("databases", {})
+    if any(not isinstance(db_config, dict) for db_config in databases.values()):
+        raise ConfigError("Every databases entry must be a mapping")
     enabled_dbs = [
         name for name, db_config in databases.items() if db_config.get("enabled", False)
     ]
 
     if not enabled_dbs:
         raise ConfigError("At least one database must be enabled")
+
+    logging_config = config.get("logging", {})
+    if not isinstance(logging_config, dict):
+        raise ConfigError("Section logging must be a mapping")
+    for subsection in ("file", "console"):
+        value = logging_config.get(subsection, {})
+        if not isinstance(value, dict):
+            raise ConfigError(f"Section logging.{subsection} must be a mapping")
 
 
 def load_config(config_path: Optional[Union[str, Path]] = None) -> Config:
@@ -182,13 +199,17 @@ def load_config(config_path: Optional[Union[str, Path]] = None) -> Config:
 
 
 def get_default_config() -> Dict[str, Any]:
-    """Get default configuration values.
+    """Get the safe, self-contained SQLite bootstrap configuration.
 
     Returns:
-        Default configuration dictionary
+        A valid configuration that works without PostgreSQL extras. Optional
+        PostgreSQL, monitoring, and advanced settings remain opt-in.
     """
     return {
         "jvlink": {},
+        "database": {
+            "type": "sqlite",
+        },
         "databases": {
             "sqlite": {
                 "enabled": True,
@@ -217,6 +238,7 @@ def get_default_config() -> Dict[str, Any]:
             "commit_interval": 10000,
             "max_workers": 4,
         },
+        "auto_update_check": False,
         "logging": {
             "level": "INFO",
             "file": {

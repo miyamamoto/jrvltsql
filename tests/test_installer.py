@@ -110,10 +110,14 @@ class TestGetCurrentVersion:
     """Tests for get_current_version."""
 
     @patch("subprocess.run")
-    def test_from_git_tag(self, mock_run):
+    def test_from_git_tag_without_source_or_installed_metadata(self, mock_run, tmp_path):
         mock_run.return_value = MagicMock(returncode=0, stdout="v2.5.0\n")
-        version = get_current_version()
-        assert version == "v2.5.0"
+        with (
+            patch("src.utils.updater.PROJECT_ROOT", tmp_path),
+            patch("importlib.metadata.version", side_effect=LookupError),
+        ):
+            version = get_current_version()
+            assert version == "v2.5.0"
 
     @patch("subprocess.run")
     def test_fallback_to_pyproject(self, mock_run):

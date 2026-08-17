@@ -1,6 +1,7 @@
 """Auto-update and version checking utilities for JLTSQL."""
 
 import json
+import os
 import subprocess
 import sys
 import time
@@ -19,16 +20,61 @@ GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}"
 
 # Update check state file
 PROJECT_ROOT = Path(__file__).parent.parent.parent
-UPDATE_CHECK_FILE = PROJECT_ROOT / "data" / ".update_check.json"
+
+
+def _default_update_check_file() -> Path:
+    explicit_state = os.environ.get("JLTSQL_STATE_DIR")
+    if explicit_state:
+        state_root = Path(explicit_state)
+    elif sys.platform == "win32":
+        state_root = Path(
+            os.environ.get(
+                "LOCALAPPDATA",
+                Path.home() / "AppData" / "Local",
+            )
+        ) / "jltsql"
+    else:
+        state_root = Path(
+            os.environ.get(
+                "XDG_STATE_HOME",
+                Path.home() / ".local" / "state",
+            )
+        ) / "jltsql"
+    return state_root / "update_check.json"
+
+
+UPDATE_CHECK_FILE = _default_update_check_file()
 
 
 def get_current_version() -> str:
-    """Get the current installed version from git tags or pyproject.toml.
+    """Get the current version from source or installed package metadata.
 
     Returns:
         Version string (e.g., "2.2.0" or "v2.2.0")
     """
-    # Try git describe first
+    # A source checkout may intentionally be ahead of the latest release tag.
+    # Its project metadata is therefore the source of truth.
+    try:
+        toml_path = PROJECT_ROOT / "pyproject.toml"
+        if toml_path.exists():
+            content = toml_path.read_text(encoding="utf-8")
+            for line in content.splitlines():
+                if line.strip().startswith("version"):
+                    # version = "2.2.0"
+                    return line.split("=")[1].strip().strip('"').strip("'")
+    except Exception:
+        pass
+
+    # Installed wheels do not carry their source pyproject.
+    try:
+        from importlib.metadata import version
+
+        return version("jltsql")
+    except Exception:
+        pass
+
+    # Last-resort compatibility for an unpacked git checkout without project
+    # metadata. A tag is not allowed to override either authoritative source.
     try:
         result = subprocess.run(
             ["git", "describe", "--tags", "--abbrev=0"],
@@ -39,18 +85,6 @@ def get_current_version() -> str:
         )
         if result.returncode == 0:
             return result.stdout.strip()
-    except Exception:
-        pass
-
-    # Fallback: read from pyproject.toml
-    try:
-        toml_path = PROJECT_ROOT / "pyproject.toml"
-        if toml_path.exists():
-            content = toml_path.read_text(encoding="utf-8")
-            for line in content.splitlines():
-                if line.strip().startswith("version"):
-                    # version = "2.2.0"
-                    return line.split("=")[1].strip().strip('"').strip("'")
     except Exception:
         pass
 
@@ -204,6 +238,14 @@ def perform_update(verbose: bool = True) -> bool:
     Returns:
         True if update succeeded
     """
+    if not (PROJECT_ROOT / ".git").exists():
+        if verbose:
+            print(
+                "This installation is not a git checkout. "
+                "Upgrade it with pip or the release installer."
+            )
+        return False
+
     try:
         # Step 1: git pull
         if verbose:

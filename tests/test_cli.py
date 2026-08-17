@@ -92,6 +92,30 @@ class TestInitCommand(unittest.TestCase):
             self.assertEqual(result.exit_code, 0)
             self.assertIn('Created configuration file', result.output)
 
+    def test_init_rejects_a_global_config_path_instead_of_ignoring_it(self):
+        """Init has a CWD target and must not silently ignore --config."""
+        with self.runner.isolated_filesystem():
+            explicit = Path("existing.yaml")
+            explicit.write_text("sentinel", encoding="utf-8")
+
+            result = self.runner.invoke(
+                cli,
+                ["--config", str(explicit), "init", "--force"],
+            )
+
+            self.assertNotEqual(result.exit_code, 0)
+            self.assertEqual(explicit.read_text(encoding="utf-8"), "sentinel")
+            self.assertFalse(Path("config/config.yaml").exists())
+
+    def test_init_default_is_a_valid_sqlite_configuration(self):
+        with self.runner.isolated_filesystem():
+            init_result = self.runner.invoke(cli, ["init"])
+            show_result = self.runner.invoke(cli, ["config", "--show"])
+
+            self.assertEqual(init_result.exit_code, 0, init_result.output)
+            self.assertEqual(show_result.exit_code, 0, show_result.output)
+            self.assertIn("Type: sqlite", show_result.output)
+
 
 class TestCreateTablesCommand(unittest.TestCase):
     """Test create-tables command."""
@@ -583,12 +607,17 @@ class TestConfigCommand(unittest.TestCase):
 database:
   type: sqlite
   path: data/keiba.db
+databases:
+  sqlite:
+    enabled: true
+    path: data/keiba.db
 jvlink:
   sid: JLTSQL
-  service_key: test_key
 logging:
   level: INFO
-  file: logs/jltsql.log
+  file:
+    enabled: true
+    path: logs/jltsql.log
 """)
 
             result = self.runner.invoke(cli, ['config', '--show'])
@@ -623,6 +652,11 @@ jvlink:
             Path('config/config.yaml').write_text("""
 database:
   type: sqlite
+databases:
+  sqlite:
+    enabled: true
+    path: data/keiba.db
+jvlink: {}
 """)
 
             result = self.runner.invoke(cli, ['config', '--get', 'nonexistent.key'])
@@ -638,6 +672,11 @@ database:
             Path('config/config.yaml').write_text("""
 database:
   type: sqlite
+databases:
+  sqlite:
+    enabled: true
+    path: data/keiba.db
+jvlink: {}
 """)
 
             result = self.runner.invoke(cli, ['config', '--set', 'database.type=sqlite'])
@@ -653,6 +692,10 @@ database:
 database:
   type: sqlite
   path: data/test.db
+databases:
+  sqlite:
+    enabled: true
+    path: data/test.db
 jvlink:
   sid: TEST
 logging:
@@ -663,6 +706,69 @@ logging:
 
             # Should show config tree
             self.assertEqual(result.exit_code, 0)
+
+    def test_config_uses_the_validating_loader_and_expands_environment(self):
+        with self.runner.isolated_filesystem():
+            Path("config").mkdir()
+            Path("config/config.yaml").write_text(
+                """
+database:
+  type: sqlite
+databases:
+  sqlite:
+    enabled: true
+    path: ${JLTSQL_TEST_DB_PATH:fallback.db}
+jvlink: {}
+""",
+                encoding="utf-8",
+            )
+            with patch.dict(
+                "os.environ",
+                {"JLTSQL_TEST_DB_PATH": "expanded.db"},
+            ):
+                result = self.runner.invoke(
+                    cli,
+                    ["config", "--get", "databases.sqlite.path"],
+                )
+
+            self.assertEqual(result.exit_code, 0, result.output)
+            self.assertIn("expanded.db", result.output)
+            self.assertNotIn("${", result.output)
+
+    def test_empty_config_fails_with_a_controlled_configuration_error(self):
+        with self.runner.isolated_filesystem():
+            Path("config").mkdir()
+            Path("config/config.yaml").write_text("", encoding="utf-8")
+
+            result = self.runner.invoke(cli, ["config", "--show"])
+
+            self.assertEqual(result.exit_code, 1)
+            self.assertIn("Configuration Error", result.output)
+            self.assertNotIn("Traceback", result.output)
+
+    def test_invalid_logging_shape_fails_with_a_controlled_error(self):
+        with self.runner.isolated_filesystem():
+            Path("config").mkdir()
+            Path("config/config.yaml").write_text(
+                """
+database:
+  type: sqlite
+databases:
+  sqlite:
+    enabled: true
+    path: data/keiba.db
+jvlink: {}
+logging:
+  file: logs/jltsql.log
+""",
+                encoding="utf-8",
+            )
+
+            result = self.runner.invoke(cli, ["config", "--show"])
+
+            self.assertEqual(result.exit_code, 1)
+            self.assertIn("Configuration Error", result.output)
+            self.assertNotIn("Traceback", result.output)
 
 
 if __name__ == '__main__':

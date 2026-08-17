@@ -201,7 +201,7 @@ if exist "%INSTALL_DIR%\config\config.yaml" (
     echo   [!!] Review %INSTALL_DIR%\config\config.yaml for database settings
     echo   [!!] Register JV-Link in the JRA-VAN DataLab application
 ) else (
-    echo   [!!] config.yaml.example not found, run 'jltsql init' later
+    echo   [!!] config.yaml.example not found; restore the checkout and re-run this installer
 )
 
 REM === Step 7: Add to PATH ===
@@ -237,8 +237,7 @@ echo.
 echo   Next steps:
 echo     1. Restart your terminal
 echo     2. Edit config: %INSTALL_DIR%\config\config.yaml
-echo     3. Run: jltsql init
-echo     4. Run: jltsql fetch --from 20240101 --to 20241231 --spec RACE
+echo     3. Run: jltsql --config "%INSTALL_DIR%\config\config.yaml" fetch --from 20240101 --to 20241231 --spec RACE
 echo.
 echo   Quick start ^(interactive^):
 echo     cd %INSTALL_DIR% ^&^& quickstart.bat

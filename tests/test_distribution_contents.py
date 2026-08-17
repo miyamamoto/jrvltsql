@@ -1,12 +1,15 @@
 """Release-distribution content gate tests."""
 
+import hashlib
 import tarfile
 import zipfile
 from pathlib import Path
 
 import pytest
 
+from scripts import check_distribution_contents as content_gate
 from scripts.check_distribution_contents import validate_distributions
+from scripts.smoke_distribution_init import _wheel_cli_command
 
 
 def _write_wheel(
@@ -29,6 +32,14 @@ def _write_sdist(
             payload_path = path.parent / "payload"
             payload_path.write_bytes(payload)
             archive.add(payload_path, arcname=member)
+
+
+def _write_sdist_link(path: Path, member: str, target: str) -> None:
+    with tarfile.open(path, "w:gz") as archive:
+        link = tarfile.TarInfo(member)
+        link.type = tarfile.SYMTYPE
+        link.linkname = target
+        archive.addfile(link)
 
 
 def _clean_pair(tmp_path: Path) -> tuple[Path, Path]:
@@ -95,7 +106,7 @@ def test_distribution_gate_fails_closed_when_an_artifact_kind_is_missing(
         (
             "sdist",
             (
-                b"private-example-",
+                b"jltsql-private-",
                 b"runtime through ",
                 b"deadbee acknowledges close",
             ),
@@ -122,3 +133,120 @@ def test_distribution_gate_rejects_sensitive_text_without_echoing_it(
     assert errors
     assert member in rendered
     assert payload.decode("ascii") not in rendered
+
+
+@pytest.mark.parametrize(
+    ("artifact", "member", "payload"),
+    (
+        (
+            "wheel",
+            ".env",
+            b"SERVICE_KEY=" + b"".join((b"ABCD-", b"EFGH-IJKL-MNOP-Q")),
+        ),
+        (
+            "sdist",
+            "PKG-INFO",
+            b"Service-Key: " + b"".join((b"ABCD", b"EFGHIJKLMNOPQ")),
+        ),
+        (
+            "wheel",
+            "config/provider.xml",
+            b"<key>" + b"".join((b"ABCD", b"EFGHIJKLMNOPQ")) + b"</key>",
+        ),
+        (
+            "wheel",
+            "scripts/setup.ps1",
+            (
+                "service_key = "
+                + "".join(("ABCD-", "EFGH-IJKL-MNOP-Q"))
+            ).encode("utf-16-le"),
+        ),
+        (
+            "sdist",
+            "src/bridge.py",
+            b"".join((b"jltsql-private-", b"runtime revision deadbeef")),
+        ),
+    ),
+)
+def test_distribution_gate_rejects_sensitive_archive_variants(
+    tmp_path: Path,
+    artifact: str,
+    member: str,
+    payload: bytes,
+) -> None:
+    wheel, sdist = _clean_pair(tmp_path)
+    if artifact == "wheel":
+        _write_wheel(wheel, (member,), payload)
+    else:
+        member = f"jltsql-0/{member}"
+        _write_sdist(sdist, (member,), payload)
+
+    assert validate_distributions((wheel, sdist))
+
+
+def test_distribution_gate_redacts_a_sensitive_member_name(tmp_path: Path) -> None:
+    wheel, sdist = _clean_pair(tmp_path)
+    secret = "".join(("ABCD-", "EFGH-IJKL-MNOP-Q"))
+    member = f"specs/{secret}.txt"
+    _write_wheel(wheel, (member,))
+
+    rendered = "\n".join(validate_distributions((wheel, sdist)))
+
+    assert rendered
+    assert secret not in rendered
+
+
+def test_distribution_gate_allows_public_runtime_provenance(tmp_path: Path) -> None:
+    wheel, sdist = _clean_pair(tmp_path)
+    _write_wheel(
+        wheel,
+        ("src/release_surface.py",),
+        b"public-example-runtime through deadbee",
+    )
+
+    assert validate_distributions((wheel, sdist)) == []
+
+
+def test_distribution_gate_applies_the_hashed_private_token_denylist(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    token = b"syntheticrunner"
+    monkeypatch.setattr(
+        content_gate,
+        "PROHIBITED_TOKEN_SHA256",
+        frozenset({hashlib.sha256(token).hexdigest()}),
+    )
+    wheel, sdist = _clean_pair(tmp_path)
+    _write_wheel(wheel, ("src/bridge.py",), token)
+
+    assert validate_distributions((wheel, sdist))
+
+
+@pytest.mark.parametrize("member", ("C:/escape.py", "C:\\escape.py"))
+def test_distribution_gate_rejects_windows_absolute_members(
+    tmp_path: Path,
+    member: str,
+) -> None:
+    wheel, sdist = _clean_pair(tmp_path)
+    _write_wheel(wheel, (member,))
+
+    assert validate_distributions((wheel, sdist))
+
+
+def test_distribution_gate_rejects_archive_links(tmp_path: Path) -> None:
+    wheel, sdist = _clean_pair(tmp_path)
+    _write_sdist_link(
+        sdist,
+        "jltsql-0/src/linked.py",
+        "../../escape.py",
+    )
+
+    assert validate_distributions((wheel, sdist))
+
+
+def test_wheel_smoke_binds_execution_to_the_extracted_wheel(tmp_path: Path) -> None:
+    command = _wheel_cli_command(tmp_path, ("init",))
+
+    assert "-I" in command
+    assert any("is_relative_to" in argument for argument in command)
