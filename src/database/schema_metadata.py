@@ -204,7 +204,7 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
             {
                 "name": "データ区分",
                 "type": "TEXT",
-                "description": "データ区分（1=通常、2=訂正、3=削除）",
+                "description": "データ区分（0=該当レコード削除、1〜7/9/A/B=公式提供状態）",
                 "example": "1",
                 "nullable": False
             },
@@ -307,7 +307,10 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
                 "nullable": True
             }
         ],
-        "primary_key": ["開催年月日", "競馬場コード", "レース番号", "馬番"],
+        "primary_key": [
+            "Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji",
+            "RaceNum", "Umaban", "KettoNum"
+        ],
         "indexes": ["開催年月日", "血統登録番号", "騎手コード"]
     },
 
@@ -1475,7 +1478,10 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
             {"name": "単勝オッズ", "type": "TEXT", "description": "単勝オッズ", "example": "3.5", "nullable": True},
             {"name": "単勝人気順", "type": "TEXT", "description": "単勝人気順位", "example": "02", "nullable": True}
         ],
-        "primary_key": ["開催年月日", "競馬場コード", "レース番号", "馬番"],
+        "primary_key": [
+            "Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji",
+            "RaceNum", "Umaban", "KettoNum"
+        ],
         "indexes": ["開催年月日", "血統登録番号", "確定着順"]
     },
 

@@ -34,6 +34,12 @@ Public API replacements:
 - native and standard schemas now verify primary keys, types, capacities,
   child-table constraints, and cancellation/delete behavior before mutation;
   several record families gained complete child storage or corrected keys
+- SE horse-per-race storage now uses the complete eight-part official identity
+  ending in `KettoNum` across native, realtime, and `UMA_RACE`; legacy
+  seven-key/keyless tables require backup, rebuild, and `RACE` reimport rather
+  than an automatic key rewrite. The current 555-byte layout, all four reserved
+  fields, integer-kilogram body weight/change, exact targeted erase, and status-A
+  prize-zero semantics are preserved on SQLite and PostgreSQL
 - imports and realtime updates preserve provider order and use fail-closed
   transaction recovery so returned statistics agree with durable rows across
   SQLite and PostgreSQL

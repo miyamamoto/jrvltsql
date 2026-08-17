@@ -99,11 +99,16 @@ def _msshh_seconds(value: Any) -> float | None:
     return minutes * 60.0 + second_hundredths / 100.0
 
 
-def _prize_yen(value: Any, data_kubun: Any) -> int | None:
+def _prize_yen(
+    value: Any,
+    data_kubun: Any,
+    *,
+    zero_is_value_statuses: frozenset[str],
+) -> int | None:
     parsed = _unsigned_digits(value, 8)
     if parsed is None:
         return None
-    if parsed == 0 and str(data_kubun or "").strip() != "7":
+    if parsed == 0 and str(data_kubun or "").strip() not in zero_is_value_statuses:
         return None
     return parsed * 100
 
@@ -137,8 +142,18 @@ def canonicalize_se_fields(record: dict[str, Any]) -> dict[str, Any]:
         "ZogenSaKg": _signed_weight_change(record.get("ZogenSa"), record.get("ZogenFugo")),
         "RaceTimeSeconds": _msss_seconds(record.get("Time")),
         "OddsMultiplier": _scaled_unsigned(record.get("Odds"), 4, 0.1, zero_is_missing=True),
-        "HonsyokinYen": _prize_yen(record.get("Honsyokin"), record.get("DataKubun")),
-        "FukasyokinYen": _prize_yen(record.get("Fukasyokin"), record.get("DataKubun")),
+        # Format row 196 marks Honsyokin as set for 7 and A. Row 197 marks
+        # Fukasyokin as set only for 7; A keeps its initial zero.
+        "HonsyokinYen": _prize_yen(
+            record.get("Honsyokin"),
+            record.get("DataKubun"),
+            zero_is_value_statuses=frozenset({"7", "A"}),
+        ),
+        "FukasyokinYen": _prize_yen(
+            record.get("Fukasyokin"),
+            record.get("DataKubun"),
+            zero_is_value_statuses=frozenset({"7"}),
+        ),
         "HaronTimeL4Seconds": _scaled_unsigned(
             record.get("HaronTimeL4"),
             3,

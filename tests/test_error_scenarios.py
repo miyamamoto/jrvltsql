@@ -13,17 +13,18 @@ Tests various error conditions and recovery mechanisms:
 
 import os
 import tempfile
-import unittest
-from unittest.mock import MagicMock, patch, Mock
-from pathlib import Path
 import time
+import unittest
+from pathlib import Path
+from unittest.mock import MagicMock, Mock, patch
 
-from src.database.sqlite_handler import SQLiteDatabase
-from src.database.schema import SchemaManager
 from src.database.base import DatabaseError
-from src.parser.factory import ParserFactory
+from src.database.migration import SchemaMigrationError
+from src.database.schema import SchemaManager
+from src.database.sqlite_handler import SQLiteDatabase
+from src.fetcher.historical import FetcherError, HistoricalFetcher
 from src.importer.importer import DataImporter
-from src.fetcher.historical import HistoricalFetcher, FetcherError
+from src.parser.factory import ParserFactory
 
 
 class TestInvalidDataHandling(unittest.TestCase):
@@ -86,18 +87,16 @@ class TestInvalidDataHandling(unittest.TestCase):
         self.assertIsInstance(success, bool)
 
     def test_import_wrong_record_type(self):
-        """Test importing record to wrong table."""
-        # SE record but trying to import to RA table
+        """An incomplete SE record is rejected as invalid, not routed loosely."""
         wrong_record = {
-            'レコード種別ID': 'SE',  # Should go to NL_SE
+            'レコード種別ID': 'SE',
             'DataKubun': '1',
             'MakeDate': '20240101',
             '開催年月日': '20240101',
         }
 
-        success = self.importer.import_single_record(wrong_record)
-        # Should handle gracefully
-        self.assertIsInstance(success, bool)
+        with self.assertRaises(SchemaMigrationError):
+            self.importer.import_single_record(wrong_record)
 
     def test_duplicate_key_violation(self):
         """Test handling of duplicate key constraint violations."""

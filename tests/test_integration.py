@@ -349,13 +349,13 @@ class TestIntegration:
                         "RecordSpec": "SE",
                         "DataKubun": "1",
                         "MakeDate": "20240601",
-                        "Year": 2024,
-                        "MonthDay": 601,
+                        "Year": "2024",
+                        "MonthDay": "0601",
                         "JyoCD": "06",
-                        "Kaiji": 3,
-                        "Nichiji": 8,
-                        "RaceNum": race_num,
-                        "Umaban": umaban,
+                        "Kaiji": "03",
+                        "Nichiji": "08",
+                        "RaceNum": f"{race_num:02d}",
+                        "Umaban": f"{umaban:02d}",
                         "KettoNum": f"202401{race_num:02d}{umaban:02d}",
                         "Bamei": f"馬{race_num}-{umaban}",
                     })
@@ -412,12 +412,12 @@ class TestIntegration:
                 "DataKubun": "1",
                 "MakeDate": "20240601",
                 "Year": "2024",          # STRING -> INTEGER
-                "MonthDay": "601",       # STRING -> INTEGER
+                "MonthDay": "0601",      # PROVIDER WIDTH -> INTEGER
                 "JyoCD": "06",
-                "Kaiji": "3",            # STRING -> INTEGER
-                "Nichiji": "8",          # STRING -> INTEGER
+                "Kaiji": "03",           # PROVIDER WIDTH -> INTEGER
+                "Nichiji": "08",         # PROVIDER WIDTH -> INTEGER
                 "RaceNum": "11",         # STRING -> INTEGER
-                "Umaban": "1",           # STRING -> INTEGER
+                "Umaban": "01",          # PROVIDER WIDTH -> INTEGER
                 "KettoNum": "2024012345",
                 "Bamei": "テスト馬",
                 "Barei": "3",            # STRING -> INTEGER
@@ -449,9 +449,10 @@ class TestIntegration:
             assert row["Ninki"] == 1
             assert row["KakuteiJyuni"] == 1
 
-            # REAL conversions (divided by 10)
+            # REAL conversions. Body weight is already integer kilograms in
+            # the official record; the other three fields are scaled.
             assert abs(row["Futan"] - 55.0) < 0.01, "Futan should be 55.0"
-            assert abs(row["BaTaijyu"] - 48.0) < 0.01, "BaTaijyu should be 48.0"
+            assert row["BaTaijyu"] == 480, "BaTaijyu should remain 480kg"
             assert abs(row["Time"] - 123.4) < 0.01, "Time should be 123.4"
             assert abs(row["Odds"] - 1.5) < 0.01, "Odds should be 1.5"
 

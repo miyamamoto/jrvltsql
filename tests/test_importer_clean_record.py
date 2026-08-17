@@ -109,6 +109,7 @@ def test_jravan_uma_race_import_keeps_all_opponent_slots(tmp_path):
     raw[23:25] = b"03"
     raw[25:27] = b"11"
     raw[28:30] = b"07"
+    raw[30:40] = b"2020000007"
     raw[393:403] = b"2020100001"
     raw[403:439] = b"WINNER-ONE".ljust(36)
     raw[439:449] = b"2020100002"

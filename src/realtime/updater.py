@@ -16,7 +16,9 @@ from src.importer.importer import (
     clean_record_metadata,
     resolve_record_data_kubun,
     rollback_failed_import,
+    validate_se_record,
     validate_wf_record,
+    verify_se_storage_schema,
     verify_wf_storage_schema,
 )
 from src.jvlink.constants import (
@@ -189,13 +191,14 @@ class RealtimeUpdater:
         self.parser_factory = ParserFactory()
         self.cache_manager = cache_manager
         self._verified_mining_native_tables: set[str] = set()
+        self._verified_se_tables: set[str] = set()
         self._verified_wf_tables: set[str] = set()
 
         logger.info("RealtimeUpdater initialized")
 
     # Realtime tables whose caller-built rows are revalidated against the
     # official contract before any coercion or mutation.
-    STRICT_RECORD_TABLES = frozenset({"RT_WF"})
+    STRICT_RECORD_TABLES = frozenset({"RT_SE", "RT_WF"})
 
     def _canonicalize_strict_record_aliases(
         self, record: Dict
@@ -237,10 +240,16 @@ class RealtimeUpdater:
         if table_name not in self.STRICT_RECORD_TABLES:
             return None
         try:
-            if table_name not in self._verified_wf_tables:
-                if verify_wf_storage_schema(self.database, table_name):
-                    self._verified_wf_tables.add(table_name)
-            validate_wf_record(record, table_name)
+            if table_name == "RT_SE":
+                if table_name not in self._verified_se_tables:
+                    if verify_se_storage_schema(self.database, table_name):
+                        self._verified_se_tables.add(table_name)
+                validate_se_record(record, table_name)
+            else:
+                if table_name not in self._verified_wf_tables:
+                    if verify_wf_storage_schema(self.database, table_name):
+                        self._verified_wf_tables.add(table_name)
+                validate_wf_record(record, table_name)
         except SchemaMigrationError as error:
             logger.error(f"Rejected realtime {table_name} record: {error}")
             return str(error)
@@ -1249,7 +1258,16 @@ class RealtimeUpdater:
         PRIMARY_KEY_MAP = {
             # Race data - standard race identifier
             "RT_RA": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum"],
-            "RT_SE": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "Umaban"],
+            "RT_SE": [
+                "Year",
+                "MonthDay",
+                "JyoCD",
+                "Kaiji",
+                "Nichiji",
+                "RaceNum",
+                "Umaban",
+                "KettoNum",
+            ],
             "RT_HR": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum"],
 
             # Odds data - race identifier + Umaban or Kumi

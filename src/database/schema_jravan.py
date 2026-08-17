@@ -1804,15 +1804,15 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             RecordSpec                     CHAR(2)             ,  -- レコード種別ID
             DataKubun                      CHAR(1)             ,  -- データ区分
             MakeDate                       DATE                ,  -- YYYYMMDD形式の日付
-            Year                           SMALLINT            ,  -- 年(4桁)
-            MonthDay                       SMALLINT            ,  -- 月日(MMDD)
-            JyoCD                          CHAR(2)             ,  -- 競馬場コード
-            Kaiji                          SMALLINT            ,  -- 開催回
-            Nichiji                        SMALLINT            ,  -- 開催日目
-            RaceNum                        SMALLINT            ,  -- レース番号
+            Year                           SMALLINT NOT NULL   ,  -- 年(4桁)
+            MonthDay                       SMALLINT NOT NULL   ,  -- 月日(MMDD)
+            JyoCD                          CHAR(2) NOT NULL    ,  -- 競馬場コード
+            Kaiji                          SMALLINT NOT NULL   ,  -- 開催回
+            Nichiji                        SMALLINT NOT NULL   ,  -- 開催日目
+            RaceNum                        SMALLINT NOT NULL   ,  -- レース番号
             Wakuban                        SMALLINT            ,  -- 枠番
-            Umaban                         SMALLINT            ,  -- 馬番
-            KettoNum                       VARCHAR(10)         ,  -- 文字列(10)
+            Umaban                         SMALLINT NOT NULL   ,  -- 馬番
+            KettoNum                       VARCHAR(10) NOT NULL,  -- 文字列(10)
             Bamei                          VARCHAR(36)         ,  -- 文字列(36)
             UmaKigoCD                      VARCHAR(2)          ,  -- 文字列(2)
             SexCD                          VARCHAR(1)          ,  -- 文字列(1)
@@ -1854,8 +1854,8 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             Jyuni4c                        SMALLINT            ,  -- 4コーナー順位
             Odds                           DECIMAL(6,1)        ,  -- オッズ
             Ninki                          SMALLINT            ,  -- 人気
-            Honsyokin                      INTEGER             ,  -- 本賞金(千円)
-            Fukasyokin                     INTEGER             ,  -- 付加賞金(千円)
+            Honsyokin                      INTEGER             ,  -- 本賞金(100円)
+            Fukasyokin                     INTEGER             ,  -- 付加賞金(100円)
             reserved3                      VARCHAR(3)          ,  -- 文字列(3)
             reserved4                      VARCHAR(3)          ,  -- 文字列(3)
             HaronTimeL4                    DECIMAL(4,1)        ,  -- 後4F(秒)
@@ -1903,7 +1903,10 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             DMTimeSeconds                  DECIMAL(6,2)        ,
             DMGosaPSeconds                 DECIMAL(6,2)        ,
             DMGosaMSeconds                 DECIMAL(6,2)        ,
-            KyakusituKubun                 VARCHAR(1)            -- 文字列(1)
+            KyakusituKubun                 VARCHAR(1)          ,  -- 文字列(1)
+            PRIMARY KEY (
+                Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban, KettoNum
+            )
         )
     """,
 }

@@ -23,7 +23,9 @@ Primary Keys Implemented:
 -------------------------
 Race-related Tables:
     NL_RA, RT_RA: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
-    NL_SE, RT_SE: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
+    NL_SE, RT_SE: PRIMARY KEY (
+        Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban, KettoNum
+    )
     NL_RC: PRIMARY KEY (
         RecInfoKubun, Year, MonthDay, JyoCD, Kaiji, Nichiji,
         RaceNum, TokuNum, SyubetuCD, Kyori, TrackCD
@@ -1101,15 +1103,15 @@ SCHEMAS = {
             RecordSpec TEXT,
             DataKubun TEXT,
             MakeDate TEXT,
-            Year INTEGER,
-            MonthDay INTEGER,
-            JyoCD TEXT,
-            Kaiji INTEGER,
-            Nichiji INTEGER,
-            RaceNum INTEGER,
+            Year INTEGER NOT NULL,
+            MonthDay INTEGER NOT NULL,
+            JyoCD TEXT NOT NULL,
+            Kaiji INTEGER NOT NULL,
+            Nichiji INTEGER NOT NULL,
+            RaceNum INTEGER NOT NULL,
             Wakuban INTEGER,
-            Umaban INTEGER,
-            KettoNum TEXT,
+            Umaban INTEGER NOT NULL,
+            KettoNum TEXT NOT NULL,
             Bamei TEXT,
             UmaKigoCD TEXT,
             SexCD TEXT,
@@ -1201,7 +1203,9 @@ SCHEMAS = {
             DMGosaPSeconds REAL,
             DMGosaMSeconds REAL,
             KyakusituKubun TEXT,
-            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
+            PRIMARY KEY (
+                Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban, KettoNum
+            )
         )
     """,
     "NL_SK": """
@@ -2224,15 +2228,15 @@ SCHEMAS = {
             RecordSpec TEXT,
             DataKubun TEXT,
             MakeDate TEXT,
-            Year INTEGER,
-            MonthDay INTEGER,
-            JyoCD TEXT,
-            Kaiji INTEGER,
-            Nichiji INTEGER,
-            RaceNum INTEGER,
+            Year INTEGER NOT NULL,
+            MonthDay INTEGER NOT NULL,
+            JyoCD TEXT NOT NULL,
+            Kaiji INTEGER NOT NULL,
+            Nichiji INTEGER NOT NULL,
+            RaceNum INTEGER NOT NULL,
             Wakuban INTEGER,
-            Umaban INTEGER,
-            KettoNum TEXT,
+            Umaban INTEGER NOT NULL,
+            KettoNum TEXT NOT NULL,
             Bamei TEXT,
             UmaKigoCD TEXT,
             SexCD TEXT,
@@ -2324,7 +2328,9 @@ SCHEMAS = {
             DMGosaPSeconds REAL,
             DMGosaMSeconds REAL,
             KyakusituKubun TEXT,
-            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
+            PRIMARY KEY (
+                Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban, KettoNum
+            )
         )
     """,
     "RT_TC": """
@@ -2731,6 +2737,19 @@ SCHEMAS.update(
     }
 )
 STRICT_RECREATE_TABLES = frozenset({"NL_CK_CHAKU", "NL_CK_RUIKEI"})
+STRICT_SE_STORAGE_TABLES = frozenset({"NL_SE", "RT_SE"})
+
+
+def _preflight_existing_se_storage(db: BaseDatabase) -> None:
+    """Reject unsafe SE tables before any unrelated additive migration."""
+
+    from src.database.migration import _migration_targets
+    from src.importer.importer import verify_se_storage_schema
+
+    targets = _migration_targets(db)
+    for table_name in STRICT_SE_STORAGE_TABLES:
+        if any(target.table_exists_strict(table_name) for target in targets):
+            verify_se_storage_schema(db, table_name, allow_missing_columns=True)
 
 
 def _normalize_metadata_catalog_type(declared_type: str) -> str | None:
@@ -2793,10 +2812,16 @@ class SchemaManager:
             )
 
             schema_sql = SCHEMAS[table_name]
+            if table_name in STRICT_SE_STORAGE_TABLES:
+                _preflight_existing_se_storage(self.db)
             if table_name not in STRICT_RECREATE_TABLES:
                 migrate_table_if_needed(self.db, table_name, schema_sql)
             self.db.execute(schema_sql)
             verify_table_schema(self.db, table_name, schema_sql)
+            if table_name in STRICT_SE_STORAGE_TABLES:
+                from src.importer.importer import verify_se_storage_schema
+
+                verify_se_storage_schema(self.db, table_name)
             if table_name in STRICT_RECREATE_TABLES:
                 from src.importer.importer import verify_ck_child_table
 
@@ -2816,6 +2841,11 @@ class SchemaManager:
         from src.database.migration import migrate_all_tables, verify_table_schema
 
         logger.info("Creating all tables...")
+        try:
+            _preflight_existing_se_storage(self.db)
+        except Exception as error:
+            logger.error(f"SE schema preflight failed before migration: {error}")
+            return dict.fromkeys(SCHEMAS, False)
         migrate_all_tables(
             self.db,
             {
@@ -2830,6 +2860,10 @@ class SchemaManager:
             try:
                 self.db.execute(schema_sql)
                 verify_table_schema(self.db, table_name, schema_sql)
+                if table_name in STRICT_SE_STORAGE_TABLES:
+                    from src.importer.importer import verify_se_storage_schema
+
+                    verify_se_storage_schema(self.db, table_name)
                 logger.debug(f"Created table: {table_name}")
                 results[table_name] = True
             except Exception as e:
@@ -3155,6 +3189,8 @@ def create_all_tables(db: BaseDatabase) -> None:
 
     logger.info("Creating tables...")
 
+    _preflight_existing_se_storage(db)
+
     # Check and migrate existing tables with mismatched schemas
     migrate_all_tables(
         db,
@@ -3169,6 +3205,10 @@ def create_all_tables(db: BaseDatabase) -> None:
         try:
             db.execute(schema_sql)
             verify_table_schema(db, table_name, schema_sql)
+            if table_name in STRICT_SE_STORAGE_TABLES:
+                from src.importer.importer import verify_se_storage_schema
+
+                verify_se_storage_schema(db, table_name)
             logger.debug(f"Created table: {table_name}")
         except Exception as e:
             logger.error(f"Failed to create table {table_name}: {e}")

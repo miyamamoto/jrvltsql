@@ -37,9 +37,9 @@ def test_corrected_se_columns_are_added_without_dropping_existing_rows(
         db.execute(
             f"INSERT INTO {table_name} "
             "(Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban, "
-            "KettoNum1, Bamei1, Reserved_462) "
+            "KettoNum, KettoNum1, Bamei1, Reserved_462) "
             "VALUES (2026, 714, '05', 2, 3, 11, 7, "
-            "'2020100001', 'WINNER-ONE', 'legacy')"
+            "'2020000007', '2020100001', 'WINNER-ONE', 'legacy')"
         )
         db.commit()
 
@@ -73,9 +73,9 @@ def test_schema_manager_migrates_existing_rt_se_without_dropping_rows(tmp_path):
         db.execute(
             "INSERT INTO RT_SE "
             "(Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban, "
-            "KettoNum1, Bamei1, Reserved_462) "
+            "KettoNum, KettoNum1, Bamei1, Reserved_462) "
             "VALUES (2026, 714, '05', 2, 3, 11, 7, "
-            "'2020100001', 'WINNER-ONE', 'legacy')"
+            "'2020000007', '2020100001', 'WINNER-ONE', 'legacy')"
         )
         db.commit()
 
@@ -105,9 +105,13 @@ def test_schema_manager_create_table_migrates_existing_se(tmp_path):
 def test_schema_manager_rejects_unsafe_primary_key_mismatch(tmp_path):
     db = SQLiteDatabase({"path": str(tmp_path / "unsafe-pk.db")})
     unsafe_schema = SCHEMAS["NL_SE"].replace(
-        "PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)",
+        "PRIMARY KEY (\n"
+        "                Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, "
+        "Umaban, KettoNum\n"
+        "            )",
         "PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)",
     )
+    assert "PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)" in unsafe_schema
     with db:
         db.execute(unsafe_schema)
         assert SchemaManager(db).create_table("NL_SE") is False

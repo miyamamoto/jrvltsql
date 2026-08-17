@@ -39,6 +39,10 @@
 
 ### Fixed
 
+- `SE`の現行555バイト全sliceをSDK 5.0.0 manifestへ結び付け、native/速報/
+  JRA-VAN標準名の主キーを公式8項目（末尾`KettoNum`）へ統一。旧7項目・keyless・
+  不正型・追加一意制約・deferrable主キーはmutation前に拒否し、個別取消、4予約領域、
+  馬体重/増減の整数kg、status Aの本賞金0円をSQLite/PostgreSQLで保持
 - MCP向け`TABLE_METADATA`をnative 80表とJRA-VAN標準54表の全134実DDLへ
   結び付け、列名・型・論理NULL可否・主キー・索引対象が実在する物理列と一致する
   よう修正。適用前に各backendの実catalogを照合し、SQLiteは旧版の表示専用疑似列を

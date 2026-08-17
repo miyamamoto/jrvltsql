@@ -59,6 +59,110 @@ SE, derive length/field/key/status/history facts independently, then inspect
 `SEParser`, `NL_SE`/`RT_SE`, the standard owner, importer mappings, validators,
 and existing tests. Record observations before adding red tests.
 
+## Read-only audit result on the unchanged production tree
+
+- Audited HEAD: `1c6226a77dfd9859e218c4878cd7587965ce6f79`.
+  Its production tree is identical to base
+  `5922a9a28d2d5bc300ed4ebdd873898bc52a3424`; the only commit delta is this
+  worklog.
+- Two independent Codex critical reviews completed against that exact clean
+  SHA. Claude Code was unavailable and was not counted. Both reviewers
+  independently reproduced the official-key and standard-field loss before
+  seeing a repair.
+- Pinned JV-Data 4.8.0.2 and 4.9.0.1 agree on the current 555-byte physical
+  layout. SDK 5.0.0 names the root `JV_SE_RACE_UMA`; all 74 parser slices
+  (76 expanded SDK leaves after flattening nested IDs) match byte-for-byte.
+- The official ordered key is `(Year, MonthDay, JyoCD, Kaiji, Nichiji,
+  RaceNum, Umaban, KettoNum)`. Native `NL_SE`/`RT_SE`, erase routing, and
+  realtime routing omit `KettoNum`; standard `UMA_RACE` has no primary key.
+- Independent SQLite and fresh PostgreSQL 16 probes proved that two rows with
+  the same first seven values and different `KettoNum` collapse to one native
+  row while import reports success. Standard storage retains duplicates on a
+  repeated full revision and its seven-column erase predicate deletes both
+  different horses. Dual can retain different winners on its two backends
+  while reporting in-sync when an additional unique constraint is present.
+- Caller-built blank/alphanumeric/over-width `KettoNum` and malformed
+  alphanumeric `Year` values pass the current boundary; the latter are silently
+  coerced to an unrelated integer. Wrong key types, extra unique constraints, and a PostgreSQL
+  deferrable primary key are not rejected as schema incompatibilities.
+- Parser/native names `Reserved_229`, `Reserved_296`, `Reserved_382`, and
+  `Reserved_385` have no aliases to standard `reserved1` through `reserved4`.
+  Both importers report success while all four standard columns become NULL.
+- The generic scale table incorrectly divides official integer-kilogram
+  `BaTaijyu` and `ZogenSa` by ten in native storage. SQLite stored 508kg/+3kg
+  as 50.8/0.3 while canonical columns correctly retained 508/3.
+- JV-Data 4.9.0.1 row 196 marks `Honsyokin` as set for status 7 and A, so A
+  zero means zero yen. Row 197 marks A `Fukasyokin` as initial, so only the
+  existing Honsyokin rule is wrong; the first reviewer reading was challenged
+  and corrected against columns 12-21 before implementation.
+- The reconstructed 463-byte SE fixture is a repository smoke artifact, not
+  an official physical oracle. `make_se_record()` also uses NUL padding and
+  therefore creates rows that SQLite accepts but PostgreSQL text rejects.
+
+## Historical and community decision
+
+- Change-history row 331 records that Ver.1.0.1 beta added `DMGosaP` and
+  `DMGosaM` (four bytes each) on 2003-04-22, changing 547 to 555 bytes. The
+  pinned material does not include the old complete field table or its old
+  initial-value rules, so deriving and accepting a 547-byte grammar would be
+  inference rather than an official parser contract.
+- Current-normalized setup remains the supported ingestion boundary: keep the
+  explicit 547-byte rejection and pair it with a 555-byte positive. Do not
+  claim that arbitrary pre-normalization raw archives are supported.
+- JRA-VAN community topic 61 confirms that actual A/B SE values caused the
+  availability table to be corrected on 2024-08-07. Topic 88 records a
+  provider SE body-value defect, so availability cells are not promoted into
+  an over-strict body validator. Topic 215 confirms, for the 2023 data-spec
+  transition, that new setup returns the new layout for older dates and old/new
+  datasets must not be mixed; it is supporting context, not direct proof of
+  the 2003 layout.
+
+## Aggregated repair and red-first boundary
+
+One repair batch will:
+
+1. define one ordered eight-column SE key and use it in both native schemas,
+   `UMA_RACE`, erase, completeness, and realtime paths;
+2. add shared record/schema validation before coercion or mutation, including
+   exact fixed-width key values, integral key storage, exact ordered PK,
+   additional UNIQUE/exclusion rejection, and usable non-deferrable PG PK;
+3. reject legacy seven-column/keyless tables with backup/recreate/RACE-reimport
+   guidance rather than silently altering them;
+4. preserve and conflict-check all four standard reserved aliases;
+5. correct native body-weight/change units and status-A Honsyokin zero without
+   changing A Fukasyokin semantics;
+6. replace the NUL-padded test factory with official space padding and bind
+   the current parser spans/history to the pinned oracle.
+
+Before production changes, a compact parameterized regression will be run on
+this unchanged production tree. It must fail for key coexistence/targeted
+erase, malformed key, wrong schema/constraint, standard reserved readback,
+native units, status-A Honsyokin zero, and NUL-free fixture, while retaining
+paired current-layout/status-9/current-body positives. The exact failure
+summary will be appended before the repair is applied.
+
+### Observed red before implementation
+
+- Command (Python 3.12 locked environment):
+  `PYTHONPATH=. .../.venv/bin/python -m pytest
+  tests/test_se_official_contract.py -q --disable-warnings --maxfail=30
+  --basetemp=/home/keiba/scratch/20260817_jrvltsql_se_red --no-cov`.
+- Result on unchanged production code: **18 failed, 1 passed**.
+- Representative observed failures, not expected-only assertions:
+  - fixture contained NUL bytes;
+  - schema key tuple lacked `KettoNum`;
+  - both native importers retained one of two official identities;
+  - seven-column erase removed both rows from a manually correct eight-key
+    table;
+  - keyless standard storage retained three rows after one revision;
+  - all seven malformed-key cases failed to raise;
+  - wrong key type and extra UNIQUE both accepted and inserted;
+  - realtime exact erase removed both rows;
+  - native `BaTaijyu` was 50.8 instead of 508.
+- The paired canonical/status-9/B2-initial header test was the one green test,
+  proving the new negative suite did not merely reject every SE row.
+- No production implementation had been modified when this red was recorded.
+
 ## STOP conditions
 
 - Stop on candidate/worktree drift outside this iteration.
@@ -67,3 +171,100 @@ and existing tests. Record observations before adding red tests.
   evidence.
 - Do not mutate a real provider database, publish a provider/x64 claim, push,
   merge, tag, or release during the audit/red-first phase.
+
+## Implemented repair batch
+
+- Native `NL_SE`/`RT_SE` and standard `UMA_RACE` now use the ordered official
+  eight-column key ending in `KettoNum`; all key columns are explicitly
+  `NOT NULL`. Historical and realtime erase routing uses that same tuple.
+- `SEParser` and caller-built import records now require exact-width ASCII key
+  fields, real MakeDate/race dates, and a JyoCD from official code table 2001
+  before numeric coercion or mutation.
+- A shared schema gate now checks exact key/type/nullability, rejects additional
+  replacement keys and PostgreSQL deferrable primary keys, and verifies every
+  Dual target. Legacy seven-column/keyless tables stop before any additive
+  migration.
+- Standard storage preserves and conflict-checks `Reserved_229/296/382/385` as
+  `reserved1/2/3/4`. Native body weight and signed weight change remain integer
+  kilograms, and status-A Honsyokin zero is preserved as zero yen while status-A
+  Fukasyokin zero remains NULL.
+- The SE fixture now uses provider-shaped space padding rather than NUL bytes.
+  The official regression expands the pinned SDK manifest and compares every
+  parser slice, in order, while proving every byte 1 through 555 is covered
+  exactly once.
+
+### Additional observed red for the pre-mutation gate
+
+- After the first repair implementation but before the standard nullability
+  preflight was added, the existing unrelated-migration regression was extended
+  with an exact eight-column `UMA_RACE` whose `KettoNum` was nullable.
+- Exact observed result: `1 failed, 1 passed`; the nullable case raised no
+  `SchemaMigrationError` and the log showed `Adding missing column to RACE:
+  YoubiCD`. This proved the initial preflight could still say green after an
+  unsafe key and mutate an unrelated table.
+- Adding the same key-nullability check to the non-mutating standard preflight
+  changed that focused result to `2 passed`. The paired legacy seven-column
+  case stayed green.
+
+## Current local evidence before candidate freeze
+
+- SQLite/current official contract: `27 passed, 15 skipped` before the added
+  nullable-preflight parameter; the added two-case preflight regression passes.
+- Directly affected SQLite suite: `163 passed, 15 skipped, 10 subtests passed`.
+- Fresh disposable PostgreSQL 16, with the actual psycopg path: `42 passed`.
+  This covers native/standard, DataImporter/OptimizedDataImporter/single,
+  importer-owned/caller-owned transactions, coexist/update/exact erase,
+  reserved-field and unit readback, plus wrong type/extra unique/deferrable-PK
+  negatives.
+- Workflow self-check prints `TEST GATE PASS`; fatal flake8 reports `0`;
+  `uv lock --check` and `git diff --check` pass.
+- The PostgreSQL container and test environment remain disposable and will be
+  removed after the final exact-SHA review. No provider/x64/release claim is
+  made by this evidence.
+
+## Next safe command after this update
+
+Run the broader official-oracle/current-layout/metadata/schema regressions and
+the full non-live test gate. Then build and inspect fresh wheel/sdist, run strict
+docs, update this worklog with exact results, commit a clean candidate, and ask
+the two independent Codex reviewers for one aggregated exact-SHA review each.
+
+## Pre-freeze comprehensive evidence
+
+- Official oracle/current-layout/all-schema/metadata/migration selection:
+  `232 passed, 7 skipped`. One first run exposed a stale generic test that
+  treated a space-filled SE key as a valid record; SE is now classified with
+  the other formats whose positive payload comes from a dedicated official
+  fixture. The dedicated SE oracle remains the positive source of truth.
+- The first coverage-enabled non-live full suite exposed ten stale expectations:
+  incomplete SE parser samples, numeric/coerced caller keys, the former
+  divide-by-ten body-weight expectation, and one prohibited infrastructure
+  token embedded inside an example malformed value in this worklog. The tests
+  were changed to provider-width SE fixtures and the worklog example was made
+  generic; the exact last-failed selection then passed `10 passed`.
+- After those corrections, the complete Actions-equivalent non-live suite on
+  Python 3.12.11 passed:
+  `2948 passed, 184 skipped, 14 deselected, 21 subtests passed`; total coverage
+  was 77 percent. No warning was suppressed.
+- Fresh PEP 517 wheel and sdist built successfully. The distribution content
+  gate passed for both artifacts, installed-wheel init smoke passed, `specs/`
+  remained excluded, and strict MkDocs completed successfully.
+- A missing negative for standard reserved aliases was found during manual
+  coverage review. The exact regression was replayed in a temporary detached
+  worktree at production parent
+  `5922a9a28d2d5bc300ed4ebdd873898bc52a3424`: it failed with
+  `DID NOT RAISE SchemaMigrationError` and stored one conflicting row. The
+  repaired tree passed the same test and retained the existing standard
+  readback positive. The temporary worktree was removed.
+- A PostgreSQL realtime proof was added after the full-suite run. Latest fresh
+  PostgreSQL 16 SE contract result is `44 passed`: two rows sharing the first
+  seven key parts coexist, and status-0 removes only the selected `KettoNum`.
+
+## Candidate-freeze boundary
+
+No additional implementation change is planned before freeze. Re-run the
+fatal syntax/undefined-name lint, test-gate self-check, lock/diff gates, commit
+the complete iteration, then execute the focused and full gates against that
+exact clean SHA. Only after those pass should the two independent critical
+reviews start; reviewer edits are prohibited until both findings are
+aggregated.

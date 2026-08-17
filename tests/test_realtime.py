@@ -1084,7 +1084,7 @@ class TestRealtimeUpdater(unittest.TestCase):
         # Setup mock parser
         mock_parser = MagicMock()
         mock_parser.parse.return_value = {
-            "RecordSpec": "SE",
+            "RecordSpec": "RA",
             "headDataKubun": DATA_KUBUN_UPDATE,
             "Year": "2024",
             "MonthDay": "0101",
@@ -1092,7 +1092,6 @@ class TestRealtimeUpdater(unittest.TestCase):
             "Kaiji": "1",
             "Nichiji": "1",
             "RaceNum": "01",
-            "Umaban": "1",
         }
         mock_factory_instance = MagicMock()
         mock_factory_instance.parse = mock_parser.parse
@@ -1103,12 +1102,12 @@ class TestRealtimeUpdater(unittest.TestCase):
         updater.parser_factory = mock_factory_instance
 
         # Process record
-        result = updater.process_record("SE20240101...")
+        result = updater.process_record("RA20240101...")
 
         # Verify result
         self.assertIsNotNone(result)
         self.assertEqual(result["operation"], "update")
-        self.assertEqual(result["table"], "RT_SE")
+        self.assertEqual(result["table"], "RT_RA")
         self.assertTrue(result["success"])
 
         # Verify database insert was called (update uses insert for now)
@@ -1425,7 +1424,16 @@ class TestRealtimeUpdater(unittest.TestCase):
         )
         self.assertEqual(
             self.updater._get_primary_keys("RT_SE"),
-            ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "Umaban"],
+            [
+                "Year",
+                "MonthDay",
+                "JyoCD",
+                "Kaiji",
+                "Nichiji",
+                "RaceNum",
+                "Umaban",
+                "KettoNum",
+            ],
         )
         self.assertEqual(
             self.updater._get_primary_keys("RT_RC"),
@@ -1555,12 +1563,12 @@ class TestRealtimeUpdater(unittest.TestCase):
     def test_cancellation_status_is_upserted_for_realtime_state_records(self):
         updater = RealtimeUpdater(self.mock_db)
 
-        # WF is also a cancellation-state record, but RT_WF revalidates the
-        # official schema/key and complete record before any write, which a
-        # MagicMock database cannot satisfy. Its status-9 retention is covered
-        # against a real SQLite table in test_wf_official_contract.py.
+        # SE and WF revalidate their complete official schema/key before any
+        # write, which a MagicMock database cannot satisfy. Their state
+        # retention is covered against real SQLite tables in their official
+        # contract tests.
         for record_type in (
-            "RA", "SE", "HR", "H1", "H6",
+            "RA", "HR", "H1", "H6",
             "O1", "O2", "O3", "O4", "O5", "O6",
         ):
             with self.subTest(record_type=record_type):
@@ -1751,26 +1759,22 @@ class TestRealtimeUpdater(unittest.TestCase):
         self.mock_db.execute.assert_not_called()
 
     def test_finalized_se_data_kubun_is_stored_as_state(self):
-        updater = RealtimeUpdater(self.mock_db)
+        from src.database.schema import SCHEMAS
+        from src.database.sqlite_handler import SQLiteDatabase
+        from src.parser.se_parser import SEParser
+        from tests.fixtures.record_factory import make_se_record
 
-        result = updater.process_parsed_record(
-            {
-                "RecordSpec": "SE",
-                "DataKubun": "7",
-                "Year": "2026",
-                "MonthDay": "0715",
-                "JyoCD": "05",
-                "Kaiji": "1",
-                "Nichiji": "1",
-                "RaceNum": "1",
-                "Umaban": "1",
-            }
-        )
+        database = SQLiteDatabase({"path": ":memory:"})
+        with database:
+            database.execute(SCHEMAS["RT_SE"])
+            record = SEParser().parse(make_se_record(data_kubun="7"))
+            self.assertIsNotNone(record)
+            result = RealtimeUpdater(database).process_parsed_record(record)
+            stored = database.fetch_one("SELECT DataKubun FROM RT_SE")
 
         self.assertEqual(result["operation"], "insert")
         self.assertTrue(result["success"])
-        self.mock_db.insert.assert_called_once()
-        self.mock_db.execute.assert_not_called()
+        self.assertEqual(stored, {"DataKubun": "7"})
 
     @patch("src.realtime.updater.ParserFactory")
     def test_missing_data_kubun_is_rejected_without_default_or_mutation(self, mock_factory_class):

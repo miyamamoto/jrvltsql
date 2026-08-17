@@ -7,7 +7,7 @@ from src.parser.factory import ParserFactory, get_parser_factory
 from src.parser.hr_parser import HRParser
 from src.parser.ra_parser import RAParser
 from src.parser.se_parser import SEParser
-from tests.fixtures.record_factory import make_ra_record
+from tests.fixtures.record_factory import make_ra_record, make_se_record
 
 
 class _ByteOffsetParser(BaseParser):
@@ -163,9 +163,7 @@ class TestSEParser:
 
     def test_parse_official_repeated_opponents_and_tail(self):
         parser = SEParser()
-        record = bytearray(b" " * 555)
-        record[0:2] = b"SE"
-        record[2:3] = b"1"
+        record = bytearray(make_se_record())
         record[393:403] = b"2020100001"
         record[403:439] = b"WINNER-ONE".ljust(36)
         record[439:449] = b"2020100002"

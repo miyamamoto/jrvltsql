@@ -13,9 +13,9 @@
 """
 
 import pytest
-from src.parser.factory import ParserFactory, ALL_RECORD_TYPES
-from tests.fixtures.record_factory import make_ra_record
 
+from src.parser.factory import ALL_RECORD_TYPES, ParserFactory
+from tests.fixtures.record_factory import make_ra_record, make_se_record
 
 EXPANDED_RECORD_TYPES = {
     "DM", "H1", "H6", "O1", "O2", "O3", "O4", "O5", "O6", "TM", "WH"
@@ -92,6 +92,18 @@ class TestIndividualParsers:
             remaining = length - len(data)
             data += b' ' * remaining
             data = data[:-2] + b"\r\n"
+            if record_type == "SE":
+                data = make_se_record(
+                    make_date="20240601",
+                    year="2024",
+                    month_day="0601",
+                    jyo_cd="06",
+                    kaiji="03",
+                    nichiji="08",
+                    race_num="11",
+                    umaban="01",
+                    kettonum="2024012345",
+                )
             if record_type == "DM":
                 mutable = bytearray(data)
                 mutable[11:15] = b"2024"
@@ -433,6 +445,7 @@ class TestParserFieldExtraction:
         data += b'11'  # RaceNum (26-27)
         data += b'1'  # Wakuban (28)
         data += b'01'  # Umaban (29-30)
+        data += b'2024012345'  # KettoNum (31-40)
         data += b' ' * (555 - len(data) - 2) + b'\r\n'
 
         result = parser.parse(data)
@@ -483,11 +496,14 @@ class TestParserRobustness:
         parser = parser_factory.get_parser(record_type)
 
         # 正確な長さのデータを作成
-        data = record_type.encode('cp932')
-        data += b'1'
-        data += b'20240601'
-        data += b' ' * (parser.RECORD_LENGTH - len(data))
-        data = data[:-2] + b"\r\n"
+        if record_type == "SE":
+            data = make_se_record(make_date="20240601")
+        else:
+            data = record_type.encode('cp932')
+            data += b'1'
+            data += b'20240601'
+            data += b' ' * (parser.RECORD_LENGTH - len(data))
+            data = data[:-2] + b"\r\n"
 
         assert len(data) == parser.RECORD_LENGTH
 

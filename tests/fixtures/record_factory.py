@@ -74,7 +74,7 @@ def make_se_record(
     **kwargs,
 ) -> bytes:
     """Create official SE record (555 bytes including CRLF)."""
-    data = bytearray(555)
+    data = bytearray(b" " * 555)
     data[0:2] = _pad("SE", 2)
     data[2:3] = _pad(data_kubun, 1)
     data[3:11] = _pad(make_date, 8)

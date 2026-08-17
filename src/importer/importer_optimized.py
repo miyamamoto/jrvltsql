@@ -64,17 +64,19 @@ from src.importer.importer import (
     rollback_failed_import,
     validate_import_record_header,
     validate_jg_record,
+    validate_se_record,
     validate_wc_record,
     validate_wf_record,
     verify_bt_storage_schema,
-    verify_cs_storage_schema,
     verify_ch_coupled_table,
     verify_ck_coupled_tables,
+    verify_cs_storage_schema,
     verify_hy_storage_schema,
     verify_jg_storage_schema,
     verify_ks_coupled_table,
     verify_mining_native_schema,
     verify_rc_storage_schema,
+    verify_se_storage_schema,
     verify_tk_coupled_tables,
     verify_wc_storage_schema,
     verify_wf_storage_schema,
@@ -116,6 +118,7 @@ class OptimizedDataImporter:
         self._verified_mining_native_tables: set[str] = set()
         self._verified_hy_tables: set[str] = set()
         self._verified_bt_tables: set[str] = set()
+        self._verified_se_tables: set[str] = set()
         self._verified_cs_tables: set[str] = set()
         self._verified_jg_tables: set[str] = set()
         self._verified_wc_tables: set[str] = set()
@@ -385,6 +388,10 @@ class OptimizedDataImporter:
                 if table_name not in self._verified_bt_tables:
                     if verify_bt_storage_schema(self.database, table_name):
                         self._verified_bt_tables.add(table_name)
+                if table_name not in self._verified_se_tables:
+                    if verify_se_storage_schema(self.database, table_name):
+                        self._verified_se_tables.add(table_name)
+                validate_se_record(record, table_name)
                 if table_name not in self._verified_cs_tables:
                     if verify_cs_storage_schema(self.database, table_name):
                         self._verified_cs_tables.add(table_name)
