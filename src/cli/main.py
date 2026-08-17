@@ -1743,6 +1743,11 @@ def timeseries(ctx, spec, from_date, to_date, db, db_path):
                         database.create_table(table_name, schema_registry[table_name])
                         console.print(f"  [green][OK][/green] Table {table_name} ready")
 
+            # PostgreSQL DDL starts a physical transaction. Close the setup
+            # boundary so every persistence batch owns and commits only its
+            # own rows instead of borrowing one command-wide implicit tx.
+            database.commit()
+
             # Initialize fetcher and updater
             sid = config.get("jvlink.sid", "JLTSQL") if config else "JLTSQL"
             fetcher = RealtimeFetcher(sid=sid)
@@ -1761,6 +1766,10 @@ def timeseries(ctx, spec, from_date, to_date, db, db_path):
                 result = updater.process_parsed_records_batch(records_batch, timeseries=True)
                 total_success += int(result.get("inserted", 0))
                 total_errors += int(result.get("errors", 0))
+                if not result.get("success") or int(result.get("errors", 0)):
+                    raise RuntimeError(
+                        "time-series persistence batch failed; stop and rerun safely"
+                    )
 
             for spec_code in specs_list:
                 console.print(f"\n[bold]Processing {spec_code}...[/bold]")
@@ -1844,6 +1853,7 @@ def timeseries(ctx, spec, from_date, to_date, db, db_path):
                 except Exception as e:
                     console.print(f"  [red][ERROR][/red] {spec_code}: Error - {e}")
                     logger.error(f"Error processing {spec_code}", error=str(e), exc_info=True)
+                    raise
 
             console.print()
             console.print("[bold green]Complete![/bold green]")

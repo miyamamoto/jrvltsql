@@ -3065,3 +3065,68 @@
   must target this production tree plus the direct worklog-only child, verify
   zero code/test drift, and then wait for commit-specific GitHub checks before
   resolving the ownership thread. Copilot is not to be requested again.
+
+### 2026-08-17 13:20-13:30 JST — batched transaction review findings and red-first proof
+
+- Two independent Codex reviews completed against exact clean PR head
+  `2847c0c477cc7076c995204f50c442baa36d6ea1`. Both returned
+  `NEEDS_CHANGES`. The batched actionable scope is: make non-WF ordered
+  mutations atomic, roll back borrowed DM/TM snapshot replacement failures,
+  propagate rollback-plus-invalidation failure instead of returning a safe
+  looking result, and make the time-series CLI commit its table-setup boundary
+  and stop nonzero on any rejected persistence batch. The same batch will add
+  transaction-rollback observability, remove the unreachable strict-table
+  branch called out by CodeRabbit, and bind caller-pending preservation in the
+  existing SQLite/PostgreSQL matrices. No merge or release is authorized.
+- Minimal tests were changed before production code and run against that exact
+  production tree. The first SQLite selection returned `5 failed, 4 passed`:
+  existing DB-failure results lacked `transaction_rolled_back`; an implicit
+  caller-owned TM snapshot lost all 18 previously committed rows; rollback and
+  invalidation double failure returned normally instead of raising; and the
+  time-series CLI printed `[OK]`/`Complete!` with exit code zero after its
+  updater returned `success=False, errors=1`. A reordered focused replay bound
+  the ordered non-WF defect directly: the three-operation RA sequence returned
+  `inserted=2` instead of zero, while the borrowed TM case retained zero of 18
+  rows. This is the required red-first evidence; `src/` was unchanged during
+  both runs.
+- Claude Code Fable remains unavailable because the recorded service usage
+  limit has not reset. Per the maintainer's fallback authorization, Codex will
+  implement this single grouped repair and the same two independent Codex
+  reviewers will perform one bounded exact-SHA review afterward. STOP on any
+  durable-row/result mismatch, caller transaction commit on success/no-op,
+  caller transaction survival after a reported mutation rollback, CLI exit
+  zero after persistence rejection, recovery failure being converted to a
+  normal result, candidate drift, failed executed CI step, or unresolved PR
+  thread.
+- The grouped repair is green on the dirty candidate. The formerly red local
+  selection passes `9 passed`: ordered RA failure now returns `inserted=0`,
+  owned and implicit-caller TM failures retain the prior snapshot, recovery
+  double failure raises, caller-pending success/no-op remains pending, and the
+  CLI commits setup before its batch and exits nonzero without `[OK]` or
+  `Complete!`. The affected SQLite/database/realtime/CLI selection passes `441
+  passed, 45 skipped, 11 subtests passed`.
+- Fresh PostgreSQL 16 was used on loopback port 55441. The complete WF/TM
+  contract passes `156 passed`. In addition to the ordered non-WF trigger
+  regression, the TM PostgreSQL contract now commits 17 baseline rows, opens
+  an implicit caller transaction with an unrelated marker, rejects the next
+  snapshot through a database trigger, and proves the result flags rollback,
+  all 17 rows remain, the marker is gone, and no transaction remains pending.
+  The disposable container `jlt_wf_pg16_finalrepair_20260817` was removed and
+  no container with that name remains.
+- The complete local suite passes `2684 passed, 131 skipped, 14 subtests
+  passed`. The Python 3.12.11 CI-equivalent selection with coverage passes
+  `2670 passed, 125 skipped, 14 deselected, 14 subtests passed` at 77% total
+  coverage. `TEST GATE PASS`, `OFFICIAL ORACLE PASS`, compileall, isolated
+  fatal Ruff/flake8 checks, strict MkDocs, and `git diff --check` pass. Fresh
+  version 1.6.10 wheel and sdist build successfully and both pass the
+  distribution-content gate; tracked `specs/` and official audit fixtures
+  remain excluded. The only build messages are the existing future
+  setuptools license-metadata deprecations. Black still reports the
+  repository's pre-existing broad formatting debt and is not a blocking CI
+  step.
+- The next safe action is one final diff review, then one intentional commit
+  and push. Both independent reviewers must perform one bounded review of that
+  exact full SHA; commit-specific Actions must execute successfully; all three
+  current GitHub threads must receive evidence-based replies and be resolved
+  to zero. Copilot must not be re-requested. No merge, release, or provider
+  acquisition claim is authorized before those gates.

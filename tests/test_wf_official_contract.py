@@ -1038,6 +1038,14 @@ def test_wf_realtime_transaction_result_matches_durable_mixed_and_ordered_rows(
     tmp_path,
 ) -> None:
     scenarios = (
+        (
+            "ordered-non-wf-failure",
+            [
+                realtime_ra_record(),
+                realtime_ra_record(month_day="0817"),
+                {**realtime_ra_record(), "DataKubun": "0"},
+            ],
+        ),
         ("non-wf-before-wf-failure", [realtime_ra_record(), parsed_record(month_day="0817")]),
         ("wf-before-non-wf-failure", [parsed_record(), realtime_ra_record(month_day="0817")]),
         (
@@ -1066,6 +1074,7 @@ def test_wf_realtime_transaction_result_matches_durable_mixed_and_ordered_rows(
             assert result["success"] is False, case_id
             assert result["inserted"] == 0, case_id
             assert result["errors"] == len(records), case_id
+            assert result["transaction_rolled_back"] is True, case_id
             assert _count(database, "RT_WF") == 0, case_id
             assert _count(database, "RT_RA") == 0, case_id
 
@@ -1082,6 +1091,7 @@ def test_wf_realtime_transaction_result_matches_durable_mixed_and_ordered_rows(
         assert result["success"] is False
         assert result["inserted"] == 0
         assert result["errors"] == 2
+        assert result["transaction_rolled_back"] is True
         assert _count(database, "RT_RA") == 0
 
     database = SQLiteDatabase({"path": str(tmp_path / "success-boundary.db")})
@@ -1163,6 +1173,7 @@ def test_wf_realtime_does_not_commit_implicit_caller_transaction(
         result = RealtimeUpdater(database).process_parsed_records_batch(records)
         assert result["success"] is expected_success
         assert result["inserted"] == expected_inserted
+        assert database.has_pending_transaction() is True
 
         database.rollback()
         assert database.has_pending_transaction() is False
@@ -1973,6 +1984,7 @@ def test_wf_postgresql_realtime_does_not_commit_implicit_caller_transaction(
     result = RealtimeUpdater(postgresql_db).process_parsed_records_batch(records)
     assert result["success"] is expected_success
     assert result["inserted"] == expected_inserted
+    assert postgresql_db.has_pending_transaction() is True
 
     postgresql_db.rollback()
     assert postgresql_db.has_pending_transaction() is False
@@ -2216,6 +2228,11 @@ def test_wf_postgresql_realtime_database_failure_reports_no_success(
         [realtime_ra_record(), parsed_record(month_day="0817")],
         [parsed_record(), realtime_ra_record(month_day="0817")],
         [
+            realtime_ra_record(),
+            realtime_ra_record(month_day="0817"),
+            {**realtime_ra_record(), "DataKubun": "0"},
+        ],
+        [
             parsed_record(),
             parsed_record(month_day="0817"),
             parsed_record(data_kubun="0"),
@@ -2225,6 +2242,7 @@ def test_wf_postgresql_realtime_database_failure_reports_no_success(
         assert result["success"] is False
         assert result["inserted"] == 0
         assert result["errors"] == len(records)
+        assert result["transaction_rolled_back"] is True
         assert _count(postgresql_db, "RT_WF") == 0
         assert _count(postgresql_db, "RT_RA") == 0
 
@@ -2234,6 +2252,7 @@ def test_wf_postgresql_realtime_database_failure_reports_no_success(
     assert non_strict["success"] is False
     assert non_strict["inserted"] == 0
     assert non_strict["errors"] == 2
+    assert non_strict["transaction_rolled_back"] is True
     assert _count(postgresql_db, "RT_RA") == 0
     # psycopg starts a caller-owned transaction for the verification SELECT;
     # close it before the next independent updater-owned call.

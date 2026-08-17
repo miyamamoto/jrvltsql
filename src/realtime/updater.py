@@ -11,8 +11,9 @@ from src.database.migration import SchemaMigrationError
 from src.database.schema_types import get_table_primary_key_columns
 from src.importer.importer import (
     CANCELLATION_STATE_RECORD_TYPES,
+    MiningSnapshotMutationError,
+    TransactionRecoveryError,
     clean_record_metadata,
-    insert_wf_native_batch,
     rollback_failed_import,
     resolve_record_data_kubun,
     resolve_record_type,
@@ -373,34 +374,30 @@ class RealtimeUpdater:
                 }
                 for _ in snapshot_rows
             ]
+        except TransactionRecoveryError:
+            raise
         except Exception as exc:
-            recovery_error = None
-            if owned_transaction_started:
-                try:
-                    self.database.rollback()
-                except Exception as rollback_error:
-                    recovery_error = rollback_error
-                    try:
-                        self.database.invalidate_connection()
-                    except Exception as invalidation_error:
-                        recovery_error = RuntimeError(
-                            f"rollback failed: {rollback_error}; "
-                            f"connection invalidation failed: {invalidation_error}"
-                        )
+            transaction_rolled_back = isinstance(exc, MiningSnapshotMutationError)
+            if owned_transaction_started and not transaction_rolled_back:
+                rollback_failed_import(
+                    self.database,
+                    context=f"{table_name} snapshot replacement",
+                )
+                transaction_rolled_back = True
             logger.error(f"Failed to replace {table_name} snapshot: {exc}", exc_info=True)
-            error = str(exc)
-            if recovery_error is not None:
-                error = f"{error}; transactional recovery failed: {recovery_error}"
-            return [
-                {
+            results = []
+            for _ in snapshot_rows:
+                result = {
                     "operation": "insert",
                     "table": table_name,
                     "record_type": record_type,
                     "success": False,
-                    "error": error,
+                    "error": str(exc),
                 }
-                for _ in snapshot_rows
-            ]
+                if transaction_rolled_back:
+                    result["transaction_rolled_back"] = True
+                results.append(result)
+            return results
 
     def process_parsed_records_batch(self, records: list[Dict], timeseries: bool = False) -> Dict:
         """Insert already parsed records in batches grouped by target table."""
@@ -468,25 +465,55 @@ class RealtimeUpdater:
             if timeseries and batch_collected_at:
                 for record in validated_records:
                     record.setdefault("CollectedAt", batch_collected_at)
-            results = [
-                self._process_single_record(record, timeseries=timeseries)
-                for record in validated_records
-            ]
-            successful, rejected = summarize_update_result(results)
-            tables = sorted(
-                {
-                    item["table"]
-                    for item in successful
-                    if item.get("table")
+            owns_transaction = not caller_transaction_pending
+            if validated_records and owns_transaction:
+                self.database.begin_transaction()
+            successful: list[Dict] = []
+            tables: set[str] = set()
+            try:
+                for record in validated_records:
+                    result = self._process_single_record(record, timeseries=timeseries)
+                    accepted, rejected = summarize_update_result(result)
+                    tables.update(
+                        item["table"] for item in accepted if item.get("table")
+                    )
+                    if rejected:
+                        rollback_failed_import(
+                            self.database,
+                            context="atomic realtime ordered mutation",
+                        )
+                        return {
+                            "operation": "batch_insert",
+                            "success": False,
+                            "inserted": 0,
+                            "errors": errors + len(validated_records),
+                            "tables": sorted(tables),
+                            "transaction_rolled_back": True,
+                        }
+                    successful.extend(accepted)
+                if validated_records and owns_transaction:
+                    self.database.commit()
+                return {
+                    "operation": "batch_insert",
+                    "success": errors == 0,
+                    "inserted": len(successful),
+                    "errors": errors,
+                    "tables": sorted(tables),
                 }
-            )
-            return {
-                "operation": "batch_insert",
-                "success": errors + rejected == 0,
-                "inserted": len(successful),
-                "errors": errors + rejected,
-                "tables": tables,
-            }
+            except Exception as exc:
+                rollback_failed_import(
+                    self.database,
+                    context="atomic realtime ordered mutation",
+                )
+                logger.error(f"Atomic realtime ordered mutation failed: {exc}")
+                return {
+                    "operation": "batch_insert",
+                    "success": False,
+                    "inserted": 0,
+                    "errors": errors + len(validated_records),
+                    "tables": sorted(tables),
+                    "transaction_rolled_back": True,
+                }
 
         for record in validated_records:
             if timeseries and batch_collected_at:
@@ -517,16 +544,7 @@ class RealtimeUpdater:
                 self.database.begin_transaction()
                 owned_transaction_started = True
             for table_name, rows in grouped.items():
-                if table_name in self.STRICT_RECORD_TABLES:
-                    insert_wf_native_batch(
-                        self.database,
-                        table_name,
-                        rows,
-                        commit_batch=False,
-                        optimized=False,
-                    )
-                else:
-                    self.database.insert_many(table_name, rows)
+                self.database.insert_many(table_name, rows)
                 inserted += len(rows)
 
             if owned_transaction_started:
@@ -545,6 +563,7 @@ class RealtimeUpdater:
                 "inserted": 0,
                 "errors": errors + failed_operations,
                 "tables": sorted(grouped),
+                "transaction_rolled_back": True,
             }
 
         return {
@@ -597,6 +616,7 @@ class RealtimeUpdater:
                             "inserted": 0,
                             "errors": validation_errors + len(records),
                             "tables": sorted(tables),
+                            "transaction_rolled_back": True,
                         }
                     successful.extend(accepted)
                     tables.update(
@@ -667,6 +687,7 @@ class RealtimeUpdater:
                 "inserted": 0,
                 "errors": validation_errors + len(records),
                 "tables": sorted(tables),
+                "transaction_rolled_back": True,
             }
 
     def _resolve_timeseries_table(self, record: Dict) -> Optional[str]:

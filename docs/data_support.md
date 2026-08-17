@@ -268,9 +268,13 @@ rollbackし、行単位fallbackによる部分成功や、rollbackされた操�
 `inserted`は最終行数ではなく、提供順に正常適用された操作数です。
 速報の通常grouped batchも、SQLite/psycopgが暗黙に開始したcaller側transactionを所有済みとして
 扱い、成功時に勝手にcommitしません。DB書込が1件でも失敗した場合は同じcallのgrouped mutationを
-全てrollbackして`inserted=0`を返し、後続rollbackで消える行を部分成功として数えません。
+全てrollbackして`inserted=0`と`transaction_rolled_back=true`を返し、後続rollbackで消える行を
+部分成功として数えません。削除を含む提供順処理も同じatomic境界を使います。false結果を受け取った
+callerは、validation-only拒否かDB rollback済みかにかかわらず、その取込単位を必ず中断してください。
 psycopgではSELECTだけでもtransactionが開始されるため、独立した取込単位へ移るcallerは明示的に
 commitまたはrollbackして境界を閉じてください。transaction状態を判定できない場合は書込前に失敗します。
+時系列取得CLIは保存先table作成を先にcommitしてbatchごとの境界を分離し、1batchでも拒否された場合は
+`[OK]`を出さず非0終了します。
 `WIN5`は読み取り側の名前解決互換用のaliasであり、新規import先には使いません。
 主キーや`HatubaiHyosu`のない旧`JYUSYOSIKI_HEAD`、`Num`・主キー・外部キーのない旧`JYUSYOSIKI`、
 親子の片方だけが存在するDB、`WIN5`しか存在しない標準名DBは自動`ALTER`せず、
@@ -305,6 +309,9 @@ CKのJRA-VAN標準名モードはまだ実装しておらず、`CHOKYO_DETAIL`�
 右端1桁が小数第一位です。旧39バイト復元データ、旧標準名`TIME_MASTER`、主キーのない
 `TAISENGATA_MINING`、`TMScore`が整数型の旧nativeテーブルは安全に自動変換できないため、
 取り込みを停止して再構築を求めます。
+DM/TMのnative速報スナップショット置換は、既存レース行の削除後に書込が失敗した場合、caller所有を
+含むactive transaction全体をrollbackします。rollback不能時は接続を無効化し、それも失敗した場合は
+通常の失敗結果へ変換せず例外を送出します。
 
 ## 対象外
 

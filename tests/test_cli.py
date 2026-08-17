@@ -380,6 +380,81 @@ jvlink:
             self.assertIsNotNone(result)
 
 
+class TestRealtimeTimeseriesCommand(unittest.TestCase):
+    """Time-series persistence failures are command failures, not green summaries."""
+
+    def setUp(self):
+        self.runner = CliRunner()
+
+    def test_timeseries_commits_table_setup_and_fails_closed_on_batch_error(self):
+        database = MagicMock()
+        database.__enter__.return_value = database
+        database.__exit__.return_value = None
+        fetcher = MagicMock()
+        fetcher.fetch_time_series_batch_from_db.return_value = iter(
+            [{"RecordSpec": "O1", "Year": 2026, "MonthDay": 816}]
+        )
+        updater = MagicMock()
+        pending_at_batch = []
+
+        def failed_batch(*_args, **_kwargs):
+            pending_at_batch.append(database.commit.call_count == 0)
+            return {
+                "operation": "batch_insert",
+                "success": False,
+                "inserted": 0,
+                "errors": 1,
+                "tables": ["TS_O1"],
+                "transaction_rolled_back": True,
+            }
+
+        updater.process_parsed_records_batch.side_effect = failed_batch
+
+        with self.runner.isolated_filesystem():
+            config_path = Path("config.yaml")
+            config_path.write_text(
+                """
+database:
+  type: postgresql
+databases:
+  postgresql:
+    enabled: true
+jvlink:
+  sid: TEST
+auto_update_check: false
+"""
+            )
+            with patch(
+                "src.database.create_database_from_config", return_value=database
+            ), patch(
+                "src.fetcher.realtime.RealtimeFetcher", return_value=fetcher
+            ), patch(
+                "src.realtime.updater.RealtimeUpdater", return_value=updater
+            ):
+                result = self.runner.invoke(
+                    cli,
+                    [
+                        "--config",
+                        str(config_path),
+                        "realtime",
+                        "timeseries",
+                        "--spec",
+                        "0B41",
+                        "--from",
+                        "20260816",
+                        "--to",
+                        "20260816",
+                        "--db",
+                        "postgresql",
+                    ],
+                )
+
+        self.assertEqual(result.exit_code, 1, result.output)
+        self.assertEqual(pending_at_batch, [False])
+        self.assertNotIn("[OK] 0B41", result.output)
+        self.assertNotIn("Complete!", result.output)
+
+
 class TestExportCommand(unittest.TestCase):
     """Test export command."""
 

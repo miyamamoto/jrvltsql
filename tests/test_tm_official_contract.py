@@ -331,8 +331,9 @@ def test_tm_realtime_expansion_revision_and_race_delete(tmp_path) -> None:
     assert remaining == 0
 
 
-def test_tm_realtime_snapshot_failure_rolls_back_an_owned_transaction(
-    tmp_path, monkeypatch
+@pytest.mark.parametrize("caller_pending", (False, True))
+def test_tm_realtime_snapshot_failure_rolls_back_the_active_transaction(
+    tmp_path, monkeypatch, caller_pending
 ) -> None:
     # Keep this storage failure test independent of optional development
     # traceback renderers in compatibility environments.
@@ -340,11 +341,15 @@ def test_tm_realtime_snapshot_failure_rolls_back_an_owned_transaction(
     database = SQLiteDatabase({"path": str(tmp_path / "tm-realtime-rollback.db")})
     with database:
         database.execute(SCHEMAS["RT_TM"])
+        database.execute("CREATE TABLE CALLER_MARKER (id INTEGER PRIMARY KEY)")
         database.commit()
         updater = RealtimeUpdater(database)
         first = updater.process_record(_tm_record())
         assert isinstance(first, list) and all(result["success"] for result in first)
         database.commit()
+        if caller_pending:
+            database.execute("INSERT INTO CALLER_MARKER (id) VALUES (1)")
+            assert database.has_pending_transaction() is True
 
         def fail_after_race_delete(*_args, **_kwargs):
             raise RuntimeError("injected snapshot insert failure")
@@ -354,12 +359,60 @@ def test_tm_realtime_snapshot_failure_rolls_back_an_owned_transaction(
             _tm_record(make_hm="0945", entries=_official_entries(score_offset=100))
         )
         stored = database.fetch_all("SELECT Umaban, MakeHM, TMScore FROM RT_TM ORDER BY Umaban")
+        transaction_pending = database.has_pending_transaction()
+        marker_count = database.fetch_one(
+            "SELECT COUNT(*) AS count FROM CALLER_MARKER"
+        )["count"]
 
     assert isinstance(failed, list) and len(failed) == 18
     assert all(result["success"] is False for result in failed)
     assert len(stored) == 18
     assert stored[0] == {"Umaban": 1, "MakeHM": "0930", "TMScore": "0101"}
     assert stored[-1] == {"Umaban": 18, "MakeHM": "0930", "TMScore": "0118"}
+    assert transaction_pending is False
+    if caller_pending:
+        assert marker_count == 0
+    assert all(result["transaction_rolled_back"] is True for result in failed)
+
+
+def test_tm_realtime_snapshot_recovery_failure_is_not_returned_as_safe(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setattr("src.realtime.updater.logger.error", lambda *args, **kwargs: None)
+    database = SQLiteDatabase({"path": str(tmp_path / "tm-realtime-recovery.db")})
+    with database:
+        database.execute(SCHEMAS["RT_TM"])
+        database.commit()
+        updater = RealtimeUpdater(database)
+
+        original_insert_many = database.insert_many
+        original_rollback = database.rollback
+        original_invalidate = database.invalidate_connection
+        monkeypatch.setattr(
+            database,
+            "insert_many",
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                RuntimeError("injected snapshot insert failure")
+            ),
+        )
+        monkeypatch.setattr(
+            database,
+            "rollback",
+            lambda: (_ for _ in ()).throw(RuntimeError("injected rollback failure")),
+        )
+        monkeypatch.setattr(
+            database,
+            "invalidate_connection",
+            lambda: (_ for _ in ()).throw(RuntimeError("injected invalidation failure")),
+        )
+        try:
+            with pytest.raises(RuntimeError, match="connection invalidation failed"):
+                updater.process_record(_tm_record())
+        finally:
+            monkeypatch.setattr(database, "insert_many", original_insert_many)
+            monkeypatch.setattr(database, "rollback", original_rollback)
+            monkeypatch.setattr(database, "invalidate_connection", original_invalidate)
+            database.rollback()
 
 
 @pytest.mark.parametrize("importer_class", [DataImporter, OptimizedDataImporter])
@@ -557,6 +610,36 @@ def test_tm_postgresql_realtime_snapshot_revision_delete(postgresql_db) -> None:
         "MakeHM": "0945",
         "TMScore": "0201",
     }
+
+    postgresql_db.execute("CREATE TABLE CALLER_MARKER (id INTEGER PRIMARY KEY)")
+    postgresql_db.execute(
+        "CREATE FUNCTION reject_tm_0950() RETURNS trigger LANGUAGE plpgsql AS $$ "
+        "BEGIN IF NEW.makehm = '0950' THEN RAISE EXCEPTION 'simulated TM failure'; "
+        "END IF; RETURN NEW; END $$"
+    )
+    postgresql_db.execute(
+        "CREATE TRIGGER reject_tm_0950 BEFORE INSERT OR UPDATE ON RT_TM "
+        "FOR EACH ROW EXECUTE FUNCTION reject_tm_0950()"
+    )
+    postgresql_db.commit()
+    postgresql_db.execute("INSERT INTO CALLER_MARKER (id) VALUES (1)")
+    assert postgresql_db.has_pending_transaction() is True
+    failed = updater.process_record(_tm_record(make_hm="0950"))
+    pending_after_failure = postgresql_db.has_pending_transaction()
+    retained_after_failure = postgresql_db.fetch_one(
+        "SELECT COUNT(*) AS count FROM RT_TM"
+    )["count"]
+    marker_after_failure = postgresql_db.fetch_one(
+        "SELECT COUNT(*) AS count FROM CALLER_MARKER"
+    )["count"]
+    postgresql_db.commit()
+
+    assert isinstance(failed, list) and len(failed) == 18
+    assert all(result["success"] is False for result in failed)
+    assert all(result["transaction_rolled_back"] is True for result in failed)
+    assert pending_after_failure is False
+    assert retained_after_failure == 17
+    assert marker_after_failure == 0
 
     postgresql_db.begin_transaction()
     deleted = updater.process_record(

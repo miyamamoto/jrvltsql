@@ -18,6 +18,14 @@ from src.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
+class TransactionRecoveryError(RuntimeError):
+    """A failed transaction could not be rolled back or invalidated safely."""
+
+
+class MiningSnapshotMutationError(DatabaseError):
+    """A DM/TM snapshot mutation failed after its transaction was rolled back."""
+
+
 def rollback_failed_import(database: BaseDatabase, *, context: str) -> None:
     """Rollback a failed strict import, invalidating an unrecoverable session."""
     try:
@@ -26,7 +34,7 @@ def rollback_failed_import(database: BaseDatabase, *, context: str) -> None:
         try:
             database.invalidate_connection()
         except Exception as invalidation_error:
-            raise RuntimeError(
+            raise TransactionRecoveryError(
                 f"{context}: rollback failed ({rollback_error}); connection "
                 f"invalidation failed ({invalidation_error})"
             ) from invalidation_error
@@ -2812,13 +2820,20 @@ def replace_mining_native_snapshot(
     if record_race_key != expected_race_key:
         raise ValueError(f"{record_type} snapshot metadata does not match its expanded row")
 
-    _delete_mining_race_rows(database, record, table_name)
-    inserted = database.insert_many(table_name, converted_rows, use_replace=True)
-    if inserted != len(converted_rows):
-        raise DatabaseError(
-            f"{table_name} {record_type} snapshot inserted "
-            f"{inserted} of {len(converted_rows)} rows"
+    try:
+        _delete_mining_race_rows(database, record, table_name)
+        inserted = database.insert_many(table_name, converted_rows, use_replace=True)
+        if inserted != len(converted_rows):
+            raise DatabaseError(
+                f"{table_name} {record_type} snapshot inserted "
+                f"{inserted} of {len(converted_rows)} rows"
+            )
+    except Exception as exc:
+        rollback_failed_import(
+            database,
+            context=f"{table_name} {record_type} snapshot replacement",
         )
+        raise MiningSnapshotMutationError(str(exc)) from exc
     return inserted
 
 
