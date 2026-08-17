@@ -39,6 +39,9 @@
 
 ### Fixed
 
+- MCP向け`TABLE_METADATA`を全74表の実DDLへ結び付け、列名・型・NULL可否・
+  主キー・索引対象が実在する物理列と一致するよう修正。SQLiteは再適用時に旧版の
+  表示専用疑似列を除去し、PostgreSQLは全物理列へ`COMMENT ON COLUMN`を適用できる
 - JV-Link COM class 未登録時の診断を、公式SDKが提供する同じbit数のJV-Linkと、
   jrvltsqlでリリース検証済みの32-bit経路を区別する案内へ修正
 - `NL_SK` の公開メタデータに欠けていた曽祖父母8頭の繁殖登録番号を追加し、

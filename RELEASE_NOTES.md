@@ -43,6 +43,9 @@ Public API replacements:
 - distribution and bootstrap gates now inspect built artifacts, isolate wheel
   imports, and verify a base-dependency SQLite installation without writing
   runtime state into the package tree
+- MCP schema metadata now names every executable column and primary-key field
+  across all 74 published tables; SQLite drops stale display-only metadata on
+  reapplication and PostgreSQL comments target actual physical identifiers
 
 The record-by-record support and storage details are maintained in
 [`docs/data_support.md`](docs/data_support.md).

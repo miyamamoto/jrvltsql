@@ -16,16 +16,19 @@ Note: DuckDB is outside this project's supported database matrix.
 """
 
 import os
+import re
 import tempfile
 import unittest
 from pathlib import Path
 
 from scripts.setup_pg_test_db import postgresql_test_config
+from src.database.indexes import INDEXES
 from src.database.sqlite_handler import SQLiteDatabase
 from src.database.postgresql_handler import PostgreSQLDatabase
-from src.database.schema import SchemaManager
+from src.database.schema import SCHEMAS, SchemaManager
 from src.database.schema_metadata import TABLE_METADATA
 from src.database.schema_types import (
+    get_table_column_nullability,
     get_table_column_types,
     get_table_primary_key_columns,
 )
@@ -42,6 +45,50 @@ def test_metadata_primary_key_columns_are_described():
         defined_columns = {column["name"] for column in metadata["columns"]}
         missing = set(metadata.get("primary_key", [])) - defined_columns
         assert not missing, f"{table_name} primary_key references missing columns: {sorted(missing)}"
+
+
+def test_all_metadata_matches_the_executable_schema_exactly():
+    """MCP metadata must target every real SQL column and primary-key field."""
+
+    mismatches = {}
+    for table_name, metadata in TABLE_METADATA.items():
+        metadata_types = {
+            column["name"]: column["type"] for column in metadata["columns"]
+        }
+        expected_types = get_table_column_types(table_name)
+        metadata_nullability = {
+            column["name"]: column["nullable"] for column in metadata["columns"]
+        }
+        expected_nullability = get_table_column_nullability(table_name)
+        metadata_key = metadata.get("primary_key", [])
+        expected_key = get_table_primary_key_columns(table_name)
+        expected_index_columns = []
+        for statement in INDEXES.get(table_name, []):
+            match = re.search(r'\bON\s+[^\s(]+\s*\(([^)]*)\)', statement, re.I)
+            assert match is not None, statement
+            for raw_column in match.group(1).split(','):
+                column_name = raw_column.strip().strip('`"[]')
+                if column_name not in expected_index_columns:
+                    expected_index_columns.append(column_name)
+
+        if (
+            metadata_types != expected_types
+            or metadata_nullability != expected_nullability
+            or metadata_key != expected_key
+            or metadata.get("indexes", []) != expected_index_columns
+        ):
+            mismatches[table_name] = {
+                "metadata_columns": sorted(metadata_types),
+                "expected_columns": sorted(expected_types),
+                "metadata_nullability": metadata_nullability,
+                "expected_nullability": expected_nullability,
+                "metadata_key": metadata_key,
+                "expected_key": expected_key,
+                "metadata_indexes": metadata.get("indexes", []),
+                "expected_indexes": expected_index_columns,
+            }
+
+    assert mismatches == {}
 
 
 def test_ch_metadata_matches_normalized_native_schema():
@@ -80,13 +127,10 @@ def test_av_metadata_matches_scratch_exclusion_schema():
         metadata = TABLE_METADATA[table_name]
         column_names = {column["name"] for column in metadata["columns"]}
         assert "出走取消・競走除外" in metadata["description"]
-        assert metadata["primary_key"] == [
-            "開催年", "開催月日", "競馬場コード", "開催回",
-            "開催日目", "レース番号", "馬番",
-        ]
-        assert {"開催年", "開催月日", "競馬場コード", "レース番号", "馬番", "事由区分"} <= column_names
-        assert "セール主催者名" not in column_names
-        assert "取引価格" not in column_names
+        assert metadata["primary_key"] == get_table_primary_key_columns(table_name)
+        assert {"Year", "MonthDay", "JyoCD", "RaceNum", "Umaban", "JiyuKubun"} <= column_names
+        assert "SaleHostName" not in column_names
+        assert "Price" not in column_names
 
 
 def test_hs_metadata_matches_market_price_schema():
@@ -95,8 +139,8 @@ def test_hs_metadata_matches_market_price_schema():
     metadata = TABLE_METADATA["NL_HS"]
     column_names = {column["name"] for column in metadata["columns"]}
     assert "競走馬市場取引価格" in metadata["description"]
-    assert metadata["primary_key"] == ["血統登録番号", "主催者・市場コード", "市場開始日"]
-    assert {"血統登録番号", "主催者・市場コード", "市場開始日", "取引価格"} <= column_names
+    assert metadata["primary_key"] == get_table_primary_key_columns("NL_HS")
+    assert {"KettoNum", "SaleCode", "FromDate", "Price"} <= column_names
 
 
 def test_sk_metadata_describes_all_three_generation_lineage_slots():
@@ -191,7 +235,7 @@ class TestSQLiteMetadata(unittest.TestCase):
 
         # Check for specific column
         col_names = [row['column_name'] for row in rows]
-        self.assertIn('レコード種別ID', col_names)
+        self.assertIn('RecordSpec', col_names)
 
     def test_sqlite_metadata_retrieval(self):
         """Test retrieving metadata from SQLite."""
@@ -210,8 +254,15 @@ class TestSQLiteMetadata(unittest.TestCase):
         """Test that metadata can be updated (INSERT OR REPLACE)."""
         self.schema_mgr.create_table('NL_RA')
 
-        # Apply metadata twice
+        # Apply metadata once, then simulate a display-only label retained from
+        # a pre-contract release before applying the current metadata again.
         success1 = self.schema_mgr.apply_metadata_to_table('NL_RA')
+        self.database.execute(
+            """INSERT INTO _metadata
+               (table_name, column_name, description, metadata_type)
+               VALUES (?, ?, ?, 'column')""",
+            ('NL_RA', '旧表示専用列', 'stale',),
+        )
         success2 = self.schema_mgr.apply_metadata_to_table('NL_RA')
 
         self.assertTrue(success1)
@@ -223,6 +274,11 @@ class TestSQLiteMetadata(unittest.TestCase):
                WHERE table_name = 'NL_RA' AND column_name = ''"""
         )
         self.assertEqual(rows[0]['cnt'], 1)
+        stale_rows = self.database.fetch_all(
+            """SELECT column_name FROM _metadata
+               WHERE table_name = 'NL_RA' AND column_name = '旧表示専用列'"""
+        )
+        self.assertEqual(stale_rows, [])
 
 
 @unittest.skipUnless(
@@ -297,10 +353,25 @@ class TestPostgreSQLMetadata(unittest.TestCase):
         rows = self.database.fetch_all("""
             SELECT table_name
             FROM information_schema.tables
-            WHERE table_name = 'NL_RA'
+            WHERE table_name = 'nl_ra'
         """)
 
         self.assertEqual(len(rows), 1)
+
+    def test_postgresql_all_metadata_targets_are_executable(self):
+        """Every metadata entry must apply to a freshly created physical table."""
+
+        try:
+            create_results = self.schema_mgr.create_all_tables()
+            self.assertTrue(all(create_results.values()))
+            for table_name in TABLE_METADATA:
+                self.assertTrue(
+                    self.schema_mgr.apply_metadata_to_table(table_name),
+                    f"Should apply executable metadata to {table_name}",
+                )
+        finally:
+            for table_name in reversed(SCHEMAS):
+                self.database.execute(f"DROP TABLE IF EXISTS {table_name} CASCADE")
 
 
 class TestMetadataApplicationWorkflow(unittest.TestCase):
@@ -376,23 +447,21 @@ class TestMetadataApplicationWorkflow(unittest.TestCase):
 
     def test_metadata_for_all_record_types(self):
         """Test that all record types in TABLE_METADATA can be applied."""
-        # Sample a few different record types
-        sample_tables = [
-            'NL_RA',  # Race
-            'NL_SE',  # Horse per race
-            'NL_HR',  # Payoff
-            'NL_UM',  # Horse master
-            'NL_KS',  # Jockey master
-            'NL_O1',  # Odds
-            'RT_RA',  # Realtime race
-        ]
+        create_results = self.schema_mgr.create_all_tables()
+        self.assertTrue(all(create_results.values()))
 
-        for table_name in sample_tables:
-            if table_name in TABLE_METADATA:
-                self.schema_mgr.create_table(table_name)
-                success = self.schema_mgr.apply_metadata_to_table(table_name)
-                self.assertTrue(success,
-                    f"Should apply metadata to {table_name}")
+        for table_name, expected in TABLE_METADATA.items():
+            success = self.schema_mgr.apply_metadata_to_table(table_name)
+            self.assertTrue(success, f"Should apply metadata to {table_name}")
+            stored = self.database.fetch_all(
+                """SELECT column_name FROM _metadata
+                   WHERE table_name = ? AND metadata_type = 'column'""",
+                (table_name,),
+            )
+            self.assertEqual(
+                {row["column_name"] for row in stored},
+                {column["name"] for column in expected["columns"]},
+            )
 
 
 class TestMetadataRetrieval(unittest.TestCase):
@@ -452,7 +521,7 @@ class TestMetadataRetrieval(unittest.TestCase):
 
         # Check specific columns exist
         col_names = list(metadata['columns'].keys())
-        self.assertIn('レコード種別ID', col_names)
+        self.assertIn('RecordSpec', col_names)
 
 
 class TestMCPIntegration(unittest.TestCase):

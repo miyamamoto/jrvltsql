@@ -2910,6 +2910,15 @@ class SchemaManager:
                     (table_name, metadata.get("description", ""))
                 )
 
+                # Replace the complete executable column set. Older releases
+                # stored display-only labels here, so INSERT OR REPLACE alone
+                # would leave stale, non-queryable metadata behind.
+                self.db.execute(
+                    """DELETE FROM _metadata
+                       WHERE table_name = ? AND metadata_type = 'column'""",
+                    (table_name,),
+                )
+
                 # Insert column descriptions
                 for col in metadata.get("columns", []):
                     col_name = col.get("name", "")

@@ -12,6 +12,7 @@ from src.database.schema_jravan import JRAVAN_SCHEMAS
 # キャッシュ（テーブル名 → カラム型マッピング）
 _table_column_types_cache: dict[str, dict[str, str]] = {}
 _table_primary_keys_cache: dict[str, list[str]] = {}
+_table_column_nullability_cache: dict[str, dict[str, bool]] = {}
 
 # コンパイル済み正規表現パターン
 _column_pattern = re.compile(r'^\s*(\w+)\s+([A-Z]+)(?:\s*\([^)]*\))?', re.IGNORECASE)
@@ -148,6 +149,34 @@ def get_table_primary_key_columns(table_name: str) -> list[str]:
     ]
     _table_primary_keys_cache[table_name] = columns
     return columns
+
+
+def get_table_column_nullability(table_name: str) -> dict[str, bool]:
+    """Return whether each executable schema column accepts NULL values."""
+
+    if table_name in _table_column_nullability_cache:
+        return _table_column_nullability_cache[table_name]
+
+    create_statement = _schema_for_table(table_name)
+    if not create_statement:
+        return {}
+
+    primary_key = set(get_table_primary_key_columns(table_name))
+    nullability: dict[str, bool] = {}
+    for line in create_statement.split('\n'):
+        if 'PRIMARY KEY' in line.upper():
+            continue
+        match = _column_pattern.match(line)
+        if not match or _normalized_column_type(match.group(2)) is None:
+            continue
+        column_name = match.group(1)
+        nullability[column_name] = (
+            column_name not in primary_key
+            and re.search(r'\bNOT\s+NULL\b', line, re.IGNORECASE) is None
+        )
+
+    _table_column_nullability_cache[table_name] = nullability
+    return nullability
 
 
 def is_numeric_column(table_name: str, column_name: str) -> bool:

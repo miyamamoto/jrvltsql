@@ -192,20 +192,11 @@ def test_tm_native_and_standard_schema_contracts_are_keyed_and_lossless() -> Non
 
 
 def test_tm_metadata_describes_the_complete_native_race_key() -> None:
-    expected_key = [
-        "開催年月日",
-        "競馬場コード",
-        "開催回",
-        "開催日目",
-        "レース番号",
-        "馬番",
-    ]
-
     for table_name in ("NL_TM", "RT_TM"):
         metadata = TABLE_METADATA[table_name]
-        assert metadata["primary_key"] == expected_key
+        assert metadata["primary_key"] == NATIVE_KEY
         column_names = {column["name"] for column in metadata["columns"]}
-        assert set(expected_key) <= column_names
+        assert set(NATIVE_KEY) <= column_names
 
 
 @pytest.mark.parametrize(
