@@ -30,6 +30,8 @@ if not exist "config\config.yaml" (
     exit /b 1
 )
 
+REM JLTSQL is an explicit operator override for a separately validated SDK
+REM environment. This script deliberately does not discover jltsql from PATH.
 if defined PYTHON (
     if not exist "%PYTHON%" (
         echo [ERROR] PYTHON must be a full path to python.exe.
@@ -67,7 +69,8 @@ if not defined JLTSQL (
     if !errorlevel!==0 set "JLTSQL=py -3.12-32 -m src.cli.main"
 )
 if not defined JLTSQL (
-    echo [ERROR] 32-bit Python or an explicit jltsql command was not found.
+    echo [ERROR] 32-bit Python was not found. For a separately validated SDK,
+    echo         set JLTSQL to a fully quoted executable command explicitly.
     exit /b 1
 )
 

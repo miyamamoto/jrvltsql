@@ -3484,3 +3484,21 @@
   and extracted-wheel init/config/version/SQLite smoke also pass. The next safe
   action is one follow-up commit, exact-SHA verification, push, and a bounded
   two-reviewer closure check; no tag/release is authorized.
+- Follow-up commit `a48ff3723c321e85aa6e51b791e2fea7a85f6f49`
+  passed the exact locked full suite (`2738 passed, 131 skipped, 22 subtests
+  passed`), static gates, exact-archive content/smoke, and fresh base-dependency
+  wheel install with 80 SQLite tables and integrity `ok`. One bounded reviewer
+  returned GREEN for archive/config closure. The Windows/docs reviewer verified
+  all four prior findings closed but returned NEEDS_CHANGES because the exact
+  GitHub Windows job executed and failed: `1 failed, 4 passed`. The remaining
+  runtime test still required the deliberately removed PATH CLI auto-selection,
+  while production and the Linux static contract correctly required explicit
+  or bitness-verified selection. This is an executed CI failure and cannot use
+  the billing/startup exception.
+- The existing Windows runtime test is updated as a paired contract: a PATH-only
+  shim must not be selected, then the same command supplied through explicit
+  `JLTSQL` override must succeed. The batch and public script guide document
+  that the override is operator-selected only after separate SDK validation
+  and is not a 64-bit support claim. Local Linux cannot execute this cmd.exe
+  branch, so the exact follow-up SHA Windows Actions job is mandatory before
+  merge.

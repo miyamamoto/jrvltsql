@@ -28,6 +28,11 @@ PostgreSQL だけを対象にした `quickstart_postgres_timeseries.bat` もあ�
 PostgreSQL 時系列オッズ投入が終わると、`daily_sync.bat` を日次 Windows
 タスクとして登録するか確認します。
 
+`fetch_timeseries_postgres.bat` は PATH 上の `jltsql` を暗黙には選びません。
+既定の32-bit Python以外をSDK込みで別途検証済みの場合に限り、実行前に
+`JLTSQL` を引用符付きの実行可能コマンドへ明示設定できます。この変数は
+operator overrideであり、64-bit動作確認や対応を示すものではありません。
+
 三連複・三連単を含む全賭式の締切前オッズを残したい場合は、開催週に
 `jltsql realtime odds-sokuho-timeseries` を別途実行してください。SQLite に
 保存する場合は `--db sqlite --db-path data/keiba.db` を指定できます。
