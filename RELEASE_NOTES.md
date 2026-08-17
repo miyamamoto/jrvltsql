@@ -40,6 +40,11 @@ Public API replacements:
   than an automatic key rewrite. The current 555-byte layout, all four reserved
   fields, integer-kilogram body weight/change, exact targeted erase, and status-A
   prize-zero semantics are preserved on SQLite and PostgreSQL
+- AV scratch/exclusion storage now uses the official seven-part identity in
+  native, realtime, and `TORIKESI_JYOGAI` tables. Historical status 0 is an
+  exact erase only before 2003-07-11; current status 1/2 and both pre/post-2021
+  reason-field initial representations remain supported. Existing keyless,
+  nullable-key, or otherwise unsafe AV tables require rebuild and reimport
 - imports and realtime updates preserve provider order and use fail-closed
   transaction recovery so returned statistics agree with durable rows across
   SQLite and PostgreSQL

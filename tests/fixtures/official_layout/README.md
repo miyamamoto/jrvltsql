@@ -20,6 +20,9 @@ JV-Data. They do not contain provider records or a copy of the SDK source.
 - `jc_contract_4901.json` records the JC jockey-change layout, eight-part key,
   status history, apprentice-code domain, provider specs, and weight unit
   independently transcribed from both pinned current workbooks.
+- `av_contract_4901.json` records the AV scratch/exclusion layout, seven-part
+  key, status history, reason-code representation change, and provider specs
+  independently transcribed from both pinned current workbooks.
 
 The manifest is intentionally independent of jrvltsql parser and schema code.
 When the official source changes, regenerate it from a separately obtained SDK

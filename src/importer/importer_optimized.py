@@ -62,6 +62,7 @@ from src.importer.importer import (
     resolve_standard_storage_table_name,
     resolve_standard_table_name,
     rollback_failed_import,
+    validate_av_record,
     validate_import_record_header,
     validate_jc_record,
     validate_jg_record,
@@ -69,6 +70,7 @@ from src.importer.importer import (
     validate_wc_record,
     validate_we_record,
     validate_wf_record,
+    verify_av_storage_schema,
     verify_bt_storage_schema,
     verify_ch_coupled_table,
     verify_ck_coupled_tables,
@@ -124,6 +126,7 @@ class OptimizedDataImporter:
         self._verified_bt_tables: set[str] = set()
         self._verified_se_tables: set[str] = set()
         self._verified_we_tables: set[str] = set()
+        self._verified_av_tables: set[str] = set()
         self._verified_jc_tables: set[str] = set()
         self._verified_cs_tables: set[str] = set()
         self._verified_jg_tables: set[str] = set()
@@ -326,6 +329,7 @@ class OptimizedDataImporter:
                 if first_table_name is not None:
                     validate_se_record(first_record, first_table_name)
                     validate_we_record(first_record, first_table_name)
+                    validate_av_record(first_record, first_table_name)
                     validate_jc_record(first_record, first_table_name)
                 records = chain((first_record,), records)
         except Exception:
@@ -407,6 +411,10 @@ class OptimizedDataImporter:
                     if verify_we_storage_schema(self.database, table_name):
                         self._verified_we_tables.add(table_name)
                 validate_we_record(record, table_name)
+                if table_name not in self._verified_av_tables:
+                    if verify_av_storage_schema(self.database, table_name):
+                        self._verified_av_tables.add(table_name)
+                validate_av_record(record, table_name)
                 if table_name not in self._verified_jc_tables:
                     if verify_jc_storage_schema(self.database, table_name):
                         self._verified_jc_tables.add(table_name)

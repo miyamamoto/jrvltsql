@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "record_type": "AV",
+  "record_length": 78,
+  "format_sources": [
+    {
+      "artifact": "JV-Data4802.xlsx",
+      "sha256": "6a567f10b601115eca350571f36d27d9d28bd2d3835ea72b5bc057711155d4a7",
+      "sheet": "フォーマット",
+      "rows": "1461-1476"
+    },
+    {
+      "artifact": "JV-Data4901.xlsx",
+      "sha256": "23bafd375f704acbdd696b5032ac1619f17d47e882587d6e7954b610527a8234",
+      "sheet": "フォーマット",
+      "rows": "1461-1476"
+    }
+  ],
+  "fields": [
+    ["RecordSpec", 1, 2],
+    ["DataKubun", 3, 1],
+    ["MakeDate", 4, 8],
+    ["Year", 12, 4],
+    ["MonthDay", 16, 4],
+    ["JyoCD", 20, 2],
+    ["Kaiji", 22, 2],
+    ["Nichiji", 24, 2],
+    ["RaceNum", 26, 2],
+    ["HappyoTime", 28, 8],
+    ["Umaban", 36, 2],
+    ["Bamei", 38, 36],
+    ["JiyuKubun", 74, 3],
+    ["RecordDelimiter", 77, 2]
+  ],
+  "primary_key": [
+    "Year",
+    "MonthDay",
+    "JyoCD",
+    "Kaiji",
+    "Nichiji",
+    "RaceNum",
+    "Umaban"
+  ],
+  "current_data_kubun": ["1", "2"],
+  "historical_data_kubun": {
+    "value": "0",
+    "valid_before_make_date": "2003-07-11",
+    "source": {
+      "artifact": "JV-Data4901.xlsx",
+      "sheet": "変更履歴",
+      "row": 305
+    }
+  },
+  "reason_codes": ["", "000", "001", "002", "003"],
+  "reason_initial_representation_change": {
+    "effective_date": "2021-01-25",
+    "before": "000",
+    "after": "",
+    "source": {
+      "artifact": "JV-Data4901.xlsx",
+      "sheet": "変更履歴",
+      "row": 66
+    }
+  },
+  "current_provider_specs": ["0B14", "0B16"],
+  "snapshot_provider_spec": "0B14"
+}

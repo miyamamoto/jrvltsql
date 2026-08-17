@@ -196,14 +196,14 @@ SCHEMAS = {
             RecordSpec TEXT,
             DataKubun TEXT,
             MakeDate TEXT,
-            Year INTEGER,
-            MonthDay INTEGER,
-            JyoCD TEXT,
-            Kaiji INTEGER,
-            Nichiji INTEGER,
-            RaceNum INTEGER,
+            Year INTEGER NOT NULL,
+            MonthDay INTEGER NOT NULL,
+            JyoCD TEXT NOT NULL,
+            Kaiji INTEGER NOT NULL,
+            Nichiji INTEGER NOT NULL,
+            RaceNum INTEGER NOT NULL,
             HappyoTime TEXT,
-            Umaban INTEGER,
+            Umaban INTEGER NOT NULL,
             Bamei TEXT,
             JiyuKubun TEXT,
             RecordDelimiter TEXT,
@@ -1604,14 +1604,14 @@ SCHEMAS = {
             RecordSpec TEXT,
             DataKubun TEXT,
             MakeDate TEXT,
-            Year INTEGER,
-            MonthDay INTEGER,
-            JyoCD TEXT,
-            Kaiji INTEGER,
-            Nichiji INTEGER,
-            RaceNum INTEGER,
+            Year INTEGER NOT NULL,
+            MonthDay INTEGER NOT NULL,
+            JyoCD TEXT NOT NULL,
+            Kaiji INTEGER NOT NULL,
+            Nichiji INTEGER NOT NULL,
+            RaceNum INTEGER NOT NULL,
             HappyoTime TEXT,
-            Umaban INTEGER,
+            Umaban INTEGER NOT NULL,
             Bamei TEXT,
             JiyuKubun TEXT,
             RecordDelimiter TEXT,
@@ -2739,6 +2739,7 @@ SCHEMAS.update(
 STRICT_RECREATE_TABLES = frozenset({"NL_CK_CHAKU", "NL_CK_RUIKEI"})
 STRICT_SE_STORAGE_TABLES = frozenset({"NL_SE", "RT_SE"})
 STRICT_WE_STORAGE_TABLES = frozenset({"NL_WE", "RT_WE"})
+STRICT_AV_STORAGE_TABLES = frozenset({"NL_AV", "RT_AV"})
 STRICT_JC_STORAGE_TABLES = frozenset({"NL_JC", "RT_JC"})
 
 
@@ -2747,6 +2748,7 @@ def _preflight_existing_strict_storage(db: BaseDatabase) -> None:
 
     from src.database.migration import _migration_targets
     from src.importer.importer import (
+        verify_av_storage_schema,
         verify_jc_storage_schema,
         verify_se_storage_schema,
         verify_we_storage_schema,
@@ -2764,6 +2766,9 @@ def _preflight_existing_strict_storage(db: BaseDatabase) -> None:
         for table_name in STRICT_WE_STORAGE_TABLES:
             if target.table_exists_strict(table_name):
                 verify_we_storage_schema(target, table_name)
+        for table_name in STRICT_AV_STORAGE_TABLES:
+            if target.table_exists_strict(table_name):
+                verify_av_storage_schema(target, table_name)
         for table_name in STRICT_JC_STORAGE_TABLES:
             if target.table_exists_strict(table_name):
                 verify_jc_storage_schema(target, table_name)
@@ -2842,6 +2847,10 @@ class SchemaManager:
                 from src.importer.importer import verify_we_storage_schema
 
                 verify_we_storage_schema(self.db, table_name)
+            if table_name in STRICT_AV_STORAGE_TABLES:
+                from src.importer.importer import verify_av_storage_schema
+
+                verify_av_storage_schema(self.db, table_name)
             if table_name in STRICT_JC_STORAGE_TABLES:
                 from src.importer.importer import verify_jc_storage_schema
 
@@ -2892,6 +2901,10 @@ class SchemaManager:
                     from src.importer.importer import verify_we_storage_schema
 
                     verify_we_storage_schema(self.db, table_name)
+                if table_name in STRICT_AV_STORAGE_TABLES:
+                    from src.importer.importer import verify_av_storage_schema
+
+                    verify_av_storage_schema(self.db, table_name)
                 if table_name in STRICT_JC_STORAGE_TABLES:
                     from src.importer.importer import verify_jc_storage_schema
 
@@ -3245,6 +3258,10 @@ def create_all_tables(db: BaseDatabase) -> None:
                 from src.importer.importer import verify_we_storage_schema
 
                 verify_we_storage_schema(db, table_name)
+            if table_name in STRICT_AV_STORAGE_TABLES:
+                from src.importer.importer import verify_av_storage_schema
+
+                verify_av_storage_schema(db, table_name)
             if table_name in STRICT_JC_STORAGE_TABLES:
                 from src.importer.importer import verify_jc_storage_schema
 

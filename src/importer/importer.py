@@ -466,6 +466,27 @@ _WE_LIVE_BODY_COLUMNS = {
     "RT_WE": _WE_NATIVE_LIVE_BODY_COLUMNS,
     "TENKO_BABA": _WE_STANDARD_LIVE_BODY_COLUMNS,
 }
+_AV_STORAGE_TABLES = frozenset({"NL_AV", "RT_AV", "TORIKESI_JYOGAI"})
+_AV_KEY_COLUMNS = (
+    "Year",
+    "MonthDay",
+    "JyoCD",
+    "Kaiji",
+    "Nichiji",
+    "RaceNum",
+    "Umaban",
+)
+_AV_LOSSLESS_TEXT_WIDTHS = {
+    table_name: {
+        "RecordSpec": 2,
+        "DataKubun": 1,
+        "JyoCD": 2,
+        "HappyoTime": 8,
+        "Bamei": 36,
+        "JiyuKubun": 3,
+    }
+    for table_name in _AV_STORAGE_TABLES
+}
 _JC_STORAGE_TABLES = frozenset({"NL_JC", "RT_JC", "KISYU_CHANGE"})
 _JC_KEY_COLUMNS = (
     "Year",
@@ -522,6 +543,7 @@ _STRICT_NONADDITIVE_STANDARD_TABLES = frozenset(
         "KEITO",
         "JOGAIBA",
         "KISYU_CHANGE",
+        "TORIKESI_JYOGAI",
         "TENKO_BABA",
         "WOOD",
         _WF_STANDARD_HEAD_TABLE,
@@ -530,6 +552,7 @@ _STRICT_NONADDITIVE_STANDARD_TABLES = frozenset(
 _LEGACY_STANDARD_PREFLIGHT_NATIVE_TABLES = (
     "NL_BT",
     "NL_JG",
+    "NL_AV",
     "NL_JC",
     "NL_SK",
     "NL_BR",
@@ -981,6 +1004,127 @@ def verify_we_storage_schema(database: BaseDatabase, table_name: str) -> bool:
     _verify_we_key_storage_types(database, table_name)
     _verify_we_key_not_null_constraints(database, table_name)
     _verify_replacement_key_constraints(database, table_name, "WE storage")
+    return True
+
+
+def _verify_av_key_storage_types(database: BaseDatabase, table_name: str) -> None:
+    """Reject affinities that can coerce or split one AV identity."""
+
+    from src.database.migration import (
+        _get_existing_column_types,
+        _is_lossless_text_type,
+        _migration_targets,
+    )
+
+    targets = _migration_targets(database)
+    if targets != (database,):
+        for target in targets:
+            _verify_av_key_storage_types(target, table_name)
+        return
+
+    actual_types = _get_existing_column_types(database, table_name)
+    integral = {
+        "smallint",
+        "int2",
+        "integer",
+        "int",
+        "int4",
+        "bigint",
+        "int8",
+    }
+    problems: list[str] = []
+    for column in ("Year", "MonthDay", "Kaiji", "Nichiji", "RaceNum", "Umaban"):
+        actual = actual_types.get(column.lower(), "")
+        if re.sub(r"\s+", " ", actual.strip().lower()) not in integral:
+            problems.append(f"{column} existing={actual or '<unknown>'} expected=integral")
+    actual_jyo = actual_types.get("jyocd", "")
+    if not actual_jyo or not _is_lossless_text_type(actual_jyo):
+        problems.append(f"JyoCD existing={actual_jyo or '<unknown>'} expected=text")
+    if problems:
+        raise SchemaMigrationError(f"AV key type mismatch for {table_name}: {', '.join(problems)}")
+
+
+def _verify_av_key_not_null_constraints(database: BaseDatabase, table_name: str) -> None:
+    """Require every component of the AV identity to reject NULL."""
+
+    from src.database.migration import _migration_targets
+
+    targets = _migration_targets(database)
+    if targets != (database,):
+        for target in targets:
+            _verify_av_key_not_null_constraints(target, table_name)
+        return
+
+    db_type = database.get_db_type()
+    if db_type == "sqlite":
+        rows = database.fetch_all(f'PRAGMA table_info("{table_name}")')
+        not_null = {str(row.get("name") or "").lower(): bool(row.get("notnull")) for row in rows}
+    elif db_type == "postgresql":
+        rows = database.fetch_all(
+            "SELECT column_name, is_nullable FROM information_schema.columns "
+            "WHERE table_schema = current_schema() AND table_name = ?",
+            (table_name.lower(),),
+        )
+        not_null = {
+            str(row.get("column_name") or "").lower(): str(row.get("is_nullable") or "").upper()
+            == "NO"
+            for row in rows
+        }
+    else:
+        raise SchemaMigrationError(
+            f"AV key nullability cannot be verified for database type {db_type!r}"
+        )
+    missing = [column for column in _AV_KEY_COLUMNS if not not_null.get(column.lower(), False)]
+    if missing:
+        raise SchemaMigrationError(
+            f"AV storage {table_name} key columns must be NOT NULL: {missing}"
+        )
+
+
+def verify_av_storage_schema(database: BaseDatabase, table_name: str) -> bool:
+    """Fail closed unless AV storage preserves the official seven-part key."""
+
+    if table_name not in _AV_STORAGE_TABLES:
+        return False
+    from src.database.migration import verify_table_schema
+    from src.database.schema import SCHEMAS
+    from src.database.schema_jravan import JRAVAN_SCHEMAS
+
+    schema_sql = SCHEMAS.get(table_name) or JRAVAN_SCHEMAS.get(table_name)
+    if schema_sql is None:
+        raise SchemaMigrationError(f"AV storage schema is undefined: {table_name}")
+    verify_table_schema(database, table_name, schema_sql)
+    _verify_strict_storage_column_contract(
+        database,
+        table_name,
+        schema_sql,
+        allow_missing_columns=False,
+        storage_label="AV",
+        lossless_text_widths=_AV_LOSSLESS_TEXT_WIDTHS[table_name],
+    )
+    _verify_av_key_storage_types(database, table_name)
+    _verify_av_key_not_null_constraints(database, table_name)
+    _verify_replacement_key_constraints(database, table_name, "AV storage")
+    return True
+
+
+def validate_av_record(record: dict, table_name: str | None = None) -> bool:
+    """Validate one caller-built AV row before schema or row mutation."""
+
+    if table_name is not None and table_name not in _AV_STORAGE_TABLES:
+        return False
+    if _record_type_from_record(record) != "AV":
+        if table_name is None:
+            return False
+        raise SchemaMigrationError(f"{table_name} received a non-AV record")
+
+    from src.parser.av_parser import AVParser
+
+    try:
+        data_kubun = resolve_record_data_kubun(record)
+        AVParser.validate_current_fields(record, data_kubun=data_kubun)
+    except ValueError as error:
+        raise SchemaMigrationError(str(error)) from error
     return True
 
 
@@ -2134,6 +2278,8 @@ def preflight_standard_schema_migrations(
             )
         if standard_name == "TENKO_BABA":
             verify_we_storage_schema(database, standard_name)
+        if standard_name == "TORIKESI_JYOGAI":
+            verify_av_storage_schema(database, standard_name)
         if standard_name == "KISYU_CHANGE":
             verify_jc_storage_schema(database, standard_name)
         if standard_name in {"UMA", "COURSE"}:
@@ -2641,6 +2787,7 @@ _OFFICIAL_ERASE_KEY_COLUMNS = {
     "RA": _MINING_RACE_KEY_COLUMNS,
     "SE": _SE_KEY_COLUMNS,
     "WE": _WE_KEY_COLUMNS,
+    "AV": _AV_KEY_COLUMNS,
     "JC": _JC_KEY_COLUMNS,
     "HR": _MINING_RACE_KEY_COLUMNS,
     # One physical H1/H6/O1-O6 record expands into multiple child rows.
@@ -2663,6 +2810,7 @@ _OFFICIAL_ERASE_STORAGE_TABLES = {
     "RA": {"NL_RA", "RT_RA", "RACE"},
     "SE": {"NL_SE", "RT_SE", "UMA_RACE"},
     "WE": set(_WE_STORAGE_TABLES),
+    "AV": set(_AV_STORAGE_TABLES),
     "JC": set(_JC_STORAGE_TABLES),
     "HR": {"NL_HR", "RT_HR", "HARAI"},
     "H1": {"NL_H1", "RT_H1", "HYO_TANPUKU"},
@@ -2761,6 +2909,8 @@ def validate_import_record_header(record: dict) -> tuple[str, str]:
             SEParser.validate_current_fields(record)
         if record_type == "WE":
             validate_we_record(record)
+        if record_type == "AV":
+            validate_av_record(record)
         if record_type == "JC":
             validate_jc_record(record)
         return record_type, data_kubun
@@ -5344,6 +5494,7 @@ class DataImporter:
         self._verified_bt_tables: set[str] = set()
         self._verified_se_tables: set[str] = set()
         self._verified_we_tables: set[str] = set()
+        self._verified_av_tables: set[str] = set()
         self._verified_jc_tables: set[str] = set()
         self._verified_cs_tables: set[str] = set()
         self._verified_jg_tables: set[str] = set()
@@ -5594,6 +5745,7 @@ class DataImporter:
                 if first_table_name is not None:
                     validate_se_record(first_record, first_table_name)
                     validate_we_record(first_record, first_table_name)
+                    validate_av_record(first_record, first_table_name)
                     validate_jc_record(first_record, first_table_name)
                 records = chain((first_record,), records)
         except Exception:
@@ -5670,6 +5822,10 @@ class DataImporter:
                     if verify_we_storage_schema(self.database, table_name):
                         self._verified_we_tables.add(table_name)
                 validate_we_record(record, table_name)
+                if table_name not in self._verified_av_tables:
+                    if verify_av_storage_schema(self.database, table_name):
+                        self._verified_av_tables.add(table_name)
+                validate_av_record(record, table_name)
                 if table_name not in self._verified_jc_tables:
                     if verify_jc_storage_schema(self.database, table_name):
                         self._verified_jc_tables.add(table_name)
@@ -6314,6 +6470,7 @@ class DataImporter:
             if table_name is not None:
                 validate_se_record(record, table_name)
                 validate_we_record(record, table_name)
+                validate_av_record(record, table_name)
                 validate_jc_record(record, table_name)
         except SchemaMigrationError:
             if not auto_commit:
@@ -6384,6 +6541,10 @@ class DataImporter:
                 if verify_we_storage_schema(self.database, table_name):
                     self._verified_we_tables.add(table_name)
             validate_we_record(record, table_name)
+            if table_name not in self._verified_av_tables:
+                if verify_av_storage_schema(self.database, table_name):
+                    self._verified_av_tables.add(table_name)
+            validate_av_record(record, table_name)
             if table_name not in self._verified_jc_tables:
                 if verify_jc_storage_schema(self.database, table_name):
                     self._verified_jc_tables.add(table_name)

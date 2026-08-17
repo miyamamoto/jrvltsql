@@ -278,6 +278,28 @@ losslessでないキー型、キーのNULL許容、追加の`UNIQUE`/exclusion�
 `0B14`の新しい応答が前回の日付snapshotを置換する既存の一括更新契約は維持し、
 1応答内では上記7項目キーで各発表を保持します。
 
+`AV`（出走取消・競走除外）はJV-Data 4.8.0.2 / 4.9.0.1とSDK 5.0.0で
+同一の78バイト配置です。公式キーは`Year`, `MonthDay`, `JyoCD`, `Kaiji`,
+`Nichiji`, `RaceNum`, `Umaban`の7項目であり、`HappyoTime`は発表情報として
+保存しますがキーではありません。同一馬の後続発表は同じ行を更新します。
+現行のデータ区分は`1=出走取消`と`2=競走除外`です。2003-07-11より前の
+`MakeDate`でだけ旧区分`0`を受け付け、7項目が完全に一致する行を物理削除します。
+旧削除レコードでは発表時刻・馬名・事由の本文を解釈しません。
+
+事由区分はblankと`000`〜`003`を受け付けます。2021-01-25の仕様変更は
+初期値表記を`000`からspaceへ変えた同長変更であり、履歴データのprovenanceが
+不明な場合にどちらかを過剰拒否しません。nativeの`NL_AV`/`RT_AV`と標準名
+モードの`TORIKESI_JYOGAI`は同じ順序の`NOT NULL`主キーを使います。旧nullable
+key、主キーなし・誤順序、losslessでない型や容量、追加の`UNIQUE`/exclusion、
+PostgreSQLの遅延主キーを持つ既存表はmutation前に停止します。自動的なPK変更は
+行わないため、DBをバックアップし、対象表だけを現行DDLで再作成して保持範囲内を
+再取込してください。
+
+`0B14`は開催日単位の完全な現行snapshotです。現行の取消が撤回された場合は
+status `0`が届くのではなく、次のsnapshotからAV行が消えるため、同一transactionで
+その日の`RT_AV`を置換します。個別イベントは`0B16`/`JVWatchEvent`で受けられる
+という公式サポートの[説明](https://developer.jra-van.jp/t/topic/195)があります。
+
 `JC`（騎手変更）はJV-Data 4.8.0.2 / 4.9.0.1とSDK 5.0.0で同一の
 161バイト配置です。公式キーは`Year`, `MonthDay`, `JyoCD`, `Kaiji`,
 `Nichiji`, `RaceNum`, `HappyoTime`, `Umaban`の8項目です。同一馬について
