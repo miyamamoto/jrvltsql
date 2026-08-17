@@ -203,6 +203,8 @@ def test_hr_parser_rejects_malformed_official_keys(changes: dict[str, str]) -> N
     (
         ("FuseirituFlag1", "9"),
         ("FuseirituFlag6", "1"),
+        ("TokubaraiFlag6", "1"),
+        ("HenkanFlag6", "1"),
         ("HenkanUma28", "X"),
         ("TanPay", "notnumber"),
         ("WideKumi7", "123"),
@@ -220,6 +222,24 @@ def test_hr_caller_body_rejects_non_official_values_but_allows_blank_popularity(
     invalid[field] = value
     with pytest.raises(SchemaMigrationError):
         validate_import_record_header(invalid)
+
+
+@pytest.mark.parametrize(
+    "field,offset",
+    (
+        ("HenkanUma6", 63),
+        ("HenkanWaku6", 91),
+        ("HenkanDoWaku6", 99),
+    ),
+)
+def test_hr_refund_target_six_is_a_valid_official_flag(field: str, offset: int) -> None:
+    raw = bytearray(build_hr_record())
+    raw[offset] = ord("1")
+
+    parsed = HRParser().parse(bytes(raw))
+    assert parsed is not None
+    assert parsed[field] == "1"
+    assert validate_import_record_header(parsed) == ("HR", "1")
 
 
 def test_hr_status_zero_rejects_a_coercible_wrong_key_before_delete() -> None:
@@ -364,6 +384,14 @@ def test_hr_storage_preserves_payouts_provider_order_and_exact_erase(
             parsed_hr(data_kubun="2"),
             parsed_hr(data_kubun="1", race_num="12"),
         ]
+        for record in records[:2]:
+            record.update(
+                {
+                    "HenkanUma6": "1",
+                    "HenkanWaku6": "1",
+                    "HenkanDoWaku6": "1",
+                }
+            )
         result = import_records(
             database,
             entrypoint,
@@ -379,7 +407,8 @@ def test_hr_storage_preserves_payouts_provider_order_and_exact_erase(
                 "SELECT DataKubun, PayFukusyoPay2 AS FukuPay2, "
                 "PayWidePay2 AS WidePay2, PayReserved1Kumi3 AS Yobi7, "
                 "PayReserved1Pay3 AS Yobi8, PayReserved1Ninki3 AS Yobi9, "
-                "PaySanrentanPay1 AS SanrentanPay FROM HARAI WHERE RaceNum = 11"
+                "PaySanrentanPay1 AS SanrentanPay, HenkanUma6, HenkanWaku6, "
+                "HenkanDoWaku6 FROM HARAI WHERE RaceNum = 11"
             )
             expected = {
                 "DataKubun": "2",
@@ -389,11 +418,15 @@ def test_hr_storage_preserves_payouts_provider_order_and_exact_erase(
                 "Yobi8": "000000333",
                 "Yobi9": "333",
                 "SanrentanPay": "000015800",
+                "HenkanUma6": "1",
+                "HenkanWaku6": "1",
+                "HenkanDoWaku6": "1",
             }
         else:
             row = database.fetch_one(
                 "SELECT DataKubun, FukuPay2, WidePay2, Yobi7, Yobi8, Yobi9, "
-                "SanrentanPay FROM NL_HR WHERE RaceNum = 11"
+                "SanrentanPay, HenkanUma6, HenkanWaku6, HenkanDoWaku6 "
+                "FROM NL_HR WHERE RaceNum = 11"
             )
             expected = {
                 "DataKubun": "2",
@@ -403,6 +436,9 @@ def test_hr_storage_preserves_payouts_provider_order_and_exact_erase(
                 "Yobi8": "000000333",
                 "Yobi9": "333",
                 "SanrentanPay": 15800,
+                "HenkanUma6": "1",
+                "HenkanWaku6": "1",
+                "HenkanDoWaku6": "1",
             }
         assert row == expected
 
@@ -613,6 +649,13 @@ def test_hr_postgresql_provider_order_readback_and_statistics(
         parsed_hr(data_kubun="9"),
         parsed_hr(data_kubun="1", race_num="12"),
     ]
+    records[-1].update(
+        {
+            "HenkanUma6": "1",
+            "HenkanWaku6": "1",
+            "HenkanDoWaku6": "1",
+        }
+    )
     result = import_records(
         postgresql_db,
         entrypoint,
@@ -641,6 +684,15 @@ def test_hr_postgresql_provider_order_readback_and_statistics(
     assert cancelled["FukuPay2"] is None
     assert cancelled["SanrentanPay"] is None
     assert len(cancelled["OpaqueBody"]) == 1380
+    assert postgresql_db.fetch_one(
+        'SELECT HenkanUma6 AS "HenkanUma6", HenkanWaku6 AS "HenkanWaku6", '
+        'HenkanDoWaku6 AS "HenkanDoWaku6" '
+        f"FROM {table_name} WHERE RaceNum = 12"
+    ) == {
+        "HenkanUma6": "1",
+        "HenkanWaku6": "1",
+        "HenkanDoWaku6": "1",
+    }
 
 
 def test_hr_postgresql_realtime_status_nine_clears_prior_payouts(

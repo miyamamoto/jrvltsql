@@ -243,10 +243,10 @@
 ### Aggregated repair and provisional verification
 
 - Native `Yobi1..9` are now text; caller horse/combination identifiers require
-  exact-width ASCII strings; reserved flag element 6 requires `0`; reserved
-  subfields remain CP932 text without invented numeric meaning. Status 0
-  returns immediately after status/key validation and ignores every body and
-  audit alias.
+  exact-width ASCII strings; element 6 of the three ticket flag arrays requires
+  `0`; reserved subfields remain CP932 text without invented numeric meaning.
+  Status 0 returns immediately after status/key validation and ignores every
+  body and audit alias.
 - Existing native HR tables no longer allow any missing column during strict
   preflight. PostgreSQL nullability uses the relation selected by
   `to_regclass`, matching the key/type/constraint verifiers across the full
@@ -284,3 +284,29 @@
 - This exact repair commit still requires one bounded carry-forward review of
   the reviewed findings, followed by final PR-head CI/thread/clean gates. No
   release or provider-acquisition claim is made by this iteration.
+
+## Bounded carry-forward finding
+
+- Three independent Codex reviewers examined exact candidate
+  `c5385c5ada7b27dc1372cc762034c2c62129a554` and agreed on one new P1
+  over-rejection. The repair applied the official reserved-six rule to all six
+  flag arrays, although JV-Data4901/4802 rows 234, 243, and 252 reserve only
+  `FuseirituFlag6`, `TokubaraiFlag6`, and `HenkanFlag6`. The sixth elements of
+  `HenkanUma`, `HenkanWaku`, and `HenkanDoWaku` are ordinary refund targets and
+  may be `1`.
+- Red-first evidence on unchanged candidate `c5385c5...`: a compact raw/parser
+  plus caller-validator regression for `HenkanUma6`, `HenkanWaku6`, and
+  `HenkanDoWaku6` returned `3 failed`; each parser call returned `None` after
+  logging `reserved and must be 0`.
+- The bounded repair limits the reserved-six rule to the three official ticket
+  flag arrays, retains negative coverage for all three reserved fields, adds
+  positive raw/caller coverage for all three refund-target arrays, and narrows
+  the public documentation wording accordingly. Exact green verification and
+  a final bounded review remain required before this PR can leave draft state.
+- After the repair, the HR SQLite selection passed `54` tests and skipped `25`.
+  Its existing native/standard × DataImporter/OptimizedDataImporter/single ×
+  owned/caller transaction matrix now writes and reads back all three valid
+  sixth refund-target flags as `1`. A fresh disposable PostgreSQL 16 instance
+  ran the same affected selection with PostgreSQL integration enabled and
+  passed `79` tests, including native and standard durable readback of those
+  flags. The exact-name container was then stopped and removed.

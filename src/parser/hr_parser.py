@@ -219,7 +219,11 @@ class HRParser:
                 field_name = f"{prefix}{index}"
                 value = record.get(field_name)
                 cls._require_bit(field_name, value)
-                if index == 6 and value not in ("0", 0):
+                if (
+                    prefix in {"FuseirituFlag", "TokubaraiFlag", "HenkanFlag"}
+                    and index == 6
+                    and value not in ("0", 0)
+                ):
                     raise ValueError(f"HR {field_name} is reserved and must be 0")
 
         for (
