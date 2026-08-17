@@ -260,3 +260,27 @@
   passed, and strict MkDocs passed. These runs precede the repair commit and
   are provisional; exact clean-SHA verification and package gates remain
   required before ready/merge.
+
+## Exact repair candidate verification
+
+- Aggregated repair commit:
+  `9e50098c966a9480d16b03ecd922efb1f5a660c9`. A fresh fetch confirmed
+  `origin/master` remained
+  `c748da1b0ff9d3c39a1ab455112b9561b6343f39`; the repair candidate worktree
+  was clean and `git diff --check HEAD^ HEAD` passed.
+- Exact-SHA Python 3.12 full suite: `3207 passed, 279 skipped, 20 subtests
+  passed`. Exact-SHA fresh PostgreSQL 16 HR/storage/migration/E2E selection:
+  `73 passed`. The disposable PostgreSQL container was stopped and removed
+  after the run.
+- Exact-SHA workflow and documentation gates: fatal flake8
+  `E9,F63,F7,F82 = 0`, `scripts/validate_test_gate.py = PASS`,
+  `uv lock --check = PASS`, and strict MkDocs build = PASS.
+- A fresh `git archive` of the exact repair commit was built through isolated
+  PEP 517 into wheel and sdist. The distribution-content gate and extracted-
+  wheel init/SQLite bootstrap smoke both passed. The wheel contained `100`
+  members and the sdist `121`; each contained zero `specs/` entries and zero
+  removed `crawler_audit_*` documents. Temporary build and documentation
+  directories were deleted after verification.
+- This exact repair commit still requires one bounded carry-forward review of
+  the reviewed findings, followed by final PR-head CI/thread/clean gates. No
+  release or provider-acquisition claim is made by this iteration.
