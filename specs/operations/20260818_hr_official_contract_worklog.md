@@ -182,7 +182,18 @@
   and extracted-wheel SQLite init smoke. The wheel had `100` members and the
   sdist `121`; both contained zero `specs/` entries and zero removed
   `crawler_audit_*` documents. Strict MkDocs build also passed.
-- This is still an uncommitted working candidate. Actual provider acquisition
-  is intentionally not credited to it; the cumulative release candidate must
+- Actual provider acquisition is intentionally not credited to this HR
+  candidate; the cumulative release candidate must
   repeat the pinned-SHA fresh-download, parse, EOF/close, and durable
   SQLite/PostgreSQL readback gate before release.
+
+## Published candidate
+
+- Initial implementation commit:
+  `d5db5de839b40fb9d8b9867d729e615913473b28`.
+- Draft PR: `miyamamoto/jrvltsql#211`, targeting `master` from
+  `agent/hr-official-contract-20260818`.
+- The branch was pushed only after confirming `origin/master` remained the
+  recorded base, the worktree was clean, and the local test/package evidence
+  above was complete. Independent Codex review is the next gate; do not mark
+  the PR ready or merge before its findings are aggregated and resolved.
