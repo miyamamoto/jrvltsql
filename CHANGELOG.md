@@ -39,9 +39,11 @@
 
 ### Fixed
 
-- MCP向け`TABLE_METADATA`を全74表の実DDLへ結び付け、列名・型・NULL可否・
-  主キー・索引対象が実在する物理列と一致するよう修正。SQLiteは再適用時に旧版の
-  表示専用疑似列を除去し、PostgreSQLは全物理列へ`COMMENT ON COLUMN`を適用できる
+- MCP向け`TABLE_METADATA`をnative 80表とJRA-VAN標準54表の全134実DDLへ
+  結び付け、列名・型・論理NULL可否・主キー・索引対象が実在する物理列と一致する
+  よう修正。適用前に各backendの実catalogを照合し、SQLiteは旧版の表示専用疑似列を
+  除去、PostgreSQLは物理列へcommentを適用、Dualは各backend固有の構文で処理する。
+  MCP exportは破壊的な物理metadata契約を明示するversion 2.0.0へ更新
 - JV-Link COM class 未登録時の診断を、公式SDKが提供する同じbit数のJV-Linkと、
   jrvltsqlでリリース検証済みの32-bit経路を区別する案内へ修正
 - `NL_SK` の公開メタデータに欠けていた曽祖父母8頭の繁殖登録番号を追加し、

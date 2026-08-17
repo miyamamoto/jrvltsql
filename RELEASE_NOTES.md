@@ -43,9 +43,15 @@ Public API replacements:
 - distribution and bootstrap gates now inspect built artifacts, isolate wheel
   imports, and verify a base-dependency SQLite installation without writing
   runtime state into the package tree
-- MCP schema metadata now names every executable column and primary-key field
-  across all 74 published tables; SQLite drops stale display-only metadata on
-  reapplication and PostgreSQL comments target actual physical identifiers
+- MCP schema metadata now covers all 134 executable storage tables: 80 native
+  tables and 54 JRA-VAN-standard tables. Application first verifies each live
+  backend's exact column set, normalized type family, logical nullability, and
+  ordered primary key; SQLite then replaces stale display-only rows,
+  PostgreSQL comments physical identifiers, and Dual applies backend-specific
+  operations independently. The MCP metadata export is version 2.0.0:
+  `nullable` describes the portable logical schema (not SQLite's raw PRAGMA
+  enforcement bit), while `indexes` lists distinct physical columns used by
+  configured secondary indexes rather than complete index definitions
 
 The record-by-record support and storage details are maintained in
 [`docs/data_support.md`](docs/data_support.md).

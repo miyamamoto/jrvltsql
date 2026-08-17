@@ -241,6 +241,18 @@ def get_all_tables() -> list[str]:
     return list(SCHEMAS.keys())
 
 
+def get_all_executable_tables() -> list[str]:
+    """Return every native and JRA-VAN-standard executable table name.
+
+    ``SCHEMAS`` and ``JRAVAN_SCHEMAS`` are intentionally separate storage
+    layouts.  Metadata and other catalog-facing integrations must cover their
+    complete, disjoint union rather than assuming that native tables are the
+    only executable surface.
+    """
+
+    return [*SCHEMAS.keys(), *JRAVAN_SCHEMAS.keys()]
+
+
 if __name__ == "__main__":
     # Test code demonstrating functionality
     print("=" * 60)

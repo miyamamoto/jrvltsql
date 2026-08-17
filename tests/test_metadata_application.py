@@ -21,21 +21,47 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import pytest
+
 from scripts.setup_pg_test_db import postgresql_test_config
+from src.database.dual_handler import DualDatabase
 from src.database.indexes import INDEXES
-from src.database.sqlite_handler import SQLiteDatabase
 from src.database.postgresql_handler import PostgreSQLDatabase
 from src.database.schema import SCHEMAS, SchemaManager
-from src.database.schema_metadata import TABLE_METADATA
+from src.database.schema_jravan import JRAVAN_SCHEMAS
+from src.database.schema_metadata import (
+    TABLE_METADATA,
+    _get_executable_index_columns,
+    export_schema_for_mcp,
+)
 from src.database.schema_types import (
     get_table_column_nullability,
     get_table_column_types,
     get_table_primary_key_columns,
 )
+from src.database.sqlite_handler import SQLiteDatabase
 
 RUN_POSTGRESQL_INTEGRATION = (
     os.environ.get("JLTSQL_RUN_POSTGRESQL_INTEGRATION") == "1"
 )
+
+
+def _catalog_type_family(declared_type):
+    """Independent test oracle for backend catalog type families."""
+
+    normalized = re.sub(r"\s+", " ", str(declared_type or "").strip().upper())
+    token = normalized.split("(", 1)[0].split(" ", 1)[0]
+    if token in {"CHAR", "CHARACTER", "CLOB", "NCHAR", "NVARCHAR", "TEXT", "VARCHAR"}:
+        return "TEXT"
+    if token in {"DATE", "DATETIME", "TIME", "TIMESTAMP"}:
+        return "TEXT"
+    if token in {"BIGINT", "INT8"}:
+        return "BIGINT"
+    if token in {"INT", "INT2", "INT4", "INTEGER", "SMALLINT"}:
+        return "INTEGER"
+    if token in {"DECIMAL", "DOUBLE", "FLOAT", "NUMERIC", "REAL"}:
+        return "REAL"
+    return None
 
 
 def test_metadata_primary_key_columns_are_described():
@@ -49,6 +75,9 @@ def test_metadata_primary_key_columns_are_described():
 
 def test_all_metadata_matches_the_executable_schema_exactly():
     """MCP metadata must target every real SQL column and primary-key field."""
+
+    executable_tables = set(SCHEMAS) | set(JRAVAN_SCHEMAS)
+    assert set(TABLE_METADATA) == executable_tables
 
     mismatches = {}
     for table_name, metadata in TABLE_METADATA.items():
@@ -64,9 +93,14 @@ def test_all_metadata_matches_the_executable_schema_exactly():
         expected_key = get_table_primary_key_columns(table_name)
         expected_index_columns = []
         for statement in INDEXES.get(table_name, []):
-            match = re.search(r'\bON\s+[^\s(]+\s*\(([^)]*)\)', statement, re.I)
+            match = re.search(
+                r'\bON\s+(?P<table>[^\s(]+)\s*\((?P<columns>[^)]*)\)',
+                statement,
+                re.I,
+            )
             assert match is not None, statement
-            for raw_column in match.group(1).split(','):
+            assert match.group("table").strip('`"[]').lower() == table_name.lower()
+            for raw_column in match.group("columns").split(','):
                 column_name = raw_column.strip().strip('`"[]')
                 if column_name not in expected_index_columns:
                     expected_index_columns.append(column_name)
@@ -91,6 +125,29 @@ def test_all_metadata_matches_the_executable_schema_exactly():
     assert mismatches == {}
 
 
+def test_metadata_index_binding_rejects_a_definition_for_another_table(monkeypatch):
+    """An index with a shared column name must still target its owning table."""
+
+    monkeypatch.setitem(
+        INDEXES,
+        "NL_RA",
+        ["CREATE INDEX idx_wrong_target ON NL_SE(Year)"],
+    )
+
+    with pytest.raises(ValueError, match="NL_RA.*NL_SE"):
+        _get_executable_index_columns("NL_RA")
+
+
+def test_mcp_export_declares_the_breaking_physical_metadata_contract():
+    exported = export_schema_for_mcp()
+
+    assert exported["version"] == "2.0.0"
+    assert exported["semantics"] == {
+        "nullable": "logical portable schema contract",
+        "indexes": "distinct physical columns used by configured secondary indexes",
+    }
+
+
 def test_ch_metadata_matches_normalized_native_schema():
     """CH MCP metadata must expose both normalized tables exactly as stored."""
 
@@ -111,7 +168,10 @@ def test_ch_postgresql_metadata_targets_the_actual_lowercase_identifiers():
     database.table_exists = lambda _table_name: True
     database.execute = lambda sql, parameters=None: statements.append(sql) or 0
 
-    assert SchemaManager(database).apply_metadata_to_table("NL_CH") is True
+    manager = SchemaManager(database)
+    manager._metadata_schema_matches = lambda *_args: True
+
+    assert manager.apply_metadata_to_table("NL_CH") is True
     assert "COMMENT ON TABLE nl_ch " in statements[0]
     assert any(
         statement.startswith("COMMENT ON COLUMN nl_ch.chokyosicode ")
@@ -280,6 +340,29 @@ class TestSQLiteMetadata(unittest.TestCase):
         )
         self.assertEqual(stale_rows, [])
 
+    def test_sqlite_metadata_rejects_schema_drift_before_mutation(self):
+        self.database.execute("CREATE TABLE NL_RA (RecordSpec TEXT)")
+        self.database.execute(
+            """CREATE TABLE _metadata (
+                   table_name TEXT NOT NULL,
+                   column_name TEXT NOT NULL DEFAULT '',
+                   description TEXT,
+                   metadata_type TEXT NOT NULL DEFAULT 'column',
+                   PRIMARY KEY (table_name, column_name)
+               )"""
+        )
+        self.database.execute(
+            """INSERT INTO _metadata
+               (table_name, column_name, description, metadata_type)
+               VALUES ('NL_RA', 'sentinel', 'keep', 'column')"""
+        )
+
+        self.assertFalse(self.schema_mgr.apply_metadata_to_table("NL_RA"))
+        rows = self.database.fetch_all(
+            "SELECT column_name, description FROM _metadata WHERE table_name = 'NL_RA'"
+        )
+        self.assertEqual(rows, [{"column_name": "sentinel", "description": "keep"}])
+
 
 @unittest.skipUnless(
     RUN_POSTGRESQL_INTEGRATION,
@@ -364,14 +447,150 @@ class TestPostgreSQLMetadata(unittest.TestCase):
         try:
             create_results = self.schema_mgr.create_all_tables()
             self.assertTrue(all(create_results.values()))
-            for table_name in TABLE_METADATA:
+            for schema_sql in JRAVAN_SCHEMAS.values():
+                self.database.execute(schema_sql)
+
+            for table_name in sorted(set(SCHEMAS) | set(JRAVAN_SCHEMAS)):
                 self.assertTrue(
                     self.schema_mgr.apply_metadata_to_table(table_name),
                     f"Should apply executable metadata to {table_name}",
                 )
+                catalog = self.database.fetch_all(
+                    """SELECT a.attname AS name,
+                              format_type(a.atttypid, a.atttypmod) AS type,
+                              a.attnotnull AS not_null
+                       FROM pg_attribute a
+                       WHERE a.attrelid = to_regclass(?)
+                         AND a.attnum > 0
+                         AND NOT a.attisdropped
+                       ORDER BY a.attnum""",
+                    (table_name.lower(),),
+                )
+                metadata_columns = {
+                    column["name"].lower(): column
+                    for column in TABLE_METADATA[table_name]["columns"]
+                }
+                self.assertEqual(
+                    set(metadata_columns),
+                    {row["name"].lower() for row in catalog},
+                )
+                for row in catalog:
+                    column = metadata_columns[row["name"].lower()]
+                    self.assertEqual(
+                        _catalog_type_family(row["type"]),
+                        column["type"],
+                        f"{table_name}.{row['name']} type",
+                    )
+                    self.assertEqual(
+                        not bool(row["not_null"]),
+                        column["nullable"],
+                        f"{table_name}.{row['name']} nullable",
+                    )
+
+                key_rows = self.database.fetch_all(
+                    """SELECT a.attname AS name
+                       FROM pg_index i
+                       JOIN pg_attribute a
+                         ON a.attrelid = i.indrelid
+                        AND a.attnum = ANY(i.indkey)
+                       WHERE i.indrelid = to_regclass(?)
+                         AND i.indisprimary
+                       ORDER BY array_position(i.indkey, a.attnum)""",
+                    (table_name.lower(),),
+                )
+                self.assertEqual(
+                    [row["name"].lower() for row in key_rows],
+                    [
+                        column.lower()
+                        for column in TABLE_METADATA[table_name]["primary_key"]
+                    ],
+                )
+                comment_count = self.database.fetch_one(
+                    """SELECT COUNT(*) AS n
+                       FROM pg_description d
+                       JOIN pg_class c ON c.oid = d.objoid
+                       WHERE c.relname = ? AND d.objsubid > 0""",
+                    (table_name.lower(),),
+                )["n"]
+                self.assertEqual(comment_count, len(catalog))
         finally:
-            for table_name in reversed(SCHEMAS):
+            all_tables = [*SCHEMAS.keys(), *JRAVAN_SCHEMAS.keys()]
+            for table_name in reversed(all_tables):
                 self.database.execute(f"DROP TABLE IF EXISTS {table_name} CASCADE")
+
+    def test_postgresql_metadata_rejects_wrong_type_and_key_before_comments(self):
+        defects = {
+            "unknown-type": SCHEMAS["NL_RA"].replace(
+                "Year INTEGER,", "Year INTERVAL,", 1
+            ),
+            "wrong-nullability": SCHEMAS["NL_RA"].replace(
+                "RecordSpec TEXT,", "RecordSpec TEXT NOT NULL,", 1
+            ),
+            "wrong-key": SCHEMAS["NL_RA"].replace(
+                "PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)",
+                "PRIMARY KEY (Year)",
+            ),
+        }
+        for defect, drifted_schema in defects.items():
+            with self.subTest(defect=defect):
+                self.database.execute("DROP TABLE IF EXISTS NL_RA CASCADE")
+                self.database.execute(drifted_schema)
+                self.database.execute("COMMENT ON TABLE NL_RA IS 'sentinel'")
+
+                self.assertFalse(self.schema_mgr.apply_metadata_to_table("NL_RA"))
+                comment = self.database.fetch_one(
+                    "SELECT obj_description('NL_RA'::regclass) AS description"
+                )["description"]
+                self.assertEqual(comment, "sentinel")
+
+    def test_dual_metadata_uses_each_backend_specific_storage(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            sqlite = SQLiteDatabase({"path": str(Path(temp_dir) / "metadata-dual.db")})
+            sqlite.connect()
+            try:
+                SchemaManager(sqlite).create_table("NL_RA")
+                self.schema_mgr.create_table("NL_RA")
+                dual = DualDatabase(sqlite, self.database)
+
+                self.assertTrue(SchemaManager(dual).apply_metadata_to_table("NL_RA"))
+                dual.commit()
+                sqlite_count = sqlite.fetch_one(
+                    """SELECT COUNT(*) AS n FROM _metadata
+                       WHERE table_name = 'NL_RA' AND metadata_type = 'column'"""
+                )["n"]
+                pg_count = self.database.fetch_one(
+                    """SELECT COUNT(*) AS n
+                       FROM pg_description d
+                       JOIN pg_class c ON c.oid = d.objoid
+                       WHERE c.relname = 'nl_ra' AND d.objsubid > 0"""
+                )["n"]
+                self.assertEqual(
+                    sqlite_count, len(TABLE_METADATA["NL_RA"]["columns"])
+                )
+                self.assertEqual(pg_count, sqlite_count)
+                self.assertTrue(dual.secondary_in_sync)
+
+                sqlite.execute(
+                    """UPDATE _metadata SET description = 'sentinel'
+                       WHERE table_name = 'NL_RA' AND column_name = ''"""
+                )
+                sqlite.commit()
+                self.database.execute("DROP TABLE NL_RA")
+                self.database.execute(
+                    SCHEMAS["NL_RA"].replace(
+                        "Year INTEGER,", "Year TEXT,", 1
+                    )
+                )
+                self.database.commit()
+
+                self.assertFalse(SchemaManager(dual).apply_metadata_to_table("NL_RA"))
+                description = sqlite.fetch_one(
+                    """SELECT description FROM _metadata
+                       WHERE table_name = 'NL_RA' AND column_name = ''"""
+                )["description"]
+                self.assertEqual(description, "sentinel")
+            finally:
+                sqlite.disconnect()
 
 
 class TestMetadataApplicationWorkflow(unittest.TestCase):
@@ -449,10 +668,14 @@ class TestMetadataApplicationWorkflow(unittest.TestCase):
         """Test that all record types in TABLE_METADATA can be applied."""
         create_results = self.schema_mgr.create_all_tables()
         self.assertTrue(all(create_results.values()))
+        for schema_sql in JRAVAN_SCHEMAS.values():
+            self.database.execute(schema_sql)
 
-        for table_name, expected in TABLE_METADATA.items():
+        for table_name in sorted(set(SCHEMAS) | set(JRAVAN_SCHEMAS)):
+            expected = TABLE_METADATA[table_name]
             success = self.schema_mgr.apply_metadata_to_table(table_name)
             self.assertTrue(success, f"Should apply metadata to {table_name}")
+            catalog = self.database.fetch_all(f'PRAGMA table_info("{table_name}")')
             stored = self.database.fetch_all(
                 """SELECT column_name FROM _metadata
                    WHERE table_name = ? AND metadata_type = 'column'""",
@@ -460,7 +683,28 @@ class TestMetadataApplicationWorkflow(unittest.TestCase):
             )
             self.assertEqual(
                 {row["column_name"] for row in stored},
-                {column["name"] for column in expected["columns"]},
+                {row["name"] for row in catalog},
+            )
+            metadata_columns = {
+                column["name"]: column for column in expected["columns"]
+            }
+            self.assertEqual(set(metadata_columns), {row["name"] for row in catalog})
+            for row in catalog:
+                column = metadata_columns[row["name"]]
+                self.assertEqual(
+                    _catalog_type_family(row["type"]),
+                    column["type"],
+                    f"{table_name}.{row['name']} type",
+                )
+                actual_nullable = not bool(row["notnull"]) and not bool(row["pk"])
+                self.assertEqual(
+                    actual_nullable,
+                    column["nullable"],
+                    f"{table_name}.{row['name']} nullable",
+                )
+            self.assertEqual(
+                [row["name"] for row in sorted(catalog, key=lambda row: row["pk"]) if row["pk"]],
+                expected["primary_key"],
             )
 
 

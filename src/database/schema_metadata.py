@@ -1,7 +1,11 @@
 """Schema metadata for MCP (Model Context Protocol) integration.
 
 This module provides detailed descriptions of tables and columns
-for LLM-based applications to understand the database schema.
+for LLM-based applications to understand the database schema. ``nullable``
+describes the portable logical contract, including primary-key non-nullability
+even where SQLite's raw catalog flag differs. ``indexes`` is the distinct
+physical-column union used by configured secondary indexes, not an export of
+complete index definitions.
 """
 
 import re
@@ -10,10 +14,12 @@ from typing import Dict, List, TypedDict
 
 from src.database.indexes import INDEXES
 from src.database.schema_types import (
+    get_all_executable_tables,
     get_table_column_nullability,
     get_table_column_types,
     get_table_primary_key_columns,
 )
+from src.database.table_mappings import JRAVAN_TO_JLTSQL, TABLE_TO_RECORD_TYPE
 
 
 class ColumnMetadata(TypedDict):
@@ -1804,7 +1810,43 @@ for _source_table, _target_table in (
     TABLE_METADATA[_target_table] = _metadata
 
 
-_INDEX_COLUMNS_PATTERN = re.compile(r'\bON\s+[^\s(]+\s*\(([^)]*)\)', re.IGNORECASE)
+def _ensure_all_executable_metadata() -> None:
+    """Create a metadata owner for every executable storage table."""
+
+    for table_name in get_all_executable_tables():
+        if table_name in TABLE_METADATA:
+            continue
+
+        native_owner = JRAVAN_TO_JLTSQL.get(table_name)
+        owner_metadata = TABLE_METADATA.get(native_owner or "")
+        record_type = (
+            owner_metadata["record_type"]
+            if owner_metadata is not None
+            else TABLE_TO_RECORD_TYPE.get(table_name, table_name.removeprefix("NL_"))
+        )
+        if owner_metadata is not None:
+            description = f"{owner_metadata['description']}（JRA-VAN標準）"
+            purpose = (
+                f"{owner_metadata['purpose']}。"
+                "JRA-VAN標準レイアウトの実行可能テーブル"
+            )
+        else:
+            description = f"実行可能テーブル {table_name}"
+            purpose = "jrvltsqlが作成・参照する実行可能な物理テーブル"
+
+        TABLE_METADATA[table_name] = _schema_backed_metadata(
+            table_name,
+            record_type=record_type,
+            description=description,
+            purpose=purpose,
+            indexes=[],
+        )
+
+
+_INDEX_COLUMNS_PATTERN = re.compile(
+    r'\bON\s+(?P<table>[^\s(]+)\s*\((?P<columns>[^)]*)\)',
+    re.IGNORECASE,
+)
 
 
 def _get_executable_index_columns(table_name: str) -> List[str]:
@@ -1816,7 +1858,12 @@ def _get_executable_index_columns(table_name: str) -> List[str]:
         match = _INDEX_COLUMNS_PATTERN.search(statement)
         if match is None:
             raise ValueError(f"Unrecognized index definition for {table_name}")
-        for raw_column in match.group(1).split(','):
+        index_table = match.group("table").strip().strip('`"[]')
+        if index_table.lower() != table_name.lower():
+            raise ValueError(
+                f"Index for {table_name} targets a different table: {index_table}"
+            )
+        for raw_column in match.group("columns").split(','):
             column_name = raw_column.strip().strip('`"[]')
             if column_name not in physical_columns:
                 raise ValueError(
@@ -1862,6 +1909,7 @@ def _bind_all_metadata_to_executable_schemas() -> None:
         metadata["indexes"] = _get_executable_index_columns(table_name)
 
 
+_ensure_all_executable_metadata()
 _bind_all_metadata_to_executable_schemas()
 
 
@@ -1905,7 +1953,11 @@ def export_schema_for_mcp() -> Dict:
         Dictionary containing all table and column metadata
     """
     return {
-        "version": "1.0.0",
+        "version": "2.0.0",
         "description": "JRA-VAN JV-Data database schema",
-        "tables": TABLE_METADATA
+        "semantics": {
+            "nullable": "logical portable schema contract",
+            "indexes": "distinct physical columns used by configured secondary indexes",
+        },
+        "tables": TABLE_METADATA,
     }

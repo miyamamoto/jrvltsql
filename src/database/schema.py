@@ -95,6 +95,7 @@ Benefits with PRIMARY KEY constraints:
 - Optimized query performance on primary key columns
 """
 
+import re
 from typing import Any, Dict, List
 
 from src.database.base import BaseDatabase
@@ -2732,6 +2733,24 @@ SCHEMAS.update(
 STRICT_RECREATE_TABLES = frozenset({"NL_CK_CHAKU", "NL_CK_RUIKEI"})
 
 
+def _normalize_metadata_catalog_type(declared_type: str) -> str | None:
+    """Normalize backend catalog types to the public MCP type families."""
+
+    normalized = re.sub(r"\s+", " ", str(declared_type or "").strip().upper())
+    token = normalized.split("(", 1)[0].split(" ", 1)[0]
+    if token in {"CHAR", "CHARACTER", "CLOB", "NCHAR", "NVARCHAR", "TEXT", "VARCHAR"}:
+        return "TEXT"
+    if token in {"DATE", "DATETIME", "TIME", "TIMESTAMP"}:
+        return "TEXT"
+    if token in {"BIGINT", "INT8"}:
+        return "BIGINT"
+    if token in {"INT", "INT2", "INT4", "INTEGER", "SMALLINT"}:
+        return "INTEGER"
+    if token in {"DECIMAL", "DOUBLE", "FLOAT", "NUMERIC", "REAL"}:
+        return "REAL"
+    return None
+
+
 class SchemaManager:
     """Schema management for JLTSQL database.
 
@@ -2865,6 +2884,166 @@ class SchemaManager:
                 missing.append(table_name)
         return missing
 
+    @staticmethod
+    def _metadata_targets(db: BaseDatabase) -> tuple[BaseDatabase, ...]:
+        """Return each physical backend that must receive metadata."""
+
+        getter = getattr(db, "get_migration_targets", None)
+        if callable(getter):
+            targets = tuple(getter())
+            if targets:
+                return targets
+        return (db,)
+
+    @staticmethod
+    def _metadata_catalog_rows(
+        db: BaseDatabase, table_name: str
+    ) -> list[dict[str, Any]]:
+        """Read ordered column/type/nullability facts from the live catalog."""
+
+        if db.get_db_type() == "sqlite":
+            return db.fetch_all(f'PRAGMA table_info("{table_name}")')
+        if db.get_db_type() == "postgresql":
+            return db.fetch_all(
+                """SELECT a.attname AS name,
+                          format_type(a.atttypid, a.atttypmod) AS type,
+                          a.attnotnull AS not_null
+                   FROM pg_attribute a
+                   WHERE a.attrelid = to_regclass(?)
+                     AND a.attnum > 0
+                     AND NOT a.attisdropped
+                   ORDER BY a.attnum""",
+                (table_name.lower(),),
+            )
+        raise ValueError(f"Unsupported metadata backend: {db.get_db_type()}")
+
+    @classmethod
+    def _metadata_schema_matches(
+        cls, db: BaseDatabase, table_name: str, metadata: dict[str, Any]
+    ) -> bool:
+        """Fail closed unless live columns, types, nullability and key are exact."""
+
+        from src.database.migration import _get_existing_primary_key_columns
+
+        if not db.table_exists_strict(table_name):
+            logger.warning(f"Table {table_name} does not exist on {db.get_db_type()}")
+            return False
+
+        rows = cls._metadata_catalog_rows(db, table_name)
+        expected_columns = {
+            str(column["name"]).lower(): column
+            for column in metadata.get("columns", [])
+        }
+        actual_columns = {str(row["name"]).lower(): row for row in rows}
+        if len(actual_columns) != len(rows) or set(actual_columns) != set(expected_columns):
+            logger.warning(
+                f"Metadata schema mismatch for {table_name} on {db.get_db_type()}: "
+                f"columns actual={sorted(actual_columns)}, "
+                f"expected={sorted(expected_columns)}"
+            )
+            return False
+
+        actual_pk = _get_existing_primary_key_columns(db, table_name)
+        expected_pk = [str(column) for column in metadata.get("primary_key", [])]
+        if [column.lower() for column in actual_pk] != [
+            column.lower() for column in expected_pk
+        ]:
+            logger.warning(
+                f"Metadata schema mismatch for {table_name} on {db.get_db_type()}: "
+                f"primary key actual={actual_pk}, expected={expected_pk}"
+            )
+            return False
+
+        pk_columns = {column.lower() for column in actual_pk}
+        problems = []
+        for column_name, expected in expected_columns.items():
+            actual = actual_columns[column_name]
+            expected_type = _normalize_metadata_catalog_type(expected.get("type", ""))
+            actual_type = _normalize_metadata_catalog_type(actual.get("type", ""))
+            if expected_type is None or actual_type != expected_type:
+                problems.append(
+                    f"{column_name} type actual={actual.get('type')}, "
+                    f"expected={expected.get('type')}"
+                )
+
+            if db.get_db_type() == "sqlite":
+                actual_nullable = not bool(actual.get("notnull")) and (
+                    column_name not in pk_columns
+                )
+            else:
+                actual_nullable = not bool(actual.get("not_null"))
+            if actual_nullable != bool(expected.get("nullable")):
+                problems.append(
+                    f"{column_name} nullable actual={actual_nullable}, "
+                    f"expected={bool(expected.get('nullable'))}"
+                )
+
+        if problems:
+            logger.warning(
+                f"Metadata schema mismatch for {table_name} on {db.get_db_type()}: "
+                + "; ".join(problems)
+            )
+            return False
+        return True
+
+    @staticmethod
+    def _apply_prevalidated_metadata(
+        db: BaseDatabase, table_name: str, metadata: dict[str, Any]
+    ) -> None:
+        """Write metadata using syntax owned by one already-validated backend."""
+
+        db_type = db.get_db_type()
+        if db_type == "sqlite":
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS _metadata (
+                    table_name TEXT NOT NULL,
+                    column_name TEXT NOT NULL DEFAULT '',
+                    description TEXT,
+                    metadata_type TEXT NOT NULL DEFAULT 'column',
+                    PRIMARY KEY (table_name, column_name)
+                )
+            """)
+            db.execute(
+                """INSERT OR REPLACE INTO _metadata
+                   (table_name, column_name, description, metadata_type)
+                   VALUES (?, '', ?, 'table')""",
+                (table_name, metadata.get("description", "")),
+            )
+            db.execute(
+                """DELETE FROM _metadata
+                   WHERE table_name = ? AND metadata_type = 'column'""",
+                (table_name,),
+            )
+            for column in metadata.get("columns", []):
+                column_name = column.get("name", "")
+                if column_name:
+                    db.execute(
+                        """INSERT OR REPLACE INTO _metadata
+                           (table_name, column_name, description, metadata_type)
+                           VALUES (?, ?, ?, 'column')""",
+                        (table_name, column_name, column.get("description", "")),
+                    )
+            return
+
+        if db_type == "postgresql":
+            table_identifier = db._quote_identifier(table_name)
+            table_description = metadata.get("description", "").replace("'", "''")
+            db.execute(
+                f"COMMENT ON TABLE {table_identifier} IS '{table_description}'"
+            )
+            for column in metadata.get("columns", []):
+                column_name = column.get("name", "")
+                if column_name:
+                    column_identifier = db._quote_identifier(column_name)
+                    column_description = column.get("description", "").replace("'", "''")
+                    db.execute(
+                        f"COMMENT ON COLUMN {table_identifier}.{column_identifier} "
+                        f"IS '{column_description}'"
+                    )
+            return
+
+        raise ValueError(f"Unsupported metadata backend: {db_type}")
+
     def apply_metadata_to_table(self, table_name: str) -> bool:
         """Apply metadata to a specific table.
 
@@ -2876,77 +3055,23 @@ class SchemaManager:
         """
         from src.database.schema_metadata import TABLE_METADATA
 
-        # Check if table exists in database
-        if not self.db.table_exists(table_name):
-            logger.warning(f"Table {table_name} does not exist")
-            return False
-
         # Check if metadata is defined for this table
         if table_name not in TABLE_METADATA:
             logger.warning(f"No metadata defined for table {table_name}")
             return False
 
         metadata = TABLE_METADATA[table_name]
-        db_type = self.db.get_db_type()
 
         try:
-            if db_type == "sqlite":
-                # SQLite: Use _metadata table
-                # Create _metadata table if it doesn't exist
-                self.db.execute("""
-                    CREATE TABLE IF NOT EXISTS _metadata (
-                        table_name TEXT NOT NULL,
-                        column_name TEXT NOT NULL DEFAULT '',
-                        description TEXT,
-                        metadata_type TEXT NOT NULL DEFAULT 'column',
-                        PRIMARY KEY (table_name, column_name)
-                    )
-                """)
+            targets = self._metadata_targets(self.db)
+            if not all(
+                self._metadata_schema_matches(target, table_name, metadata)
+                for target in targets
+            ):
+                return False
 
-                # Insert table description (column_name is empty string for table descriptions)
-                self.db.execute(
-                    """INSERT OR REPLACE INTO _metadata (table_name, column_name, description, metadata_type)
-                       VALUES (?, '', ?, 'table')""",
-                    (table_name, metadata.get("description", ""))
-                )
-
-                # Replace the complete executable column set. Older releases
-                # stored display-only labels here, so INSERT OR REPLACE alone
-                # would leave stale, non-queryable metadata behind.
-                self.db.execute(
-                    """DELETE FROM _metadata
-                       WHERE table_name = ? AND metadata_type = 'column'""",
-                    (table_name,),
-                )
-
-                # Insert column descriptions
-                for col in metadata.get("columns", []):
-                    col_name = col.get("name", "")
-                    col_desc = col.get("description", "")
-                    if col_name:
-                        self.db.execute(
-                            """INSERT OR REPLACE INTO _metadata (table_name, column_name, description, metadata_type)
-                               VALUES (?, ?, ?, 'column')""",
-                            (table_name, col_name, col_desc)
-                        )
-
-            elif db_type == "postgresql":
-                # PostgreSQL: Use COMMENT ON
-                table_identifier = self.db._quote_identifier(table_name)
-                # Table comment
-                table_desc = metadata.get("description", "").replace("'", "''")
-                self.db.execute(f"COMMENT ON TABLE {table_identifier} IS '{table_desc}'")
-
-                # Column comments
-                for col in metadata.get("columns", []):
-                    col_name = col.get("name", "")
-                    col_desc = col.get("description", "").replace("'", "''")
-                    if col_name:
-                        column_identifier = self.db._quote_identifier(col_name)
-                        self.db.execute(
-                            f"COMMENT ON COLUMN {table_identifier}.{column_identifier} "
-                            f"IS '{col_desc}'"
-                        )
+            for target in targets:
+                self._apply_prevalidated_metadata(target, table_name, metadata)
 
             logger.info(f"Applied metadata to table {table_name}")
             return True
