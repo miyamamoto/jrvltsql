@@ -2919,9 +2919,11 @@
   green rerun and will be removed after the PostgreSQL gate.
 - `BaseDatabase` now advances a monotonic generation on each explicit
   inactive-to-active transaction transition and exposes it only while that
-  transaction is active. PostgreSQL marks the generation after its backend
-  `BEGIN` succeeds; DualDatabase marks it only after both backends begin and
-  resets active ownership on connect/disconnect. The single-record importer
+  transaction is active. The pg8000 path marks the generation after its
+  explicit backend `BEGIN` succeeds; the psycopg path records caller ownership
+  before its backend transaction starts lazily with the first statement.
+  DualDatabase marks only after both backends begin and resets active ownership
+  on connect/disconnect. The single-record importer
   now stores `(generation, counter baseline)` and replaces a cached baseline
   whenever the active generation changes, while preserving one baseline
   across multiple calls in the same transaction.
