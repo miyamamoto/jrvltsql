@@ -583,13 +583,19 @@ def _se_storage_type_is_compatible(actual: str, expected: str) -> bool:
 
     if actual == expected:
         return True
-    if expected.startswith(("char(", "varchar(")):
+    if expected.startswith("varchar("):
         if actual == "text":
             return True
         expected_width = int(expected.split("(", 1)[1][:-1])
-        if actual.startswith(("char(", "varchar(")):
+        if actual.startswith("varchar("):
             actual_width = int(actual.split("(", 1)[1][:-1])
             return actual_width >= expected_width
+        return False
+    if expected.startswith("char("):
+        # PostgreSQL CHAR pads reads to the declared width. Treat only the
+        # exact fixed-width declaration as equivalent; a wider CHAR or a
+        # VARCHAR/CHAR substitution changes either values or the accepted
+        # domain and is not a lossless schema migration.
         return False
     integral_rank = {"smallint": 1, "integer": 2, "bigint": 3}
     if expected in integral_rank and actual in integral_rank:
@@ -736,6 +742,19 @@ def validate_se_record(record: dict, table_name: str | None = None) -> bool:
             return False
         raise SchemaMigrationError(f"{table_name} received a non-SE record")
 
+    from src.parser.se_parser import SEParser
+
+    try:
+        SEParser.validate_key_fields(record)
+    except ValueError as error:
+        raise SchemaMigrationError(str(error)) from error
+
+    # DataKubun=0 is an exact-key command. Its provider body is opaque, so
+    # conflicting standard/native body aliases must not block the deletion.
+    data_kubun = record.get("DataKubun") or record.get("headDataKubun")
+    if data_kubun == "0":
+        return True
+
     aliases = _STANDARD_FIELD_ALIASES.get(table_name, {})
     if table_name == "UMA_RACE":
         conflicts = [
@@ -747,8 +766,6 @@ def validate_se_record(record: dict, table_name: str | None = None) -> bool:
         ]
         if conflicts:
             raise SchemaMigrationError(f"conflicting SE alias values: {conflicts}")
-
-    from src.parser.se_parser import SEParser
 
     normalized = dict(record)
     for native_name, standard_name in aliases.items():

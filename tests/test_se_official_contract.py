@@ -614,6 +614,23 @@ def test_se_caller_body_must_fit_the_official_cp932_span(
     assert validate_se_record(delete, "UMA_RACE") is True
 
 
+def test_se_standard_status_zero_ignores_body_alias_conflict(tmp_path) -> None:
+    database = SQLiteDatabase({"path": str(tmp_path / "opaque-alias-delete.db")})
+    with database:
+        database.execute(JRAVAN_SCHEMAS["UMA_RACE"])
+        database.commit()
+        importer = DataImporter(database, use_jravan_schema=True)
+        live = _parsed_se(ketto_num="2020000001")
+        assert importer.import_records(iter([live]))["records_imported"] == 1
+
+        delete = _parsed_se(data_kubun="0", ketto_num="2020000001")
+        delete["Reserved_229"] = "A"
+        delete["reserved1"] = "B"
+        assert validate_se_record(delete, "UMA_RACE") is True
+        assert importer.import_records(iter([delete]))["records_imported"] == 1
+        assert database.fetch_one("SELECT COUNT(*) AS n FROM UMA_RACE") == {"n": 0}
+
+
 def test_schema_manager_stops_unrelated_native_migration_on_unsafe_se(tmp_path) -> None:
     unsafe_se = SCHEMAS["NL_SE"].replace(
         "Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban, KettoNum",
@@ -775,6 +792,23 @@ def test_se_postgresql_rejects_unsafe_identity_schema(postgresql_db, defect: str
     with pytest.raises(SchemaMigrationError):
         DataImporter(postgresql_db).import_records(iter([_parsed_se()]))
     assert postgresql_db.fetch_one("SELECT COUNT(*) AS n FROM NL_SE") == {"n": 0}
+
+
+def test_se_postgresql_rejects_fixed_char_for_variable_text(postgresql_db) -> None:
+    schema = JRAVAN_SCHEMAS["UMA_RACE"].replace(
+        "Bamei                          VARCHAR(36)         ",
+        "Bamei                          CHAR(36)            ",
+        1,
+    )
+    assert schema != JRAVAN_SCHEMAS["UMA_RACE"]
+    postgresql_db.execute(schema)
+    postgresql_db.commit()
+
+    with pytest.raises(SchemaMigrationError):
+        DataImporter(postgresql_db, use_jravan_schema=True).import_records(
+            iter([_parsed_se()])
+        )
+    assert postgresql_db.fetch_one("SELECT COUNT(*) AS n FROM UMA_RACE") == {"n": 0}
 
 
 @pytest.mark.parametrize("entrypoint", ("data-batch", "optimized-batch", "single"))

@@ -367,3 +367,43 @@ aggregated.
 - These results precede the final commit only to catch integration issues. The
   same required gates must be rerun against the resulting clean full SHA before
   it can be reviewed or pushed.
+
+## Exact-candidate carry-forward review and final repair batch
+
+- Two independent Codex reviewers examined exact clean candidate
+  `5a3dca5ff0027b08eb590e850eb52d05db870dde` after the preceding aggregate
+  gates. Both stayed read-only and both returned `NEEDS_CHANGES` before any
+  repair was started.
+- The reviewers independently reproduced one shared P1: a standard
+  `DataKubun=0` row with conflicting native/standard reservation aliases was
+  rejected before the opaque-body branch, so the correct eight-key row was not
+  deleted. The database/orchestration reviewer also reproduced a second P1 on
+  PostgreSQL: a `CHAR(36)` replacement for expected `VARCHAR(36)` passed the SE
+  verifier but read back a one-character name with 35 padding spaces.
+- The two findings were deduplicated into this one final repair batch. No
+  unrelated review hypothesis or additional broad test matrix was added.
+
+### Observed red before the final repair
+
+- The new standard status-0 storage regression failed on the unchanged
+  candidate with `SchemaMigrationError: conflicting SE alias values`; the
+  existing row remained present.
+- The new fresh-PostgreSQL schema regression failed with
+  `DID NOT RAISE SchemaMigrationError`; the fixed-width `Bamei CHAR(36)` table
+  was accepted and written.
+- These exact failures were observed before changing production code. The
+  paired current-layout/status-0 and canonical-schema positives remained green.
+
+### Final repair and focused evidence
+
+- `validate_se_record()` now validates the official key first and returns for
+  status 0 before inspecting any body alias. Non-delete rows retain the strict
+  conflict, CP932, and physical-width validation.
+- The SE type verifier no longer treats fixed and variable text declarations as
+  one widening family. Expected `VARCHAR(n)` accepts only sufficient
+  `VARCHAR` or unbounded `TEXT`; expected `CHAR(n)` accepts only the exact
+  declaration. This prevents backend padding or accepted-domain changes.
+- Both formerly red tests pass after the repair. The complete SQLite SE file is
+  **47 passed, 21 skipped** and the fresh PostgreSQL 16 SE file is **68
+  passed**. Final commit, exact-SHA full gates, and bounded carry-forward review
+  remain required before push.
