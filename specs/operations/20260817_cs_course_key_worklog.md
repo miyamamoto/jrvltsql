@@ -188,9 +188,11 @@
   - added a reviewed official fixture with exact workbook hashes/rows/layout,
     the shared 2001 venue oracle, and the complete 2009 track-code set; and
   - aligned public documentation with the narrow safe-additive boundary.
-- Repair validation so far:
-  - SQLite CS contract: `87 passed, 20 skipped`;
-  - fresh disposable PostgreSQL 16 CS contract: `107 passed`, including the
+- Repair validation so far (the exact frozen `6fdc3d1e6595eb42aefae1db7ec944e3274d1651`
+  candidate includes one additional status-0 validator test beyond the first
+  recorded run):
+  - SQLite CS contract: `88 passed, 20 skipped`;
+  - fresh disposable PostgreSQL 16 CS contract: `108 passed`, including the
     caller-body byte-width, nonempty bodyless table, and wrong-key-type paths;
   - directly affected parser/schema/migration/metadata/mapping/importer suite:
     `565 passed, 24 skipped`.
@@ -218,9 +220,35 @@
   bounded carry-forward pass from both original reviewers against the resulting
   exact clean SHA. The pass must verify closure of the four aggregated P1s and
   the official-oracle P2 without reopening unrelated record-family scope.
-- Current state is intentionally dirty only with this aggregated repair,
-  tests/fixture, docs, and this tracked worklog. Next safe action: rerun full
-  suite, strict docs, fatal/static gates, actual-PG cleanup check, and exact
-  candidate package gates; then commit one new candidate and perform one bounded
-  carry-forward review of the material repair. STOP on any regression, resource
-  leak, worktree drift, or new P0/P1 finding.
+
+## 2026-08-17 — carry-forward status-0 storage boundary repair
+
+- The first carry-forward reviewer found one adjacent P1 on exact clean
+  `6fdc3d1e6595eb42aefae1db7ec944e3274d1651`. The parser and shared header
+  validator correctly treated a status-0 `CourseEx` body as opaque, but every
+  importer still passed that body to the database. A caller-built 6,801-character
+  body therefore succeeded on SQLite and failed at PostgreSQL `VARCHAR(6800)`
+  DML in all 12 native/standard × data/optimized/single × owned/caller cases.
+  This is the observed red-first evidence for the storage-boundary repair; the
+  reviewer used a fresh PostgreSQL 16 instance and stopped when the shared
+  worktree later changed.
+- The smallest repair normalizes `CourseEx` to `NULL` in the common post-header
+  cleaning path only for CS status 0. It does not interpret the opaque bytes,
+  does not extend the status domain, and does not claim to implement the later
+  physical-erase iteration. New end-to-end SQLite and PostgreSQL matrices bind
+  all 12 public entry-point/storage/transaction combinations and assert the
+  same stored result on both backends.
+- Post-repair verification:
+  - SQLite CS contract: `100 passed, 32 skipped`;
+  - fresh disposable PostgreSQL 16 CS contract: `132 passed`;
+  - full local suite: `2924 passed, 168 skipped, 22 subtests passed`.
+  The exact temporary PostgreSQL container was removed and the exact-name list
+  was empty. The focused test file is Black- and Ruff-clean.
+- Workflow-equivalent static checks also pass: `uv lock --check`, the
+  fail-closed test-gate validator, fatal Flake8 (`0`), compileall, strict
+  MkDocs, Black/Ruff for the changed contract, and `git diff --check`.
+- Next safe action: commit this single adjacent repair and worklog correction,
+  build and inspect artifacts from that exact immutable SHA, then obtain one
+  final bounded carry-forward verdict from both original independent reviewers.
+  STOP on worktree drift, any failed gate, a packaging/privacy leak, or a new
+  correctness/data-integrity finding.

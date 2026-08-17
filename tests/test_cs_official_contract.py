@@ -226,6 +226,33 @@ def test_cs_status_zero_keeps_the_future_delete_body_opaque():
     assert validate_import_record_header(record) == ("CS", "0")
 
 
+@pytest.mark.parametrize("standard", (False, True), ids=("native", "standard"))
+@pytest.mark.parametrize("entrypoint", ("data-batch", "optimized-batch", "single"))
+@pytest.mark.parametrize("auto_commit", (True, False), ids=("owned", "caller"))
+def test_cs_status_zero_discards_opaque_body_before_sqlite_storage(
+    tmp_path, standard, entrypoint, auto_commit
+):
+    table_name = "COURSE" if standard else "NL_CS"
+    database = SQLiteDatabase(
+        {"path": str(tmp_path / f"opaque-zero-{table_name}-{entrypoint}-{auto_commit}.db")}
+    )
+    record = parsed_record(data_kubun="0", course_ex="ignored")
+    record["CourseEx"] = "A" * 6801
+    with database:
+        database.execute(JRAVAN_SCHEMAS[table_name] if standard else SCHEMAS[table_name])
+        database.commit()
+        _import_records(
+            database,
+            entrypoint,
+            [record],
+            standard=standard,
+            auto_commit=auto_commit,
+        )
+        row = database.fetch_one(f"SELECT DataKubun, CourseEx FROM {table_name}")
+        assert row["DataKubun"] == "0"
+        assert row["CourseEx"] is None
+
+
 def test_cs_native_standard_and_metadata_schemas_preserve_the_official_contract():
     assert get_table_primary_key_columns("NL_CS") == list(CS_KEY)
     assert get_table_primary_key_columns("COURSE") == list(CS_KEY)
@@ -619,6 +646,31 @@ def test_cs_postgresql_rejects_a_caller_body_over_the_physical_byte_width(
             auto_commit=True,
         )
     assert postgresql_db.fetch_one(f"SELECT COUNT(*) AS count FROM {table_name}")["count"] == 0
+
+
+@pytest.mark.parametrize("standard", (False, True), ids=("native", "standard"))
+@pytest.mark.parametrize("entrypoint", ("data-batch", "optimized-batch", "single"))
+@pytest.mark.parametrize("auto_commit", (True, False), ids=("owned", "caller"))
+def test_cs_postgresql_status_zero_discards_opaque_body_before_storage(
+    postgresql_db, standard, entrypoint, auto_commit
+):
+    table_name = "COURSE" if standard else "NL_CS"
+    postgresql_db.execute(JRAVAN_SCHEMAS[table_name] if standard else SCHEMAS[table_name])
+    postgresql_db.commit()
+    record = parsed_record(data_kubun="0", course_ex="ignored")
+    record["CourseEx"] = "A" * 6801
+    _import_records(
+        postgresql_db,
+        entrypoint,
+        [record],
+        standard=standard,
+        auto_commit=auto_commit,
+    )
+    row = postgresql_db.fetch_one(
+        f'SELECT datakubun AS "DataKubun", courseex AS "CourseEx" FROM {table_name}'
+    )
+    assert row["DataKubun"] == "0"
+    assert row["CourseEx"] is None
 
 
 def test_cs_postgresql_rejects_a_nonempty_course_missing_the_body_before_alter(

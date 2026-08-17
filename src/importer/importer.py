@@ -2015,6 +2015,10 @@ def clean_record_metadata(record: dict) -> dict:
     ):
         cleaned["DataKubun"] = resolve_record_data_kubun(record)
     cleaned.pop("headDataKubun", None)
+    if record_type == "CS" and cleaned.get("DataKubun") == "0":
+        # The official delete command body is opaque. Do not let arbitrary
+        # caller payload reach backend-specific VARCHAR enforcement or storage.
+        cleaned["CourseEx"] = None
     return cleaned
 
 
