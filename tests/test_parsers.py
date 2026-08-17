@@ -148,6 +148,7 @@ class TestIndividualParsers:
                 mutable[13:17] = b"2400"
                 mutable[17:19] = b"18"
                 mutable[19:27] = b"20100101"
+                mutable[27:33] = b"course"
                 data = bytes(mutable)
             if record_type == "JG":
                 # JG has fixed-width official key/code domains; a generic

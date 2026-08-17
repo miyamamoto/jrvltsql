@@ -12,6 +12,7 @@ import json
 from datetime import date
 
 from src.parser.base import validate_fixed_record
+from src.parser.code_domains import OFFICIAL_JYO_CODES_2001
 from src.utils.logger import get_logger
 
 
@@ -44,78 +45,7 @@ class WFParser:
     # コード表2001の掲載値から、初期値00と明示的な未使用値C4/F4/F6/
     # G4/G6/G8を除いた競馬場コード。廃止済みの競馬場・国も含むため
     # 「現在使用中」の集合ではない。公式追加時はmanifest/specと同時更新する。
-    OFFICIAL_JYO_CODES = frozenset(
-        {f"{value:02d}" for value in range(1, 11)}
-        | {str(value) for value in range(30, 62)}
-        | {
-            "A0",
-            "A2",
-            "A4",
-            "A6",
-            "A8",
-            "B0",
-            "B2",
-            "B4",
-            "B6",
-            "B8",
-            "C0",
-            "C2",
-            "C5",
-            "C6",
-            "C7",
-            "C8",
-            "D0",
-            "D2",
-            "D4",
-            "D6",
-            "D8",
-            "E0",
-            "E2",
-            "E4",
-            "E6",
-            "E8",
-            "F0",
-            "F1",
-            "F2",
-            "F8",
-            "G0",
-            "G2",
-            "H0",
-            "H2",
-            "H4",
-            "H6",
-            "H8",
-            "I0",
-            "I2",
-            "I4",
-            "I6",
-            "I8",
-            "J0",
-            "J2",
-            "J4",
-            "J6",
-            "J8",
-            "K0",
-            "K2",
-            "K4",
-            "K6",
-            "K8",
-            "L0",
-            "L2",
-            "L4",
-            "L6",
-            "L8",
-            "M0",
-            "M2",
-            "M4",
-            "M6",
-            "M8",
-            "N0",
-            "N2",
-            "N4",
-            "N6",
-        }
-    )
+    OFFICIAL_JYO_CODES = OFFICIAL_JYO_CODES_2001
     NO_HIT_PAY = "000000000"
     NO_HIT_VOTES = "0000000000"
 

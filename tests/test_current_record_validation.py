@@ -38,10 +38,10 @@ PREVIOUS_OFFICIAL_LENGTHS = tuple(
 # These parsers also require populated domain-specific arrays or master fields.
 # Their valid payloads are covered by dedicated official-contract tests; this
 # module limits their positive case to the shared physical-record envelope.
-# JG, WC, and WF additionally require their official fixed-width keys, race
-# composites, and current status/code domains, so a generic space-filled
-# envelope is not valid.
-DOMAIN_PAYLOAD_REQUIRED = {"CK", "DM", "JG", "KS", "TK", "TM", "WC", "WF", "WH"}
+# CS, JG, WC, and WF additionally require their official fixed-width keys,
+# bodies, race composites, and current status/code domains, so a generic
+# space-filled envelope is not valid.
+DOMAIN_PAYLOAD_REQUIRED = {"CK", "CS", "DM", "JG", "KS", "TK", "TM", "WC", "WF", "WH"}
 
 
 def test_declared_current_lengths_match_every_factory_parser():

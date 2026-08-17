@@ -12,6 +12,10 @@ from datetime import datetime
 from typing import Any, Dict, List
 
 from src.parser.base import BaseParser, FieldDef
+from src.parser.code_domains import (
+    OFFICIAL_JYO_CODES_2001,
+    OFFICIAL_TRACK_CODES_2009,
+)
 
 
 class CSParser(BaseParser):
@@ -25,11 +29,9 @@ class CSParser(BaseParser):
 
     record_type = "CS"
     RECORD_LENGTH = 6829
-    TRACK_CD_VALUES = frozenset(
-        {"00"}
-        | {str(value) for value in range(10, 30)}
-        | {str(value) for value in range(51, 60)}
-    )
+    COURSE_EX_BYTES = 6800
+    OFFICIAL_JYO_CODES = OFFICIAL_JYO_CODES_2001
+    TRACK_CD_VALUES = OFFICIAL_TRACK_CODES_2009
 
     @staticmethod
     def _require_ascii_digits(field_name: str, value: Any, width: int) -> None:
@@ -57,24 +59,46 @@ class CSParser(BaseParser):
 
         cls._require_yyyymmdd("MakeDate", record.get("MakeDate"))
         jyo_cd = record.get("JyoCD")
-        if (
-            not isinstance(jyo_cd, str)
-            or len(jyo_cd) != 2
-            or not jyo_cd.isascii()
-            or not jyo_cd.isalnum()
-        ):
-            raise ValueError("CS JyoCD must be a 2-character ASCII code")
+        if jyo_cd not in cls.OFFICIAL_JYO_CODES:
+            raise ValueError("CS JyoCD is not in official code table 2001")
         cls._require_ascii_digits("Kyori", record.get("Kyori"), 4)
         track_cd = record.get("TrackCD")
         if track_cd not in cls.TRACK_CD_VALUES:
             raise ValueError(f"CS TrackCD is not in official code table 2009: {track_cd!r}")
         cls._require_yyyymmdd("KaishuDate", record.get("KaishuDate"))
 
+    @classmethod
+    def validate_body_field(cls, record: Dict[str, Any]) -> None:
+        """Require a caller body that could occupy the official physical field."""
+
+        course_ex = record.get("CourseEx")
+        if not isinstance(course_ex, str):
+            raise ValueError("CS CourseEx must be a string")
+        try:
+            encoded = course_ex.encode("cp932", errors="strict")
+        except UnicodeEncodeError as error:
+            raise ValueError("CS CourseEx must be strict CP932 text") from error
+        if len(encoded) > cls.COURSE_EX_BYTES:
+            raise ValueError(
+                f"CS CourseEx must be at most {cls.COURSE_EX_BYTES} CP932 bytes"
+            )
+
+    @classmethod
+    def validate_current_fields(
+        cls, record: Dict[str, Any], *, data_kubun: str | None = None
+    ) -> None:
+        """Validate one current CS record before returning or mutating storage."""
+
+        cls.validate_key_fields(record)
+        status = data_kubun if data_kubun is not None else record.get("DataKubun")
+        if status != "0":
+            cls.validate_body_field(record)
+
     def parse(self, record: bytes) -> Dict[str, Any]:
         """Parse one exact current CS record and reject malformed identities."""
 
         parsed = super().parse(record)
-        self.validate_key_fields(parsed)
+        self.validate_current_fields(parsed)
         return parsed
 
     def _define_fields(self) -> List[FieldDef]:

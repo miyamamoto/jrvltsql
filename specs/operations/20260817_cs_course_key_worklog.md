@@ -142,3 +142,72 @@
   critical reviews of that exact full SHA. Aggregate both verdicts before any
   repair. STOP on worktree drift, a packaging leak, or any correctness/data-
   integrity finding.
+
+## 2026-08-17 — frozen review and one aggregated repair batch
+
+- Froze clean candidate `94a0104440c40f413cba9cceeaa89b5f9dfd42c2`
+  (parent `17335604e0f951ae1cc39ebb447c6fb1b7b683be`) and stopped edits while two
+  independent Codex reviewers worked in parallel. Claude Code was unavailable,
+  so this was the documented local-review fallback. One reviewer emphasized
+  official workbook/SDK/history/code-table/docs/test-oracle truth; the other
+  independently attacked migration, type, constraint, transaction, Dual, and
+  actual-storage boundaries. Both started and ended on the same clean full SHA,
+  used separate disposable PostgreSQL 16 resources, made no repository or
+  GitHub changes, and returned `NEEDS_CHANGES`.
+- Aggregated findings before editing, with duplicates merged:
+  1. P1: official code table 2001 was not enforced; undefined or explicitly
+     unused venue codes such as the reviewed negative controls were accepted.
+  2. P1: caller-built status 1/2 records could omit `CourseEx`, supply a
+     non-string or non-CP932 value, or exceed 6,800 CP932 bytes. SQLite stored
+     the invalid values, and PostgreSQL `VARCHAR(6800)` checked characters
+     rather than official physical bytes.
+  3. P1: standard preflight allowed any missing `COURSE` column, and adding
+     `CourseEx` to a nonempty table left existing rows permanently incomplete.
+  4. P1: generic schema verification did not check integral `Kyori` storage.
+     TEXT/BLOB keys could split one official distance into `'0900'` and `900`;
+     one Dual probe reported in-sync despite divergent row counts.
+  5. P2: the CS test named both workbooks but bound only the SDK plus a local
+     hand-written tuple, and did not compare the complete code-table domains.
+- Added the smallest grouped red contracts before production repair. On the
+  frozen production code they reported `35 failed, 52 passed, 13 skipped`.
+  The failures covered the complete venue/code oracle, every public importer
+  entry point for an oversized caller body, missing/invalid body forms, both
+  Dual targets with an invalid key type, native/standard wrong-key types,
+  nonempty bodyless `COURSE`, and arbitrary missing non-body columns. This is
+  the actual red-first evidence for the revised validators and gates.
+- Implemented one repair batch:
+  - added pinned shared code domains for official tables 2001 and 2009 and made
+    CS reject undefined/unused venue and track codes;
+  - required status 1/2 `CourseEx` to be a string, strict-CP932 encodable, and
+    at most 6,800 encoded bytes before any schema/DML path, while preserving
+    status 0 body opacity for the later physical-erase iteration;
+  - added a dedicated integral `Kyori` verifier across every migration target;
+  - restricted standard additive migration to an exact-key, empty `COURSE`
+    whose only missing column is `CourseEx`; any other missing column or a
+    nonempty bodyless table stops before ALTER/DML;
+  - added a reviewed official fixture with exact workbook hashes/rows/layout,
+    the shared 2001 venue oracle, and the complete 2009 track-code set; and
+  - aligned public documentation with the narrow safe-additive boundary.
+- Repair validation so far:
+  - SQLite CS contract: `87 passed, 20 skipped`;
+  - fresh disposable PostgreSQL 16 CS contract: `107 passed`, including the
+    caller-body byte-width, nonempty bodyless table, and wrong-key-type paths;
+  - directly affected parser/schema/migration/metadata/mapping/importer suite:
+    `565 passed, 24 skipped`.
+  The repair PostgreSQL container was removed and its exact name no longer
+  appears in `docker ps -a`.
+- The affected suite exposed one additional false-green generic physical-shape
+  test which supplied CS with no valid key/body. CS is now correctly classified
+  among record types whose positive domain payload is exercised only by their
+  dedicated official-contract test; the generic test still verifies short/long
+  framing rejection.
+- The final post-repair full suite reports `2912 passed, 156 skipped, 22
+  subtests passed`; strict MkDocs also passes. The venue-code domain is now a
+  single production constant shared by CS and WF, and the existing WF complete-
+  domain contract passed after that mechanical centralization.
+- Current state is intentionally dirty only with this aggregated repair,
+  tests/fixture, docs, and this tracked worklog. Next safe action: rerun full
+  suite, strict docs, fatal/static gates, actual-PG cleanup check, and exact
+  candidate package gates; then commit one new candidate and perform one bounded
+  carry-forward review of the material repair. STOP on any regression, resource
+  leak, worktree drift, or new P0/P1 finding.

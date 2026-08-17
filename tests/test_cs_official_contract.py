@@ -18,14 +18,19 @@ from src.database.schema_types import (
     get_table_primary_key_columns,
 )
 from src.database.sqlite_handler import SQLiteDatabase
-from src.importer.importer import DataImporter
+from src.importer.importer import DataImporter, validate_import_record_header
 from src.importer.importer_optimized import OptimizedDataImporter
 from src.parser.cs_parser import CSParser
 
+OFFICIAL_FIXTURES = Path(__file__).parent / "fixtures" / "official_layout"
 OFFICIAL_MANIFEST = json.loads(
-    (
-        Path(__file__).parent / "fixtures" / "official_layout" / "jvdata_sdk500_manifest.json"
-    ).read_text(encoding="utf-8")
+    (OFFICIAL_FIXTURES / "jvdata_sdk500_manifest.json").read_text(encoding="utf-8")
+)
+CS_OFFICIAL_CONTRACT = json.loads(
+    (OFFICIAL_FIXTURES / "cs_contract_4901.json").read_text(encoding="utf-8")
+)
+JYO_OFFICIAL_CONTRACT = json.loads(
+    (OFFICIAL_FIXTURES / CS_OFFICIAL_CONTRACT["venue_code_contract"]).read_text(encoding="utf-8")
 )
 CS_KEY = ("JyoCD", "Kyori", "TrackCD", "KaishuDate")
 CS_LAYOUT = (
@@ -108,6 +113,23 @@ def test_cs_layout_matches_the_pinned_sdk_and_both_current_workbooks():
 
     root = OFFICIAL_MANIFEST["root_records"]["CS"]
     structure = OFFICIAL_MANIFEST["structures"][root["struct"]]
+    assert CS_OFFICIAL_CONTRACT["format_sources"] == [
+        {
+            "artifact": "JV-Data4802.xlsx",
+            "sha256": "6a567f10b601115eca350571f36d27d9d28bd2d3835ea72b5bc057711155d4a7",
+            "sheet": "フォーマット",
+            "rows": "1241-1251",
+        },
+        {
+            "artifact": "JV-Data4901.xlsx",
+            "sha256": "23bafd375f704acbdd696b5032ac1619f17d47e882587d6e7954b610527a8234",
+            "sheet": "フォーマット",
+            "rows": "1241-1251",
+        },
+    ]
+    assert CS_OFFICIAL_CONTRACT["record_length"] == 6829
+    assert [tuple(field) for field in CS_OFFICIAL_CONTRACT["fields"]] == list(CS_LAYOUT)
+    assert CS_OFFICIAL_CONTRACT["primary_key"] == list(CS_KEY)
     assert root == {"struct": "JV_CS_COURSE", "length": 6829}
     assert structure["width"] == 6829
     assert [(field.name, field.start + 1, field.length) for field in CSParser()._fields] == list(
@@ -140,8 +162,12 @@ def test_cs_parser_preserves_the_full_6800_byte_body_and_rejects_bad_length():
     (
         ("make_date", "20260230"),
         ("jyo_cd", "@8"),
+        ("jyo_cd", "ZZ"),
+        ("jyo_cd", "11"),
+        ("jyo_cd", "C4"),
         ("kyori", "24A0"),
         ("track_cd", "99"),
+        ("track_cd", "30"),
         ("kaishu_date", "20260230"),
     ),
 )
@@ -158,6 +184,46 @@ def test_cs_parser_retains_official_initial_and_overseas_code_forms(jyo_cd, trac
     parsed = parsed_record(jyo_cd=jyo_cd, track_cd=track_cd)
     assert parsed["JyoCD"] == jyo_cd
     assert parsed["TrackCD"] == track_cd
+
+
+def test_cs_code_domains_match_the_complete_pinned_official_tables():
+    assert CSParser.OFFICIAL_JYO_CODES == frozenset(
+        JYO_OFFICIAL_CONTRACT["listed_non_initial_non_unused_codes"]
+    )
+    assert CSParser.OFFICIAL_JYO_CODES.isdisjoint(JYO_OFFICIAL_CONTRACT["excluded_codes"])
+    assert CSParser.TRACK_CD_VALUES == frozenset(CS_OFFICIAL_CONTRACT["track_codes"])
+
+
+@pytest.mark.parametrize(
+    ("mutation", "value"),
+    (
+        ("missing", None),
+        ("replace", None),
+        ("replace", 6800),
+        ("replace", "A" * 6801),
+        ("replace", "😀"),
+    ),
+)
+def test_cs_caller_body_validator_rejects_nonphysical_payloads(mutation, value):
+    record = parsed_record(course_ex="x")
+    if mutation == "missing":
+        record.pop("CourseEx")
+    else:
+        record["CourseEx"] = value
+
+    with pytest.raises(SchemaMigrationError, match="CourseEx"):
+        validate_import_record_header(record)
+
+    assert validate_import_record_header(parsed_record()) == ("CS", "1")
+    blank_body = parsed_record(course_ex="x")
+    blank_body["CourseEx"] = ""
+    assert validate_import_record_header(blank_body) == ("CS", "1")
+
+
+def test_cs_status_zero_keeps_the_future_delete_body_opaque():
+    record = parsed_record(data_kubun="0", course_ex="ignored")
+    record.pop("CourseEx")
+    assert validate_import_record_header(record) == ("CS", "0")
 
 
 def test_cs_native_standard_and_metadata_schemas_preserve_the_official_contract():
@@ -280,7 +346,8 @@ def test_cs_legacy_storage_is_rejected_before_schema_or_row_mutation(
 
 
 @pytest.mark.parametrize("unsafe_target", ("primary", "secondary"))
-def test_cs_dual_rejects_an_extra_unique_on_either_backend(tmp_path, unsafe_target):
+@pytest.mark.parametrize("drift", ("extra-unique", "wrong-key-type"))
+def test_cs_dual_rejects_unsafe_identity_storage_on_either_backend(tmp_path, unsafe_target, drift):
     safe_schema = """
     CREATE TABLE NL_CS (
         RecordSpec TEXT, DataKubun TEXT, MakeDate TEXT, JyoCD TEXT,
@@ -288,10 +355,13 @@ def test_cs_dual_rejects_an_extra_unique_on_either_backend(tmp_path, unsafe_targ
         RecordDelimiter TEXT, PRIMARY KEY (JyoCD, Kyori, TrackCD, KaishuDate)
     )
     """
-    unsafe_schema = safe_schema.replace(
-        "PRIMARY KEY (JyoCD, Kyori, TrackCD, KaishuDate)",
-        "PRIMARY KEY (JyoCD, Kyori, TrackCD, KaishuDate), UNIQUE (MakeDate)",
-    )
+    if drift == "extra-unique":
+        unsafe_schema = safe_schema.replace(
+            "PRIMARY KEY (JyoCD, Kyori, TrackCD, KaishuDate)",
+            "PRIMARY KEY (JyoCD, Kyori, TrackCD, KaishuDate), UNIQUE (MakeDate)",
+        )
+    else:
+        unsafe_schema = safe_schema.replace("Kyori INTEGER", "Kyori BLOB")
     primary = SQLiteDatabase({"path": str(tmp_path / f"{unsafe_target}-primary.db")})
     secondary = SQLiteDatabase({"path": str(tmp_path / f"{unsafe_target}-secondary.db")})
     with primary, secondary:
@@ -299,7 +369,7 @@ def test_cs_dual_rejects_an_extra_unique_on_either_backend(tmp_path, unsafe_targ
         secondary.execute(unsafe_schema if unsafe_target == "secondary" else safe_schema)
         primary.commit()
         secondary.commit()
-        with pytest.raises(SchemaMigrationError, match="UNIQUE"):
+        with pytest.raises(SchemaMigrationError):
             DataImporter(DualDatabase(primary, secondary)).import_records(iter([parsed_record()]))
         assert primary.fetch_one("SELECT COUNT(*) AS count FROM NL_CS")["count"] == 0
         assert secondary.fetch_one("SELECT COUNT(*) AS count FROM NL_CS")["count"] == 0
@@ -332,11 +402,37 @@ def test_cs_caller_built_invalid_key_is_rejected_before_mutation(tmp_path, stand
 
 
 @pytest.mark.parametrize("standard", (False, True), ids=("native", "standard"))
+@pytest.mark.parametrize("entrypoint", ("data-batch", "optimized-batch", "single"))
+@pytest.mark.parametrize("auto_commit", (True, False), ids=("owned", "caller"))
+def test_cs_caller_built_oversized_body_is_rejected_by_every_entrypoint(
+    tmp_path, standard, entrypoint, auto_commit
+):
+    table_name = "COURSE" if standard else "NL_CS"
+    database = SQLiteDatabase(
+        {"path": str(tmp_path / f"caller-body-{table_name}-{entrypoint}-{auto_commit}.db")}
+    )
+    record = parsed_record(course_ex="x")
+    record["CourseEx"] = "A" * 6801
+    with database:
+        database.execute(JRAVAN_SCHEMAS[table_name] if standard else SCHEMAS[table_name])
+        database.commit()
+        with pytest.raises(SchemaMigrationError, match="CourseEx"):
+            _import_records(
+                database,
+                entrypoint,
+                [record],
+                standard=standard,
+                auto_commit=auto_commit,
+            )
+        assert database.fetch_one(f"SELECT COUNT(*) AS count FROM {table_name}")["count"] == 0
+
+
+@pytest.mark.parametrize("standard", (False, True), ids=("native", "standard"))
 @pytest.mark.parametrize(
     "entrypoint",
     ("data-batch", "optimized-batch", "single"),
 )
-@pytest.mark.parametrize("drift", ("extra-unique", "short-body"))
+@pytest.mark.parametrize("drift", ("extra-unique", "short-body", "wrong-key-type"))
 def test_cs_storage_drift_is_rejected_before_mutation(tmp_path, standard, entrypoint, drift):
     table_name = "COURSE" if standard else "NL_CS"
     schema_sql = JRAVAN_SCHEMAS[table_name] if standard else SCHEMAS[table_name]
@@ -345,13 +441,26 @@ def test_cs_storage_drift_is_rejected_before_mutation(tmp_path, standard, entryp
             "PRIMARY KEY (JyoCD, Kyori, TrackCD, KaishuDate)",
             "PRIMARY KEY (JyoCD, Kyori, TrackCD, KaishuDate), UNIQUE (MakeDate)",
         )
-    else:
+    elif drift == "short-body":
         schema_sql = schema_sql.replace("VARCHAR(6800)", "VARCHAR(1)")
+    elif standard:
+        schema_sql = schema_sql.replace("Kyori                          SMALLINT", "Kyori TEXT")
+    else:
+        schema_sql = schema_sql.replace("Kyori INTEGER", "Kyori BLOB")
     database = SQLiteDatabase(
         {"path": str(tmp_path / f"drift-{drift}-{table_name}-{entrypoint}.db")}
     )
     with database:
         database.execute(schema_sql)
+        expected_rows = 0
+        if drift == "wrong-key-type":
+            database.execute(
+                f"INSERT INTO {table_name} "
+                "(RecordSpec, DataKubun, MakeDate, JyoCD, Kyori, TrackCD, "
+                "KaishuDate, CourseEx) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                ("CS", "1", "20200101", "08", "0900", "18", "20100101", "existing"),
+            )
+            expected_rows = 1
         database.commit()
         with pytest.raises(SchemaMigrationError):
             _import_records(
@@ -361,7 +470,10 @@ def test_cs_storage_drift_is_rejected_before_mutation(tmp_path, standard, entryp
                 standard=standard,
                 auto_commit=True,
             )
-        assert database.fetch_one(f"SELECT COUNT(*) AS count FROM {table_name}")["count"] == 0
+        assert (
+            database.fetch_one(f"SELECT COUNT(*) AS count FROM {table_name}")["count"]
+            == expected_rows
+        )
 
 
 @pytest.mark.parametrize(
@@ -387,6 +499,51 @@ def test_cs_standard_adds_only_a_missing_body_to_an_already_correct_key(tmp_path
         )
         row = database.fetch_one("SELECT CourseEx FROM COURSE")
         assert row["CourseEx"] == "追加済み"
+
+
+@pytest.mark.parametrize("entrypoint", ("data-batch", "optimized-batch", "single"))
+@pytest.mark.parametrize("drift", ("nonempty-missing-body", "missing-nonbody"))
+def test_cs_standard_additive_migration_rejects_unsafe_missing_columns(tmp_path, entrypoint, drift):
+    if drift == "nonempty-missing-body":
+        schema_sql = JRAVAN_SCHEMAS["COURSE"].replace(
+            "            CourseEx                       VARCHAR(6800)        ,  -- コース説明\n",
+            "",
+        )
+    else:
+        schema_sql = JRAVAN_SCHEMAS["COURSE"].replace(
+            "            DataKubun                      CHAR(1)             ,  -- データ区分\n",
+            "",
+        )
+    expected_missing = "CourseEx" if drift == "nonempty-missing-body" else "DataKubun"
+    assert expected_missing not in schema_sql
+    database = SQLiteDatabase({"path": str(tmp_path / f"unsafe-additive-{drift}-{entrypoint}.db")})
+    with database:
+        database.execute(schema_sql)
+        if drift == "nonempty-missing-body":
+            database.execute(
+                "INSERT INTO COURSE "
+                "(RecordSpec, DataKubun, MakeDate, JyoCD, Kyori, TrackCD, KaishuDate) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                ("CS", "1", "20200101", "08", 2400, "18", "20100101"),
+            )
+        database.commit()
+        before = database.fetch_one(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='COURSE'"
+        )["sql"]
+        with pytest.raises(SchemaMigrationError):
+            _import_records(
+                database,
+                entrypoint,
+                [parsed_record(kaishu_date="20230422")],
+                standard=True,
+                auto_commit=True,
+            )
+        after = database.fetch_one(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='COURSE'"
+        )["sql"]
+        assert after == before
+        expected_rows = 1 if drift == "nonempty-missing-body" else 0
+        assert database.fetch_one("SELECT COUNT(*) AS count FROM COURSE")["count"] == expected_rows
 
 
 @pytest.fixture
@@ -444,25 +601,96 @@ def test_cs_postgresql_preserves_the_full_key_and_body(postgresql_db, standard, 
 
 
 @pytest.mark.parametrize("standard", (False, True), ids=("native", "standard"))
-@pytest.mark.parametrize("drift", ("extra-unique", "deferrable-primary-key"))
+@pytest.mark.parametrize("entrypoint", ("data-batch", "optimized-batch", "single"))
+def test_cs_postgresql_rejects_a_caller_body_over_the_physical_byte_width(
+    postgresql_db, standard, entrypoint
+):
+    table_name = "COURSE" if standard else "NL_CS"
+    postgresql_db.execute(JRAVAN_SCHEMAS[table_name] if standard else SCHEMAS[table_name])
+    postgresql_db.commit()
+    record = parsed_record(course_ex="x")
+    record["CourseEx"] = "界" * 6800
+    with pytest.raises(SchemaMigrationError, match="CourseEx"):
+        _import_records(
+            postgresql_db,
+            entrypoint,
+            [record],
+            standard=standard,
+            auto_commit=True,
+        )
+    assert postgresql_db.fetch_one(f"SELECT COUNT(*) AS count FROM {table_name}")["count"] == 0
+
+
+def test_cs_postgresql_rejects_a_nonempty_course_missing_the_body_before_alter(
+    postgresql_db,
+):
+    schema_without_body = JRAVAN_SCHEMAS["COURSE"].replace(
+        "            CourseEx                       VARCHAR(6800)        ,  -- コース説明\n",
+        "",
+    )
+    assert "CourseEx" not in schema_without_body
+    postgresql_db.execute(schema_without_body)
+    postgresql_db.execute(
+        "INSERT INTO COURSE "
+        "(RecordSpec, DataKubun, MakeDate, JyoCD, Kyori, TrackCD, KaishuDate) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        ("CS", "1", "20200101", "08", 2400, "18", "20100101"),
+    )
+    postgresql_db.commit()
+
+    with pytest.raises(SchemaMigrationError, match="existing rows"):
+        DataImporter(postgresql_db, use_jravan_schema=True).import_records(
+            iter([parsed_record(kaishu_date="20230422")])
+        )
+
+    columns = postgresql_db.fetch_all(
+        "SELECT column_name AS name FROM information_schema.columns "
+        "WHERE table_schema = current_schema() AND table_name = 'course'"
+    )
+    assert "courseex" not in {str(row["name"]).lower() for row in columns}
+    assert postgresql_db.fetch_one("SELECT COUNT(*) AS count FROM COURSE")["count"] == 1
+
+
+@pytest.mark.parametrize("standard", (False, True), ids=("native", "standard"))
+@pytest.mark.parametrize("drift", ("extra-unique", "deferrable-primary-key", "wrong-key-type"))
 def test_cs_postgresql_constraint_drift_is_rejected_before_mutation(postgresql_db, standard, drift):
     table_name = "COURSE" if standard else "NL_CS"
     schema_sql = JRAVAN_SCHEMAS[table_name] if standard else SCHEMAS[table_name]
     if drift == "extra-unique":
         replacement = "PRIMARY KEY (JyoCD, Kyori, TrackCD, KaishuDate), UNIQUE (MakeDate)"
-    else:
+        schema_sql = schema_sql.replace(
+            "PRIMARY KEY (JyoCD, Kyori, TrackCD, KaishuDate)", replacement
+        )
+    elif drift == "deferrable-primary-key":
         replacement = (
             "PRIMARY KEY (JyoCD, Kyori, TrackCD, KaishuDate) " "DEFERRABLE INITIALLY DEFERRED"
         )
-    postgresql_db.execute(
-        schema_sql.replace("PRIMARY KEY (JyoCD, Kyori, TrackCD, KaishuDate)", replacement)
-    )
+        schema_sql = schema_sql.replace(
+            "PRIMARY KEY (JyoCD, Kyori, TrackCD, KaishuDate)", replacement
+        )
+    elif standard:
+        schema_sql = schema_sql.replace("Kyori                          SMALLINT", "Kyori TEXT")
+    else:
+        schema_sql = schema_sql.replace("Kyori INTEGER", "Kyori TEXT")
+    postgresql_db.execute(schema_sql)
+    expected_rows = 0
+    if drift == "wrong-key-type":
+        postgresql_db.execute(
+            f"INSERT INTO {table_name} "
+            "(RecordSpec, DataKubun, MakeDate, JyoCD, Kyori, TrackCD, "
+            "KaishuDate, CourseEx) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            ("CS", "1", "20200101", "08", "0900", "18", "20100101", "existing"),
+        )
+        expected_rows = 1
     postgresql_db.commit()
     with pytest.raises(SchemaMigrationError):
         DataImporter(postgresql_db, use_jravan_schema=standard).import_records(
             iter([parsed_record()])
         )
-    assert postgresql_db.fetch_one(f"SELECT COUNT(*) AS count FROM {table_name}")["count"] == 0
+    assert (
+        postgresql_db.fetch_one(f"SELECT COUNT(*) AS count FROM {table_name}")["count"]
+        == expected_rows
+    )
 
 
 def test_cs_postgresql_metadata_targets_physical_columns(postgresql_db):

@@ -444,6 +444,80 @@ def verify_bt_storage_schema(database: BaseDatabase, table_name: str) -> bool:
     return True
 
 
+def _verify_cs_kyori_storage_type(
+    database: BaseDatabase, table_name: str
+) -> None:
+    """Require an integral identity type on every concrete CS backend."""
+
+    from src.database.migration import _get_existing_column_types, _migration_targets
+
+    targets = _migration_targets(database)
+    if targets != (database,):
+        for target in targets:
+            _verify_cs_kyori_storage_type(target, table_name)
+        return
+
+    actual = _get_existing_column_types(database, table_name).get("kyori", "")
+    normalized = re.sub(r"\s+", " ", actual.strip().lower())
+    if normalized not in {
+        "smallint",
+        "int2",
+        "integer",
+        "int",
+        "int4",
+        "bigint",
+        "int8",
+    }:
+        raise SchemaMigrationError(
+            f"CS storage {table_name} Kyori must use an integral type; "
+            f"existing={actual or '<unknown>'}"
+        )
+
+
+def _preflight_course_additive_storage(database: BaseDatabase) -> None:
+    """Allow only an empty exact-key COURSE to add its missing body column."""
+
+    from src.database.migration import (
+        _extract_column_definitions,
+        _get_existing_columns,
+        _migration_targets,
+    )
+    from src.database.schema_jravan import JRAVAN_SCHEMAS
+
+    targets = _migration_targets(database)
+    if targets != (database,):
+        for target in targets:
+            _preflight_course_additive_storage(target)
+        return
+    if not database.table_exists_strict("COURSE"):
+        return
+
+    definitions = _extract_column_definitions(JRAVAN_SCHEMAS["COURSE"])
+    if definitions is None:
+        raise SchemaMigrationError("Could not parse standard COURSE schema")
+    existing = {column.lower() for column in _get_existing_columns(database, "COURSE")}
+    missing = {
+        column
+        for column in definitions
+        if column.lower() not in existing
+    }
+    unexpected = sorted(column for column in missing if column.lower() != "courseex")
+    if unexpected:
+        raise SchemaMigrationError(
+            "Standard COURSE additive migration permits only a missing CourseEx; "
+            f"missing={sorted(missing)}"
+        )
+    if missing:
+        existing_row = database.fetch_one("SELECT 1 AS present FROM COURSE LIMIT 1")
+        if existing_row is not None:
+            raise SchemaMigrationError(
+                "Standard COURSE with existing rows and no CourseEx cannot be "
+                "completed safely; rebuild and reimport COMM"
+            )
+
+    _verify_cs_kyori_storage_type(database, "COURSE")
+
+
 def verify_cs_storage_schema(database: BaseDatabase, table_name: str) -> bool:
     """Fail closed unless CS storage preserves the full body and official key."""
     if table_name not in _CS_STORAGE_TABLES:
@@ -457,6 +531,7 @@ def verify_cs_storage_schema(database: BaseDatabase, table_name: str) -> bool:
     if schema_sql is None:
         raise SchemaMigrationError(f"CS storage schema is undefined: {table_name}")
     verify_table_schema(database, table_name, schema_sql)
+    _verify_cs_kyori_storage_type(database, table_name)
     _verify_replacement_key_constraints(database, table_name, "CS storage")
     return True
 
@@ -1287,6 +1362,8 @@ def preflight_standard_schema_migrations(
         schema_sql = JRAVAN_SCHEMAS.get(standard_name)
         if not schema_sql or not database.table_exists(standard_name):
             continue
+        if standard_name == "COURSE":
+            _preflight_course_additive_storage(database)
         verify_table_schema(
             database,
             standard_name,
@@ -1908,7 +1985,7 @@ def validate_import_record_header(record: dict) -> tuple[str, str]:
         if record_type == "CS":
             from src.parser.cs_parser import CSParser
 
-            CSParser.validate_key_fields(record)
+            CSParser.validate_current_fields(record, data_kubun=data_kubun)
         return record_type, data_kubun
     except ValueError as error:
         raise SchemaMigrationError(str(error)) from error

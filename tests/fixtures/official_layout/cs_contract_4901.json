@@ -1,0 +1,42 @@
+{
+  "format_sources": [
+    {
+      "artifact": "JV-Data4802.xlsx",
+      "sha256": "6a567f10b601115eca350571f36d27d9d28bd2d3835ea72b5bc057711155d4a7",
+      "sheet": "フォーマット",
+      "rows": "1241-1251"
+    },
+    {
+      "artifact": "JV-Data4901.xlsx",
+      "sha256": "23bafd375f704acbdd696b5032ac1619f17d47e882587d6e7954b610527a8234",
+      "sheet": "フォーマット",
+      "rows": "1241-1251"
+    }
+  ],
+  "record_length": 6829,
+  "fields": [
+    ["RecordSpec", 1, 2],
+    ["DataKubun", 3, 1],
+    ["MakeDate", 4, 8],
+    ["JyoCD", 12, 2],
+    ["Kyori", 14, 4],
+    ["TrackCD", 18, 2],
+    ["KaishuDate", 20, 8],
+    ["CourseEx", 28, 6800],
+    ["RecordDelimiter", 6828, 2]
+  ],
+  "primary_key": ["JyoCD", "Kyori", "TrackCD", "KaishuDate"],
+  "venue_code_contract": "wf_jyo_codes_4901.json",
+  "track_code_source": {
+    "artifact": "JV-Data4901.xlsx",
+    "sha256": "23bafd375f704acbdd696b5032ac1619f17d47e882587d6e7954b610527a8234",
+    "sheet": "コード表",
+    "rows": "335-368",
+    "code_table": "2009.トラックコード"
+  },
+  "track_codes": [
+    "00", "10", "11", "12", "13", "14", "15", "16", "17", "18",
+    "19", "20", "21", "22", "23", "24", "25", "26", "27", "28",
+    "29", "51", "52", "53", "54", "55", "56", "57", "58", "59"
+  ]
+}
