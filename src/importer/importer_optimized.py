@@ -294,6 +294,13 @@ class OptimizedDataImporter:
         Returns:
             Dictionary with import statistics
         """
+        previous_statistics = (
+            self._records_imported,
+            self._records_failed,
+            self._batches_processed,
+        )
+        previous_transaction_generation = self.database.get_transaction_generation()
+
         self._records_imported = 0
         self._records_failed = 0
         self._batches_processed = 0
@@ -313,9 +320,19 @@ class OptimizedDataImporter:
                         context="first-header failure in optimized caller-owned import",
                     )
                 except TransactionRecoveryError:
-                    self._records_imported = 0
-                    self._records_failed = 0
-                    self._batches_processed = 0
+                    if (
+                        self.database.is_connected()
+                        and previous_transaction_generation is not None
+                    ):
+                        (
+                            self._records_imported,
+                            self._records_failed,
+                            self._batches_processed,
+                        ) = previous_statistics
+                    else:
+                        self._records_imported = 0
+                        self._records_failed = 0
+                        self._batches_processed = 0
                     raise
                 if pending_transaction:
                     rollback_failed_import(

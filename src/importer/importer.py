@@ -4558,6 +4558,13 @@ class DataImporter:
             ...     stats = importer.import_records(records)
             ...     print(f"Imported {stats['records_imported']} records")
         """
+        previous_statistics = (
+            self._records_imported,
+            self._records_failed,
+            self._batches_processed,
+        )
+        previous_transaction_generation = self.database.get_transaction_generation()
+
         # Every call owns a fresh statistics interval, including a call that is
         # rejected before schema preflight.
         self._records_imported = 0
@@ -4582,7 +4589,17 @@ class DataImporter:
                         context="first-header failure in caller-owned import",
                     )
                 except TransactionRecoveryError:
-                    self.reset_statistics()
+                    if (
+                        self.database.is_connected()
+                        and previous_transaction_generation is not None
+                    ):
+                        (
+                            self._records_imported,
+                            self._records_failed,
+                            self._batches_processed,
+                        ) = previous_statistics
+                    else:
+                        self.reset_statistics()
                     raise
                 if pending_transaction:
                     rollback_failed_import(
@@ -5264,13 +5281,27 @@ class DataImporter:
             record_type, _ = validate_import_record_header(record)
         except SchemaMigrationError:
             if not auto_commit:
+                checkpoint_generation = (
+                    self._single_record_stats_checkpoint[0]
+                    if self._single_record_stats_checkpoint is not None
+                    else None
+                )
+                active_generation = self.database.get_transaction_generation()
+                checkpoint_is_active = (
+                    checkpoint_generation is not None
+                    and checkpoint_generation == active_generation
+                )
                 try:
                     pending_transaction = inspect_pending_transaction_or_invalidate(
                         self.database,
                         context="header failure in caller-owned single-record import",
                     )
                 except TransactionRecoveryError:
-                    self._restore_single_record_statistics()
+                    if not self.database.is_connected():
+                        if checkpoint_is_active:
+                            self._restore_single_record_statistics()
+                        else:
+                            self._single_record_stats_checkpoint = None
                     raise
                 if pending_transaction:
                     self._rollback_single_record_transaction(

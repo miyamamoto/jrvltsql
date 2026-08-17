@@ -429,7 +429,9 @@ class RealtimeUpdater:
                 return f"{record_type} snapshot expansion index mismatch", None
             if expanded_row.get(rows_key) != snapshot_rows:
                 return f"{record_type} snapshot expansion metadata mismatch", None
-            if any(expanded_row.get(key) != value for key, value in snapshot_row.items()):
+            if clean_record_metadata(expanded_row) != clean_record_metadata(
+                snapshot_row
+            ):
                 return f"{record_type} snapshot expansion row mismatch", None
             umaban = snapshot_row.get("Umaban")
             if (
@@ -443,6 +445,54 @@ class RealtimeUpdater:
                 return f"{record_type} snapshot expansion has invalid Umaban", None
             seen_umaban.add(umaban)
         return None, snapshot_rows
+
+    @classmethod
+    def _partition_mining_batch(
+        cls, records: list[Dict]
+    ) -> tuple[Optional[list[tuple[str, list[Dict], Optional[list[Dict]]]]], Optional[str]]:
+        """Split a flat realtime batch into complete physical mining operations."""
+
+        operations: list[tuple[str, list[Dict], Optional[list[Dict]]]] = []
+        position = 0
+        metadata_keys = {
+            "DM": ("_dm_snapshot_rows", "_dm_snapshot_index"),
+            "TM": ("_tm_snapshot_rows", "_tm_snapshot_index"),
+        }
+        while position < len(records):
+            record = records[position]
+            record_type = record.get("RecordSpec")
+            if record_type not in metadata_keys:
+                operations.append(("record", [record], None))
+                position += 1
+                continue
+
+            data_kubun = resolve_record_data_kubun(record)
+            if data_kubun == DATA_KUBUN_ERASE:
+                error, snapshot_rows = cls._validate_mining_snapshot_list(
+                    [record], record_type
+                )
+                if error is not None:
+                    return None, error
+                operations.append(("record", [record], snapshot_rows))
+                position += 1
+                continue
+
+            rows_key, index_key = metadata_keys[record_type]
+            snapshot_rows = record.get(rows_key)
+            if record.get(index_key) != 0:
+                return None, f"{record_type} batch starts with a snapshot follower"
+            if not isinstance(snapshot_rows, list) or not snapshot_rows:
+                return None, f"{record_type} snapshot expansion metadata is missing"
+            operation_rows = records[position : position + len(snapshot_rows)]
+            error, validated_snapshot = cls._validate_mining_snapshot_list(
+                operation_rows, record_type
+            )
+            if error is not None:
+                return None, error
+            operations.append(("snapshot", operation_rows, validated_snapshot))
+            position += len(operation_rows)
+
+        return operations, None
 
     def _replace_mining_native_snapshot(
         self,
@@ -533,11 +583,14 @@ class RealtimeUpdater:
         validated_records: list[Dict] = []
         ordered_mutation_required = False
         strict_wf_present = False
+        mining_present = False
 
         for record in records:
             record_type, alias_error = self._canonicalize_strict_record_aliases(record)
             if record_type == "WF":
                 strict_wf_present = True
+            if record_type in {"DM", "TM"}:
+                mining_present = True
             if alias_error is not None:
                 logger.warning(f"Skipping record with conflicting header aliases: {alias_error}")
                 errors += 1
@@ -575,6 +628,33 @@ class RealtimeUpdater:
                 "errors": max(errors, len(records)),
                 "tables": [],
             }
+
+        if mining_present:
+            if errors:
+                return {
+                    "operation": "batch_insert",
+                    "success": False,
+                    "inserted": 0,
+                    "errors": max(errors, len(records)),
+                    "tables": [],
+                }
+            mining_operations, mining_error = self._partition_mining_batch(
+                validated_records
+            )
+            if mining_error is not None or mining_operations is None:
+                return {
+                    "operation": "batch_insert",
+                    "success": False,
+                    "inserted": 0,
+                    "errors": max(1, len(records)),
+                    "tables": [],
+                }
+            return self._process_mining_realtime_batch(
+                mining_operations,
+                timeseries=timeseries,
+                batch_collected_at=batch_collected_at,
+                caller_transaction_pending=caller_transaction_pending,
+            )
 
         if strict_wf_present:
             return self._process_strict_wf_realtime_batch(
@@ -698,6 +778,93 @@ class RealtimeUpdater:
             "errors": errors,
             "tables": sorted(grouped),
         }
+
+    def _process_mining_realtime_batch(
+        self,
+        operations: list[tuple[str, list[Dict], Optional[list[Dict]]]],
+        *,
+        timeseries: bool,
+        batch_collected_at: Optional[str],
+        caller_transaction_pending: bool,
+    ) -> Dict:
+        """Apply complete mining snapshots and adjacent operations atomically."""
+
+        owns_transaction = not caller_transaction_pending
+        if owns_transaction:
+            self.database.begin_transaction()
+
+        successful: list[Dict] = []
+        tables: set[str] = set()
+        operation_count = sum(len(rows) for _, rows, _ in operations)
+        try:
+            for operation_kind, operation_rows, snapshot_rows in operations:
+                record = operation_rows[0]
+                record_type = record.get("RecordSpec")
+                if operation_kind == "snapshot":
+                    if snapshot_rows is None:
+                        raise RuntimeError(
+                            f"{record_type} batch lost validated snapshot metadata"
+                        )
+                    result = self._replace_mining_native_snapshot(
+                        record, snapshot_rows, f"RT_{record_type}"
+                    )
+                else:
+                    if timeseries and batch_collected_at:
+                        record.setdefault("CollectedAt", batch_collected_at)
+                    result = self._process_single_record(
+                        record, timeseries=timeseries
+                    )
+
+                accepted, rejected = summarize_update_result(result)
+                tables.update(
+                    item["table"] for item in accepted if item.get("table")
+                )
+                if rejected:
+                    rolled_back = any(
+                        isinstance(item, dict)
+                        and item.get("transaction_rolled_back") is True
+                        for item in (result if isinstance(result, list) else [result])
+                    )
+                    if not rolled_back:
+                        rollback_failed_import(
+                            self.database,
+                            context="atomic realtime mining batch",
+                        )
+                    return {
+                        "operation": "batch_insert",
+                        "success": False,
+                        "inserted": 0,
+                        "errors": operation_count,
+                        "tables": sorted(tables),
+                        "transaction_rolled_back": True,
+                    }
+                successful.extend(accepted)
+
+            if owns_transaction:
+                self.database.commit()
+            return {
+                "operation": "batch_insert",
+                "success": True,
+                "inserted": len(successful),
+                "errors": 0,
+                "tables": sorted(tables),
+            }
+        except TransactionRecoveryError:
+            raise
+        except Exception as exc:
+            rollback_failed_import(
+                self.database,
+                context="atomic realtime mining batch",
+            )
+            logger.error(f"Atomic realtime mining batch failed: {exc}")
+            return {
+                "operation": "batch_insert",
+                "success": False,
+                "inserted": 0,
+                "errors": operation_count,
+                "tables": sorted(tables),
+                "transaction_rolled_back": True,
+            }
 
     def _process_strict_wf_realtime_batch(
         self,

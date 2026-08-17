@@ -46,12 +46,19 @@ class _PendingInspectionFailureSQLite(SQLiteDatabase):
     """Inject one physical-transaction inspection failure after a real write."""
 
     fail_next_pending_inspection = False
+    fail_next_invalidation = False
 
     def has_pending_transaction(self) -> bool:
         if self.fail_next_pending_inspection:
             self.fail_next_pending_inspection = False
             raise DatabaseError("injected transaction-state inspection failure")
         return super().has_pending_transaction()
+
+    def invalidate_connection(self) -> None:
+        if self.fail_next_invalidation:
+            self.fail_next_invalidation = False
+            raise DatabaseError("injected connection invalidation failure")
+        super().invalidate_connection()
 
 
 @pytest.mark.parametrize(("entry_name", "importer_class", "single"), ENTRY_POINTS)
@@ -248,6 +255,73 @@ def test_first_header_state_inspection_failure_invalidates_the_connection(
     reopened = SQLiteDatabase({"path": str(path)})
     with reopened:
         assert reopened.fetch_one("SELECT COUNT(*) AS count FROM NL_TC")["count"] == 0
+
+    failure_path = tmp_path / f"invalidation-failure-{entry_name}.db"
+    recovery_failure = _PendingInspectionFailureSQLite(
+        {"path": str(failure_path)}
+    )
+    with recovery_failure:
+        recovery_failure.execute(SCHEMAS["NL_TC"])
+        recovery_failure.commit()
+        importer = importer_class(recovery_failure)
+        if single:
+            assert importer.import_single_record(_tc_record(), auto_commit=False) is True
+        else:
+            assert (
+                importer.import_records(
+                    iter([_tc_record()]), auto_commit=False
+                )["records_imported"]
+                == 1
+            )
+        recovery_failure.fail_next_pending_inspection = True
+        recovery_failure.fail_next_invalidation = True
+
+        with pytest.raises(TransactionRecoveryError, match="invalidation failed"):
+            if single:
+                importer.import_single_record(
+                    _tc_record(DataKubun="0"), auto_commit=False
+                )
+            else:
+                importer.import_records(
+                    iter([_tc_record(DataKubun="0")]), auto_commit=False
+                )
+
+        assert recovery_failure.is_connected() is True
+        assert recovery_failure.has_pending_transaction() is True
+        assert importer.get_statistics()["records_imported"] == 1
+        assert importer.get_statistics()["batches_processed"] == (0 if single else 1)
+        recovery_failure.rollback()
+
+    if single:
+        committed_path = tmp_path / "inspection-single-committed.db"
+        committed = _PendingInspectionFailureSQLite(
+            {"path": str(committed_path)}
+        )
+        with committed:
+            committed.execute(SCHEMAS["NL_TC"])
+            committed.commit()
+            importer = DataImporter(committed)
+            assert importer.import_single_record(
+                _tc_record(), auto_commit=False
+            ) is True
+            committed.commit()
+            assert importer.get_statistics()["records_imported"] == 1
+            committed.fail_next_pending_inspection = True
+
+            with pytest.raises(TransactionRecoveryError, match="inspection"):
+                importer.import_single_record(
+                    _tc_record(DataKubun="0"), auto_commit=False
+                )
+
+            assert committed.is_connected() is False
+            assert importer.get_statistics()["records_imported"] == 1
+            assert importer.get_statistics()["batches_processed"] == 0
+
+        committed_reopened = SQLiteDatabase({"path": str(committed_path)})
+        with committed_reopened:
+            assert committed_reopened.fetch_one(
+                "SELECT COUNT(*) AS count FROM NL_TC"
+            )["count"] == 1
 
 
 @pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))

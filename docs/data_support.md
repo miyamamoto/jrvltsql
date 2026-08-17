@@ -109,7 +109,11 @@ schema preflightによる変更は保持されます。呼び出し全体をall-
 `auto_commit=False`を使います。この場合、後続検証失敗は同じ呼び出しまたは同じ
 caller-owned transactionで先に書いた行と統計をrollbackします。
 このrollback要否を判定するtransaction状態を取得できない場合は、未確定行をcommit可能な
-接続として残さず接続を無効化し、`TransactionRecoveryError`で停止します。
+接続として残さず接続を無効化し、`TransactionRecoveryError`で停止します。統計のrollbackは
+同じtransaction generationに属する未確定分だけに限定します。callerが前のtransactionを
+commit済みの場合、その確定行と累積統計を後続transactionの状態判定失敗で巻き戻しません。
+状態判定と接続無効化の両方が失敗した場合は、接続上の未確定分を安全に分類できないため
+`TransactionRecoveryError`を送出し、既存の統計も成功・失敗のどちらへも推測更新しません。
 
 下表は全38形式について、通常import/parserで使うcurrent base domainを示します。
 providerがその形式を蓄積系・速報系のどちらで提供するかを表すavailability表では
@@ -356,9 +360,16 @@ CKのJRA-VAN標準名モードはまだ実装しておらず、`CHOKYO_DETAIL`�
 取り込みを停止して再構築を求めます。
 速報の非削除DM/TMは、1物理レコードから展開された同一種別・同一`DataKubun`の
 1〜18頭を完全なlistとして渡す必要があります。共通metadata、展開index、馬番
-（`01`〜`18`、重複なし）、各行内容が一致しないlist、他種別との混在、または19頭以上は
-DBへ到達する前にlist全体を拒否します。非削除の1行dictを完全snapshotとは扱いません。
+（`01`〜`18`、重複なし）、metadata内と展開後の正規化済み各行内容が完全一致しないlist、
+または19頭以上はDBへ到達する前に拒否します。`process_parsed_record`へ渡すlistは1物理
+スナップショットだけを表し、他種別との混在を拒否します。非削除の1行dictを完全snapshotとは
+扱いません。
 `DataKubun=0`だけはmetadataを持たない単一の削除レコードとして受け付けます。
+`process_parsed_records_batch`は、先頭行の展開indexとmetadata件数で複数のDM/TM物理
+スナップショットを分割し、間にある削除や他種別レコードも提供順の1 transactionで処理します。
+途中の不完全な展開、metadataの無い非削除行、または1操作でもDB書込に失敗したbatchは、
+先行操作も含めて全てrollbackし、`inserted=0`を返します。成功時の`inserted`は最終行数ではなく、
+提供順に正常適用した展開行と隣接レコードの操作数です。
 DM/TMのnative速報スナップショット置換は、既存レース行の削除後に書込が失敗した場合、caller所有を
 含むactive transaction全体をrollbackします。rollback不能時は接続を無効化し、それも失敗した場合は
 batch・optimized・single・速報の全入口から`TransactionRecoveryError`を送出し、通常の失敗結果へ

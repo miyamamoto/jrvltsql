@@ -348,6 +348,9 @@ def test_mining_snapshot_list_rejects_mixed_or_tampered_expansions(
         }
         for index, row in enumerate(oversized_snapshot)
     ]
+    truncated_snapshot = [
+        {key: value for key, value in base.items() if key not in payload}
+    ]
     variants = (
         [expanded, race],
         [race, expanded],
@@ -355,6 +358,7 @@ def test_mining_snapshot_list_rejects_mixed_or_tampered_expansions(
         [delete, race],
         [{**expanded, index_key: 1}],
         [{**expanded, "Umaban": "02"}],
+        [{**expanded, rows_key: truncated_snapshot}],
         oversized_expansion,
     )
 
@@ -413,6 +417,107 @@ def test_mining_snapshot_list_rejects_mixed_or_tampered_expansions(
             == 0
         )
         database.rollback()
+
+        direct_batch = updater.process_parsed_records_batch([base])
+        assert direct_batch["success"] is False
+        assert direct_batch["inserted"] == 0
+        assert (
+            database.fetch_one(f"SELECT COUNT(*) AS count FROM RT_{record_type}")[
+                "count"
+            ]
+            == 0
+        )
+
+        old_snapshot = [
+            {**base, "Umaban": f"{umaban:02d}"}
+            for umaban in range(1, 19)
+        ]
+        old_expansion = [
+            {**row, rows_key: old_snapshot, index_key: index}
+            for index, row in enumerate(old_snapshot)
+        ]
+        corrected_snapshot = [
+            {**row, "MakeHM": "0945"}
+            for row in old_snapshot
+            if row["Umaban"] != "02"
+        ]
+        corrected_expansion = [
+            {**row, rows_key: corrected_snapshot, index_key: index}
+            for index, row in enumerate(corrected_snapshot)
+        ]
+
+        corrected_batch = updater.process_parsed_records_batch(
+            [*old_expansion, *corrected_expansion]
+        )
+        assert corrected_batch["success"] is True
+        assert corrected_batch["inserted"] == 35
+        corrected_rows = database.fetch_all(
+            f"SELECT Umaban, MakeHM FROM RT_{record_type} ORDER BY Umaban"
+        )
+        assert len(corrected_rows) == 17
+        assert all(row["Umaban"] != 2 for row in corrected_rows)
+        assert all(row["MakeHM"] == "0945" for row in corrected_rows)
+
+        database.execute(f"DELETE FROM RT_{record_type}")
+        database.commit()
+        assert all(
+            item["success"] for item in updater.process_parsed_record(old_expansion)
+        )
+        database.commit()
+        malformed_batch = updater.process_parsed_records_batch(
+            [*old_expansion[1:], *corrected_expansion]
+        )
+        assert malformed_batch["success"] is False
+        assert malformed_batch["inserted"] == 0
+        preserved_rows = database.fetch_all(
+            f"SELECT Umaban, MakeHM FROM RT_{record_type} ORDER BY Umaban"
+        )
+        assert len(preserved_rows) == 18
+        assert all(row["MakeHM"] == "0930" for row in preserved_rows)
+
+        database.execute(f"DELETE FROM RT_{record_type}")
+        database.commit()
+        ordered_batch = updater.process_parsed_records_batch(
+            [*old_expansion, delete, *corrected_expansion]
+        )
+        assert ordered_batch["success"] is True
+        assert ordered_batch["inserted"] == 36
+        ordered_rows = database.fetch_all(
+            f"SELECT Umaban, MakeHM FROM RT_{record_type} ORDER BY Umaban"
+        )
+        assert len(ordered_rows) == 17
+        assert all(row["MakeHM"] == "0945" for row in ordered_rows)
+
+        database.execute(f"DELETE FROM RT_{record_type}")
+        database.execute(
+            f"CREATE TRIGGER reject_{record_type.lower()}_0945 "
+            f"BEFORE INSERT ON RT_{record_type} "
+            "WHEN NEW.MakeHM = '0945' "
+            "BEGIN SELECT RAISE(FAIL, 'injected second snapshot failure'); END"
+        )
+        database.commit()
+        failed_batch = updater.process_parsed_records_batch(
+            [*old_expansion, *corrected_expansion]
+        )
+        assert failed_batch["success"] is False
+        assert failed_batch["inserted"] == 0
+        assert failed_batch["transaction_rolled_back"] is True
+        assert database.fetch_one(
+            f"SELECT COUNT(*) AS count FROM RT_{record_type}"
+        )["count"] == 0
+
+        mixed_batch = updater.process_parsed_records_batch([race, *old_expansion])
+        assert mixed_batch["success"] is True
+        assert mixed_batch["inserted"] == 19
+        assert database.fetch_one(
+            f"SELECT COUNT(*) AS count FROM RT_{record_type}"
+        )["count"] == 18
+        assert database.fetch_one("SELECT COUNT(*) AS count FROM RT_RA")[
+            "count"
+        ] == 1
+        database.execute(f"DELETE FROM RT_{record_type}")
+        database.execute("DELETE FROM RT_RA")
+        database.commit()
 
         delete_with_metadata = {
             **delete,

@@ -331,7 +331,6 @@ def test_tm_realtime_expansion_revision_and_race_delete(tmp_path) -> None:
     assert deleted[0]["success"] is True
     assert remaining == 0
 
-
 @pytest.mark.parametrize("caller_pending", (False, True))
 def test_tm_realtime_snapshot_failure_rolls_back_the_active_transaction(
     tmp_path, monkeypatch, caller_pending
@@ -710,3 +709,37 @@ def test_tm_postgresql_realtime_snapshot_revision_delete(postgresql_db) -> None:
     assert isinstance(deleted, list) and len(deleted) == 1
     assert deleted[0]["success"] is True
     assert remaining == 0
+
+    old_expansion = TMParser().parse(_tm_record())
+    corrected_expansion = TMParser().parse(
+        _tm_record(make_hm="0945", entries=corrected_entries)
+    )
+    assert old_expansion is not None and corrected_expansion is not None
+    batch = updater.process_parsed_records_batch(
+        [*old_expansion, *corrected_expansion]
+    )
+    batch_rows = postgresql_db.fetch_all(
+        'SELECT Umaban AS "Umaban", MakeHM AS "MakeHM" '
+        "FROM RT_TM ORDER BY Umaban"
+    )
+    assert batch["success"] is True
+    assert batch["inserted"] == 35
+    assert len(batch_rows) == 17
+    assert all(
+        row["Umaban"] != 2 and row["MakeHM"] == "0945"
+        for row in batch_rows
+    )
+
+    failing_expansion = TMParser().parse(_tm_record(make_hm="0950"))
+    assert failing_expansion is not None
+    failed_batch = updater.process_parsed_records_batch(
+        [*old_expansion, *failing_expansion]
+    )
+    retained_batch_rows = postgresql_db.fetch_all(
+        'SELECT Umaban AS "Umaban", MakeHM AS "MakeHM" '
+        "FROM RT_TM ORDER BY Umaban"
+    )
+    assert failed_batch["success"] is False
+    assert failed_batch["inserted"] == 0
+    assert failed_batch["transaction_rolled_back"] is True
+    assert retained_batch_rows == batch_rows

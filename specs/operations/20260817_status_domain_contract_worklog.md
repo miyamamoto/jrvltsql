@@ -291,3 +291,66 @@
 - Next safe action: commit this repair and worklog together, run the final
   affected/full/static/docs/package gates on that exact clean full SHA, then
   obtain one bounded carry-forward critical review without changing the tree.
+
+## 2026-08-17 — exact second candidate review and third aggregated repair
+
+- Froze the second repaired candidate as
+  `a587b034270d8f858812e8afc26e2fb572899d5c`. Its exact ordinary full suite
+  completed with `2795 passed, 131 skipped, 22 subtests passed`. Three
+  independent read-only Codex reviewers were used because Claude Code quota
+  remained unavailable. Findings were collected before any edit, following
+  the batched-review policy.
+- The reviews retained three related boundaries. First,
+  `process_parsed_records_batch` still bypassed complete DM/TM snapshot
+  replacement, so a corrected 17-horse physical record could leave the stale
+  eighteenth horse. Second, the metadata comparison checked only keys present
+  in the metadata row, so omitted payload such as `DMTime` or `TMScore` was
+  accepted and persisted as NULL. Third, a committed single-record statistics
+  checkpoint could be mistaken for a later transaction and restored after an
+  unreadable transaction state, under-counting already durable rows.
+- Red-first evidence was kept compact by extending the existing transaction
+  recovery and mining snapshot tests. Against exact production at
+  `a587b034270d8f858812e8afc26e2fb572899d5c`, the focused selection produced
+  exactly `5 failed`: three recovery-failure counter cases reported zero after
+  a successful prior write, and both DM/TM accepted snapshot metadata with the
+  payload key removed. Independent SQLite and PostgreSQL probes additionally
+  reproduced the batch bypass: a 17-row correction returned success while the
+  old eighteenth row remained, and a metadata-free non-delete row was stored.
+- The third repair compares the normalized expanded and metadata rows in both
+  directions. It partitions a flat realtime batch into complete 1–18-row
+  mining physical operations, one-record erases, and adjacent non-mining
+  operations, then applies them in provider order inside one atomic
+  transaction. Multiple corrected snapshots are supported; an incomplete
+  follower, direct non-delete row, or middle DB failure rejects/rolls back the
+  whole batch with `inserted=0`. Successful `inserted` counts provider
+  operations rather than final table cardinality.
+- Importer recovery now associates rollback statistics with the active
+  transaction generation. A stale checkpoint from a committed transaction is
+  cleared without reducing its durable counters. If transaction inspection and
+  connection invalidation both fail, existing counters are preserved because
+  the pending state cannot safely be classified; the fail-hard
+  `TransactionRecoveryError` remains the caller-visible result.
+- Current dirty-tree evidence after the aggregated implementation and final
+  compact test extensions: the original five red cases are now `5 passed`;
+  the earlier affected SQLite selection completed with
+  `463 passed, 42 skipped, 11 subtests passed`; the focused DM/TM set completed
+  with `83 passed, 6 skipped`; actual PostgreSQL 16 DM/TM opt-in contracts
+  completed with `6 passed`; and an independent actual-PostgreSQL statistics
+  recovery probe returned `POSTGRES_STATS_RECOVERY_OK`. After the final compact
+  extensions, the dirty-tree full suite completed with
+  `2795 passed, 131 skipped, 22 subtests passed` in 58.44s. Fatal flake8,
+  `git diff --check`, `uv lock --check`, strict MkDocs, the fail-closed test
+  gate, fresh wheel/sdist content gate, and installed-wheel init smoke all
+  passed. The disposable PostgreSQL container was removed and its exact-name
+  inventory is empty. Final exact-SHA gates still need to be run after this
+  worklog and documentation are committed.
+- Claude Code was not invoked in this repair because its configured quota was
+  unavailable. The maintainer-authorized Codex critical-review fallback was
+  used. No push, PR, merge, tag, or release has occurred. The unrelated
+  PostgreSQL RA/SE executable-metadata mismatch remains a later release blocker
+  and is not claimed fixed by this status-domain iteration.
+- Next safe action: run the full affected SQLite and live PostgreSQL selections,
+  fatal/static/docs/package gates, stop the disposable PostgreSQL container,
+  commit the complete third repair, and perform one final bounded review of the
+  immutable full SHA. Do not open or merge the PR until that final review is
+  GREEN.
