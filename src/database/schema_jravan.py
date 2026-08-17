@@ -1570,9 +1570,10 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             RecordSpec                     CHAR(2)             ,  -- レコード種別ID
             DataKubun                      CHAR(1)             ,  -- データ区分
             MakeDate                       DATE                ,  -- YYYYMMDD形式の日付
+            KettoNum                       VARCHAR(10)         ,  -- 血統登録番号
             DelKubun                       VARCHAR(1)          ,  -- 文字列(1)
             RegDate                        VARCHAR(8)          ,  -- 文字列(8)
-            DelDate                        DATE                ,  -- 抹消年月日
+            DelDate                        VARCHAR(8)          ,  -- 抹消年月日（00000000を保持）
             BirthDate                      DATE                ,  -- 生年月日
             Bamei                          VARCHAR(36)         ,  -- 文字列(36)
             BameiKana                      VARCHAR(36)         ,  -- 文字列(36)
@@ -1791,7 +1792,8 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             Kyakusitu1                     VARCHAR(3)          ,  -- 文字列(3)
             Kyakusitu2                     VARCHAR(3)          ,  -- 文字列(3)
             Kyakusitu3                     VARCHAR(3)          ,  -- 文字列(3)
-            Kyakusitu4                     VARCHAR(3)            -- 文字列(3)
+            Kyakusitu4                     VARCHAR(3)          ,  -- 文字列(3)
+            PRIMARY KEY (KettoNum)
         )
     """,
     "UMA_RACE": """

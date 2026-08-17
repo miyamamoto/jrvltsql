@@ -9,8 +9,17 @@ JV-Data仕様書 Ver.4.9.0.1「フォーマット」シート １３．競走馬
 （実在する馬・馬主・生産者・調教師の情報は入っていない）。フォーマットだけが本物。
 """
 
+import os
+from uuid import uuid4
+
 import pytest
 
+from src.database.migration import SchemaMigrationError
+from src.database.schema_jravan import JRAVAN_SCHEMAS
+from src.database.schema_types import get_table_column_types, get_table_primary_key_columns
+from src.database.sqlite_handler import SQLiteDatabase
+from src.importer.importer import DataImporter
+from src.importer.importer_optimized import OptimizedDataImporter
 from src.parser.um_parser import UMParser
 
 ZENKAKU_SPACE = b"\x81\x40"
@@ -72,14 +81,33 @@ FIELDS += [
     ("RuikeiSyutokuSyogai", 1098, 9, b"000123406"),
 ]
 CHAKU_NAMES = [
-    "SogoChaku", "ChuoGokeiChaku",
-    "SibaChokuChaku", "SibaMigiChaku", "SibaHidariChaku",
-    "DirtChokuChaku", "DirtMigiChaku", "DirtHidariChaku", "SyogaiChaku",
-    "SibaRyoChaku", "SibaYayaomoChaku", "SibaOmoChaku", "SibaFuryoChaku",
-    "DirtRyoChaku", "DirtYayaomoChaku", "DirtOmoChaku", "DirtFuryoChaku",
-    "SyogaiRyoChaku", "SyogaiYayaomoChaku", "SyogaiOmoChaku", "SyogaiFuryoChaku",
-    "SibaShortChaku", "SibaMiddleChaku", "SibaLongChaku",
-    "DirtShortChaku", "DirtMiddleChaku", "DirtLongChaku",
+    "SogoChaku",
+    "ChuoGokeiChaku",
+    "SibaChokuChaku",
+    "SibaMigiChaku",
+    "SibaHidariChaku",
+    "DirtChokuChaku",
+    "DirtMigiChaku",
+    "DirtHidariChaku",
+    "SyogaiChaku",
+    "SibaRyoChaku",
+    "SibaYayaomoChaku",
+    "SibaOmoChaku",
+    "SibaFuryoChaku",
+    "DirtRyoChaku",
+    "DirtYayaomoChaku",
+    "DirtOmoChaku",
+    "DirtFuryoChaku",
+    "SyogaiRyoChaku",
+    "SyogaiYayaomoChaku",
+    "SyogaiOmoChaku",
+    "SyogaiFuryoChaku",
+    "SibaShortChaku",
+    "SibaMiddleChaku",
+    "SibaLongChaku",
+    "DirtShortChaku",
+    "DirtMiddleChaku",
+    "DirtLongChaku",
 ]
 # 項番34-60 着回数 位置1107 から 18バイトずつ。値を項番ごとに変えて、
 # 1つずれたら別の数字が出るようにする。
@@ -92,10 +120,21 @@ FIELDS += [
 ]
 
 
-def build_record():
+def build_record(
+    *,
+    data_kubun: str = "2",
+    ketto_num: str = "2019900001",
+    bamei: str = "テストウマアルファ",
+):
     """仕様書の位置どおりに 1609 バイトを組み立てる（すき間があれば落ちる）。"""
+    replacements = {
+        "DataKubun": data_kubun.encode("ascii"),
+        "KettoNum": ketto_num.encode("ascii"),
+        "Bamei": _pad(bamei, 36, zenkaku=True),
+    }
     record = bytearray()
     for name, position, size, value in FIELDS:
+        value = replacements.get(name, value)
         assert len(value) == size, f"{name}: {len(value)} != {size}"
         assert len(record) == position - 1, f"{name}: gap at {len(record)} (want {position - 1})"
         record += value
@@ -118,7 +157,7 @@ class TestUMParserLayout:
         assert len(self.record) == UMParser.RECORD_LENGTH
 
     def test_record_delimiter_closes_the_layout(self):
-        delimiter = self.record[UMParser.RECORD_DELIMITER_START:UMParser.RECORD_LENGTH]
+        delimiter = self.record[UMParser.RECORD_DELIMITER_START : UMParser.RECORD_LENGTH]
         assert delimiter == b"\r\n"
 
     def test_every_field_uses_a_distinct_decoded_sentinel(self):
@@ -161,3 +200,205 @@ class TestUMParserExactLayoutEnforcement:
     )
     def test_unsupported_record_returns_none(self, mutate):
         assert self.parser.parse(mutate(self.record)) is None
+
+
+def parsed_record(**kwargs):
+    parsed = UMParser().parse(build_record(**kwargs))
+    assert parsed is not None
+    return parsed
+
+
+def test_um_standard_schema_preserves_the_official_registration_key():
+    column_types = get_table_column_types("UMA")
+    assert column_types["KettoNum"] == "TEXT"
+    assert get_table_primary_key_columns("UMA") == ["KettoNum"]
+    database = SQLiteDatabase({"path": ":memory:"})
+    with database:
+        database.execute(JRAVAN_SCHEMAS["UMA"])
+        declared_types = {
+            row["name"]: row["type"] for row in database.fetch_all("PRAGMA table_info(UMA)")
+        }
+    assert declared_types["KettoNum"] == "VARCHAR(10)"
+    assert declared_types["DelDate"] == "VARCHAR(8)"
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_um_standard_storage_keeps_distinct_keys_and_updates_exact_key(
+    tmp_path,
+    importer_class,
+):
+    database = SQLiteDatabase({"path": str(tmp_path / f"{importer_class.__name__}.db")})
+    with database:
+        database.create_table("UMA", JRAVAN_SCHEMAS["UMA"])
+        importer = importer_class(database, use_jravan_schema=True)
+        created = importer.import_records(
+            iter(
+                [
+                    parsed_record(ketto_num="2019900001", bamei="第一登録馬"),
+                    parsed_record(ketto_num="2019900002", bamei="第二登録馬"),
+                ]
+            )
+        )
+        updated = importer.import_records(
+            iter(
+                [
+                    parsed_record(
+                        data_kubun="2",
+                        ketto_num="2019900001",
+                        bamei="第一更新馬",
+                    )
+                ]
+            )
+        )
+        rows = database.fetch_all("SELECT KettoNum, Bamei FROM UMA ORDER BY KettoNum")
+
+    assert created["records_imported"] == 2
+    assert created["records_failed"] == 0
+    assert updated["records_imported"] == 1
+    assert updated["records_failed"] == 0
+    assert rows == [
+        {"KettoNum": "2019900001", "Bamei": "第一更新馬"},
+        {"KettoNum": "2019900002", "Bamei": "第二登録馬"},
+    ]
+
+
+OBSOLETE_STANDARD_UMA_SCHEMA = """
+    CREATE TABLE UMA (
+        RecordSpec CHAR(2),
+        DataKubun CHAR(1),
+        MakeDate DATE,
+        Bamei VARCHAR(36),
+        PRIMARY KEY (Bamei)
+    )
+"""
+
+
+@pytest.fixture
+def postgresql_db():
+    if os.getenv("JLTSQL_RUN_POSTGRESQL_INTEGRATION") != "1":
+        pytest.skip("Set JLTSQL_RUN_POSTGRESQL_INTEGRATION=1 to run PostgreSQL tests")
+
+    from src.database.postgresql_handler import PostgreSQLDatabase
+
+    database = PostgreSQLDatabase(
+        {
+            "host": os.getenv("POSTGRES_HOST") or os.getenv("PGHOST", "localhost"),
+            "port": int(os.getenv("POSTGRES_PORT") or os.getenv("PGPORT", "5432")),
+            "database": os.getenv("POSTGRES_DB") or os.getenv("PGDATABASE", "jltsql_test"),
+            "user": os.getenv("POSTGRES_USER") or os.getenv("PGUSER", "jltsql"),
+            "password": os.getenv("POSTGRES_PASSWORD") or os.getenv("PGPASSWORD", ""),
+            "connect_timeout": 5,
+        }
+    )
+    schema_name = f"jlt_um_{uuid4().hex[:12]}"
+    database.connect()
+    try:
+        database.execute(f"CREATE SCHEMA {schema_name}")
+        database.execute(f"SET search_path TO {schema_name}")
+        database.commit()
+        yield database
+    finally:
+        try:
+            database.execute(f"DROP SCHEMA IF EXISTS {schema_name} CASCADE")
+            database.commit()
+        finally:
+            database.disconnect()
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_um_standard_wrong_key_is_rejected_before_any_mutation(tmp_path, importer_class):
+    database = SQLiteDatabase({"path": str(tmp_path / f"legacy-{importer_class.__name__}.db")})
+    with database:
+        database.execute(OBSOLETE_STANDARD_UMA_SCHEMA)
+        database.execute(
+            "INSERT INTO UMA (RecordSpec, DataKubun, MakeDate, Bamei) VALUES (?, ?, ?, ?)",
+            ("UM", "1", "20000101", "legacy-row"),
+        )
+        database.commit()
+        before_columns = database.fetch_all("PRAGMA table_info(UMA)")
+        before_rows = database.fetch_all("SELECT * FROM UMA")
+
+        with pytest.raises(SchemaMigrationError, match="primary key"):
+            importer_class(database, use_jravan_schema=True).import_records(iter([parsed_record()]))
+
+        assert database.fetch_all("PRAGMA table_info(UMA)") == before_columns
+        assert database.fetch_all("SELECT * FROM UMA") == before_rows
+
+
+def test_um_standard_single_record_respects_the_caller_transaction(tmp_path):
+    database = SQLiteDatabase({"path": str(tmp_path / "single.db")})
+    with database:
+        database.create_table("UMA", JRAVAN_SCHEMAS["UMA"])
+        importer = DataImporter(database, use_jravan_schema=True)
+
+        database.begin_transaction()
+        assert importer.import_single_record(parsed_record(), auto_commit=False) is True
+        assert database.fetch_one("SELECT COUNT(*) AS count FROM UMA")["count"] == 1
+        database.rollback()
+        assert database.fetch_one("SELECT COUNT(*) AS count FROM UMA")["count"] == 0
+
+        assert importer.import_single_record(parsed_record(), auto_commit=True) is True
+        assert database.fetch_one("SELECT KettoNum FROM UMA") == {"KettoNum": "2019900001"}
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_um_postgresql_standard_key_roundtrip_and_legacy_preflight(
+    postgresql_db,
+    importer_class,
+):
+    postgresql_db.execute(JRAVAN_SCHEMAS["UMA"])
+    postgresql_db.commit()
+    importer = importer_class(postgresql_db, use_jravan_schema=True)
+
+    created = importer.import_records(
+        iter(
+            [
+                parsed_record(ketto_num="2019900001", bamei="第一登録馬"),
+                parsed_record(ketto_num="2019900002", bamei="第二登録馬"),
+            ]
+        )
+    )
+    updated = importer.import_records(
+        iter([parsed_record(ketto_num="2019900001", bamei="第一更新馬")])
+    )
+    rows = postgresql_db.fetch_all(
+        'SELECT kettonum AS "KettoNum", bamei AS "Bamei" FROM uma ORDER BY kettonum'
+    )
+
+    assert created["records_imported"] == 2
+    assert created["records_failed"] == 0
+    assert updated["records_imported"] == 1
+    assert updated["records_failed"] == 0
+    assert rows == [
+        {"KettoNum": "2019900001", "Bamei": "第一更新馬"},
+        {"KettoNum": "2019900002", "Bamei": "第二登録馬"},
+    ]
+
+    postgresql_db.execute("DROP TABLE uma")
+    postgresql_db.execute(OBSOLETE_STANDARD_UMA_SCHEMA)
+    postgresql_db.execute(
+        "INSERT INTO uma (RecordSpec, DataKubun, MakeDate, Bamei) VALUES (?, ?, ?, ?)",
+        ("UM", "1", "20000101", "legacy-row"),
+    )
+    postgresql_db.commit()
+    before_columns = postgresql_db.fetch_all(
+        "SELECT column_name, data_type FROM information_schema.columns "
+        "WHERE table_schema = current_schema() AND table_name = 'uma' "
+        "ORDER BY ordinal_position"
+    )
+    before_rows = postgresql_db.fetch_all("SELECT * FROM uma")
+
+    with pytest.raises(SchemaMigrationError, match="primary key"):
+        importer_class(postgresql_db, use_jravan_schema=True).import_records(
+            iter([parsed_record()])
+        )
+
+    assert (
+        postgresql_db.fetch_all(
+            "SELECT column_name, data_type FROM information_schema.columns "
+            "WHERE table_schema = current_schema() AND table_name = 'uma' "
+            "ORDER BY ordinal_position"
+        )
+        == before_columns
+    )
+    assert postgresql_db.fetch_all("SELECT * FROM uma") == before_rows
