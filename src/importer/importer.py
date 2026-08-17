@@ -1028,7 +1028,7 @@ def insert_wf_native_batch(
         return 0
 
     try:
-        if not database.is_transaction_active():
+        if not database.has_pending_transaction():
             database.begin_transaction()
         if optimized and hasattr(database, "insert_many_optimized"):
             inserted = database.insert_many_optimized(table_name, rows)

@@ -343,13 +343,13 @@ class RealtimeUpdater:
         from src.importer.importer import replace_mining_native_snapshot
 
         record_type = record.get("RecordSpec")
-        transaction_active = getattr(self.database, "is_transaction_active", None)
-        owns_transaction = not bool(transaction_active()) if callable(transaction_active) else False
+        owns_transaction = False
         owned_transaction_started = False
 
         try:
             from src.importer.importer import verify_mining_native_schema
 
+            owns_transaction = not self.database.has_pending_transaction()
             if owns_transaction:
                 self.database.begin_transaction()
                 owned_transaction_started = True
@@ -404,6 +404,21 @@ class RealtimeUpdater:
 
     def process_parsed_records_batch(self, records: list[Dict], timeseries: bool = False) -> Dict:
         """Insert already parsed records in batches grouped by target table."""
+        try:
+            # This must be captured before validation or catalog reads. psycopg
+            # starts a physical transaction lazily, so a later snapshot cannot
+            # distinguish caller work from reads performed by this batch.
+            caller_transaction_pending = self.database.has_pending_transaction()
+        except Exception as exc:
+            logger.error(f"Cannot determine realtime transaction ownership: {exc}")
+            return {
+                "operation": "batch_insert",
+                "success": False,
+                "inserted": 0,
+                "errors": max(1, len(records)),
+                "tables": [],
+            }
+
         grouped: dict[str, list[Dict]] = {}
         errors = 0
         batch_collected_at = self._current_collected_at() if timeseries else None
@@ -446,6 +461,7 @@ class RealtimeUpdater:
                 ordered_mutation_required=ordered_mutation_required,
                 timeseries=timeseries,
                 batch_collected_at=batch_collected_at,
+                caller_transaction_pending=caller_transaction_pending,
             )
 
         if ordered_mutation_required:
@@ -494,29 +510,42 @@ class RealtimeUpdater:
             grouped.setdefault(table_name, []).append(clean_data)
 
         inserted = 0
-        owns_batch_transaction = not self.database.is_transaction_active()
-        for table_name, rows in grouped.items():
-            if table_name in self.STRICT_RECORD_TABLES:
-                try:
-                    inserted += insert_wf_native_batch(
+        owns_batch_transaction = not caller_transaction_pending
+        owned_transaction_started = False
+        try:
+            if grouped and owns_batch_transaction:
+                self.database.begin_transaction()
+                owned_transaction_started = True
+            for table_name, rows in grouped.items():
+                if table_name in self.STRICT_RECORD_TABLES:
+                    insert_wf_native_batch(
                         self.database,
                         table_name,
                         rows,
                         commit_batch=False,
                         optimized=False,
                     )
-                except Exception as exc:
-                    logger.error(
-                        f"Atomic realtime insert failed for {table_name}: {exc}"
-                    )
-                    errors += len(rows)
-                continue
-            inserted_rows, failed_rows = self._insert_rows_resilient(table_name, rows)
-            inserted += inserted_rows
-            errors += failed_rows
+                else:
+                    self.database.insert_many(table_name, rows)
+                inserted += len(rows)
 
-        if owns_batch_transaction:
-            self.database.commit()
+            if owned_transaction_started:
+                self.database.commit()
+                owned_transaction_started = False
+        except Exception as exc:
+            rollback_failed_import(
+                self.database,
+                context="atomic realtime batch",
+            )
+            failed_operations = sum(len(rows) for rows in grouped.values())
+            logger.error(f"Atomic realtime batch failed: {exc}")
+            return {
+                "operation": "batch_insert",
+                "success": False,
+                "inserted": 0,
+                "errors": errors + failed_operations,
+                "tables": sorted(grouped),
+            }
 
         return {
             "operation": "batch_insert",
@@ -534,6 +563,7 @@ class RealtimeUpdater:
         ordered_mutation_required: bool,
         timeseries: bool,
         batch_collected_at: Optional[str],
+        caller_transaction_pending: bool,
     ) -> Dict:
         """Apply a realtime mutation containing WF without partial success.
 
@@ -542,7 +572,7 @@ class RealtimeUpdater:
         reported, including non-WF rows in the same call. Provider ordering is
         retained whenever an erase command is present.
         """
-        owns_transaction = not self.database.is_transaction_active()
+        owns_transaction = not caller_transaction_pending
         if owns_transaction:
             self.database.begin_transaction()
 
@@ -661,74 +691,6 @@ class RealtimeUpdater:
     def _clean_data_for_table(self, table_name: str, data: Dict) -> Dict:
         """Drop parser metadata and coerce values for the target schema."""
         return self._prepare_data_for_db(table_name, data)
-
-    def _insert_rows_resilient(
-        self,
-        table_name: str,
-        rows: list[Dict],
-        reconnected: bool = False,
-    ) -> tuple[int, int]:
-        """Insert rows, splitting batches on timeout/driver failures.
-
-        PostgreSQL can time out on very large odds time-series upserts.
-        Dropping a whole 5,000-row odds batch silently corrupts later strategy
-        evaluation, so recursively split failed batches and only count
-        irreducible single-row failures as errors.
-        """
-        if not rows:
-            return 0, 0
-
-        try:
-            self.database.insert_many(table_name, rows)
-            return len(rows), 0
-        except Exception as exc:
-            if not reconnected and self._reconnect_database_after_insert_error(exc):
-                return self._insert_rows_resilient(
-                    table_name,
-                    rows,
-                    reconnected=True,
-                )
-
-            if len(rows) == 1:
-                logger.error(f"Failed to insert row into {table_name}: {exc}")
-                return 0, 1
-
-            midpoint = len(rows) // 2
-            logger.warning(
-                f"Batch insert failed for {table_name}; retrying split batches "
-                f"({len(rows)} -> {midpoint}+{len(rows) - midpoint}): {exc}"
-            )
-            left_inserted, left_failed = self._insert_rows_resilient(table_name, rows[:midpoint])
-            right_inserted, right_failed = self._insert_rows_resilient(table_name, rows[midpoint:])
-            return left_inserted + right_inserted, left_failed + right_failed
-
-    def _reconnect_database_after_insert_error(self, exc: Exception) -> bool:
-        """Reconnect once after driver/network failures before retrying rows."""
-        message = str(exc).lower()
-        connection_error_markers = (
-            "not connected",
-            "timed out",
-            "timeout",
-            "connection",
-            "socket",
-            "closed",
-        )
-        if not any(marker in message for marker in connection_error_markers):
-            return False
-
-        reconnect = getattr(self.database, "_reconnect", None)
-        if reconnect is None:
-            reconnect = getattr(self.database, "connect", None)
-        if reconnect is None:
-            return False
-
-        try:
-            logger.warning(f"Database insert failed with connection error; reconnecting: {exc}")
-            reconnect()
-            return True
-        except Exception as reconnect_exc:
-            logger.error(f"Database reconnect failed after insert error: {reconnect_exc}")
-            return False
 
     def _process_single_record(self, parsed_data: Dict, timeseries: bool = False) -> Optional[Dict]:
         """Process a single parsed record dict."""

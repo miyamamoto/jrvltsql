@@ -307,6 +307,15 @@ class BaseDatabase(ABC):
         """Return whether a caller-owned explicit transaction is active."""
         return self._transaction_active
 
+    def has_pending_transaction(self) -> bool:
+        """Return whether the backend has uncommitted transactional work.
+
+        The base implementation can only observe transactions opened through
+        :meth:`begin_transaction`. Backends that start transactions implicitly
+        must override this method and inspect their physical connection state.
+        """
+        return self._transaction_active
+
     def get_transaction_generation(self) -> Optional[int]:
         """Return the current explicit transaction identity, if active.
 

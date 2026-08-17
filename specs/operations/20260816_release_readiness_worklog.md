@@ -2957,3 +2957,104 @@
   not restart a broad speculative review loop. STOP on candidate drift,
   commit-specific CI failure, reviewer blocker, or a nonzero unresolved PR
   thread count.
+
+### 2026-08-17 12:24-12:45 JST — final candidate gate and GitHub ownership finding
+
+- The transaction-generation repair was committed and pushed as code/test head
+  `f26107935d55e341b5b8d41bb275981fdfa54d3d`. GitHub Actions run
+  `31991059778` completed test, lint, and Windows successfully; performance was
+  a zero-step PR skip. Two independent bounded Codex reviews exercised
+  SQLite, fresh PostgreSQL 16, DualDatabase, same/new caller generations, and
+  rollback-response failure followed by invalidation/reconnect. One returned
+  GREEN with no P0/P1/P2. The second found no production blocker and one
+  worklog-only P2: pg8000 issues explicit `BEGIN`, while psycopg records caller
+  ownership before its backend transaction starts lazily. That wording was
+  corrected in a separate tracked-worklog-only child.
+- Final PR head `e40c2548c12963c4caf0e168c5f5013e0778b34f` differs from the
+  reviewed code/test head only by that factual wording correction. Both
+  reviewers carried forward `GREEN (P0=0/P1=0/P2=0)`, confirming zero
+  `src/`/`tests/` delta, clean worktree, and clean diff. Commit-specific Actions
+  run `31991564984` completed test, lint, and Windows successfully; performance
+  was again a zero-step PR skip. PR #201 was marked ready, its body was updated
+  to the final exact SHAs and evidence, and Copilot was requested exactly once.
+  Copilot reported quota exhaustion and will not be re-requested.
+- Marking the PR ready triggered GitHub Codex review. It opened one unresolved
+  P2 thread at `src/realtime/updater.py:518-519`: SQLite and psycopg may already
+  hold an implicit caller transaction while the wrapper's explicit
+  `is_transaction_active()` remains false. The current realtime batch can then
+  infer ownership and commit unrelated caller work, including on an empty or
+  fully rejected non-WF batch; the strict-WF path makes the same ownership
+  inference after calling the wrapper's begin method. This is an actionable
+  transaction-integrity finding, so merge is stopped even though all previous
+  gates were green.
+- Next safe action is one minimal red-first contract on exact production head
+  `e40c2548c12963c4caf0e168c5f5013e0778b34f`: create an unrelated uncommitted
+  marker through the raw database API, run both a non-WF no-op/rejection and a
+  successful strict-WF batch, then caller rollback must remove both the marker
+  and the batch write. Reproduce on SQLite and fresh PostgreSQL 16 before
+  production repair. The implementation must distinguish actual backend
+  pending transaction state from wrapper explicit ownership without weakening
+  strict failure rollback. STOP on committing caller rows, backend mismatch,
+  hiding the issue only in a test mock, or candidate drift.
+- The grouped contract was extended before production code. On exact production
+  head `e40c2548c12963c4caf0e168c5f5013e0778b34f`, SQLite returned `2
+  failed, 110 deselected`: both an empty non-WF batch and a successful strict-WF
+  batch committed the unrelated caller marker, leaving one row after caller
+  rollback. A fresh PostgreSQL 16 psycopg run returned the identical `2 failed,
+  110 deselected` and durable marker result. This binds both inference sites
+  and both actual implicit-transaction backends; no production file changed
+  before these red runs. The container remains running only for the immediate
+  green replay and will be removed afterward.
+- Before production repair, the same parameterized contract was expanded rather
+  than adding separate speculative tests. It now binds empty, fully rejected
+  unknown non-WF, valid RA, and valid strict-WF calls, and the existing durable
+  mixed-batch test now binds a non-strict RA pair whose second row is rejected by
+  a database trigger. Exact head `e40c2548c12963c4caf0e168c5f5013e0778b34f`
+  returned `5 failed, 4 skipped, 107 deselected` on SQLite: all four success/no-op
+  shapes committed the caller marker, while the non-strict database failure
+  reported `inserted=1` after both rows had been rolled back. Fresh PostgreSQL 16
+  with psycopg returned the identical `5 failed, 111 deselected`: all four caller
+  markers survived rollback and the non-strict failure again returned one
+  success with zero durable rows. These are the red-first proofs for the single
+  pending-ownership plus atomic-failure repair batch; `src/` remains unchanged.
+- A third minimal red check made the new ownership inspection itself prove it
+  can say no: when the backend state accessor raises, the old updater returned
+  success for an empty batch instead of a structured failure. Exact head
+  `e40c2548c12963c4caf0e168c5f5013e0778b34f` therefore returned `1 failed, 64
+  deselected` before production repair. Claude Code Fable remained unavailable
+  because the previously recorded service usage limit had not reset; per the
+  maintainer's fallback authorization this batch was implemented by Codex and
+  challenged by the independent Codex transaction reviewer.
+- The repair adds a fail-closed backend pending-transaction accessor: SQLite
+  reads `Connection.in_transaction`, psycopg reads its physical transaction
+  status, pg8000 retains the wrapper's explicit-BEGIN state, and DualDatabase
+  treats either connected backend as pending. Realtime captures that state at
+  method entry before validation/catalog reads, never commits a caller-pending
+  success, and reports a state-inspection failure before mutation. WF native
+  and mining snapshot helpers use the same physical boundary. The unsafe
+  recursive row-split/reconnect fallback was removed: any grouped DB failure
+  now rolls back the whole call and returns `inserted=0`, because later rollback
+  could otherwise erase an earlier row already counted as successful.
+- The formerly red SQLite selection passes `6 passed, 4 skipped, 171
+  deselected` including the state-inspection refusal; focused backend accessor
+  tests pass `4 passed, 85 deselected`. The same fresh PostgreSQL 16 psycopg
+  instance passes the formerly red ownership/failure selection `5 passed, 111
+  deselected` and the complete opt-in WF contract `116 passed`. The disposable
+  container `jlt_wf_pg16_implicit_red_20260817` was removed and its filtered
+  `docker ps -a` result is empty.
+- Broader affected realtime/PostgreSQL/Dual/WF/DM/TM/expanded/daily tests pass
+  `335 passed, 45 skipped, 11 subtests passed`. The Python 3.12.11 CI-equivalent
+  suite passes `2667 passed, 125 skipped, 14 deselected, 14 subtests passed`
+  with 76% coverage. `TEST GATE PASS`, `OFFICIAL ORACLE PASS`, compileall,
+  isolated fatal flake8 with zero findings, strict MkDocs, and `git diff
+  --check` pass. Ruff still reports the repository's existing broad style/type
+  debt and was not used as a blocking gate. Fresh wheel/sdist version 1.6.10
+  build succeeds; the two-artifact content gate passes and continues to exclude
+  tracked `specs/` and official audit fixtures. Setuptools emits only the known
+  future license-metadata deprecation.
+- Current state remains intentionally dirty with this one batched repair and
+  its worklog. Next safe action is a final diff check, one commit/push, then one
+  exact-SHA critical review batch and commit-specific CI. The GitHub thread must
+  be answered politely and resolved only after that exact SHA is green. STOP on
+  candidate drift, reviewer blocker, failed CI step, or any nonzero unresolved
+  thread count; no merge/release/provider-acquisition claim is authorized yet.

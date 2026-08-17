@@ -77,6 +77,26 @@ class PostgreSQLDatabase(BaseDatabase):
         """
         return "postgresql"
 
+    def has_pending_transaction(self) -> bool:
+        """Return explicit or psycopg-implicit transaction state."""
+        if self._transaction_active:
+            return True
+        if self._connection is None:
+            return False
+        if DRIVER == "pg8000":
+            # pg8000.native statements are standalone unless this wrapper has
+            # issued BEGIN, which is represented by _transaction_active.
+            return False
+        try:
+            return (
+                self._connection.info.transaction_status
+                != psycopg.pq.TransactionStatus.IDLE
+            )
+        except Exception as exc:
+            raise DatabaseError(
+                f"Failed to inspect PostgreSQL transaction state: {exc}"
+            ) from exc
+
     def _quote_identifier(self, identifier: str) -> str:
         """Convert identifier to PostgreSQL-compatible form (lowercase, unquoted).
 

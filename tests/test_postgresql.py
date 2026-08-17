@@ -191,11 +191,43 @@ def test_pg8000_explicit_batch_transaction(monkeypatch):
     monkeypatch.setattr(postgresql_handler, "DRIVER", "pg8000")
 
     database.begin_transaction()
+    assert database.has_pending_transaction() is True
     database.begin_transaction()
     database.commit()
+    assert database.has_pending_transaction() is False
     database.commit()
 
     assert database._connection.run.call_args_list == [call("BEGIN"), call("COMMIT")]
+
+
+def test_psycopg_pending_transaction_inspection_is_fail_closed(monkeypatch):
+    """Implicit psycopg state is observable and inspection errors propagate."""
+    from unittest.mock import MagicMock
+
+    import src.database.postgresql_handler as postgresql_handler
+    from src.database.base import DatabaseError
+
+    database = postgresql_handler.PostgreSQLDatabase({})
+    database._connection = MagicMock()
+    monkeypatch.setattr(postgresql_handler, "DRIVER", "psycopg")
+
+    database._connection.info.transaction_status = (
+        postgresql_handler.psycopg.pq.TransactionStatus.IDLE
+    )
+    assert database.has_pending_transaction() is False
+    database._connection.info.transaction_status = (
+        postgresql_handler.psycopg.pq.TransactionStatus.INTRANS
+    )
+    assert database.has_pending_transaction() is True
+
+    class BrokenInfo:
+        @property
+        def transaction_status(self):
+            raise RuntimeError("status unavailable")
+
+    database._connection.info = BrokenInfo()
+    with pytest.raises(DatabaseError, match="Failed to inspect PostgreSQL"):
+        database.has_pending_transaction()
 
 
 def test_pg8000_caller_managed_transaction_can_roll_back(monkeypatch):

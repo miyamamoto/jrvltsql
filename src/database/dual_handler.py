@@ -149,6 +149,14 @@ class DualDatabase(BaseDatabase):
         """
         return self._primary.get_db_type()
 
+    def has_pending_transaction(self) -> bool:
+        """Return whether either connected backend has pending work."""
+        if self._transaction_active or self._primary.has_pending_transaction():
+            return True
+        if not self._secondary.is_connected():
+            return False
+        return self._secondary.has_pending_transaction()
+
     def get_migration_targets(self) -> tuple[BaseDatabase, ...]:
         """Return connected backends for backend-specific schema migration."""
         targets = [self._primary]

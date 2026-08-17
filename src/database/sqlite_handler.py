@@ -50,6 +50,19 @@ class SQLiteDatabase(BaseDatabase):
         """
         return "sqlite"
 
+    def has_pending_transaction(self) -> bool:
+        """Return explicit or SQLite-implicit transaction state."""
+        if self._transaction_active:
+            return True
+        if self._connection is None:
+            return False
+        try:
+            return bool(self._connection.in_transaction)
+        except Exception as exc:
+            raise DatabaseError(
+                f"Failed to inspect SQLite transaction state: {exc}"
+            ) from exc
+
     def connect(self) -> None:
         """Establish SQLite database connection.
 

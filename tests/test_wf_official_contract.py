@@ -1069,6 +1069,21 @@ def test_wf_realtime_transaction_result_matches_durable_mixed_and_ordered_rows(
             assert _count(database, "RT_WF") == 0, case_id
             assert _count(database, "RT_RA") == 0, case_id
 
+    database = SQLiteDatabase({"path": str(tmp_path / "non-strict-failure.db")})
+    with database:
+        database.execute(SCHEMAS["RT_RA"])
+        database.execute(
+            "CREATE TRIGGER reject_rt_ra_0817 BEFORE INSERT ON RT_RA "
+            "WHEN NEW.MonthDay = 817 BEGIN SELECT RAISE(FAIL, 'reject RA 0817'); END"
+        )
+        result = RealtimeUpdater(database).process_parsed_records_batch(
+            [realtime_ra_record(), realtime_ra_record(month_day="0817")]
+        )
+        assert result["success"] is False
+        assert result["inserted"] == 0
+        assert result["errors"] == 2
+        assert _count(database, "RT_RA") == 0
+
     database = SQLiteDatabase({"path": str(tmp_path / "success-boundary.db")})
     with database:
         database.execute(SCHEMAS["RT_WF"])
@@ -1115,6 +1130,45 @@ def test_wf_realtime_transaction_result_matches_durable_mixed_and_ordered_rows(
             "tables": ["RT_WF"],
         }
         assert _count(database, "RT_WF") == 0
+
+
+@pytest.mark.parametrize(
+    ("case_id", "expected_success", "expected_inserted"),
+    (
+        ("empty-non-wf", True, 0),
+        ("rejected-non-wf", False, 0),
+        ("valid-non-wf", True, 1),
+        ("strict-wf", True, 1),
+    ),
+)
+def test_wf_realtime_does_not_commit_implicit_caller_transaction(
+    tmp_path, case_id, expected_success, expected_inserted
+) -> None:
+    database = SQLiteDatabase({"path": str(tmp_path / f"implicit-{case_id}.db")})
+    with database:
+        database.execute("CREATE TABLE CALLER_MARKER (id INTEGER PRIMARY KEY)")
+        database.execute(SCHEMAS["RT_WF"])
+        database.execute(SCHEMAS["RT_RA"])
+        database.commit()
+        database.execute("INSERT INTO CALLER_MARKER (id) VALUES (1)")
+        assert database.is_transaction_active() is False
+        assert database.has_pending_transaction() is True
+
+        records = {
+            "empty-non-wf": [],
+            "rejected-non-wf": [{"RecordSpec": "ZZ", "DataKubun": "1"}],
+            "valid-non-wf": [realtime_ra_record()],
+            "strict-wf": [parsed_record()],
+        }[case_id]
+        result = RealtimeUpdater(database).process_parsed_records_batch(records)
+        assert result["success"] is expected_success
+        assert result["inserted"] == expected_inserted
+
+        database.rollback()
+        assert database.has_pending_transaction() is False
+        assert _count(database, "CALLER_MARKER") == 0
+        assert _count(database, "RT_WF") == 0
+        assert _count(database, "RT_RA") == 0
 
 
 def test_wf_realtime_extra_unique_constraint_is_rejected_before_mutation(tmp_path) -> None:
@@ -1891,6 +1945,44 @@ def test_wf_postgresql_native_standard_and_realtime_contract(postgresql_db) -> N
 
 
 @pytest.mark.parametrize(
+    ("case_id", "expected_success", "expected_inserted"),
+    (
+        ("empty-non-wf", True, 0),
+        ("rejected-non-wf", False, 0),
+        ("valid-non-wf", True, 1),
+        ("strict-wf", True, 1),
+    ),
+)
+def test_wf_postgresql_realtime_does_not_commit_implicit_caller_transaction(
+    postgresql_db, case_id, expected_success, expected_inserted
+) -> None:
+    postgresql_db.execute("CREATE TABLE CALLER_MARKER (id INTEGER PRIMARY KEY)")
+    postgresql_db.execute(SCHEMAS["RT_WF"])
+    postgresql_db.execute(SCHEMAS["RT_RA"])
+    postgresql_db.commit()
+    postgresql_db.execute("INSERT INTO CALLER_MARKER (id) VALUES (1)")
+    assert postgresql_db.is_transaction_active() is False
+    assert postgresql_db.has_pending_transaction() is True
+
+    records = {
+        "empty-non-wf": [],
+        "rejected-non-wf": [{"RecordSpec": "ZZ", "DataKubun": "1"}],
+        "valid-non-wf": [realtime_ra_record()],
+        "strict-wf": [parsed_record()],
+    }[case_id]
+    result = RealtimeUpdater(postgresql_db).process_parsed_records_batch(records)
+    assert result["success"] is expected_success
+    assert result["inserted"] == expected_inserted
+
+    postgresql_db.rollback()
+    assert postgresql_db.has_pending_transaction() is False
+    assert _count(postgresql_db, "CALLER_MARKER") == 0
+    assert _count(postgresql_db, "RT_WF") == 0
+    assert _count(postgresql_db, "RT_RA") == 0
+    postgresql_db.commit()
+
+
+@pytest.mark.parametrize(
     ("expected", "malformed", "message"),
     (
         pytest.param(
@@ -2135,6 +2227,17 @@ def test_wf_postgresql_realtime_database_failure_reports_no_success(
         assert result["errors"] == len(records)
         assert _count(postgresql_db, "RT_WF") == 0
         assert _count(postgresql_db, "RT_RA") == 0
+
+    non_strict = updater.process_parsed_records_batch(
+        [realtime_ra_record(), realtime_ra_record(month_day="0817")]
+    )
+    assert non_strict["success"] is False
+    assert non_strict["inserted"] == 0
+    assert non_strict["errors"] == 2
+    assert _count(postgresql_db, "RT_RA") == 0
+    # psycopg starts a caller-owned transaction for the verification SELECT;
+    # close it before the next independent updater-owned call.
+    postgresql_db.commit()
 
     first = updater.process_parsed_records_batch([realtime_ra_record()])
     assert first["success"] is True

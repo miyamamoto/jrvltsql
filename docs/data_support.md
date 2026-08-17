@@ -266,6 +266,11 @@ JRA-VAN標準名モードの保存先はproject canonical名`JYUSYOSIKI_HEAD`（
 削除拒否の根拠にしません。native・標準名・速報の各WF書込はbatch途中のDB例外で全体を
 rollbackし、行単位fallbackによる部分成功や、rollbackされた操作を成功件数へ残すことを許しません。
 `inserted`は最終行数ではなく、提供順に正常適用された操作数です。
+速報の通常grouped batchも、SQLite/psycopgが暗黙に開始したcaller側transactionを所有済みとして
+扱い、成功時に勝手にcommitしません。DB書込が1件でも失敗した場合は同じcallのgrouped mutationを
+全てrollbackして`inserted=0`を返し、後続rollbackで消える行を部分成功として数えません。
+psycopgではSELECTだけでもtransactionが開始されるため、独立した取込単位へ移るcallerは明示的に
+commitまたはrollbackして境界を閉じてください。transaction状態を判定できない場合は書込前に失敗します。
 `WIN5`は読み取り側の名前解決互換用のaliasであり、新規import先には使いません。
 主キーや`HatubaiHyosu`のない旧`JYUSYOSIKI_HEAD`、`Num`・主キー・外部キーのない旧`JYUSYOSIKI`、
 親子の片方だけが存在するDB、`WIN5`しか存在しない標準名DBは自動`ALTER`せず、
