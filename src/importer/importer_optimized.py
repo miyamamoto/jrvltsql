@@ -315,7 +315,10 @@ class OptimizedDataImporter:
         try:
             first_record = next(records, exhausted)
             if first_record is not exhausted:
-                validate_import_record_header(first_record)
+                first_record_type, _ = validate_import_record_header(first_record)
+                first_table_name = self._get_table_name(first_record_type)
+                if first_table_name is not None:
+                    validate_se_record(first_record, first_table_name)
                 records = chain((first_record,), records)
         except Exception:
             if not auto_commit:

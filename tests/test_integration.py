@@ -168,14 +168,14 @@ class TestIntegration:
                 "Kaiji": "03",
                 "Nichiji": "08",
                 "RaceNum": "11",
-                "Wakuban": "01",
+                "Wakuban": "1",
                 "Umaban": "01",
                 "KettoNum": "2024012345",
                 "Bamei": "テスト馬",
                 "SexCD": "1",
                 "Barei": "03",
                 "Futan": "550",      # Will be converted to 55.0
-                "BaTaijyu": "480",   # Will be converted to 48.0
+                "BaTaijyu": "480",   # Provider kilograms stay 480
                 "Time": "1234",      # Will be converted to 123.4
                 "Odds": "0015",      # Will be converted to 1.5
                 "Ninki": "01",

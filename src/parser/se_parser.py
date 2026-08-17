@@ -39,6 +39,73 @@ class SEParser:
         "Umaban",
         "KettoNum",
     )
+    # Provider strings are stripped after strict CP932 decoding. Caller-built
+    # rows must still fit the same physical spans before database coercion.
+    # DataKubun=0 is a keyed command, so its provider body stays opaque.
+    BODY_FIELD_BYTE_WIDTHS = (
+        ("Wakuban", 1),
+        ("Bamei", 36),
+        ("UmaKigoCD", 2),
+        ("SexCD", 1),
+        ("HinsyuCD", 1),
+        ("KeiroCD", 2),
+        ("Barei", 2),
+        ("TozaiCD", 1),
+        ("ChokyosiCode", 5),
+        ("ChokyosiRyakusyo", 8),
+        ("BanusiCode", 6),
+        ("BanusiName", 64),
+        ("Fukusyoku", 60),
+        ("Reserved_229", 60),
+        ("Futan", 3),
+        ("FutanBefore", 3),
+        ("Blinker", 1),
+        ("Reserved_296", 1),
+        ("KisyuCode", 5),
+        ("KisyuCodeBefore", 5),
+        ("KisyuRyakusyo", 8),
+        ("KisyuRyakusyoBefore", 8),
+        ("MinaraiCD", 1),
+        ("MinaraiCDBefore", 1),
+        ("BaTaijyu", 3),
+        ("ZogenFugo", 1),
+        ("ZogenSa", 3),
+        ("IJyoCD", 1),
+        ("NyusenJyuni", 2),
+        ("KakuteiJyuni", 2),
+        ("DochakuKubun", 1),
+        ("DochakuTosu", 1),
+        ("Time", 4),
+        ("ChakusaCD", 3),
+        ("ChakusaCDP", 3),
+        ("ChakusaCDPP", 3),
+        ("Jyuni1c", 2),
+        ("Jyuni2c", 2),
+        ("Jyuni3c", 2),
+        ("Jyuni4c", 2),
+        ("Odds", 4),
+        ("Ninki", 2),
+        ("Honsyokin", 8),
+        ("Fukasyokin", 8),
+        ("Reserved_382", 3),
+        ("Reserved_385", 3),
+        ("HaronTimeL4", 3),
+        ("HaronTimeL3", 3),
+        ("KettoNum1", 10),
+        ("Bamei1", 36),
+        ("KettoNum2", 10),
+        ("Bamei2", 36),
+        ("KettoNum3", 10),
+        ("Bamei3", 36),
+        ("TimeDiff", 4),
+        ("RecordUpKubun", 1),
+        ("DMKubun", 1),
+        ("DMTime", 5),
+        ("DMGosaP", 4),
+        ("DMGosaM", 4),
+        ("DMJyuni", 2),
+        ("KyakusituKubun", 1),
+    )
 
     def __init__(self):
         self.logger = get_logger(__name__)
@@ -94,6 +161,23 @@ class SEParser:
         """Validate fields required to route/update/delete one current SE row."""
 
         cls.validate_key_fields(record)
+        data_kubun = record.get("DataKubun") or record.get("headDataKubun")
+        if data_kubun == "0":
+            return
+        for field_name, byte_width in cls.BODY_FIELD_BYTE_WIDTHS:
+            if field_name not in record or record[field_name] in (None, ""):
+                continue
+            value = record[field_name]
+            if not isinstance(value, str):
+                raise ValueError(f"SE {field_name} must be a provider text value")
+            try:
+                encoded = value.encode("cp932", errors="strict")
+            except UnicodeEncodeError as error:
+                raise ValueError(f"SE {field_name} is not CP932 encodable") from error
+            if len(encoded) > byte_width:
+                raise ValueError(
+                    f"SE {field_name} exceeds its official {byte_width}-byte span"
+                )
 
     def parse(self, data: bytes) -> dict[str, Any] | None:
         """

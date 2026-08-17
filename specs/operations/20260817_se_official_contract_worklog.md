@@ -268,3 +268,102 @@ the complete iteration, then execute the focused and full gates against that
 exact clean SHA. Only after those pass should the two independent critical
 reviews start; reviewer edits are prohibited until both findings are
 aggregated.
+
+## Exact-candidate critical review and one repair batch
+
+- Frozen reviewed candidate:
+  `6f4a6a31567c574c78b08cdde0a3125670454d9d`; both independent Codex
+  reviewers started and ended on that exact clean SHA. Both returned
+  `NEEDS_CHANGES`; no reviewer edited the worktree and no Claude result was
+  counted.
+- The findings were deduplicated before implementation. The actionable repair
+  groups were: preflight every single-table native migration against existing
+  SE storage; validate every present SE column type/capacity/nullability;
+  validate caller-built CP932 body widths and standard alias conflicts before
+  schema migration; allow Dual to create a missing SE table only after each
+  existing target is verified; make row-fallback statistics match committed
+  rows; and separate the official workbook prize evidence from the narrower
+  community A/B background citation.
+- The body validator remains deliberately narrow: non-delete caller values
+  must be strict CP932 and no wider than their official physical spans, but it
+  does not invent availability/value-domain rules from provider defects.
+  Status 0 remains an exact-key command with an opaque body.
+
+### Observed red before the review repair
+
+- With only the compact existing test extended and production code unchanged,
+  the SQLite SE contract produced **18 failed, 28 passed, 20 skipped**.
+  Concrete failures included accepted wrong body type/extra `NOT NULL`, an
+  alias conflict after `RACE.YoubiCD` had already been added, all six malformed
+  CP932/width cases passing, unrelated `NL_RA` migration despite unsafe
+  `NL_SE`, four Dual missing-target false negatives, and
+  `records_imported=1` with zero durable rows after row fallback.
+- Fresh PostgreSQL 16 on the same unchanged implementation produced **4
+  failed** for the added boundary selection: DataImporter batch,
+  OptimizedDataImporter batch, and single-record Dual imports all treated an
+  over-width standard reservation as success while only SQLite retained it;
+  the normal DataImporter again reported one success while PostgreSQL retained
+  zero rows after a later trigger rejection.
+- These are observed failures, not expected-only assertions. Existing
+  canonical current-layout and status-0 positives remained green in the same
+  run.
+
+### Implemented review repair
+
+- `SEParser.validate_current_fields()` now validates every present non-delete
+  physical body value as strict CP932 within its official byte span. The
+  standard aliases are conflict-checked and projected back to their provider
+  names before the same validator runs.
+- Both batch importers validate the first fully resolved SE target before
+  standard schema preflight; single-record import does the same before opening
+  or joining a transaction. This prevents the first invalid SE body/alias from
+  causing unrelated additive DDL.
+- SE schema verification now checks every present column's logical type,
+  lossless capacity, and exact nullability. Safe widening is limited to
+  unbounded text, sufficient text/numeric capacity, and wider integral types;
+  unrelated type families and extra `NOT NULL` constraints fail closed.
+- `SchemaManager.create_table()` performs existing-SE preflight before every
+  known native table migration. On Dual, only targets where the SE table
+  already exists are verified; a missing counterpart can then be created by
+  the normal mirrored `CREATE TABLE IF NOT EXISTS` path.
+- Normal DataImporter row fallback commits each successful retry before
+  incrementing its success count. A later rejected row can no longer roll back
+  a row already counted as imported.
+- The public documentation now attributes status-A prize-zero behavior to the
+  workbook rows that define it and limits the community link to the separate
+  A/B availability-correction background it actually supports.
+
+### Repair checks completed so far
+
+- SQLite SE contract: **46 passed, 20 skipped**.
+- Fresh PostgreSQL 16 SE contract: **66 passed**.
+- A first broader affected run exposed one old simulated SE row with a
+  two-character one-byte `Wakuban` and three migration tests using safe widened
+  SQLite key affinities. The simulated row was corrected to provider width;
+  the schema verifier was narrowed from exact spelling to lossless logical
+  compatibility while still rejecting the new wrong-type/capacity/nullability
+  negatives. The exact last-failed plus SE selection then passed **50 passed,
+  20 skipped**.
+- No new release, provider architecture, or 64-bit support claim is made by
+  this repair evidence. Final focused/full/build/docs gates and a clean exact
+  candidate commit remain required before carry-forward review.
+
+### Pre-commit aggregate gates
+
+- Affected parser/importer/realtime/migration selection: **685 passed, 20
+  skipped, 10 subtests passed**.
+- Fresh PostgreSQL 16 final SE selection after lossless type-compatibility
+  refinement: **66 passed**.
+- Complete Actions-equivalent non-live suite on Python 3.12.11: **2967 passed,
+  189 skipped, 14 deselected, 21 subtests passed**, total coverage 77 percent.
+- Test-gate self-validation, fatal syntax/undefined-name flake8, `uv lock
+  --check`, and `git diff --check` passed.
+- Strict MkDocs passed. Fresh PEP 517 wheel and sdist built; the distribution
+  content gate and installed-wheel init smoke both passed, with `specs/`
+  excluded from the artifacts.
+- The runtime CP932 width map is directly bound to every non-header/non-key
+  parser slice from the pinned SDK manifest in the existing SE oracle test;
+  the added assertion passed.
+- These results precede the final commit only to catch integration issues. The
+  same required gates must be rerun against the resulting clean full SHA before
+  it can be reviewed or pushed.

@@ -14,11 +14,16 @@ import pytest
 from scripts.setup_pg_test_db import postgresql_test_config
 from src.database.dual_handler import DualDatabase
 from src.database.migration import SchemaMigrationError
-from src.database.schema import SCHEMAS
+from src.database.schema import SCHEMAS, SchemaManager
 from src.database.schema_jravan import JRAVAN_SCHEMAS
 from src.database.schema_types import get_table_primary_key_columns
 from src.database.sqlite_handler import SQLiteDatabase
-from src.importer.importer import DataImporter, convert_record_types, validate_import_record_header
+from src.importer.importer import (
+    DataImporter,
+    convert_record_types,
+    validate_import_record_header,
+    validate_se_record,
+)
 from src.importer.importer_optimized import OptimizedDataImporter
 from src.parser.canonical import canonicalize_se_fields
 from src.parser.se_parser import SEParser
@@ -249,6 +254,13 @@ def test_every_se_parser_slice_is_bound_to_the_pinned_sdk_manifest() -> None:
             assert covered[offset] is False
             covered[offset] = True
     assert all(covered)
+    header_and_key = {"RecordSpec", "DataKubun", "MakeDate", *SE_KEY_COLUMNS}
+    expected_body_widths = {
+        name: width
+        for name, _, width in actual
+        if name not in header_and_key and name != "RecordSeparator"
+    }
+    assert dict(SEParser.BODY_FIELD_BYTE_WIDTHS) == expected_body_widths
 
 
 def test_se_all_storage_schemas_use_the_official_ordered_key() -> None:
@@ -363,11 +375,22 @@ def test_se_canonical_key_and_status9_remain_valid() -> None:
     )
 
 
-@pytest.mark.parametrize("defect", ["wrong-key-type", "extra-unique", "null-key-row"])
+@pytest.mark.parametrize(
+    "defect",
+    [
+        "wrong-key-type",
+        "wrong-body-type",
+        "extra-unique",
+        "null-key-row",
+        "nonnull-body",
+    ],
+)
 def test_se_unsafe_schema_is_rejected_before_mutation(tmp_path, defect: str) -> None:
     schema = _official_pk_schema(SCHEMAS["NL_SE"])
     if defect == "wrong-key-type":
         schema = schema.replace("Year INTEGER", "Year TEXT", 1)
+    elif defect == "wrong-body-type":
+        schema = schema.replace("BaTaijyu REAL", "BaTaijyu TEXT", 1)
     elif defect == "extra-unique":
         primary_key = (
             "PRIMARY KEY (\n"
@@ -380,8 +403,10 @@ def test_se_unsafe_schema_is_rejected_before_mutation(tmp_path, defect: str) -> 
             f"UNIQUE (Bamei),\n            {primary_key}",
         )
         assert "UNIQUE (Bamei)" in schema
-    else:
+    elif defect == "null-key-row":
         schema = schema.replace("KettoNum TEXT NOT NULL", "KettoNum TEXT", 1)
+    else:
+        schema = schema.replace("Bamei TEXT,", "Bamei TEXT NOT NULL,", 1)
 
     database = SQLiteDatabase({"path": str(tmp_path / f"{defect}.db")})
     with database:
@@ -485,7 +510,10 @@ def test_se_dual_rejects_unsafe_identity_on_either_target(
         assert secondary.fetch_one("SELECT COUNT(*) AS n FROM NL_SE") == {"n": 0}
 
 
-@pytest.mark.parametrize("defect", ("legacy-key", "nullable-key"))
+@pytest.mark.parametrize(
+    "defect",
+    ("legacy-key", "nullable-key", "wrong-body-type", "nonnull-body"),
+)
 def test_unsafe_standard_se_key_stops_before_unrelated_additive_migration(
     tmp_path, defect: str
 ) -> None:
@@ -500,13 +528,25 @@ def test_unsafe_standard_se_key_stops_before_unrelated_additive_migration(
             "Kaiji INTEGER, Nichiji INTEGER, RaceNum INTEGER, Umaban INTEGER, "
             "PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban))"
         )
-    else:
+    elif defect == "nullable-key":
         unsafe_se = JRAVAN_SCHEMAS["UMA_RACE"].replace(
             "KettoNum                       VARCHAR(10) NOT NULL",
             "KettoNum                       VARCHAR(10)         ",
             1,
         )
         assert unsafe_se != JRAVAN_SCHEMAS["UMA_RACE"]
+    elif defect == "wrong-body-type":
+        unsafe_se = JRAVAN_SCHEMAS["UMA_RACE"].replace(
+            "BaTaijyu                       SMALLINT",
+            "BaTaijyu                       VARCHAR(3)",
+            1,
+        )
+    else:
+        unsafe_se = JRAVAN_SCHEMAS["UMA_RACE"].replace(
+            "Bamei                          VARCHAR(36)         ",
+            "Bamei                          VARCHAR(36) NOT NULL",
+            1,
+        )
     database = SQLiteDatabase({"path": str(tmp_path / "preflight.db")})
     with database:
         database.execute(race_schema)
@@ -518,6 +558,120 @@ def test_unsafe_standard_se_key_stops_before_unrelated_additive_migration(
         after = database.fetch_all('PRAGMA table_info("RACE")')
 
     assert after == before
+
+
+@pytest.mark.parametrize(
+    "changes",
+    (
+        {"Reserved_229": "A", "reserved1": "B"},
+        {"Reserved_229": "A" * 61},
+    ),
+)
+def test_first_se_body_rejection_stops_before_standard_migration(
+    tmp_path, changes: dict
+) -> None:
+    race_schema = JRAVAN_SCHEMAS["RACE"].replace(
+        "            YoubiCD                        VARCHAR(1)          ,  -- 文字列(1)\n",
+        "",
+    )
+    database = SQLiteDatabase({"path": str(tmp_path / "first-body.db")})
+    with database:
+        database.execute(race_schema)
+        database.execute(JRAVAN_SCHEMAS["UMA_RACE"])
+        database.commit()
+        before = database.fetch_all('PRAGMA table_info("RACE")')
+        record = _parsed_se()
+        record.update(changes)
+        with pytest.raises(SchemaMigrationError):
+            DataImporter(database, use_jravan_schema=True).import_records(iter([record]))
+        after = database.fetch_all('PRAGMA table_info("RACE")')
+
+    assert after == before
+
+
+@pytest.mark.parametrize(
+    ("field_name", "value"),
+    [
+        ("Bamei", "馬" * 19),
+        ("Bamei", "\U0001f40e"),
+        ("Reserved_229", "A" * 61),
+        ("Reserved_296", "AB"),
+        ("Reserved_382", "ABCD"),
+        ("Reserved_385", "ABCD"),
+    ],
+)
+def test_se_caller_body_must_fit_the_official_cp932_span(
+    field_name: str, value: str
+) -> None:
+    record = _parsed_se()
+    record[field_name] = value
+
+    with pytest.raises(SchemaMigrationError):
+        validate_se_record(record, "UMA_RACE")
+
+    delete = _parsed_se(data_kubun="0")
+    delete[field_name] = value
+    assert validate_se_record(delete, "UMA_RACE") is True
+
+
+def test_schema_manager_stops_unrelated_native_migration_on_unsafe_se(tmp_path) -> None:
+    unsafe_se = SCHEMAS["NL_SE"].replace(
+        "Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban, KettoNum",
+        "Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban",
+        1,
+    )
+    incomplete_ra = SCHEMAS["NL_RA"].replace("            Crlf TEXT,\n", "", 1)
+    assert incomplete_ra != SCHEMAS["NL_RA"]
+    database = SQLiteDatabase({"path": str(tmp_path / "schema-manager.db")})
+    with database:
+        database.execute(unsafe_se)
+        database.execute(incomplete_ra)
+        database.commit()
+        before = database.fetch_all('PRAGMA table_info("NL_RA")')
+        created = SchemaManager(database).create_table("NL_RA")
+        after = database.fetch_all('PRAGMA table_info("NL_RA")')
+
+    assert created is False
+    assert after == before
+
+
+@pytest.mark.parametrize("table_name", ("NL_SE", "RT_SE"))
+@pytest.mark.parametrize("existing_target", ("primary", "secondary"))
+def test_schema_manager_repairs_only_the_missing_dual_se_table(
+    tmp_path, table_name: str, existing_target: str
+) -> None:
+    primary = SQLiteDatabase({"path": str(tmp_path / f"{table_name}-primary.db")})
+    secondary = SQLiteDatabase({"path": str(tmp_path / f"{table_name}-secondary.db")})
+    with primary, secondary:
+        existing = primary if existing_target == "primary" else secondary
+        existing.execute(SCHEMAS[table_name])
+        existing.commit()
+        created = SchemaManager(DualDatabase(primary, secondary)).create_table(table_name)
+
+        assert created is True
+        assert primary.table_exists_strict(table_name) is True
+        assert secondary.table_exists_strict(table_name) is True
+
+
+def test_data_importer_fallback_counts_only_durable_se_rows(tmp_path) -> None:
+    database = SQLiteDatabase({"path": str(tmp_path / "fallback.db")})
+    with database:
+        database.execute(SCHEMAS["NL_SE"])
+        database.execute(
+            "CREATE TRIGGER reject_se_bamei BEFORE INSERT ON NL_SE "
+            "WHEN NEW.Bamei = 'FAIL' BEGIN SELECT RAISE(ABORT, 'rejected'); END"
+        )
+        database.commit()
+        good = _parsed_se(ketto_num="2020000001")
+        bad = _parsed_se(ketto_num="2020000002")
+        good["Bamei"] = "OK"
+        bad["Bamei"] = "FAIL"
+        stats = DataImporter(database).import_records(iter([good, bad]))
+        durable = database.fetch_all("SELECT KettoNum FROM NL_SE")
+
+    assert stats["records_imported"] == 1
+    assert stats["records_failed"] == 1
+    assert durable == [{"KettoNum": "2020000001"}]
 
 
 @pytest.mark.parametrize("standard", (False, True), ids=("native", "standard"))
@@ -621,3 +775,57 @@ def test_se_postgresql_rejects_unsafe_identity_schema(postgresql_db, defect: str
     with pytest.raises(SchemaMigrationError):
         DataImporter(postgresql_db).import_records(iter([_parsed_se()]))
     assert postgresql_db.fetch_one("SELECT COUNT(*) AS n FROM NL_SE") == {"n": 0}
+
+
+@pytest.mark.parametrize("entrypoint", ("data-batch", "optimized-batch", "single"))
+def test_se_postgresql_dual_rejects_overwidth_body_before_any_write(
+    tmp_path, postgresql_db, entrypoint: str
+) -> None:
+    sqlite = SQLiteDatabase({"path": str(tmp_path / f"dual-{entrypoint}.db")})
+    with sqlite:
+        sqlite.execute(JRAVAN_SCHEMAS["UMA_RACE"])
+        postgresql_db.execute(JRAVAN_SCHEMAS["UMA_RACE"])
+        sqlite.commit()
+        postgresql_db.commit()
+        dual = DualDatabase(sqlite, postgresql_db)
+        record = _parsed_se()
+        record["Reserved_229"] = "A" * 61
+
+        with pytest.raises(SchemaMigrationError):
+            if entrypoint == "data-batch":
+                DataImporter(dual, use_jravan_schema=True).import_records(iter([record]))
+            elif entrypoint == "optimized-batch":
+                OptimizedDataImporter(dual, use_jravan_schema=True).import_records(
+                    iter([record])
+                )
+            else:
+                DataImporter(dual, use_jravan_schema=True).import_single_record(record)
+
+        assert sqlite.fetch_one("SELECT COUNT(*) AS n FROM UMA_RACE") == {"n": 0}
+        assert postgresql_db.fetch_one("SELECT COUNT(*) AS n FROM UMA_RACE") == {"n": 0}
+
+
+def test_se_postgresql_fallback_counts_only_durable_rows(postgresql_db) -> None:
+    postgresql_db.execute(SCHEMAS["NL_SE"])
+    postgresql_db.execute(
+        "CREATE FUNCTION reject_se_bamei() RETURNS trigger LANGUAGE plpgsql AS $$ "
+        "BEGIN IF NEW.bamei = 'FAIL' THEN RAISE EXCEPTION 'rejected'; END IF; "
+        "RETURN NEW; END $$"
+    )
+    postgresql_db.execute(
+        "CREATE TRIGGER reject_se_bamei BEFORE INSERT ON NL_SE "
+        "FOR EACH ROW EXECUTE FUNCTION reject_se_bamei()"
+    )
+    postgresql_db.commit()
+    good = _parsed_se(ketto_num="2020000001")
+    bad = _parsed_se(ketto_num="2020000002")
+    good["Bamei"] = "OK"
+    bad["Bamei"] = "FAIL"
+
+    stats = DataImporter(postgresql_db).import_records(iter([good, bad]))
+
+    assert stats["records_imported"] == 1
+    assert stats["records_failed"] == 1
+    assert postgresql_db.fetch_all('SELECT kettonum AS "KettoNum" FROM NL_SE') == [
+        {"KettoNum": "2020000001"}
+    ]

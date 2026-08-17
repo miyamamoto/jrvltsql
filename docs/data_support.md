@@ -245,9 +245,10 @@ PostgreSQLのdeferrable主キーは取込や他表のadditive migrationより前
 additive migrationは維持します。標準名モードでは4つの予約領域も
 `reserved1`〜`reserved4`へ保持します。馬体重と増減はkgの整数であり、nativeでも
 508kg/+3kgを508/3として保存します。status Aでは公式availabilityに従い、
-本賞金0円は実値0、付加賞金の初期値0はNULLとして区別します。A/B値については
-公式スタッフが実データを確認して仕様表を訂正した
-[回答](https://developer.jra-van.jp/t/topic/61)も境界確認に用いています。
+本賞金0円は実値0、付加賞金の初期値0はNULLとして区別します。この賞金の根拠は
+公式フォーマット表の本賞金・付加賞金行です。騎手見習や着差など、別のA/B項目で
+実データに合わせてavailability表が訂正された背景は、公式スタッフの
+[回答](https://developer.jra-van.jp/t/topic/61)を参照してください。
 
 `CS`（コース情報）はJV-Data 4.8.0.2 / 4.9.0.1とSDK 5.0.0で同一の
 6,829バイト配置です。公式キーは競馬場コード・距離・トラックコード・

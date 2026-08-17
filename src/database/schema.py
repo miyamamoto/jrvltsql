@@ -2747,9 +2747,14 @@ def _preflight_existing_se_storage(db: BaseDatabase) -> None:
     from src.importer.importer import verify_se_storage_schema
 
     targets = _migration_targets(db)
-    for table_name in STRICT_SE_STORAGE_TABLES:
-        if any(target.table_exists_strict(table_name) for target in targets):
-            verify_se_storage_schema(db, table_name, allow_missing_columns=True)
+    for target in targets:
+        for table_name in STRICT_SE_STORAGE_TABLES:
+            if target.table_exists_strict(table_name):
+                verify_se_storage_schema(
+                    target,
+                    table_name,
+                    allow_missing_columns=True,
+                )
 
 
 def _normalize_metadata_catalog_type(declared_type: str) -> str | None:
@@ -2812,8 +2817,7 @@ class SchemaManager:
             )
 
             schema_sql = SCHEMAS[table_name]
-            if table_name in STRICT_SE_STORAGE_TABLES:
-                _preflight_existing_se_storage(self.db)
+            _preflight_existing_se_storage(self.db)
             if table_name not in STRICT_RECREATE_TABLES:
                 migrate_table_if_needed(self.db, table_name, schema_sql)
             self.db.execute(schema_sql)
