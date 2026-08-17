@@ -108,6 +108,8 @@ cache の変更に入る前に、対応する現行種別名を示して停止�
 schema preflightによる変更は保持されます。呼び出し全体をall-or-nothingにする場合は
 `auto_commit=False`を使います。この場合、後続検証失敗は同じ呼び出しまたは同じ
 caller-owned transactionで先に書いた行と統計をrollbackします。
+このrollback要否を判定するtransaction状態を取得できない場合は、未確定行をcommit可能な
+接続として残さず接続を無効化し、`TransactionRecoveryError`で停止します。
 
 下表は全38形式について、通常import/parserで使うcurrent base domainを示します。
 providerがその形式を蓄積系・速報系のどちらで提供するかを表すavailability表では
@@ -352,6 +354,11 @@ CKのJRA-VAN標準名モードはまだ実装しておらず、`CHOKYO_DETAIL`�
 右端1桁が小数第一位です。旧39バイト復元データ、旧標準名`TIME_MASTER`、主キーのない
 `TAISENGATA_MINING`、`TMScore`が整数型の旧nativeテーブルは安全に自動変換できないため、
 取り込みを停止して再構築を求めます。
+速報の非削除DM/TMは、1物理レコードから展開された同一種別・同一`DataKubun`の
+1〜18頭を完全なlistとして渡す必要があります。共通metadata、展開index、馬番
+（`01`〜`18`、重複なし）、各行内容が一致しないlist、他種別との混在、または19頭以上は
+DBへ到達する前にlist全体を拒否します。非削除の1行dictを完全snapshotとは扱いません。
+`DataKubun=0`だけはmetadataを持たない単一の削除レコードとして受け付けます。
 DM/TMのnative速報スナップショット置換は、既存レース行の削除後に書込が失敗した場合、caller所有を
 含むactive transaction全体をrollbackします。rollback不能時は接続を無効化し、それも失敗した場合は
 batch・optimized・single・速報の全入口から`TransactionRecoveryError`を送出し、通常の失敗結果へ

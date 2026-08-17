@@ -51,6 +51,7 @@ from src.importer.importer import (
     insert_tk_coupled_batch,
     insert_wf_native_batch,
     insert_wf_standard_batch,
+    inspect_pending_transaction_or_invalidate,
     preflight_standard_schema_migrations,
     prepare_ch_coupled_rows,
     prepare_ck_coupled_rows,
@@ -305,11 +306,22 @@ class OptimizedDataImporter:
                 validate_import_record_header(first_record)
                 records = chain((first_record,), records)
         except Exception:
-            if not auto_commit and self.database.has_pending_transaction():
-                rollback_failed_import(
-                    self.database,
-                    context="first-header failure in optimized caller-owned import",
-                )
+            if not auto_commit:
+                try:
+                    pending_transaction = inspect_pending_transaction_or_invalidate(
+                        self.database,
+                        context="first-header failure in optimized caller-owned import",
+                    )
+                except TransactionRecoveryError:
+                    self._records_imported = 0
+                    self._records_failed = 0
+                    self._batches_processed = 0
+                    raise
+                if pending_transaction:
+                    rollback_failed_import(
+                        self.database,
+                        context="first-header failure in optimized caller-owned import",
+                    )
                 self._records_imported = 0
                 self._records_failed = 0
                 self._batches_processed = 0

@@ -331,29 +331,103 @@ def test_mining_snapshot_list_rejects_mixed_or_tampered_expansions(
         "Nichiji": "08",
         "RaceNum": "11",
     }
+    delete = {
+        key: value
+        for key, value in base.items()
+        if key not in {"Umaban", *payload}
+    }
+    delete["DataKubun"] = "0"
+    oversized_snapshot = [
+        {**base, "Umaban": f"{umaban:02d}"} for umaban in range(1, 20)
+    ]
+    oversized_expansion = [
+        {
+            **row,
+            rows_key: oversized_snapshot,
+            index_key: index,
+        }
+        for index, row in enumerate(oversized_snapshot)
+    ]
     variants = (
         [expanded, race],
+        [race, expanded],
+        [{key: value for key, value in expanded.items() if key != rows_key}],
+        [delete, race],
         [{**expanded, index_key: 1}],
         [{**expanded, "Umaban": "02"}],
+        oversized_expansion,
     )
 
     database = SQLiteDatabase({"path": str(tmp_path / f"{record_type}-mixed.db")})
     with database:
         database.execute(SCHEMAS[f"RT_{record_type}"])
         database.execute(SCHEMAS["RT_RA"])
+        database.execute("CREATE TABLE CALLER_MARKER (id INTEGER PRIMARY KEY)")
         database.commit()
         updater = RealtimeUpdater(database)
+
+        accepted = updater.process_parsed_record([expanded])
+        assert len(accepted) == 1 and accepted[0]["success"] is True
+        erased = updater.process_parsed_record([delete])
+        assert len(erased) == 1 and erased[0]["success"] is True
+        database.commit()
+
         for records in variants:
+            database.execute("INSERT INTO CALLER_MARKER (id) VALUES (1)")
             result = updater.process_parsed_record(records)
             assert isinstance(result, list) and len(result) == len(records)
             assert all(item["success"] is False for item in result)
-            assert database.fetch_one(
-                f"SELECT COUNT(*) AS count FROM RT_{record_type}"
-            )["count"] == 0
+            assert database.has_pending_transaction() is True
+            assert (
+                database.fetch_one(
+                    "SELECT COUNT(*) AS count FROM CALLER_MARKER"
+                )["count"]
+                == 1
+            )
+            assert (
+                database.fetch_one(
+                    f"SELECT COUNT(*) AS count FROM RT_{record_type}"
+                )["count"]
+                == 0
+            )
             assert (
                 database.fetch_one("SELECT COUNT(*) AS count FROM RT_RA")["count"]
                 == 0
             )
+            database.rollback()
+
+        database.execute("INSERT INTO CALLER_MARKER (id) VALUES (1)")
+        direct = updater.process_parsed_record(expanded)
+        assert direct["success"] is False
+        assert database.has_pending_transaction() is True
+        assert (
+            database.fetch_one("SELECT COUNT(*) AS count FROM CALLER_MARKER")[
+                "count"
+            ]
+            == 1
+        )
+        assert (
+            database.fetch_one(f"SELECT COUNT(*) AS count FROM RT_{record_type}")[
+                "count"
+            ]
+            == 0
+        )
+        database.rollback()
+
+        delete_with_metadata = {
+            **delete,
+            rows_key: [delete],
+            index_key: 0,
+        }
+        rejected_delete = updater.process_parsed_record(delete_with_metadata)
+        assert rejected_delete["success"] is False
+        assert (
+            database.fetch_one(f"SELECT COUNT(*) AS count FROM RT_{record_type}")[
+                "count"
+            ]
+            == 0
+        )
+        database.rollback()
 
 
 class TestRealtimeMonitor(unittest.TestCase):

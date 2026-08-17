@@ -229,3 +229,65 @@
 - Next safe action: run the final affected/full/static/document/package gates,
   freeze one repaired full SHA, and request one aggregated carry-forward review
   of that SHA. Do not merge on the parent review result.
+
+## 2026-08-17 — carry-forward findings and second aggregated repair
+
+- Froze the first repaired candidate as
+  `6fe73c48880e1f1af81fe1e855e68c822a9a6c2e`. Its exact ordinary full suite
+  completed with `2792 passed, 131 skipped, 22 subtests passed`; fatal flake8,
+  test gate, lock, strict docs, and fresh wheel/sdist gates passed. No release
+  decision was made because the separate PostgreSQL RA/SE metadata blocker is
+  still open.
+- Two independent Codex carry-forward reviews were aggregated before editing.
+  First, the new first-header rollback boundary called
+  `has_pending_transaction()` without recovery. If that state inspection
+  failed, an already-written caller-owned row remained committable and the
+  connection was not invalidated. Second, the realtime DM/TM shortcut selected
+  its complete-snapshot contract only from the first row and its metadata. It
+  therefore admitted reverse-order mixed lists, missing first-row metadata,
+  metadata-consistent 19-row lists, a mixed delete, and a direct non-delete
+  dictionary.
+- Added one compact regression extension for each boundary before changing
+  production. Against production at exact `6fe73c48880e1f1af81fe1e855e68c822a9a6c2e`,
+  the targeted command produced exactly `5 failed`: three importer entry paths
+  propagated the raw inspection error instead of invalidating, while both
+  mining formats accepted one or more malformed list forms. Existing valid
+  transaction and snapshot controls remained green.
+- The second repair centralizes transaction-state inspection recovery. An
+  unreadable state now invalidates the connection and raises
+  `TransactionRecoveryError`; importer statistics or the active single-record
+  checkpoint are restored before propagation. If invalidation also fails, the
+  same fail-hard exception type retains both recovery contexts.
+- Realtime now selects the DM/TM contract if either format occurs anywhere in
+  the list. A non-delete list must contain one format and one status, exactly
+  1–18 unique official horse numbers, shared complete metadata, contiguous
+  expansion indexes, and exact row content. A metadata-free single status-0
+  record remains the only delete form. Mixed lists, missing metadata, 19 rows,
+  and direct non-delete dictionaries are rejected before schema or DB work;
+  rejection preserves an existing caller transaction. Public documentation
+  records these boundaries.
+- Post-repair local evidence on the dirty repair tree:
+  - original red selection: `5 passed`;
+  - focused entry/realtime/DM/TM selection:
+    `178 passed, 6 skipped, 11 subtests passed`;
+  - expanded affected selection (current record validation, both importer
+    entry contracts, importer, realtime, DM, TM):
+    `314 passed, 6 skipped, 11 subtests passed`;
+  - fatal flake8 for all changed Python files: zero findings;
+    `git diff --check`: pass. Repository-wide advisory style debt remains
+    outside the fatal gate and was not mechanically rewritten in this repair.
+- A fresh disposable PostgreSQL 16 instance ran the existing DM/TM opt-in
+  contracts with `6 passed, 78 deselected`. An independent actual-PostgreSQL
+  probe then verified physical rollback plus connection invalidation after a
+  state-inspection failure, valid 18-row and corrected 17-row snapshots,
+  mutation-free metadata/mixed/direct rejection, and the final status-0 erase
+  (`POSTGRES_REPAIR_BOUNDARIES_OK`). An initial version of that probe quoted an
+  unquoted PostgreSQL table identifier and failed in the probe query itself;
+  the corrected query passed on the unchanged repair tree. The disposable
+  container was removed and its exact-name inventory is empty.
+- No Claude session was used for this repair: the configured quota remained
+  unavailable, and the maintainer-authorized independent Codex fallback was
+  used. No push, PR update, merge, tag, or release has occurred.
+- Next safe action: commit this repair and worklog together, run the final
+  affected/full/static/docs/package gates on that exact clean full SHA, then
+  obtain one bounded carry-forward critical review without changing the tree.

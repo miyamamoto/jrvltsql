@@ -51,6 +51,26 @@ def rollback_failed_import(database: BaseDatabase, *, context: str) -> None:
         )
 
 
+def inspect_pending_transaction_or_invalidate(
+    database: BaseDatabase, *, context: str
+) -> bool:
+    """Read transaction ownership or invalidate a session whose state is unknown."""
+    try:
+        return database.has_pending_transaction()
+    except Exception as inspection_error:
+        try:
+            database.invalidate_connection()
+        except Exception as invalidation_error:
+            raise TransactionRecoveryError(
+                f"{context}: transaction-state inspection failed "
+                f"({inspection_error}); connection invalidation failed "
+                f"({invalidation_error})"
+            ) from invalidation_error
+        raise TransactionRecoveryError(
+            f"{context}: transaction-state inspection failed; connection invalidated"
+        ) from inspection_error
+
+
 def resolve_standard_storage_table_name(native_table_name: str) -> str:
     """Resolve the canonical standard storage owner without database checks."""
     from src.database.table_mappings import (
@@ -4555,12 +4575,21 @@ class DataImporter:
                 validate_import_record_header(first_record)
                 records = chain((first_record,), records)
         except Exception:
-            if not auto_commit and self.database.has_pending_transaction():
-                rollback_failed_import(
-                    self.database,
-                    context="first-header failure in caller-owned import",
-                )
-                self.reset_statistics()
+            if not auto_commit:
+                try:
+                    pending_transaction = inspect_pending_transaction_or_invalidate(
+                        self.database,
+                        context="first-header failure in caller-owned import",
+                    )
+                except TransactionRecoveryError:
+                    self.reset_statistics()
+                    raise
+                if pending_transaction:
+                    rollback_failed_import(
+                        self.database,
+                        context="first-header failure in caller-owned import",
+                    )
+                    self.reset_statistics()
             raise
 
         if not auto_commit:
@@ -5202,6 +5231,10 @@ class DataImporter:
     def _rollback_single_record_transaction(self, *, context: str) -> None:
         """Rollback a failed single-record sequence and restore its counters."""
         rollback_failed_import(self.database, context=context)
+        self._restore_single_record_statistics()
+
+    def _restore_single_record_statistics(self) -> None:
+        """Restore counters to the start of the current single-record sequence."""
         if self._single_record_stats_checkpoint is not None:
             (
                 _,
@@ -5230,10 +5263,19 @@ class DataImporter:
         try:
             record_type, _ = validate_import_record_header(record)
         except SchemaMigrationError:
-            if not auto_commit and self.database.has_pending_transaction():
-                self._rollback_single_record_transaction(
-                    context="header failure in caller-owned single-record import",
-                )
+            if not auto_commit:
+                try:
+                    pending_transaction = inspect_pending_transaction_or_invalidate(
+                        self.database,
+                        context="header failure in caller-owned single-record import",
+                    )
+                except TransactionRecoveryError:
+                    self._restore_single_record_statistics()
+                    raise
+                if pending_transaction:
+                    self._rollback_single_record_transaction(
+                        context="header failure in caller-owned single-record import",
+                    )
             raise
         self._begin_single_record_transaction(auto_commit=auto_commit)
         try:

@@ -338,37 +338,38 @@ class RealtimeUpdater:
                     }
                     for _ in parsed_data
                 ]
-            if parsed_data:
-                from src.importer.importer import _mining_native_snapshot_rows
-
-                record_type = parsed_data[0].get("RecordSpec")
-                table_name = {"DM": "RT_DM", "TM": "RT_TM"}.get(record_type)
-                if table_name is not None:
-                    snapshot_rows = _mining_native_snapshot_rows(
-                        parsed_data[0], table_name
-                    )
-                    if snapshot_rows is not None:
-                        expansion_error = self._mining_snapshot_expansion_error(
-                            parsed_data,
-                            snapshot_rows,
-                            record_type,
+            mining_record_types = {
+                item.get("RecordSpec")
+                for item in parsed_data
+                if item.get("RecordSpec") in {"DM", "TM"}
+            }
+            if mining_record_types:
+                record_type = next(iter(mining_record_types))
+                expansion_error, snapshot_rows = self._validate_mining_snapshot_list(
+                    parsed_data, record_type
+                )
+                if expansion_error is not None:
+                    return [
+                        {
+                            "operation": "validate",
+                            "table": self.RECORD_TYPE_TABLE.get(
+                                item.get("RecordSpec")
+                            ),
+                            "record_type": item.get("RecordSpec"),
+                            "success": False,
+                            "error": expansion_error,
+                        }
+                        for item in parsed_data
+                    ]
+                if snapshot_rows is None:
+                    return [
+                        self._process_single_record(
+                            parsed_data[0], timeseries=timeseries
                         )
-                        if expansion_error is not None:
-                            return [
-                                {
-                                    "operation": "validate",
-                                    "table": self.RECORD_TYPE_TABLE.get(
-                                        item.get("RecordSpec")
-                                    ),
-                                    "record_type": item.get("RecordSpec"),
-                                    "success": False,
-                                    "error": expansion_error,
-                                }
-                                for item in parsed_data
-                            ]
-                        return self._replace_mining_native_snapshot(
-                            parsed_data[0], snapshot_rows, table_name
-                        )
+                    ]
+                return self._replace_mining_native_snapshot(
+                    parsed_data[0], snapshot_rows, f"RT_{record_type}"
+                )
             results = []
             for item in parsed_data:
                 if timeseries and source_spec:
@@ -384,35 +385,64 @@ class RealtimeUpdater:
         return self._process_single_record(parsed_data, timeseries=timeseries)
 
     @staticmethod
-    def _mining_snapshot_expansion_error(
-        parsed_data: list[Dict],
-        snapshot_rows: list[Dict],
-        record_type: str,
-    ) -> Optional[str]:
-        """Reject a list that is not one exact parser-expanded DM/TM snapshot."""
+    def _validate_mining_snapshot_list(
+        parsed_data: list[Dict], record_type: str
+    ) -> tuple[Optional[str], Optional[list[Dict]]]:
+        """Validate one complete DM/TM snapshot or one metadata-free erase."""
 
         metadata_keys = {
             "DM": ("_dm_snapshot_rows", "_dm_snapshot_index"),
             "TM": ("_tm_snapshot_rows", "_tm_snapshot_index"),
         }
         rows_key, index_key = metadata_keys[record_type]
+        if any(item.get("RecordSpec") != record_type for item in parsed_data):
+            return f"{record_type} snapshot expansion mixes record types", None
+
+        statuses = {resolve_record_data_kubun(item) for item in parsed_data}
+        if len(statuses) != 1:
+            return f"{record_type} snapshot expansion mixes DataKubun values", None
+        data_kubun = next(iter(statuses))
+        if data_kubun == DATA_KUBUN_ERASE:
+            if (
+                len(parsed_data) == 1
+                and rows_key not in parsed_data[0]
+                and index_key not in parsed_data[0]
+            ):
+                return None, None
+            return f"{record_type} erase must be one metadata-free record", None
+
+        snapshot_rows = parsed_data[0].get(rows_key)
+        if not isinstance(snapshot_rows, list) or not snapshot_rows:
+            return f"{record_type} snapshot expansion metadata is missing", None
+        if len(snapshot_rows) > 18:
+            return f"{record_type} snapshot expansion exceeds 18 horses", None
         if len(parsed_data) != len(snapshot_rows):
             return (
                 f"{record_type} snapshot expansion count mismatch: "
                 f"expanded={len(parsed_data)}, snapshot={len(snapshot_rows)}"
-            )
+            ), None
+        seen_umaban: set[str] = set()
         for index, (expanded_row, snapshot_row) in enumerate(
             zip(parsed_data, snapshot_rows, strict=True)
         ):
-            if expanded_row.get("RecordSpec") != record_type:
-                return f"{record_type} snapshot expansion mixes record types"
             if expanded_row.get(index_key) != index:
-                return f"{record_type} snapshot expansion index mismatch"
+                return f"{record_type} snapshot expansion index mismatch", None
             if expanded_row.get(rows_key) != snapshot_rows:
-                return f"{record_type} snapshot expansion metadata mismatch"
+                return f"{record_type} snapshot expansion metadata mismatch", None
             if any(expanded_row.get(key) != value for key, value in snapshot_row.items()):
-                return f"{record_type} snapshot expansion row mismatch"
-        return None
+                return f"{record_type} snapshot expansion row mismatch", None
+            umaban = snapshot_row.get("Umaban")
+            if (
+                not isinstance(umaban, str)
+                or len(umaban) != 2
+                or not umaban.isascii()
+                or not umaban.isdigit()
+                or not 1 <= int(umaban) <= 18
+                or umaban in seen_umaban
+            ):
+                return f"{record_type} snapshot expansion has invalid Umaban", None
+            seen_umaban.add(umaban)
+        return None, snapshot_rows
 
     def _replace_mining_native_snapshot(
         self,
@@ -824,6 +854,32 @@ class RealtimeUpdater:
                 logger.warning("Missing RecordSpec in parsed data")
                 return None
 
+            record_data_kubun = resolve_record_data_kubun(parsed_data)
+            if record_type in {"DM", "TM"}:
+                rows_key, index_key = {
+                    "DM": ("_dm_snapshot_rows", "_dm_snapshot_index"),
+                    "TM": ("_tm_snapshot_rows", "_tm_snapshot_index"),
+                }[record_type]
+                if record_data_kubun != DATA_KUBUN_ERASE:
+                    mining_error = (
+                        f"{record_type} non-delete records require one complete "
+                        "parser-expanded snapshot list"
+                    )
+                elif rows_key in parsed_data or index_key in parsed_data:
+                    mining_error = (
+                        f"{record_type} erase must be one metadata-free record"
+                    )
+                else:
+                    mining_error = None
+                if mining_error is not None:
+                    return {
+                        "operation": "validate",
+                        "table": self.RECORD_TYPE_TABLE.get(record_type),
+                        "record_type": record_type,
+                        "success": False,
+                        "error": mining_error,
+                    }
+
             # Get table name. In time-series mode, route official 0B41/0B42
             # and current-week 0B30-0B36速報 odds to separate physical tables.
             table_name = self._resolve_timeseries_table(parsed_data) if timeseries else None
@@ -844,8 +900,6 @@ class RealtimeUpdater:
             # name headDataKubun is the same header field, not a second command.
             # For cancellation-capable records, 9 must remain queryable and
             # only the official 0 value requests physical erase.
-            record_data_kubun = resolve_record_data_kubun(parsed_data)
-
             rejection = self._reject_strict_record(table_name, parsed_data)
             if rejection is not None:
                 return {
