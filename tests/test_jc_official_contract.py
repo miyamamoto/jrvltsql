@@ -26,6 +26,10 @@ from src.importer.importer import (
 )
 from src.importer.importer_optimized import OptimizedDataImporter
 from src.parser.jc_parser import JCParser
+from src.parser.status_domain import (
+    CURRENT_ACCUMULATED_DATA_KUBUN,
+    HISTORICAL_DATA_KUBUN,
+)
 from src.realtime.updater import RealtimeUpdater
 
 FIXTURES = Path(__file__).parent / "fixtures" / "official_layout"
@@ -184,6 +188,19 @@ def test_jc_layout_and_storage_keys_match_the_pinned_official_sources() -> None:
         "struct": "JV_JC_INFO",
         "length": 161,
     }
+    assert frozenset(JC_CONTRACT["current_data_kubun"]) == (CURRENT_ACCUMULATED_DATA_KUBUN["JC"])
+    historical = HISTORICAL_DATA_KUBUN["JC"]
+    assert JC_CONTRACT["historical_data_kubun"] == {
+        "value": historical.value,
+        "valid_before_make_date": historical.valid_before_make_date.isoformat(),
+        "source": {
+            "artifact": "JV-Data4901.xlsx",
+            "sheet": "変更履歴",
+            "row": 306,
+        },
+    }
+    assert frozenset(JC_CONTRACT["minarai_codes"]) == JCParser.MINARAI_CODES
+    assert JC_CONTRACT["current_provider_specs"] == ["0B14", "0B16"]
     for table_name in ("NL_JC", "RT_JC", "KISYU_CHANGE"):
         assert tuple(get_table_primary_key_columns(table_name)) == JC_KEY
         nullability = get_table_column_nullability(table_name)
@@ -240,12 +257,16 @@ def test_jc_historical_status_boundary_and_opaque_body() -> None:
         JCParser().parse(build_jc_record(data_kubun="0", make_date="20030711"))
 
 
-def test_jc_accepts_official_initial_time_and_undecided_rider_shape() -> None:
+@pytest.mark.parametrize("minarai", JC_CONTRACT["minarai_codes"])
+def test_jc_accepts_official_initial_time_and_undecided_rider_shape(
+    minarai: str,
+) -> None:
     record = parsed_jc(
         happyo_time="00000000",
         ato_kisyu_code="00000",
         ato_kisyu_name="未定",
-        ato_minarai="0",
+        ato_minarai=minarai,
+        mae_minarai=minarai,
     )
     assert validate_import_record_header(record) == ("JC", "1")
 

@@ -196,18 +196,18 @@ SCHEMAS = {
             RecordSpec TEXT,
             DataKubun TEXT,
             MakeDate TEXT,
-            Year INTEGER NOT NULL,
-            MonthDay INTEGER NOT NULL,
-            JyoCD TEXT NOT NULL,
-            Kaiji INTEGER NOT NULL,
-            Nichiji INTEGER NOT NULL,
-            RaceNum INTEGER NOT NULL,
-            HappyoTime TEXT NOT NULL,
-            Umaban INTEGER NOT NULL,
+            Year INTEGER,
+            MonthDay INTEGER,
+            JyoCD TEXT,
+            Kaiji INTEGER,
+            Nichiji INTEGER,
+            RaceNum INTEGER,
+            HappyoTime TEXT,
+            Umaban INTEGER,
             Bamei TEXT,
             JiyuKubun TEXT,
             RecordDelimiter TEXT,
-            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, HappyoTime, Umaban)
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
         )
     """,
 

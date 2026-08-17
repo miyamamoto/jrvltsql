@@ -181,9 +181,13 @@
 
 ## Red-first evidence on the unchanged production implementation
 
-- Added the compact official fixture `jc_contract_4901.json`, its fixture-index
-  entry, and `tests/test_jc_official_contract.py`. No production file had been
-  changed when the new contract was first executed.
+- Added an initial compact official fixture `jc_contract_4901.json`, its
+  fixture-index entry, and an intermediate working-tree version of
+  `tests/test_jc_official_contract.py`. No production file had been changed
+  when that intermediate contract was first executed. The final committed
+  test module later gained additional imports and cases, so the exact original
+  red command is historical evidence rather than a byte-for-byte overlay test
+  that can be collected unchanged against the parent.
 - Command (external basetemp, cache and coverage disabled):
   `PYTHONDONTWRITEBYTECODE=1 /home/keiba/work/jrvltsql/.venv/bin/python -m pytest -q -p no:cacheprovider --no-cov --basetemp=/home/keiba/scratch/pytest-jc-red tests/test_jc_official_contract.py`
 - Observed result on exact starting SHA production: `24 failed, 2 passed`.
@@ -241,3 +245,41 @@
   disposable PostgreSQL container, record the final dirty-path set, commit the
   candidate, and submit that immutable full SHA once to both independent Codex
   reviewers. STOP on any production/test drift after the SHA is frozen.
+
+## First frozen candidate review and one aggregated repair
+
+- Candidate `4c017499fe89a188ef77f38af76118b1622f66f3` was pushed as draft PR
+  #209 and reviewed once by two independent read-only Codex reviewers. Both
+  started and ended on the exact clean SHA and removed their disposable
+  PostgreSQL containers.
+- Both reviews agreed on one P1: an over-broad schema edit had also changed
+  unrelated `NL_AV` from its official seven-part key to an eight-part key with
+  `HappyoTime`. Official 4.8/4.9 rows 1466-1473 define `HappyoTime` as a field,
+  not an AV key component. The hunk was incomplete relative to RT/standard AV
+  handling and outside this JC iteration, so it is reverted rather than
+  broadening the PR.
+- A minimal guard was added to the existing announcement-time test module.
+  Before the revert it failed with two rows (`06150930`, `06151000`) instead of
+  the expected one revised row (`06151000`). This is the review-repair red-first
+  evidence for the accidental AV schema change.
+- Accepted nonblocking corrections were grouped into the same repair:
+  - docs distinguish the official staff answer in topic 331 from the community
+    example in topic 164;
+  - the JC fixture now binds current/historical statuses and every apprentice
+    code directly to production registries, with all six codes as positive
+    cases;
+  - the earlier red-first record is explicitly identified as an intermediate
+    working-tree test version.
+- The reviewers also reproduced the pre-existing PostgreSQL same-key batch
+  statistic undercount. JC durable state and provider order remained correct;
+  `batch_size=1` in the JC state-machine test intentionally isolates the JC
+  contract. Generic provider-operation statistics remain a separate follow-up
+  and do not expand this PR.
+- The aggregated review repair then passed the affected SQLite selection:
+  `101 passed, 24 skipped, 294 deselected`. The exact fatal workflow lint
+  command returned `0`, and `git diff --check` passed. No JC production logic
+  changed after the first candidate review; the only production correction is
+  restoration of the official base `NL_AV` schema.
+- Next safe action: commit and push this single aggregated repair, then perform
+  one bounded carry-forward review on the new immutable SHA. STOP if any
+  non-AV/JC production path changes.

@@ -7,6 +7,7 @@ from uuid import uuid4
 import pytest
 
 from src.database.migration import SchemaMigrationError, verify_table_schema
+from src.database.schema import SCHEMAS
 from src.database.schema_jravan import JRAVAN_SCHEMAS
 from src.database.sqlite_handler import SQLiteDatabase
 from src.database.table_mappings import JLTSQL_TO_JRAVAN
@@ -126,6 +127,25 @@ def test_native_tables_map_to_official_change_table_names(
     record_type, parser_class, length, start, table_name, native_name
 ) -> None:
     assert JLTSQL_TO_JRAVAN[native_name] == table_name
+
+
+def test_native_av_identity_does_not_include_announcement_time(tmp_path) -> None:
+    """A later AV announcement revises the same official seven-part key."""
+
+    database = SQLiteDatabase({"path": str(tmp_path / "av-official-key.db")})
+    first = AVParser().parse(_record("AV", 78, 27))
+    revised_raw = bytearray(_record("AV", 78, 27))
+    revised_raw[27:35] = b"06151000"
+    revised = AVParser().parse(bytes(revised_raw))
+    with database:
+        database.execute(SCHEMAS["NL_AV"])
+        database.commit()
+        result = DataImporter(database).import_records(iter([first, revised]))
+        rows = database.fetch_all("SELECT HappyoTime FROM NL_AV")
+
+    assert result["records_imported"] == 2
+    assert result["records_failed"] == 0
+    assert rows == [{"HappyoTime": "06151000"}]
 
 
 def _assert_standard_storage(database, importer_class=DataImporter) -> None:
