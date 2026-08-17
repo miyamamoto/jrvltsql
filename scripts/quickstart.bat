@@ -36,7 +36,7 @@ if not defined PYTHON_CMD if defined VIRTUAL_ENV (
     set "PYTHON_CMD="!VIRTUAL_ENV!\Scripts\python.exe""
 )
 if not defined PYTHON_CMD if exist "%~dp0..\venv32\Scripts\python.exe" (
-    "%~dp0..\venv32\Scripts\python.exe" -c "import sys; raise SystemExit(sys.version_info < (3, 12))" >nul 2>&1
+    "%~dp0..\venv32\Scripts\python.exe" -c "import struct,sys; raise SystemExit(sys.version_info < (3, 12) or struct.calcsize('P') != 4)" >nul 2>&1
     if !errorlevel!==0 set "PYTHON_CMD="%~dp0..\venv32\Scripts\python.exe""
 )
 if not defined PYTHON_CMD if exist "%~dp0..\.venv\Scripts\python.exe" (

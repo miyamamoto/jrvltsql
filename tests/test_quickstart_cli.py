@@ -316,6 +316,15 @@ class TestQuickstartBatchRoles:
             assert 'set "PYTHON_CMD=%PYTHON%"' not in text, launcher.name
             assert "sys.version_info ^<" not in text, launcher.name
             assert "sys.version_info < (3, 12)" in text, launcher.name
+            venv32_probes = [
+                line
+                for line in text.splitlines()
+                if "venv32" in line.lower() and " -c " in line
+            ]
+            assert venv32_probes, launcher.name
+            assert all(
+                "struct.calcsize('P') != 4" in line for line in venv32_probes
+            ), launcher.name
 
     def test_launcher_command_assignment_defers_paths_until_execution(self):
         """Parentheses in Program Files paths must not close an IF block early."""
@@ -367,17 +376,17 @@ class TestQuickstartBatchRoles:
         assert "PYTHON must be a full path to python.exe" in batch
         assert "PYTHON must be a full path to python.exe" in powershell
 
-    def test_timeseries_fetch_prefers_installed_cli_before_global_python(self):
-        """A working PATH installation must win over an unrelated global Python."""
+    def test_timeseries_fetch_uses_only_explicit_or_32bit_interpreters(self):
+        """An arbitrary PATH entry must not bypass the bitness contract."""
         batch = Path(__file__).resolve().parents[1] / "fetch_timeseries_postgres.bat"
         text = batch.read_text(encoding="utf-8")
 
-        assert "where jltsql" in text
+        assert "where jltsql" not in text
+        assert 'set "JLTSQL="' not in text.splitlines()
         assert text.index("if defined PYTHON") < text.index("if defined VIRTUAL_ENV")
         assert text.index("if defined VIRTUAL_ENV") < text.index("venv32\\Scripts")
         assert text.index("venv32\\Scripts") < text.index(".venv\\Scripts")
-        assert text.index(".venv\\Scripts") < text.index("where jltsql")
-        assert text.index("where jltsql") < text.index("py -3.12-32 --version")
+        assert text.index(".venv\\Scripts") < text.index("py -3.12-32 --version")
 
     def test_installers_default_to_release_validated_32bit_python(self):
         root = Path(__file__).resolve().parents[1]

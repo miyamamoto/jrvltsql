@@ -1,8 +1,9 @@
 """Public setup examples must match the executable provider contract."""
 
+import hashlib
+import re
 import sys
 import tomllib
-import re
 from pathlib import Path
 from unittest.mock import patch
 
@@ -65,6 +66,27 @@ def test_automatic_windows_paths_do_not_select_unverified_64_bit_python() -> Non
     assert "py -3 -c" not in quickstart
 
 
+def test_tracked_public_markdown_omits_the_retired_infrastructure_token() -> None:
+    blocked_hash = "730bea4ff16f200fb931b06cae08a5da8e279813775d7ed81e680b4a77946fe1"
+    markdown_paths = [
+        REPOSITORY_ROOT / "README.md",
+        REPOSITORY_ROOT / "CHANGELOG.md",
+        REPOSITORY_ROOT / "RELEASE_NOTES.md",
+        *(REPOSITORY_ROOT / "docs").rglob("*.md"),
+        *(REPOSITORY_ROOT / "specs").rglob("*.md"),
+    ]
+    for path in markdown_paths:
+        tokens = re.findall(
+            r"[A-Za-z][A-Za-z0-9_.+]+",
+            path.read_text(encoding="utf-8"),
+        )
+        assert all(
+            hashlib.sha256(token.lower().encode("ascii")).hexdigest()
+            != blocked_hash
+            for token in tokens
+        ), path
+
+
 def test_sqlite_bootstrap_does_not_import_an_optional_postgresql_driver() -> None:
     from src.database import create_database_from_config
     from src.database.sqlite_handler import SQLiteDatabase
@@ -84,6 +106,9 @@ def test_sqlite_bootstrap_does_not_import_an_optional_postgresql_driver() -> Non
 
 def test_removed_public_setup_contract_is_recorded_for_2_0() -> None:
     changelog = (REPOSITORY_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    release_notes = (REPOSITORY_ROOT / "RELEASE_NOTES.md").read_text(
+        encoding="utf-8"
+    )
     constants = (REPOSITORY_ROOT / "src/jvlink/constants.py").read_text(
         encoding="utf-8"
     )
@@ -93,6 +118,11 @@ def test_removed_public_setup_contract_is_recorded_for_2_0() -> None:
 
     assert "2.0.0" in changelog
     assert "JVLINK_BRIDGE_RUNNER" in changelog
+    assert "JVLinkWrapper.jv_set_service_key" in release_notes
+    assert "JVLinkBridge.jv_set_service_key" in release_notes
+    assert "RECORD_TYPE_O1" in release_notes
+    assert "RECORD_TYPE_O6" in release_notes
+    assert "uses_external_runner" in release_notes
     assert project["project"]["version"].startswith("2.0.0")
     assert "wrapper.py の JVSetServiceKey 呼び出し箇所" not in constants
     for record_type in range(1, 7):

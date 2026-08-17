@@ -182,6 +182,11 @@ def test_distribution_gate_rejects_sensitive_text_without_echoing_it(
             b'key = "ABCD-" "EFGH-" "IJKL-" "MNOP-Q"',
         ),
         (
+            "wheel",
+            "src/provider.py",
+            b'key = "ABCD-" + "EFGH-" + "IJKL-" + "MNOP-Q"',
+        ),
+        (
             "sdist",
             "src/bridge.py",
             b"".join((b"jltsql-private-", b"runtime revision deadbeef")),

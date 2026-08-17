@@ -162,7 +162,7 @@ def _validate_config(config: Dict[str, Any]) -> None:
     if not enabled_dbs:
         raise ConfigError("At least one database must be enabled")
 
-    required_backends: tuple[str, ...] = ()
+    required_backends: tuple[str, ...] = ("sqlite",)
     if selected_database in {"sqlite", "postgresql"}:
         required_backends = (selected_database,)
     elif selected_database == "dual":
@@ -183,6 +183,14 @@ def _validate_config(config: Dict[str, Any]) -> None:
     logging_level = logging_config.get("level", "INFO")
     if not isinstance(logging_level, str):
         raise ConfigError("logging.level must be a string")
+    if logging_level.upper() not in {
+        "DEBUG",
+        "INFO",
+        "WARNING",
+        "ERROR",
+        "CRITICAL",
+    }:
+        raise ConfigError(f"Unsupported logging.level: {logging_level}")
     for subsection in ("file", "console"):
         value = logging_config.get(subsection, {})
         if not isinstance(value, dict):
@@ -193,6 +201,10 @@ def _validate_config(config: Dict[str, Any]) -> None:
     log_path = logging_config.get("file", {}).get("path")
     if log_path is not None and not isinstance(log_path, str):
         raise ConfigError("logging.file.path must be a string")
+
+    auto_update_check = config.get("auto_update_check", True)
+    if not isinstance(auto_update_check, bool):
+        raise ConfigError("auto_update_check must be a boolean")
 
 
 def load_config(config_path: Optional[Union[str, Path]] = None) -> Config:

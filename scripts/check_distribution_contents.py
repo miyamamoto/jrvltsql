@@ -84,7 +84,7 @@ def _sensitive_category(payload: bytes) -> str | None:
     variants = (
         payload,
         without_nuls,
-        re.sub(rb"[\s\"']", b"", without_nuls),
+        re.sub(rb"[\s\"'+]", b"", without_nuls),
     )
     for candidate in variants:
         for category, pattern in SENSITIVE_TEXT_PATTERNS:

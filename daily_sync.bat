@@ -145,7 +145,7 @@ if defined VIRTUAL_ENV (
 )
 
 if exist "%~dp0venv32\Scripts\python.exe" (
-    "%~dp0venv32\Scripts\python.exe" -c "import sys; raise SystemExit(sys.version_info < (3, 12))" >nul 2>&1
+    "%~dp0venv32\Scripts\python.exe" -c "import struct,sys; raise SystemExit(sys.version_info < (3, 12) or struct.calcsize('P') != 4)" >nul 2>&1
     if !errorlevel!==0 (
         "%~dp0venv32\Scripts\python.exe" %SYNC_SCRIPT% !SYNC_ARGS!
         set "SCRIPT_EXIT_CODE=!errorlevel!"

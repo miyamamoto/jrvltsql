@@ -2663,8 +2663,8 @@
   superseded audit pages are not distributed. Existing setuptools license
   deprecation messages are advisory build debt and did not weaken the build or
   content result.
-- A final tracked-Markdown/public-doc scan reports no maintainer-prohibited
-  runtime term, no public `a6` mention, and no maintainer-local home path. All
+- A final tracked-Markdown/public-doc scan reports no retired infrastructure
+  term and no maintainer-local home path. All
   public x64/64-bit references explicitly say the project acquisition/parse/
   storage path remains unverified and must not be treated as supported. Sixteen
   historical absolute scratch paths found in this worklog were sanitized to
@@ -3439,3 +3439,48 @@
   exact full SHA exists. Next safe action: commit the complete grouped repair,
   verify a clean worktree, replay the necessary exact-SHA full/static/artifact
   gates once, push PR #202, and request two independent bounded reviews.
+- The grouped repair was committed and pushed as exact candidate
+  `e5a18b3a19b90e0a9d36137e7fff082c802958e2`. Its locked full suite passed
+  `2736 passed, 131 skipped, 19 subtests passed`; fail-closed test-gate,
+  compileall, fatal flake8, strict MkDocs, lock check, and diff check passed.
+  Exact `git archive` wheel/sdist content and extracted-wheel smoke passed. A
+  fresh Python 3.12 venv installed only that wheel plus base dependencies and
+  successfully initialized config, created/read 80 SQLite tables, and kept
+  tests/specs out of the sdist. GitHub test/lint/Windows-batch checks passed;
+  performance was the expected conditional skip.
+- Two independent Codex reviews of that frozen SHA both returned
+  NEEDS_CHANGES. Findings were consolidated before editing: explicit `+`
+  concatenation bypassed the archive sensitive-shape normalization; missing
+  database selector with only PostgreSQL enabled, unknown logging level, and
+  string-valued update flag passed config validation; six launchers trusted a
+  `venv32` directory name without measuring bitness and one accepted an
+  arbitrary PATH CLI; one tracked worklog sentence itself named a retired
+  infrastructure token; and v2 notes lacked concrete public API replacement
+  guidance. Prior c08 wheel-origin, path/member, install-root, version, update,
+  and archive-checkout findings were independently confirmed closed.
+- Minimal tests were extended before production repair. On unchanged e5
+  production they returned `8 failed, 8 passed, 5 subtests passed`: one archive
+  concatenation failure, three config semantic failures, two launcher policy
+  failures, one tracked-Markdown privacy failure, and one release-note API
+  migration failure. A ResourceWarning followed the intentionally accepted
+  invalid logging level because the pre-repair CLI opened a handler before
+  crashing; validation now rejects it before logging setup. No sensitive value
+  was printed or recorded by the tests.
+- The batched follow-up strips explicit concatenation operators during bounded
+  archive normalization, validates default/selected backend coherence, logging
+  levels, and boolean update policy, verifies bitness for every automatically
+  discovered virtual environment, and preserves only explicit CLI/interpreter
+  overrides. The tracked sentence was generalized and a hash-only Markdown
+  privacy contract added. Release notes now map removed registry methods and
+  odds constants to their supported registration/record-ID replacements and
+  direct users to the generic runner property without naming private
+  implementation details. The formerly red selection passes `13 passed, 8
+  subtests passed`; broader/full and artifact gates remain pending on this
+  uncommitted repair.
+- The broader affected selection passes `326 passed, 5 skipped, 8 subtests
+  passed`; the complete dirty-tree suite passes `2738 passed, 131 skipped, 22
+  subtests passed`. Fail-closed test-gate, compileall, fatal flake8, strict
+  MkDocs, lock check, and diff check pass. Fresh wheel/sdist content inspection
+  and extracted-wheel init/config/version/SQLite smoke also pass. The next safe
+  action is one follow-up commit, exact-SHA verification, push, and a bounded
+  two-reviewer closure check; no tag/release is authorized.

@@ -15,6 +15,17 @@ Current migration boundary:
   runtime-state targets
 - 64-bit SDK execution remains unverified and is not claimed as supported
 
+Public API replacements:
+
+- `JVLinkWrapper.jv_set_service_key` and
+  `JVLinkBridge.jv_set_service_key` have no programmatic replacement;
+  complete provider registration in DataLab
+- removed `DATA_SPEC_O1` through `DATA_SPEC_O6` constants are replaced by
+  `RECORD_TYPE_O1` through `RECORD_TYPE_O6`; these are record identifiers
+  delivered by a supported data spec, not standalone open specs
+- use `uses_external_runner` instead of the removed
+  implementation-specific runner-detection property
+
 ## Data-contract and reliability changes since v1.6.10
 
 - parser contracts now bind current official fixed-width layouts, reject

@@ -834,6 +834,25 @@ jvlink: {}
 logging:
   file: {enabled: true, path: 123}
 """,
+            """
+databases:
+  postgresql: {enabled: true}
+jvlink: {}
+""",
+            """
+database: {type: sqlite}
+databases:
+  sqlite: {enabled: true, path: data/keiba.db}
+jvlink: {}
+logging: {level: VERBOSE}
+""",
+            """
+database: {type: sqlite}
+databases:
+  sqlite: {enabled: true, path: data/keiba.db}
+jvlink: {}
+auto_update_check: "false"
+""",
         )
         for document in invalid_documents:
             with self.subTest(document=document), self.runner.isolated_filesystem():
