@@ -355,7 +355,7 @@ def test_ys_status_upserts_cancellation_and_exact_deletion(
             build_ys_record(data_kubun="0", key_overrides={"MonthDay": ""})[0],
             "incomplete official key",
         ),
-        (build_ys_record(data_kubun="4")[0], "unsupported DataKubun"),
+        (build_ys_record(data_kubun="4")[0], "DataKubun"),
     ),
     ids=("incomplete-delete-key", "unsupported-status"),
 )
@@ -368,7 +368,10 @@ def test_invalid_ys_row_aborts_the_whole_batch_before_mutation(
     database = SQLiteDatabase({"path": str(tmp_path / "invalid-row.db")})
     valid = YSParser().parse(build_ys_record()[0])
     invalid = YSParser().parse(invalid_record)
-    assert valid is not None and invalid is not None
+    assert valid is not None
+    if invalid is None:
+        invalid = dict(valid)
+        invalid["DataKubun"] = "4"
 
     with database:
         database.create_table("NL_YS", SCHEMAS["NL_YS"])

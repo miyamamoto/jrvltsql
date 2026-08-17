@@ -5,12 +5,22 @@ from pathlib import Path
 
 import pytest
 
+from src.parser import status_domain
 from src.parser.base import validate_fixed_record
 from src.parser.factory import ParserFactory
+from src.parser.status_domain import (
+    CURRENT_ACCUMULATED_DATA_KUBUN,
+    CURRENT_REALTIME_DATA_KUBUN,
+    DataKubunContext,
+    validate_data_kubun,
+)
 
 OFFICIAL_LAYOUT_ROOT = Path(__file__).parent / "fixtures" / "official_layout"
 CURRENT_LAYOUT = json.loads(
     (OFFICIAL_LAYOUT_ROOT / "jvdata_sdk500_manifest.json").read_text(encoding="utf-8")
+)
+STATUS_DOMAIN = json.loads(
+    (OFFICIAL_LAYOUT_ROOT / "jvdata_status_domain.json").read_text(encoding="utf-8")
 )
 LAYOUT_HISTORY = json.loads(
     (OFFICIAL_LAYOUT_ROOT / "jvdata_layout_history.json").read_text(encoding="utf-8")
@@ -48,7 +58,9 @@ def test_declared_current_lengths_match_every_factory_parser():
 def _record(record_type: str, length: int) -> bytes:
     record = bytearray(b" " * length)
     record[0:2] = record_type.encode("ascii")
-    record[2:3] = b"1"
+    # H1/H6 do not define status 1. Their generic framing control uses the
+    # official update-interim state 2; domain payload tests live elsewhere.
+    record[2:3] = b"2" if record_type in {"H1", "H6"} else b"1"
     record[3:11] = b"20260816"
     if length >= 27:
         record[11:15] = b"2026"
@@ -68,6 +80,201 @@ def _is_rejected(parser, record: bytes) -> bool:
         return parser.parse(record) is None
     except (UnicodeDecodeError, ValueError):
         return True
+
+
+def _record_with_header(
+    record_type: str,
+    *,
+    data_kubun: str,
+    make_date: str = "20260816",
+) -> bytes:
+    length = CURRENT_LENGTHS[record_type][0]
+    record = bytearray(_record(record_type, length))
+    record[2:3] = data_kubun.encode("ascii")
+    record[3:11] = make_date.encode("ascii")
+    return bytes(record)
+
+
+def test_official_status_oracle_covers_all_38_records_and_154_current_pairs():
+    """The reviewed workbook oracle is complete, not a selected sentinel list."""
+
+    current = STATUS_DOMAIN["current_accumulated"]
+    assert set(current) == set(CURRENT_LENGTHS)
+    assert sum(len(contract["values"]) for contract in current.values()) == 154
+    assert set(STATUS_DOMAIN["realtime_overrides"]) == {"DM", "TM", "WF"}
+    assert set(STATUS_DOMAIN["historical_exceptions"]) == {
+        "AV",
+        "JC",
+        "RC",
+        "WE",
+        "WH",
+    }
+    assert STATUS_DOMAIN["unresolved_history"]["DM"]["reintroduced_at"] is None
+    assert STATUS_DOMAIN["unresolved_history"]["RA"]["before_allowed"] is None
+
+    expected_accumulated = {
+        record_type: frozenset(contract["values"]) for record_type, contract in current.items()
+    }
+    expected_realtime = dict(expected_accumulated)
+    expected_realtime.update(
+        {
+            record_type: frozenset(contract["values"])
+            for record_type, contract in STATUS_DOMAIN["realtime_overrides"].items()
+        }
+    )
+    assert CURRENT_ACCUMULATED_DATA_KUBUN == expected_accumulated
+    assert CURRENT_REALTIME_DATA_KUBUN == expected_realtime
+
+
+def test_physical_header_accepts_every_official_current_status():
+    """Every workbook-listed positive remains accepted by the shared envelope."""
+
+    for record_type, contract in STATUS_DOMAIN["current_accumulated"].items():
+        for data_kubun in contract["values"]:
+            validate_fixed_record(
+                _record_with_header(record_type, data_kubun=data_kubun),
+                record_type,
+                CURRENT_LENGTHS[record_type],
+            )
+
+
+def test_physical_header_rejects_blank_and_unknown_status_for_all_38_records():
+    """A structurally valid buffer is not valid when byte 3 has no official state."""
+
+    for record_type in CURRENT_LENGTHS:
+        for data_kubun in (" ", "Z"):
+            with pytest.raises(ValueError, match="DataKubun"):
+                validate_fixed_record(
+                    _record_with_header(record_type, data_kubun=data_kubun),
+                    record_type,
+                    CURRENT_LENGTHS[record_type],
+                )
+
+
+def test_direct_factory_parsers_reject_unknown_status_through_the_shared_gate():
+    """Domain-specific payload rejection must not be mistaken for status coverage."""
+
+    factory = ParserFactory()
+    for record_type in CURRENT_LENGTHS:
+        record = _record_with_header(record_type, data_kubun="Z")
+        assert _is_rejected(factory.get_parser(record_type), record), record_type
+
+
+def test_all_factory_parsers_reach_the_central_status_gate(monkeypatch):
+    """A parser's separate body checks cannot provide a false-green signal."""
+
+    observed: list[str] = []
+    original = status_domain.validate_data_kubun
+
+    def observe(record_type, data_kubun, **kwargs):
+        observed.append(record_type)
+        return original(record_type, data_kubun, **kwargs)
+
+    monkeypatch.setattr(status_domain, "validate_data_kubun", observe)
+    factory = ParserFactory()
+    for record_type, lengths in CURRENT_LENGTHS.items():
+        try:
+            factory.get_parser(record_type).parse(_record(record_type, lengths[0]))
+        except (UnicodeDecodeError, ValueError):
+            pass
+
+    assert observed == list(CURRENT_LENGTHS)
+
+
+def test_realtime_overrides_reject_only_accumulated_status_seven():
+    """DM/TM/WF have one explicit channel difference and paired RT controls."""
+
+    realtime_controls = {"DM": "1", "TM": "3", "WF": "9"}
+    for record_type, realtime_value in realtime_controls.items():
+        assert validate_data_kubun(record_type, "7") == "7"
+        with pytest.raises(ValueError, match="DataKubun"):
+            validate_data_kubun(
+                record_type,
+                "7",
+                context=DataKubunContext.REALTIME,
+            )
+        assert (
+            validate_data_kubun(
+                record_type,
+                realtime_value,
+                context=DataKubunContext.REALTIME,
+            )
+            == realtime_value
+        )
+
+
+@pytest.mark.parametrize(
+    ("record_type", "legacy_value", "valid_before"),
+    [
+        (record_type, contract["value"], contract["valid_before_make_date"])
+        for record_type, contract in STATUS_DOMAIN["historical_exceptions"].items()
+    ],
+)
+def test_historical_status_requires_make_date_before_its_official_boundary(
+    record_type,
+    legacy_value,
+    valid_before,
+):
+    """Old and current generations share a length, so MakeDate is provenance."""
+
+    before = str(int(valid_before) - 1)
+    validate_fixed_record(
+        _record_with_header(
+            record_type,
+            data_kubun=legacy_value,
+            make_date=before,
+        ),
+        record_type,
+        CURRENT_LENGTHS[record_type],
+    )
+    with pytest.raises(ValueError, match="DataKubun"):
+        validate_fixed_record(
+            _record_with_header(
+                record_type,
+                data_kubun=legacy_value,
+                make_date=valid_before,
+            ),
+            record_type,
+            CURRENT_LENGTHS[record_type],
+        )
+
+
+@pytest.mark.parametrize(
+    ("record_type", "legacy_value"),
+    [
+        (record_type, contract["value"])
+        for record_type, contract in STATUS_DOMAIN["historical_exceptions"].items()
+    ],
+)
+def test_historical_only_status_rejects_missing_or_invalid_provenance(
+    record_type,
+    legacy_value,
+):
+    """Unknown provenance means current-only, never a permissive history union."""
+
+    for make_date in (None, "", "not-a-date"):
+        with pytest.raises(ValueError, match="DataKubun"):
+            validate_data_kubun(
+                record_type,
+                legacy_value,
+                make_date=make_date,
+            )
+
+
+def test_um_status_nine_is_rejected_before_its_documented_generation():
+    """UM status 9 was added on 2003-04-22, not part of every old UM record."""
+
+    validate_fixed_record(
+        _record_with_header("UM", data_kubun="9", make_date="20030422"),
+        "UM",
+        CURRENT_LENGTHS["UM"],
+    )
+    with pytest.raises(ValueError, match="DataKubun"):
+        validate_fixed_record(
+            _record_with_header("UM", data_kubun="9", make_date="20030421"),
+            "UM",
+            CURRENT_LENGTHS["UM"],
+        )
 
 
 @pytest.mark.parametrize("record_type", CURRENT_LENGTHS)

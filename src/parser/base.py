@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
 from src.jvlink.constants import ENCODING_JVDATA
+from src.parser import status_domain
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -43,6 +44,11 @@ def validate_fixed_record(
     if record[-2:] != b"\r\n":
         raise ValueError(f"{record_type} record delimiter must be CRLF")
     record.decode(ENCODING_JVDATA, errors="strict")
+    status_domain.validate_data_kubun(
+        record_type,
+        record[2:3].decode("ascii", errors="strict"),
+        make_date=record[3:11].decode("ascii", errors="strict"),
+    )
 
 
 @dataclass

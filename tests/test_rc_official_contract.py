@@ -295,12 +295,9 @@ def test_rc_delete_is_ordered_and_scoped_to_the_complete_official_key(
     database = SQLiteDatabase({"path": str(tmp_path / f"delete-{table_name}.db")})
     schema = JRAVAN_SCHEMAS[table_name] if use_jravan_schema else SCHEMAS[table_name]
     first = RCParser().parse(build_rc_record()[0])
-    replacement = RCParser().parse(
-        build_rc_record(data_kubun="2", horse_prefix="REPLACED")[0]
-    )
+    replacement = RCParser().parse(build_rc_record(horse_prefix="REPLACED")[0])
     second = RCParser().parse(
         build_rc_record(
-            data_kubun="2",
             key_overrides={"SyubetuCD": "14"},
             horse_prefix="OTHER",
         )[0]
@@ -324,11 +321,11 @@ def test_rc_delete_is_ordered_and_scoped_to_the_complete_official_key(
     assert replacement_stats["records_imported"] == 2
     assert replacement_stats["records_failed"] == 0
     assert replaced == [
-        {"DataKubun": "2", "SyubetuCD": "13", "RecUmaBamei1": "REPLACED1"}
+        {"DataKubun": "1", "SyubetuCD": "13", "RecUmaBamei1": "REPLACED1"}
     ]
     assert stats["records_imported"] == 2
     assert stats["records_failed"] == 0
-    assert rows == [{"DataKubun": "2", "SyubetuCD": "14", "RecUmaBamei1": "OTHER1"}]
+    assert rows == [{"DataKubun": "1", "SyubetuCD": "14", "RecUmaBamei1": "OTHER1"}]
 
 
 @pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
@@ -360,12 +357,13 @@ def test_unsupported_rc_data_kubun_aborts_before_mutation(
     importer_class,
 ) -> None:
     database = SQLiteDatabase({"path": str(tmp_path / "unsupported-data-kubun.db")})
-    unsupported = RCParser().parse(build_rc_record(data_kubun="9")[0])
+    unsupported = RCParser().parse(build_rc_record()[0])
     assert unsupported is not None
+    unsupported["DataKubun"] = "9"
 
     with database:
         database.create_table("NL_RC", SCHEMAS["NL_RC"])
-        with pytest.raises(SchemaMigrationError, match="unsupported DataKubun"):
+        with pytest.raises(SchemaMigrationError, match="DataKubun"):
             importer_class(database).import_records(iter([unsupported]))
 
         assert database.fetch_one("SELECT COUNT(*) AS count FROM NL_RC")["count"] == 0
@@ -383,9 +381,7 @@ def test_rc_batches_only_consecutive_upserts_around_ordered_deletes(
         build_rc_record(key_overrides={"SyubetuCD": "14"}, horse_prefix="OTHER")[0]
     )
     delete_first = RCParser().parse(build_rc_record(data_kubun="0")[0])
-    replacement = RCParser().parse(
-        build_rc_record(data_kubun="2", horse_prefix="LAST")[0]
-    )
+    replacement = RCParser().parse(build_rc_record(horse_prefix="LAST")[0])
     assert all(row is not None for row in (first, second, delete_first, replacement))
 
     with database:

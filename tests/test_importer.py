@@ -5,7 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from src.database.schema import create_all_tables, SCHEMAS
+from src.database.migration import SchemaMigrationError
+from src.database.schema import SCHEMAS, create_all_tables
 from src.database.sqlite_handler import SQLiteDatabase
 from src.importer.importer import DataImporter
 
@@ -210,7 +211,7 @@ class TestDataImporter:
             assert hr_count["cnt"] == 1
 
     def test_invalid_record_handling(self, db, importer):
-        """Test handling of invalid records."""
+        """A malformed header aborts the batch before any valid row is stored."""
         with db:
             db.execute(SCHEMAS["NL_RA"])
 
@@ -238,10 +239,10 @@ class TestDataImporter:
                 },
             ]
 
-            stats = importer.import_records(iter(records), auto_commit=False)
+            with pytest.raises(SchemaMigrationError, match="record-type"):
+                importer.import_records(iter(records), auto_commit=False)
 
-            assert stats["records_imported"] == 1
-            assert stats["records_failed"] == 2
+            assert db.fetch_one("SELECT COUNT(*) AS count FROM NL_RA")["count"] == 0
 
     def test_get_statistics(self, importer):
         """Test getting statistics."""

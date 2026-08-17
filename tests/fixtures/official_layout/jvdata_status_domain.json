@@ -1,0 +1,80 @@
+{
+  "contract_schema_version": 1,
+  "source": {
+    "artifact": "JV-Data4901.xlsx",
+    "jvdata_version": "4.9.0.1",
+    "sha256": "23bafd375f704acbdd696b5032ac1619f17d47e882587d6e7954b610527a8234"
+  },
+  "current_accumulated": {
+    "AV": {"values": ["1", "2"], "source": "フォーマット:1464"},
+    "BN": {"values": ["0", "1", "2"], "source": "フォーマット:803"},
+    "BR": {"values": ["0", "1", "2"], "source": "フォーマット:782"},
+    "BT": {"values": ["0", "1", "2"], "source": "フォーマット:1232"},
+    "CC": {"values": ["1"], "source": "フォーマット:1534"},
+    "CH": {"values": ["0", "1", "2"], "source": "フォーマット:711"},
+    "CK": {"values": ["0", "1", "2"], "source": "フォーマット:866"},
+    "CS": {"values": ["0", "1", "2"], "source": "フォーマット:1244"},
+    "DM": {"values": ["0", "1", "2", "3", "7"], "source": "フォーマット:1257"},
+    "H1": {"values": ["0", "2", "4", "5", "9"], "source": "フォーマット:301"},
+    "H6": {"values": ["0", "2", "4", "5", "9"], "source": "フォーマット:370"},
+    "HC": {"values": ["0", "1"], "source": "フォーマット:1145"},
+    "HN": {"values": ["0", "1", "2"], "source": "フォーマット:824"},
+    "HR": {"values": ["0", "1", "2", "9"], "source": "フォーマット:219"},
+    "HS": {"values": ["0", "1"], "source": "フォーマット:1173"},
+    "HY": {"values": ["0", "1"], "source": "フォーマット:1192"},
+    "JC": {"values": ["1"], "source": "フォーマット:1482"},
+    "JG": {"values": ["0", "1"], "source": "フォーマット:1341"},
+    "KS": {"values": ["0", "1", "2"], "source": "フォーマット:621"},
+    "O1": {"values": ["0", "1", "2", "3", "4", "5", "9"], "source": "フォーマット:394"},
+    "O2": {"values": ["0", "1", "2", "3", "4", "5", "9"], "source": "フォーマット:431"},
+    "O3": {"values": ["0", "1", "2", "3", "4", "5", "9"], "source": "フォーマット:454"},
+    "O4": {"values": ["0", "1", "2", "3", "4", "5", "9"], "source": "フォーマット:478"},
+    "O5": {"values": ["0", "1", "2", "3", "4", "5", "9"], "source": "フォーマット:501"},
+    "O6": {"values": ["0", "1", "2", "3", "4", "5", "9"], "source": "フォーマット:524"},
+    "RA": {"values": ["0", "1", "2", "3", "4", "5", "6", "7", "9", "A", "B"], "source": "フォーマット:77"},
+    "RC": {"values": ["0", "1"], "source": "フォーマット:1107"},
+    "SE": {"values": ["0", "1", "2", "3", "4", "5", "6", "7", "9", "A", "B"], "source": "フォーマット:144"},
+    "SK": {"values": ["0", "1", "2"], "source": "フォーマット:848"},
+    "TC": {"values": ["1"], "source": "フォーマット:1512"},
+    "TK": {"values": ["0", "1", "2"], "source": "フォーマット:19"},
+    "TM": {"values": ["0", "1", "2", "3", "7"], "source": "フォーマット:1279"},
+    "UM": {"values": ["0", "1", "2", "3", "4", "9"], "source": "フォーマット:547"},
+    "WC": {"values": ["0", "1"], "source": "フォーマット:1360"},
+    "WE": {"values": ["1"], "source": "フォーマット:1438"},
+    "WF": {"values": ["0", "1", "2", "3", "7", "9"], "source": "フォーマット:1299"},
+    "WH": {"values": ["1"], "source": "フォーマット:1416"},
+    "YS": {"values": ["0", "1", "2", "3", "9"], "source": "フォーマット:1203"}
+  },
+  "realtime_overrides": {
+    "DM": {"values": ["0", "1", "2", "3"], "source": "フォーマット:1257", "reason": "DataKubun 7 is accumulated-only"},
+    "TM": {"values": ["0", "1", "2", "3"], "source": "フォーマット:1279", "reason": "DataKubun 7 is accumulated-only"},
+    "WF": {"values": ["0", "1", "2", "3", "9"], "source": "フォーマット:1299", "reason": "DataKubun 7 is accumulated-only"}
+  },
+  "historical_exceptions": {
+    "AV": {"value": "0", "valid_before_make_date": "20030711", "official_spec_version": "1.0.7-beta", "source": "変更履歴:305"},
+    "JC": {"value": "0", "valid_before_make_date": "20030711", "official_spec_version": "1.0.7-beta", "source": "変更履歴:306"},
+    "RC": {"value": "2", "valid_before_make_date": "20050929", "official_spec_version": "2.1.3", "source": "変更履歴:195"},
+    "WE": {"value": "0", "valid_before_make_date": "20030711", "official_spec_version": "1.0.7-beta", "source": "変更履歴:304"},
+    "WH": {"value": "0", "valid_before_make_date": "20030711", "official_spec_version": "1.0.7-beta", "source": "変更履歴:303"}
+  },
+  "status_generation_constraints": {
+    "UM": {"value": "9", "valid_from_make_date": "20030422", "official_spec_version": "1.0.1-beta", "source": "変更履歴:335"}
+  },
+  "unresolved_history": {
+    "RA": {
+      "changed_at": "20030603",
+      "before_allowed": null,
+      "source": "変更履歴:315",
+      "policy": "Do not invent an undocumented pre-change domain."
+    },
+    "DM": {
+      "removed_value": "0",
+      "removed_at": "20030711",
+      "removed_in_version": "1.0.7-beta",
+      "current_values_include_removed_value": true,
+      "reintroduced_at": null,
+      "source": "変更履歴:307;フォーマット:1257",
+      "policy": "Validate the documented current domain; do not invent an undocumented historical transition window."
+    }
+  }
+}

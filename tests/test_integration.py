@@ -13,7 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from src.database.schema import create_all_tables, SCHEMAS
+from src.database.migration import SchemaMigrationError
+from src.database.schema import SCHEMAS, create_all_tables
 from src.database.sqlite_handler import SQLiteDatabase
 from src.importer.importer import DataImporter
 from src.parser.factory import ParserFactory
@@ -461,10 +462,7 @@ class TestIntegration:
     def test_transaction_rollback_on_error(self, temp_db, importer):
         """Test that failed batches are rolled back properly.
 
-        This test verifies:
-        - When a batch fails, it falls back to individual inserts
-        - Failed individual records are tracked
-        - Successful records in the batch are still imported
+        A malformed official header aborts the batch before any row is stored.
         """
         with temp_db:
             create_all_tables(temp_db)
@@ -509,15 +507,11 @@ class TestIntegration:
                 },
             ]
 
-            stats = importer.import_records(iter(records), auto_commit=True)
+            with pytest.raises(SchemaMigrationError, match="record-type"):
+                importer.import_records(iter(records), auto_commit=True)
 
-            # Verify statistics
-            assert stats["records_imported"] == 2, "2 valid records should be imported"
-            assert stats["records_failed"] == 2, "2 invalid records should fail"
-
-            # Verify valid records are in database
             rows = temp_db.fetch_all("SELECT * FROM NL_RA ORDER BY RaceNum")
-            assert len(rows) == 2
+            assert rows == []
 
     def test_primary_key_enforcement(self, temp_db):
         """Test that primary key constraints are properly enforced.
@@ -610,6 +604,7 @@ class TestIntegration:
 if __name__ == "__main__":
     # Allow running this test file directly
     import sys
+
     import pytest
 
     print("Running integration tests...")

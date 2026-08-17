@@ -15,17 +15,18 @@ Test Categories:
 
 import tempfile
 import unittest
-from unittest.mock import MagicMock, patch
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
-from src.database.sqlite_handler import SQLiteDatabase
+from src.database.migration import SchemaMigrationError
 from src.database.schema import SchemaManager
-from src.parser.factory import ParserFactory
-from src.importer.importer import DataImporter
-from src.importer.batch import BatchProcessor
+from src.database.sqlite_handler import SQLiteDatabase
 from src.fetcher.realtime import RealtimeFetcher
-from src.services.realtime_monitor import RealtimeMonitor
+from src.importer.batch import BatchProcessor
+from src.importer.importer import DataImporter
 from src.jvlink.constants import JV_RT_SUCCESS
+from src.parser.factory import ParserFactory
+from src.services.realtime_monitor import RealtimeMonitor
 from tests.fixtures.record_factory import make_hr_record, make_ra_record, make_se_record
 
 
@@ -237,18 +238,17 @@ class TestTransactionHandling(unittest.TestCase):
 
         records = [
             factory.parse(make_ra_record(race_num="01")),
-            {'RecordSpec': 'INVALID'},
+            {"RecordSpec": "RA", "DataKubun": "Z"},
             factory.parse(make_ra_record(race_num="02")),
         ]
         self.assertTrue(all(record is not None for record in (records[0], records[2])))
 
-        result = importer.import_records(records)
+        with self.assertRaises(SchemaMigrationError):
+            importer.import_records(records)
 
-        self.assertEqual(result['records_imported'], 2)
-        self.assertEqual(result['records_failed'], 1)
         self.assertEqual(
             self.database.fetch_one("SELECT COUNT(*) AS count FROM NL_RA")["count"],
-            2,
+            0,
         )
 
 

@@ -2,6 +2,7 @@ from hashlib import sha256
 
 import pytest
 
+from src.database.schema import SCHEMAS
 from src.importer.importer import convert_record_types
 from src.parser.canonical import canonicalize_se_fields
 from src.parser.se_parser import SEParser
@@ -221,6 +222,8 @@ def test_jravan_importer_auto_commit_false_keeps_migration_and_row_in_caller_tra
         db.commit()
         record = {
             "RecordSpec": "SE",
+            "DataKubun": "1",
+            "MakeDate": "20260718",
             "Year": "2026",
             "MonthDay": "0718",
             "JyoCD": "05",
@@ -261,6 +264,8 @@ def test_jravan_single_record_auto_commit_false_stays_in_caller_transaction(tmp_
         inserted = importer.import_single_record(
             {
                 "RecordSpec": "SE",
+                "DataKubun": "1",
+                "MakeDate": "20260718",
                 "Year": "2026",
                 "MonthDay": "0718",
                 "JyoCD": "05",
@@ -288,19 +293,27 @@ def test_optimized_importer_does_not_retry_inside_caller_transaction(tmp_path) -
 
     db = SQLiteDatabase({"path": str(tmp_path / "optimized-failure.db")})
     with db:
+        db.execute(SCHEMAS["NL_RA"])
         db.execute(
-            "CREATE TABLE TX_TEST (RecordSpec TEXT, id INTEGER PRIMARY KEY, "
-            "value TEXT CHECK(value != 'bad'))"
+            "CREATE TRIGGER reject_race_three BEFORE INSERT ON NL_RA "
+            "WHEN NEW.RaceNum = 3 BEGIN SELECT RAISE(FAIL, 'rejected'); END"
         )
         db.commit()
         importer = OptimizedDataImporter(db, batch_size=2)
-        importer._table_map["TX"] = "TX_TEST"
         records = iter(
             [
-                {"RecordSpec": "TX", "id": 1, "value": "a"},
-                {"RecordSpec": "TX", "id": 2, "value": "b"},
-                {"RecordSpec": "TX", "id": 3, "value": "bad"},
-                {"RecordSpec": "TX", "id": 4, "value": "c"},
+                {
+                    "RecordSpec": "RA",
+                    "DataKubun": "1",
+                    "MakeDate": "20260718",
+                    "Year": "2026",
+                    "MonthDay": "0718",
+                    "JyoCD": "05",
+                    "Kaiji": "1",
+                    "Nichiji": "1",
+                    "RaceNum": str(race_num),
+                }
+                for race_num in range(1, 5)
             ]
         )
 
@@ -308,7 +321,7 @@ def test_optimized_importer_does_not_retry_inside_caller_transaction(tmp_path) -
             importer.import_records(records, auto_commit=False)
         db.rollback()
 
-        assert db.fetch_one("SELECT COUNT(*) AS n FROM TX_TEST")["n"] == 0
+        assert db.fetch_one("SELECT COUNT(*) AS n FROM NL_RA")["n"] == 0
 
 
 def test_initial_card_prize_zero_is_missing_but_settled_zero_is_real() -> None:

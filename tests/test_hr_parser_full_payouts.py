@@ -22,7 +22,7 @@ def _num(value: int, width: int) -> bytes:
 def build_record() -> bytes:
     buf = b""
     buf += _field("HR", 2)            # RecordSpec
-    buf += _field("7", 1)             # DataKubun
+    buf += _field("1", 1)             # DataKubun
     buf += _field("20260611", 8)      # MakeDate
     buf += _field("2026", 4)          # Year
     buf += _field("0611", 4)          # MonthDay

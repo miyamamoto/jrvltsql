@@ -76,6 +76,8 @@ class TestInvalidDataHandling(unittest.TestCase):
         """Test importing record with missing required fields."""
         invalid_record = {
             'レコード種別ID': 'RA',
+            'DataKubun': '1',
+            'MakeDate': '20240101',
             # Missing required fields
         }
 
@@ -88,6 +90,8 @@ class TestInvalidDataHandling(unittest.TestCase):
         # SE record but trying to import to RA table
         wrong_record = {
             'レコード種別ID': 'SE',  # Should go to NL_SE
+            'DataKubun': '1',
+            'MakeDate': '20240101',
             '開催年月日': '20240101',
         }
 
@@ -100,6 +104,8 @@ class TestInvalidDataHandling(unittest.TestCase):
         # Use ASCII field names to avoid encoding issues
         sample = {
             'RecordSpec': 'RA',
+            'DataKubun': '1',
+            'MakeDate': '20240101',
             'year': '2024',
             'month_day': '0101'
         }
@@ -118,6 +124,8 @@ class TestInvalidDataHandling(unittest.TestCase):
         """Test handling of NULL/None values."""
         record_with_nulls = {
             'レコード種別ID': 'RA',
+            'DataKubun': '1',
+            'MakeDate': '20240101',
             '開催年月日': None,  # NULL value
             '競馬場コード': '',  # Empty string
         }
@@ -228,6 +236,8 @@ class TestResourceConstraints(unittest.TestCase):
         large_batch = [
             {
                 'レコード種別ID': 'RA',
+                'DataKubun': '1',
+                'MakeDate': '20240101',
                 '開催年月日': f'2024{i:04d}',
                 '競馬場コード': f'{i % 10:02d}',
                 'レース番号': f'{i % 12:02d}'
@@ -259,6 +269,8 @@ class TestResourceConstraints(unittest.TestCase):
         # Record with very long string
         long_record = {
             'レコード種別ID': 'RA',
+            'DataKubun': '1',
+            'MakeDate': '20240101',
             '開催年月日': '20240101',
             'レース名': 'A' * 10000,  # Very long race name
         }
@@ -284,7 +296,11 @@ class TestResourceConstraints(unittest.TestCase):
         schema_mgr.create_table('NL_RA')
 
         # Create record with all possible fields
-        many_fields_record = {'レコード種別ID': 'RA'}
+        many_fields_record = {
+            'レコード種別ID': 'RA',
+            'DataKubun': '1',
+            'MakeDate': '20240101',
+        }
         for i in range(100):
             many_fields_record[f'field_{i}'] = f'value_{i}'
 
@@ -391,8 +407,18 @@ class TestConcurrencyIssues(unittest.TestCase):
         importer2 = DataImporter(db, batch_size=10)
 
         # Both try to import
-        record1 = {'レコード種別ID': 'RA', '開催年月日': '20240101'}
-        record2 = {'レコード種別ID': 'RA', '開催年月日': '20240102'}
+        record1 = {
+            'レコード種別ID': 'RA',
+            'DataKubun': '1',
+            'MakeDate': '20240101',
+            '開催年月日': '20240101',
+        }
+        record2 = {
+            'レコード種別ID': 'RA',
+            'DataKubun': '1',
+            'MakeDate': '20240102',
+            '開催年月日': '20240102',
+        }
 
         success1 = importer1.import_single_record(record1)
         success2 = importer2.import_single_record(record2)

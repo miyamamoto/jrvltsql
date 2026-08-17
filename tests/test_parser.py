@@ -165,6 +165,7 @@ class TestSEParser:
         parser = SEParser()
         record = bytearray(b" " * 555)
         record[0:2] = b"SE"
+        record[2:3] = b"1"
         record[393:403] = b"2020100001"
         record[403:439] = b"WINNER-ONE".ljust(36)
         record[439:449] = b"2020100002"

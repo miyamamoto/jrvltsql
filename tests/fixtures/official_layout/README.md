@@ -8,6 +8,9 @@ JV-Data. They do not contain provider records or a copy of the SDK source.
   exact local source artifact used by the maintainer.
 - `jvdata_layout_history.json` records physical-length and same-length semantic
   changes cited by the official 4.8.0.2 and 4.9.0.1 specification workbooks.
+- `jvdata_status_domain.json` records all 38 current DataKubun domains, the
+  three explicit accumulated/realtime differences, and date-bounded historical
+  values cited by the official 4.9.0.1 format and change-history sheets.
 
 The manifest is intentionally independent of jrvltsql parser and schema code.
 When the official source changes, regenerate it from a separately obtained SDK

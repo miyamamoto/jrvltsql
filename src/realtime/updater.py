@@ -14,9 +14,8 @@ from src.importer.importer import (
     MiningSnapshotMutationError,
     TransactionRecoveryError,
     clean_record_metadata,
-    rollback_failed_import,
     resolve_record_data_kubun,
-    resolve_record_type,
+    rollback_failed_import,
     validate_wf_record,
     verify_wf_storage_schema,
 )
@@ -29,6 +28,7 @@ from src.jvlink.constants import (
     DATA_KUBUN_UPDATE,
 )
 from src.parser.factory import ParserFactory
+from src.parser.status_domain import DataKubunContext, validate_record_header
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -200,29 +200,29 @@ class RealtimeUpdater:
     def _canonicalize_strict_record_aliases(
         self, record: Dict
     ) -> tuple[Optional[str], Optional[str]]:
-        """Canonicalize aliases needed to route a strict realtime record.
+        """Canonicalize aliases needed to route a realtime record.
 
-        Returns ``(record_type, error)``. Conflicts and missing WF status stay
-        explicit validation failures; they are never defaulted to a live row.
+        Returns ``(record_type, error)``. Missing, conflicting, and unsupported
+        header state stays an explicit validation failure; it is never
+        defaulted to a live row.
         """
         try:
-            record_type = resolve_record_type(record)
-        except SchemaMigrationError as error:
-            return None, str(error)
-        if record_type != "WF":
-            return record_type, None
-
-        record["RecordSpec"] = record_type
-        has_status = any(
-            record.get(name) not in (None, "")
-            for name in ("DataKubun", "headDataKubun")
-        )
-        if not has_status:
-            return record_type, "WF DataKubun is required"
-        try:
-            record["DataKubun"] = resolve_record_data_kubun(record)
+            record_type, data_kubun = validate_record_header(
+                record,
+                context=DataKubunContext.REALTIME,
+            )
         except ValueError as error:
+            record_type = next(
+                (
+                    value
+                    for name in ("RecordSpec", "headRecordSpec", "レコード種別ID")
+                    if isinstance((value := record.get(name)), str) and value
+                ),
+                None,
+            )
             return record_type, str(error)
+        record["RecordSpec"] = record_type
+        record["DataKubun"] = data_kubun
         return record_type, None
 
     def _reject_strict_record(self, table_name: str, record: Dict) -> Optional[str]:
@@ -274,6 +274,19 @@ class RealtimeUpdater:
                 logger.warning("Failed to parse record")
                 return None
 
+            # The physical parser validates the accumulated contract. Realtime
+            # DM/TM/WF have a narrower official domain, which must be checked
+            # before even the optional local cache is mutated.
+            parsed_rows = parsed_data if isinstance(parsed_data, list) else [parsed_data]
+            for parsed_row in parsed_rows:
+                _, header_error = self._canonicalize_strict_record_aliases(parsed_row)
+                if header_error is not None:
+                    return self.process_parsed_record(
+                        parsed_data,
+                        timeseries=timeseries,
+                        source_spec=source_spec,
+                    )
+
             # Write to RT cache if enabled
             if self.cache_manager and buff:
                 from datetime import date
@@ -307,6 +320,24 @@ class RealtimeUpdater:
         directly through this method. Returns a list when parsed_data is a list.
         """
         if isinstance(parsed_data, list):
+            header_errors: list[tuple[Optional[str], str]] = []
+            for item in parsed_data:
+                record_type, header_error = self._canonicalize_strict_record_aliases(item)
+                if header_error is not None:
+                    header_errors.append((record_type, header_error))
+            if header_errors:
+                record_type, header_error = header_errors[0]
+                table_name = self.RECORD_TYPE_TABLE.get(record_type) if record_type else None
+                return [
+                    {
+                        "operation": "validate",
+                        "table": table_name,
+                        "record_type": record_type,
+                        "success": False,
+                        "error": header_error,
+                    }
+                    for _ in parsed_data
+                ]
             if parsed_data:
                 from src.importer.importer import _mining_native_snapshot_rows
 
@@ -418,6 +449,7 @@ class RealtimeUpdater:
 
         grouped: dict[str, list[Dict]] = {}
         errors = 0
+        header_errors = 0
         batch_collected_at = self._current_collected_at() if timeseries else None
         validated_records: list[Dict] = []
         ordered_mutation_required = False
@@ -430,12 +462,14 @@ class RealtimeUpdater:
             if alias_error is not None:
                 logger.warning(f"Skipping record with conflicting header aliases: {alias_error}")
                 errors += 1
+                header_errors += 1
                 continue
             try:
                 data_kubun = resolve_record_data_kubun(record)
             except ValueError as exc:
                 logger.warning(f"Skipping record with conflicting DataKubun aliases: {exc}")
                 errors += 1
+                header_errors += 1
                 continue
             strict_table = self.RECORD_TYPE_TABLE.get(record_type)
             if (
@@ -450,6 +484,18 @@ class RealtimeUpdater:
             ):
                 ordered_mutation_required = True
             validated_records.append(record)
+
+        # A malformed provider operation invalidates the batch. Saving only
+        # the remaining rows would silently change provider order. No database
+        # mutation has happened at this point.
+        if header_errors:
+            return {
+                "operation": "batch_insert",
+                "success": False,
+                "inserted": 0,
+                "errors": max(errors, len(records)),
+                "tables": [],
+            }
 
         if strict_wf_present:
             return self._process_strict_wf_realtime_batch(
@@ -720,7 +766,7 @@ class RealtimeUpdater:
             if alias_error is not None:
                 return {
                     "operation": "validate",
-                    "table": "RT_WF" if record_type == "WF" else None,
+                    "table": self.RECORD_TYPE_TABLE.get(record_type) if record_type else None,
                     "record_type": record_type,
                     "success": False,
                     "error": alias_error,

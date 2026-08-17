@@ -85,7 +85,8 @@ class TestIndividualParsers:
             length = parser.RECORD_LENGTH
             # RecordSpec(2) + DataKubun(1) + MakeDate(8) = 11バイト + 残りをスペースで埋める
             data = record_type.encode('cp932')  # RecordSpec (2 bytes)
-            data += b'1'  # DataKubun (1 byte)
+            # H1/H6 do not define status 1 in the official current contract.
+            data += b"2" if record_type in {"H1", "H6"} else b"1"
             data += b'20240601'  # MakeDate (8 bytes)
             # 残りのフィールドをスペースで埋める
             remaining = length - len(data)

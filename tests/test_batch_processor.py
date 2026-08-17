@@ -4,11 +4,12 @@ from unittest.mock import MagicMock, call
 
 import pytest
 
-from src.importer.batch import BatchProcessor
-from src.importer.importer import DataImporter, ImporterError
-from src.fetcher.historical import HistoricalFetcher
+from src.database.migration import SchemaMigrationError
 from src.database.schema import SCHEMAS
 from src.database.sqlite_handler import SQLiteDatabase
+from src.fetcher.historical import HistoricalFetcher
+from src.importer.batch import BatchProcessor
+from src.importer.importer import DataImporter, ImporterError
 
 
 def test_option_3_setup_range_splits_long_periods():
@@ -183,6 +184,8 @@ def test_import_rejection_rolls_back_earlier_successful_batch(tmp_path):
         [
             {
                 "RecordSpec": "RA",
+                "DataKubun": "1",
+                "MakeDate": "20260714",
                 "Year": "2026",
                 "MonthDay": "0714",
                 "JyoCD": "05",
@@ -190,7 +193,7 @@ def test_import_rejection_rolls_back_earlier_successful_batch(tmp_path):
                 "Nichiji": "01",
                 "RaceNum": "01",
             },
-            {"RecordSpec": "UNKNOWN"},
+            {"RecordSpec": "RA", "DataKubun": "Z"},
         ]
     )
     processor.fetcher.get_statistics.return_value = {
@@ -204,7 +207,7 @@ def test_import_rejection_rolls_back_earlier_successful_batch(tmp_path):
         database.commit()
         processor.importer = DataImporter(database, batch_size=1)
 
-        with pytest.raises(ImporterError, match="rejected 1 record"):
+        with pytest.raises(SchemaMigrationError, match="DataKubun"):
             processor.process_date_range(
                 "RACE",
                 "20260714",
@@ -312,6 +315,8 @@ def test_split_setup_rolls_back_all_chunks_on_later_failure(tmp_path):
             [
                 {
                     "RecordSpec": "RA",
+                    "DataKubun": "1",
+                    "MakeDate": "20250714",
                     "Year": "2025",
                     "MonthDay": "0714",
                     "JyoCD": "05",
@@ -321,7 +326,7 @@ def test_split_setup_rolls_back_all_chunks_on_later_failure(tmp_path):
                 }
             ]
         ),
-        iter([{"RecordSpec": "UNKNOWN"}]),
+        iter([{"RecordSpec": "RA", "DataKubun": "Z"}]),
     ]
     processor.fetcher.get_statistics.side_effect = [
         {"records_fetched": 1, "records_parsed": 1, "records_failed": 0},
@@ -338,7 +343,7 @@ def test_split_setup_rolls_back_all_chunks_on_later_failure(tmp_path):
         database.commit()
         processor.importer = DataImporter(database, batch_size=1)
 
-        with pytest.raises(ImporterError, match="rejected 1 record"):
+        with pytest.raises(SchemaMigrationError, match="DataKubun"):
             processor._process_split_setup_range(
                 "RACE", "20250101", "20261231", 3, True, False
             )
@@ -539,6 +544,8 @@ def test_option_4_rejection_rolls_back_only_its_own_chunk(tmp_path, monkeypatch)
     def _ra_record(race_num):
         return {
             "RecordSpec": "RA",
+            "DataKubun": "1",
+            "MakeDate": "20260714",
             "Year": "2026",
             "MonthDay": "0714",
             "JyoCD": "05",
@@ -553,7 +560,7 @@ def test_option_4_rejection_rolls_back_only_its_own_chunk(tmp_path, monkeypatch)
             _ra_record("01"),
             _ra_record("02"),
             _ra_record("03"),
-            {"RecordSpec": "UNKNOWN"},
+            {"RecordSpec": "RA", "DataKubun": "Z"},
         ]
     )
     processor.fetcher.get_statistics.return_value = {
@@ -567,7 +574,7 @@ def test_option_4_rejection_rolls_back_only_its_own_chunk(tmp_path, monkeypatch)
         database.commit()
         processor.importer = DataImporter(database, batch_size=1)
 
-        with pytest.raises(ImporterError, match="rejected 1 record"):
+        with pytest.raises(SchemaMigrationError, match="DataKubun"):
             processor.process_date_range(
                 "RACE", "19860101", "20221231", option=4, ensure_tables=False
             )
