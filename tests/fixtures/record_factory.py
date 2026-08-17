@@ -184,8 +184,8 @@ def make_hr_record(
     kaiji="01", nichiji="01", race_num="01",
     **kwargs,
 ) -> bytes:
-    """Create HR record (719 bytes)."""
-    data = bytearray(719)
+    """Create a minimal current-contract HR record (719 bytes)."""
+    data = bytearray(b" " * 719)
     data[0:2] = _pad("HR", 2)
     data[2:3] = _pad(data_kubun, 1)
     data[3:11] = _pad(make_date, 8)
@@ -195,6 +195,10 @@ def make_hr_record(
     data[21:23] = _pad(kaiji, 2)
     data[23:25] = _pad(nichiji, 2)
     data[25:27] = _pad(race_num, 2)
+    data[27:29] = _pad(kwargs.get("toroku_tosu", "18"), 2)
+    data[29:31] = _pad(kwargs.get("syusso_tosu", "18"), 2)
+    # The official current HR body requires every cancellation/refund flag.
+    data[31:102] = b"0" * 71
     data[717:719] = b'\r\n'
     return bytes(data)
 

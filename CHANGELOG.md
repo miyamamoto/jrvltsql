@@ -39,6 +39,12 @@
 
 ### Fixed
 
+- `HR`を公式719バイト・6項目キーへ結び付け、3件の予備領域を含む全repeatを
+  native/速報/JRA-VAN標準名`HARAI`へ保存。`HARAI`の払戻NULL化・重複行、
+  coercion前validation欠落、unsafe schemaの見逃し、PostgreSQL同一キー操作の
+  統計過少計上を修正。2004-08-14より前の同長114バイト領域は三連単と誤解釈せず
+  hexでlossless保持し、現行三連単列と区別する。公式に本文値の規定がない中止状態9も
+  本文を払戻として意味変換せず、raw監査値とキー・状態を保持する
 - `AV`を公式78バイト・7項目キーへ結び付け、native/速報/JRA-VAN標準名の
   主キーを`NOT NULL`で統一。旧status 0はexact delete、現行status 1/2と
   2021年前後の事由blank/000〜003を両立し、旧`AVOIDENCE`単独構成、不正key・
@@ -211,7 +217,8 @@
 
 ### Added
 
-- HR 払戻配列の全エントリ抽出を追加
+- HR の主要払戻配列を複数エントリ抽出へ拡張
+  （3件の予備領域を含む完全化と標準名保存は2.0.0で実施）
 - コーナー通過順位を最大4セットの配列として収集
 - `0B12` / `0B15` の daily sync 統合を追加
 - JVOpen/JVRTOpen の対応データ種別、レコード種別、保存先テーブル、運用コマンドをまとめた `docs/data_support.md` を追加

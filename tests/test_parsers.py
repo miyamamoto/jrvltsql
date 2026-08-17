@@ -15,7 +15,7 @@
 import pytest
 
 from src.parser.factory import ALL_RECORD_TYPES, ParserFactory
-from tests.fixtures.record_factory import make_ra_record, make_se_record
+from tests.fixtures.record_factory import make_hr_record, make_ra_record, make_se_record
 
 EXPANDED_RECORD_TYPES = {
     "DM", "H1", "H6", "O1", "O2", "O3", "O4", "O5", "O6", "TM", "WH"
@@ -103,6 +103,16 @@ class TestIndividualParsers:
                     race_num="11",
                     umaban="01",
                     kettonum="2024012345",
+                )
+            if record_type == "HR":
+                data = make_hr_record(
+                    make_date="20240601",
+                    year="2024",
+                    month_day="0601",
+                    jyo_cd="05",
+                    kaiji="03",
+                    nichiji="08",
+                    race_num="11",
                 )
             if record_type == "AV":
                 mutable = bytearray(data)
@@ -546,6 +556,8 @@ class TestParserRobustness:
         # 正確な長さのデータを作成
         if record_type == "SE":
             data = make_se_record(make_date="20240601")
+        elif record_type == "HR":
+            data = make_hr_record(make_date="20240601")
         else:
             data = record_type.encode('cp932')
             data += b'1'

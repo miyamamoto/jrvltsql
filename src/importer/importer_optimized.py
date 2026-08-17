@@ -13,7 +13,7 @@ from typing import Dict, Iterator, List, Optional, Union
 from src.database.base import BaseDatabase, DatabaseError
 from src.database.migration import SchemaMigrationError
 from src.importer.importer import (
-    _AV_STORAGE_TABLES,
+    _PROVIDER_OPERATION_COUNT_STORAGE_TABLES,
     _ORDERED_MASTER_STORAGE_TABLES,
     _PREPARED_CH_SEISEKI_ROWS_KEY,
     _PREPARED_CK_ROWS_KEY,
@@ -64,6 +64,7 @@ from src.importer.importer import (
     resolve_standard_table_name,
     rollback_failed_import,
     validate_av_record,
+    validate_hr_record,
     validate_import_record_header,
     validate_jc_record,
     validate_jg_record,
@@ -77,6 +78,7 @@ from src.importer.importer import (
     verify_ck_coupled_tables,
     verify_cs_storage_schema,
     verify_hy_storage_schema,
+    verify_hr_storage_schema,
     verify_jc_storage_schema,
     verify_jg_storage_schema,
     verify_ks_coupled_table,
@@ -128,6 +130,7 @@ class OptimizedDataImporter:
         self._verified_se_tables: set[str] = set()
         self._verified_we_tables: set[str] = set()
         self._verified_av_tables: set[str] = set()
+        self._verified_hr_tables: set[str] = set()
         self._verified_jc_tables: set[str] = set()
         self._verified_cs_tables: set[str] = set()
         self._verified_jg_tables: set[str] = set()
@@ -331,6 +334,7 @@ class OptimizedDataImporter:
                     validate_se_record(first_record, first_table_name)
                     validate_we_record(first_record, first_table_name)
                     validate_av_record(first_record, first_table_name)
+                    validate_hr_record(first_record, first_table_name)
                     validate_jc_record(first_record, first_table_name)
                 records = chain((first_record,), records)
         except Exception:
@@ -416,6 +420,10 @@ class OptimizedDataImporter:
                     if verify_av_storage_schema(self.database, table_name):
                         self._verified_av_tables.add(table_name)
                 validate_av_record(record, table_name)
+                if table_name not in self._verified_hr_tables:
+                    if verify_hr_storage_schema(self.database, table_name):
+                        self._verified_hr_tables.add(table_name)
+                validate_hr_record(record, table_name)
                 if table_name not in self._verified_jc_tables:
                     if verify_jc_storage_schema(self.database, table_name):
                         self._verified_jc_tables.add(table_name)
@@ -970,9 +978,13 @@ class OptimizedDataImporter:
                 # Standard insert_many
                 affected_rows = self.database.insert_many(table_name, batch)
 
-            # PostgreSQL collapses same-key AV operations before one upsert.
+            # PostgreSQL collapses same-key replacement operations before one upsert.
             # Statistics count accepted provider operations, not final rows.
-            rows = len(batch) if table_name in _AV_STORAGE_TABLES else affected_rows
+            rows = (
+                len(batch)
+                if table_name in _PROVIDER_OPERATION_COUNT_STORAGE_TABLES
+                else affected_rows
+            )
 
             self._records_imported += rows
             self._batches_processed += 1

@@ -18,6 +18,7 @@ from src.database.schema import SCHEMAS, create_all_tables
 from src.database.sqlite_handler import SQLiteDatabase
 from src.importer.importer import DataImporter
 from src.parser.factory import ParserFactory
+from tests.fixtures.record_factory import make_hr_record
 
 
 class TestIntegration:
@@ -93,7 +94,7 @@ class TestIntegration:
                 "NL_SE": 103,  # Results plus canonical-v2 and provider-raw audit fields
                 "NL_UM": 90,   # Horse master (incl. 項番34-62 着回数/脚質傾向/登録レース数)
                 "NL_KS": 67,   # Official jockey-master header; results are normalized
-                "NL_HR": 194,  # Expanded payout combinations
+                "NL_HR": 202,  # Official 200 fields plus two opaque compatibility spans
                 "NL_O1": 29,   # Odds table
             }
 
@@ -311,7 +312,7 @@ class TestIntegration:
             assert rows[49]["RaceNum"] == 50
             assert rows[49]["Hondai"] == "レース50"
 
-    def test_mixed_record_types_batch_import(self, temp_db, importer):
+    def test_mixed_record_types_batch_import(self, temp_db, importer, parser_factory):
         """Test importing mixed record types in a single batch.
 
         This test verifies:
@@ -362,20 +363,19 @@ class TestIntegration:
 
             # Add 5 HR records (refund)
             for i in range(1, 6):
-                records.append({
-                    "headRecordSpec": "HR",
-                    "RecordSpec": "HR",
-                    "DataKubun": "1",
-                    "MakeDate": "20240601",
-                    "Year": 2024,
-                    "MonthDay": 601,
-                    "JyoCD": "06",
-                    "Kaiji": 3,
-                    "Nichiji": 8,
-                    "RaceNum": i,
-                    "TorokuTosu": 18,
-                    "SyussoTosu": 18,
-                })
+                parsed = parser_factory.parse(
+                    make_hr_record(
+                        make_date="20240601",
+                        year="2024",
+                        month_day="0601",
+                        jyo_cd="06",
+                        kaiji="03",
+                        nichiji="08",
+                        race_num=f"{i:02d}",
+                    )
+                )
+                assert parsed is not None
+                records.append(parsed)
 
             # Import all records
             stats = importer.import_records(iter(records), auto_commit=True)

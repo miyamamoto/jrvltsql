@@ -496,12 +496,12 @@ SCHEMAS = {
             RecordSpec TEXT,
             DataKubun TEXT,
             MakeDate TEXT,
-            Year INTEGER,
-            MonthDay INTEGER,
-            JyoCD TEXT,
-            Kaiji INTEGER,
-            Nichiji INTEGER,
-            RaceNum INTEGER,
+            Year INTEGER NOT NULL,
+            MonthDay INTEGER NOT NULL,
+            JyoCD TEXT NOT NULL,
+            Kaiji INTEGER NOT NULL,
+            Nichiji INTEGER NOT NULL,
+            RaceNum INTEGER NOT NULL,
             TorokuTosu INTEGER,
             SyussoTosu INTEGER,
             FuseirituFlag1 INTEGER,
@@ -639,8 +639,14 @@ SCHEMAS = {
             WidePay7 BIGINT,
             WideNinki7 INTEGER,
             Yobi1 TEXT,
-            Yobi2 TEXT,
-            Yobi3 TEXT,
+            Yobi2 BIGINT,
+            Yobi3 INTEGER,
+            Yobi4 TEXT,
+            Yobi5 BIGINT,
+            Yobi6 INTEGER,
+            Yobi7 TEXT,
+            Yobi8 BIGINT,
+            Yobi9 INTEGER,
             UmatanKumi TEXT,
             UmatanPay BIGINT,
             UmatanNinki INTEGER,
@@ -686,6 +692,8 @@ SCHEMAS = {
             SanrentanKumi6 TEXT,
             SanrentanPay6 BIGINT,
             SanrentanNinki6 INTEGER,
+            LegacyReserved604_717Hex TEXT,
+            OpaqueStatus9Body28_717Hex TEXT,
             RecordDelimiter TEXT,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
         )
@@ -1732,12 +1740,12 @@ SCHEMAS = {
             RecordSpec TEXT,
             DataKubun TEXT,
             MakeDate TEXT,
-            Year INTEGER,
-            MonthDay INTEGER,
-            JyoCD TEXT,
-            Kaiji INTEGER,
-            Nichiji INTEGER,
-            RaceNum INTEGER,
+            Year INTEGER NOT NULL,
+            MonthDay INTEGER NOT NULL,
+            JyoCD TEXT NOT NULL,
+            Kaiji INTEGER NOT NULL,
+            Nichiji INTEGER NOT NULL,
+            RaceNum INTEGER NOT NULL,
             TorokuTosu INTEGER,
             SyussoTosu INTEGER,
             FuseirituFlag1 INTEGER,
@@ -1875,8 +1883,14 @@ SCHEMAS = {
             WidePay7 BIGINT,
             WideNinki7 INTEGER,
             Yobi1 TEXT,
-            Yobi2 TEXT,
-            Yobi3 TEXT,
+            Yobi2 BIGINT,
+            Yobi3 INTEGER,
+            Yobi4 TEXT,
+            Yobi5 BIGINT,
+            Yobi6 INTEGER,
+            Yobi7 TEXT,
+            Yobi8 BIGINT,
+            Yobi9 INTEGER,
             UmatanKumi TEXT,
             UmatanPay BIGINT,
             UmatanNinki INTEGER,
@@ -1922,6 +1936,8 @@ SCHEMAS = {
             SanrentanKumi6 TEXT,
             SanrentanPay6 BIGINT,
             SanrentanNinki6 INTEGER,
+            LegacyReserved604_717Hex TEXT,
+            OpaqueStatus9Body28_717Hex TEXT,
             RecordDelimiter TEXT,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
         )
@@ -2740,15 +2756,17 @@ STRICT_RECREATE_TABLES = frozenset({"NL_CK_CHAKU", "NL_CK_RUIKEI"})
 STRICT_SE_STORAGE_TABLES = frozenset({"NL_SE", "RT_SE"})
 STRICT_WE_STORAGE_TABLES = frozenset({"NL_WE", "RT_WE"})
 STRICT_AV_STORAGE_TABLES = frozenset({"NL_AV", "RT_AV"})
+STRICT_HR_STORAGE_TABLES = frozenset({"NL_HR", "RT_HR"})
 STRICT_JC_STORAGE_TABLES = frozenset({"NL_JC", "RT_JC"})
 
 
 def _preflight_existing_strict_storage(db: BaseDatabase) -> None:
-    """Reject unsafe SE/WE/AV/JC identities before unrelated additive migration."""
+    """Reject unsafe strict identities before unrelated additive migration."""
 
     from src.database.migration import _migration_targets
     from src.importer.importer import (
         verify_av_storage_schema,
+        verify_hr_storage_schema,
         verify_jc_storage_schema,
         verify_se_storage_schema,
         verify_we_storage_schema,
@@ -2769,6 +2787,13 @@ def _preflight_existing_strict_storage(db: BaseDatabase) -> None:
         for table_name in STRICT_AV_STORAGE_TABLES:
             if target.table_exists_strict(table_name):
                 verify_av_storage_schema(
+                    target,
+                    table_name,
+                    allow_missing_columns=True,
+                )
+        for table_name in STRICT_HR_STORAGE_TABLES:
+            if target.table_exists_strict(table_name):
+                verify_hr_storage_schema(
                     target,
                     table_name,
                     allow_missing_columns=True,
@@ -2855,6 +2880,10 @@ class SchemaManager:
                 from src.importer.importer import verify_av_storage_schema
 
                 verify_av_storage_schema(self.db, table_name)
+            if table_name in STRICT_HR_STORAGE_TABLES:
+                from src.importer.importer import verify_hr_storage_schema
+
+                verify_hr_storage_schema(self.db, table_name)
             if table_name in STRICT_JC_STORAGE_TABLES:
                 from src.importer.importer import verify_jc_storage_schema
 
@@ -2909,6 +2938,10 @@ class SchemaManager:
                     from src.importer.importer import verify_av_storage_schema
 
                     verify_av_storage_schema(self.db, table_name)
+                if table_name in STRICT_HR_STORAGE_TABLES:
+                    from src.importer.importer import verify_hr_storage_schema
+
+                    verify_hr_storage_schema(self.db, table_name)
                 if table_name in STRICT_JC_STORAGE_TABLES:
                     from src.importer.importer import verify_jc_storage_schema
 
@@ -3266,6 +3299,10 @@ def create_all_tables(db: BaseDatabase) -> None:
                 from src.importer.importer import verify_av_storage_schema
 
                 verify_av_storage_schema(db, table_name)
+            if table_name in STRICT_HR_STORAGE_TABLES:
+                from src.importer.importer import verify_hr_storage_schema
+
+                verify_hr_storage_schema(db, table_name)
             if table_name in STRICT_JC_STORAGE_TABLES:
                 from src.importer.importer import verify_jc_storage_schema
 

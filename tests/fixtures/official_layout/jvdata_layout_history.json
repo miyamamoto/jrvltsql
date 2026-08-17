@@ -188,6 +188,33 @@
       "provenance_required": false,
       "reason": "Initial carryover availability for statuses 1, 2, and 9 changed to required without changing byte positions or record length.",
       "source": "JV-Data4901.xlsx:変更履歴:103-105"
+    },
+    {
+      "record_type": "HR",
+      "announced_date": "2004-03-02",
+      "effective_date": "2004-08-14",
+      "official_spec_version": "1.1.4",
+      "length_unchanged": true,
+      "layout_unchanged": false,
+      "change_kind": "reserved_span_repurposed",
+      "before_fields": [
+        {
+          "name": "Reserved604_717",
+          "start": 604,
+          "width": 114
+        }
+      ],
+      "current_fields": [
+        {
+          "name": "PaySanrentan",
+          "start": 604,
+          "width": 19,
+          "repeat": 6
+        }
+      ],
+      "provenance_required": true,
+      "reason": "The unchanged 114-byte span is not safe to label as trifecta payout data before trifecta sales began; the race date selects canonical fields versus opaque preservation.",
+      "source": "JV-Data4901.xlsx:変更履歴:249"
     }
   ]
 }

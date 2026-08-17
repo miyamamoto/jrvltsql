@@ -7,7 +7,7 @@ from src.parser.factory import ParserFactory, get_parser_factory
 from src.parser.hr_parser import HRParser
 from src.parser.ra_parser import RAParser
 from src.parser.se_parser import SEParser
-from tests.fixtures.record_factory import make_ra_record, make_se_record
+from tests.fixtures.record_factory import make_hr_record, make_ra_record, make_se_record
 
 
 class _ByteOffsetParser(BaseParser):
@@ -219,17 +219,15 @@ class TestHRParser:
         """Test parsing HR record."""
         parser = HRParser()
 
-        # Create a minimal valid HR record
-        record = b"HR1"  # RecordSpec + DataKubun
-        record += b"20240601"  # MakeDate
-        record += b"2024"  # idYear (offset 11)
-        record += b"0601"  # idMonthDay
-        record += b"06"  # idJyoCD
-        record += b"03"  # idKaiji
-        record += b"08"  # idNichiji
-        record += b"11"  # idRaceNum
-        record += b" " * (719 - len(record) - 2)
-        record += b"\r\n"
+        record = make_hr_record(
+            make_date="20240601",
+            year="2024",
+            month_day="0601",
+            jyo_cd="06",
+            kaiji="03",
+            nichiji="08",
+            race_num="11",
+        )
 
         data = parser.parse(record)
         assert data is not None

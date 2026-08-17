@@ -1890,6 +1890,25 @@ def _bind_all_metadata_to_executable_schemas() -> None:
 _ensure_all_executable_metadata()
 _bind_all_metadata_to_executable_schemas()
 
+for _hr_table in ("NL_HR", "RT_HR", "HARAI"):
+    TABLE_METADATA[_hr_table]["purpose"] = (
+        "公式719バイトHRの全払戻repeatを6項目レースキーで保持。"
+        "2004-08-14より前の同長予備領域はhexでlossless保持"
+    )
+    for _column in TABLE_METADATA[_hr_table]["columns"]:
+        if _column["name"] == "LegacyReserved604_717Hex":
+            _column["description"] = (
+                "三連単発売前の位置604-717を誤解釈せず保持する228文字hex"
+            )
+        elif _column["name"] == "OpaqueStatus9Body28_717Hex":
+            _column["description"] = (
+                "公式が本文値を規定しない中止状態9の位置28-717を保持する1380文字hex"
+            )
+        elif _column["name"].startswith("Yobi") or _column["name"].startswith(
+            "PayReserved1"
+        ):
+            _column["description"] = "公式PayReserved1の3反復（組番・払戻・人気）"
+
 for _jc_table in ("NL_JC", "RT_JC"):
     for _column in TABLE_METADATA[_jc_table]["columns"]:
         if _column["name"] in {"AtoFutan", "MaeFutan"}:

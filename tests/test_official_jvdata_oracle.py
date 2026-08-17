@@ -25,7 +25,7 @@ OFFICIAL_MANIFEST_CONTRACT_SHA256 = (
     "f35859d252fd20e4d7e38ee8d0a224deae87a62bae9db1995ed897bdccef6c45"
 )
 OFFICIAL_HISTORY_CONTRACT_SHA256 = (
-    "f0a2485f4eb263643d253ee0eae12b717241841edb3377050ee3f7a7d79a5a8b"
+    "620e2a7716a62685d3b50ad0d8e7ef6045919a3531196158a0e889362a9917be"
 )
 
 
@@ -721,7 +721,7 @@ def test_official_hy_and_ck_sentinels_cannot_follow_current_implementation_drift
 def _assert_history_cardinality(history):
     assert len(history["sources"]) == 2
     assert len(history["physical_length_changes"]) == 10
-    assert len(history["same_length_semantic_changes"]) == 5
+    assert len(history["same_length_semantic_changes"]) == 6
 
 
 def _assert_history_truth_contract(history):
@@ -832,6 +832,28 @@ def _assert_history_truth_contract(history):
     assert wf_420["source"] == "JV-Data4901.xlsx:変更履歴:103-105"
     assert wf_420["announced_date"] > wf_411["announced_date"]
 
+    hr_change = history["same_length_semantic_changes"][5]
+    assert hr_change == {
+        "record_type": "HR",
+        "announced_date": "2004-03-02",
+        "effective_date": "2004-08-14",
+        "official_spec_version": "1.1.4",
+        "length_unchanged": True,
+        "layout_unchanged": False,
+        "change_kind": "reserved_span_repurposed",
+        "before_fields": [{"name": "Reserved604_717", "start": 604, "width": 114}],
+        "current_fields": [
+            {"name": "PaySanrentan", "start": 604, "width": 19, "repeat": 6}
+        ],
+        "provenance_required": True,
+        "reason": (
+            "The unchanged 114-byte span is not safe to label as trifecta payout "
+            "data before trifecta sales began; the race date selects canonical "
+            "fields versus opaque preservation."
+        ),
+        "source": "JV-Data4901.xlsx:変更履歴:249",
+    }
+
 
 def test_official_layout_history_is_provenanced_and_continuous_to_current():
     history = json.loads(HISTORY_PATH.read_text(encoding="utf-8"))
@@ -918,7 +940,7 @@ def test_history_truth_contract_rejects_content_and_provenance_drift(path, value
     (
         ("sources", 2),
         ("physical_length_changes", 10),
-        ("same_length_semantic_changes", 5),
+        ("same_length_semantic_changes", 6),
     ),
 )
 def test_history_contract_rejects_duplicate_entries(collection, expected_count):

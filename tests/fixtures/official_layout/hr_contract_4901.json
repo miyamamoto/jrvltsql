@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "record_type": "HR",
+  "record_length": 719,
+  "format_sources": [
+    {
+      "artifact": "JV-Data4802.xlsx",
+      "sha256": "6a567f10b601115eca350571f36d27d9d28bd2d3835ea72b5bc057711155d4a7",
+      "sheet": "フォーマット",
+      "rows": "216-295"
+    },
+    {
+      "artifact": "JV-Data4901.xlsx",
+      "sha256": "23bafd375f704acbdd696b5032ac1619f17d47e882587d6e7954b610527a8234",
+      "sheet": "フォーマット",
+      "rows": "216-295"
+    }
+  ],
+  "primary_key": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum"],
+  "current_data_kubun": ["0", "1", "2", "9"],
+  "repeat_groups": [
+    ["Tan", 103, 3, 13, [2, 9, 2]],
+    ["Fuku", 142, 5, 13, [2, 9, 2]],
+    ["Waku", 207, 3, 13, [2, 9, 2]],
+    ["Umaren", 246, 3, 16, [4, 9, 3]],
+    ["Wide", 294, 7, 16, [4, 9, 3]],
+    ["Reserved", 406, 3, 16, [4, 9, 3]],
+    ["Umatan", 454, 6, 16, [4, 9, 3]],
+    ["Sanrenfuku", 550, 3, 18, [6, 9, 3]],
+    ["Sanrentan", 604, 6, 19, [6, 9, 4]]
+  ],
+  "same_length_history": {
+    "announced_date": "2004-03-02",
+    "available_from_race_date": "2004-08-14",
+    "before": "reserved span",
+    "current": "trifecta payout span",
+    "source": {
+      "artifact": "JV-Data4901.xlsx",
+      "sheet": "変更履歴",
+      "row": 249
+    }
+  },
+  "community_contracts": [
+    {
+      "topic": 304,
+      "contract": "Realtime popularity may be blank until every finish position is finalized."
+    },
+    {
+      "topic": 64,
+      "contract": "Persist provider payload without suppressing fields according to mutable flags."
+    }
+  ]
+}

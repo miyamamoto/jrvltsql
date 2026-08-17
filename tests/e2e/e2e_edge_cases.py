@@ -368,10 +368,11 @@ def test_null_zero_values(conn: sqlite3.Connection):
         record(f"E-4 NL_SE.{col} NOT NULL", null_count == 0,
                f"NULL: {null_count} 件")
 
-    # E-5: HR (払戻) の TanPay が全レースで 0 でないこと（確定データ）
+    # E-5: HR status 1/2 (払戻確定/成績) の単勝払戻を確認する。
+    # HRにはstatus 7が存在しないため、7を条件にすると常に空集合で緑になる。
     c.execute("""
         SELECT COUNT(*) FROM NL_HR
-        WHERE DataKubun = '7' AND TanPay = 0
+        WHERE DataKubun IN ('1', '2') AND TanPay = 0
     """)
     zero_pay = c.fetchone()[0]
     record("E-5 確定レースの単勝払戻>0", zero_pay == 0,

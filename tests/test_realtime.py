@@ -1571,12 +1571,12 @@ class TestRealtimeUpdater(unittest.TestCase):
     def test_cancellation_status_is_upserted_for_realtime_state_records(self):
         updater = RealtimeUpdater(self.mock_db)
 
-        # SE and WF revalidate their complete official schema/key before any
+        # HR, SE, and WF revalidate their complete official schema/key before any
         # write, which a MagicMock database cannot satisfy. Their state
         # retention is covered against real SQLite tables in their official
         # contract tests.
         for record_type in (
-            "RA", "HR", "H1", "H6",
+            "RA", "H1", "H6",
             "O1", "O2", "O3", "O4", "O5", "O6",
         ):
             with self.subTest(record_type=record_type):

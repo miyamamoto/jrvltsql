@@ -51,9 +51,7 @@ def rollback_failed_import(database: BaseDatabase, *, context: str) -> None:
         )
 
 
-def inspect_pending_transaction_or_invalidate(
-    database: BaseDatabase, *, context: str
-) -> bool:
+def inspect_pending_transaction_or_invalidate(database: BaseDatabase, *, context: str) -> bool:
     """Read transaction ownership or invalidate a session whose state is unknown."""
     try:
         return database.has_pending_transaction()
@@ -212,6 +210,43 @@ def resolve_standard_table_name(database: BaseDatabase, native_table_name: str) 
 
 
 _STANDARD_FIELD_ALIASES = {
+    "HARAI": {
+        **{
+            f"{source}{'' if index == 1 else index}": f"{target}{index}"
+            for source, target, count in (
+                ("TanUmaban", "PayTansyoUmaban", 3),
+                ("TanPay", "PayTansyoPay", 3),
+                ("TanNinki", "PayTansyoNinki", 3),
+                ("FukuUmaban", "PayFukusyoUmaban", 5),
+                ("FukuPay", "PayFukusyoPay", 5),
+                ("FukuNinki", "PayFukusyoNinki", 5),
+                ("WakuKumi", "PayWakurenKumi", 3),
+                ("WakuPay", "PayWakurenPay", 3),
+                ("WakuNinki", "PayWakurenNinki", 3),
+                ("UmarenKumi", "PayUmarenKumi", 3),
+                ("UmarenPay", "PayUmarenPay", 3),
+                ("UmarenNinki", "PayUmarenNinki", 3),
+                ("WideKumi", "PayWideKumi", 7),
+                ("WidePay", "PayWidePay", 7),
+                ("WideNinki", "PayWideNinki", 7),
+                ("UmatanKumi", "PayUmatanKumi", 6),
+                ("UmatanPay", "PayUmatanPay", 6),
+                ("UmatanNinki", "PayUmatanNinki", 6),
+                ("SanrenfukuKumi", "PaySanrenpukuKumi", 3),
+                ("SanrenfukuPay", "PaySanrenpukuPay", 3),
+                ("SanrenfukuNinki", "PaySanrenpukuNinki", 3),
+                ("SanrentanKumi", "PaySanrentanKumi", 6),
+                ("SanrentanPay", "PaySanrentanPay", 6),
+                ("SanrentanNinki", "PaySanrentanNinki", 6),
+            )
+            for index in range(1, count + 1)
+        },
+        **{
+            f"Yobi{(entry - 1) * 3 + offset}": (f"PayReserved1{part}{entry}")
+            for entry in range(1, 4)
+            for offset, part in ((1, "Kumi"), (2, "Pay"), (3, "Ninki"))
+        },
+    },
     "UMA_RACE": {
         "Reserved_229": "reserved1",
         "Reserved_296": "reserved2",
@@ -350,9 +385,7 @@ def _expand_standard_uma_fields(record: dict) -> dict:
             or not value.isascii()
             or not value.isdigit()
         ):
-            raise SchemaMigrationError(
-                f"UM {source} must contain exactly six 3-digit ASCII counts"
-            )
+            raise SchemaMigrationError(f"UM {source} must contain exactly six 3-digit ASCII counts")
         for index in range(1, 7):
             target = f"{target_prefix}Chakukaisu{index}"
             chunk = value[(index - 1) * 3 : index * 3]
@@ -502,6 +535,9 @@ _AV_LOSSLESS_TEXT_WIDTHS = {
     }
     for table_name in _AV_STORAGE_TABLES
 }
+_HR_STORAGE_TABLES = frozenset({"NL_HR", "RT_HR", "HARAI"})
+_HR_KEY_COLUMNS = ("Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum")
+_PROVIDER_OPERATION_COUNT_STORAGE_TABLES = _AV_STORAGE_TABLES | _HR_STORAGE_TABLES
 _JC_STORAGE_TABLES = frozenset({"NL_JC", "RT_JC", "KISYU_CHANGE"})
 _JC_KEY_COLUMNS = (
     "Year",
@@ -557,6 +593,7 @@ _STRICT_NONADDITIVE_STANDARD_TABLES = frozenset(
     {
         "KEITO",
         "JOGAIBA",
+        "HARAI",
         "KISYU_CHANGE",
         "TORIKESI_JYOGAI",
         "TENKO_BABA",
@@ -631,14 +668,10 @@ def _verify_se_key_storage_types(database: BaseDatabase, table_name: str) -> Non
         if not actual or not _is_lossless_text_type(actual):
             problems.append(f"{column} existing={actual or '<unknown>'} expected=text")
     if problems:
-        raise SchemaMigrationError(
-            f"SE key type mismatch for {table_name}: {', '.join(problems)}"
-        )
+        raise SchemaMigrationError(f"SE key type mismatch for {table_name}: {', '.join(problems)}")
 
 
-def _verify_se_key_not_null_constraints(
-    database: BaseDatabase, table_name: str
-) -> None:
+def _verify_se_key_not_null_constraints(database: BaseDatabase, table_name: str) -> None:
     """Require the complete composite key to reject NULL identities at the DB."""
 
     from src.database.migration import _migration_targets
@@ -652,10 +685,7 @@ def _verify_se_key_not_null_constraints(
     db_type = database.get_db_type()
     if db_type == "sqlite":
         rows = database.fetch_all(f'PRAGMA table_info("{table_name}")')
-        not_null = {
-            str(row.get("name") or "").lower(): bool(row.get("notnull"))
-            for row in rows
-        }
+        not_null = {str(row.get("name") or "").lower(): bool(row.get("notnull")) for row in rows}
     elif db_type == "postgresql":
         rows = database.fetch_all(
             "SELECT column_name, is_nullable FROM information_schema.columns "
@@ -663,9 +693,7 @@ def _verify_se_key_not_null_constraints(
             (table_name.lower(),),
         )
         not_null = {
-            str(row.get("column_name") or "").lower(): str(
-                row.get("is_nullable") or ""
-            ).upper()
+            str(row.get("column_name") or "").lower(): str(row.get("is_nullable") or "").upper()
             == "NO"
             for row in rows
         }
@@ -674,9 +702,7 @@ def _verify_se_key_not_null_constraints(
             f"SE key nullability cannot be verified for database type {db_type!r}"
         )
 
-    missing = [
-        column for column in _SE_KEY_COLUMNS if not not_null.get(column.lower(), False)
-    ]
+    missing = [column for column in _SE_KEY_COLUMNS if not not_null.get(column.lower(), False)]
     if missing:
         raise SchemaMigrationError(
             f"SE storage {table_name} key columns must be NOT NULL: {missing}"
@@ -751,8 +777,7 @@ def _strict_storage_type_is_compatible(actual: str, expected: str) -> bool:
         )
         return (
             actual_scale >= expected_scale
-            and actual_precision - actual_scale
-            >= expected_precision - expected_scale
+            and actual_precision - actual_scale >= expected_precision - expected_scale
         )
     if expected == "real":
         return actual == "real"
@@ -803,16 +828,12 @@ def _verify_strict_storage_column_contract(
             )
         return
 
-    text_widths = {
-        column.lower(): width for column, width in (lossless_text_widths or {}).items()
-    }
+    text_widths = {column.lower(): width for column, width in (lossless_text_widths or {}).items()}
     stricter_not_null = {column.lower() for column in allow_stricter_not_null}
 
     definitions = _extract_column_definitions(schema_sql)
     if definitions is None:
-        raise SchemaMigrationError(
-            f"Could not parse {storage_label} schema for {table_name}"
-        )
+        raise SchemaMigrationError(f"Could not parse {storage_label} schema for {table_name}")
     if database.get_db_type() == "postgresql":
         rows = database.fetch_all(
             "SELECT a.attname AS name, format_type(a.atttypid, a.atttypmod) AS type, "
@@ -844,9 +865,7 @@ def _verify_strict_storage_column_contract(
         actual_type, actual_not_null = actual[column]
         expected_type = _normalize_strict_storage_type(_definition_type(definition))
         normalized_actual_type = _normalize_strict_storage_type(actual_type)
-        compatible_type = _strict_storage_type_is_compatible(
-            normalized_actual_type, expected_type
-        )
+        compatible_type = _strict_storage_type_is_compatible(normalized_actual_type, expected_type)
         if not compatible_type and column in text_widths:
             compatible_type = _fixed_width_text_type_is_lossless(
                 normalized_actual_type, text_widths[column]
@@ -857,9 +876,7 @@ def _verify_strict_storage_column_contract(
                 f"expected={expected_type}"
             )
         expected_not_null = "NOT NULL" in definition.upper()
-        safely_stricter = (
-            actual_not_null and not expected_not_null and column in stricter_not_null
-        )
+        safely_stricter = actual_not_null and not expected_not_null and column in stricter_not_null
         if actual_not_null != expected_not_null and not safely_stricter:
             mismatches.append(
                 f"{column_name} nullability existing="
@@ -943,14 +960,10 @@ def _verify_we_key_storage_types(database: BaseDatabase, table_name: str) -> Non
         if not actual or not _is_lossless_text_type(actual):
             problems.append(f"{column} existing={actual or '<unknown>'} expected=text")
     if problems:
-        raise SchemaMigrationError(
-            f"WE key type mismatch for {table_name}: {', '.join(problems)}"
-        )
+        raise SchemaMigrationError(f"WE key type mismatch for {table_name}: {', '.join(problems)}")
 
 
-def _verify_we_key_not_null_constraints(
-    database: BaseDatabase, table_name: str
-) -> None:
+def _verify_we_key_not_null_constraints(database: BaseDatabase, table_name: str) -> None:
     """Require every component of the WE identity to reject NULL."""
 
     from src.database.migration import _migration_targets
@@ -964,10 +977,7 @@ def _verify_we_key_not_null_constraints(
     db_type = database.get_db_type()
     if db_type == "sqlite":
         rows = database.fetch_all(f'PRAGMA table_info("{table_name}")')
-        not_null = {
-            str(row.get("name") or "").lower(): bool(row.get("notnull"))
-            for row in rows
-        }
+        not_null = {str(row.get("name") or "").lower(): bool(row.get("notnull")) for row in rows}
     elif db_type == "postgresql":
         rows = database.fetch_all(
             "SELECT column_name, is_nullable FROM information_schema.columns "
@@ -975,9 +985,7 @@ def _verify_we_key_not_null_constraints(
             (table_name.lower(),),
         )
         not_null = {
-            str(row.get("column_name") or "").lower(): str(
-                row.get("is_nullable") or ""
-            ).upper()
+            str(row.get("column_name") or "").lower(): str(row.get("is_nullable") or "").upper()
             == "NO"
             for row in rows
         }
@@ -985,9 +993,7 @@ def _verify_we_key_not_null_constraints(
         raise SchemaMigrationError(
             f"WE key nullability cannot be verified for database type {db_type!r}"
         )
-    missing = [
-        column for column in _WE_KEY_COLUMNS if not not_null.get(column.lower(), False)
-    ]
+    missing = [column for column in _WE_KEY_COLUMNS if not not_null.get(column.lower(), False)]
     if missing:
         raise SchemaMigrationError(
             f"WE storage {table_name} key columns must be NOT NULL: {missing}"
@@ -1083,8 +1089,7 @@ def _verify_av_key_not_null_constraints(database: BaseDatabase, table_name: str)
             (table_name,),
         )
         not_null = {
-            str(row.get("column_name") or "").lower(): bool(row.get("not_null"))
-            for row in rows
+            str(row.get("column_name") or "").lower(): bool(row.get("not_null")) for row in rows
         }
     else:
         raise SchemaMigrationError(
@@ -1154,6 +1159,139 @@ def validate_av_record(record: dict, table_name: str | None = None) -> bool:
     return True
 
 
+def _verify_hr_key_storage_types(database: BaseDatabase, table_name: str) -> None:
+    """Reject HR key affinities that can coerce or split an official race."""
+
+    from src.database.migration import (
+        _get_existing_column_types,
+        _is_lossless_text_type,
+        _migration_targets,
+    )
+
+    targets = _migration_targets(database)
+    if targets != (database,):
+        for target in targets:
+            _verify_hr_key_storage_types(target, table_name)
+        return
+    actual_types = _get_existing_column_types(database, table_name)
+    integral = {"smallint", "int2", "integer", "int", "int4", "bigint", "int8"}
+    problems: list[str] = []
+    for column in ("Year", "MonthDay", "Kaiji", "Nichiji", "RaceNum"):
+        actual = actual_types.get(column.lower(), "")
+        if re.sub(r"\s+", " ", actual.strip().lower()) not in integral:
+            problems.append(f"{column} existing={actual or '<unknown>'} expected=integral")
+    actual = actual_types.get("jyocd", "")
+    if not actual or not _is_lossless_text_type(actual):
+        problems.append(f"JyoCD existing={actual or '<unknown>'} expected=text")
+    if problems:
+        raise SchemaMigrationError(f"HR key type mismatch for {table_name}: {', '.join(problems)}")
+
+
+def _verify_hr_key_not_null_constraints(database: BaseDatabase, table_name: str) -> None:
+    """Require every HR key column to reject NULL identities."""
+
+    from src.database.migration import _migration_targets
+
+    targets = _migration_targets(database)
+    if targets != (database,):
+        for target in targets:
+            _verify_hr_key_not_null_constraints(target, table_name)
+        return
+    db_type = database.get_db_type()
+    if db_type == "sqlite":
+        rows = database.fetch_all(f'PRAGMA table_info("{table_name}")')
+        not_null = {str(row.get("name") or "").lower(): bool(row.get("notnull")) for row in rows}
+    elif db_type == "postgresql":
+        rows = database.fetch_all(
+            "SELECT column_name, is_nullable FROM information_schema.columns "
+            "WHERE table_schema = current_schema() AND table_name = ?",
+            (table_name.lower(),),
+        )
+        not_null = {
+            str(row.get("column_name") or "").lower(): str(row.get("is_nullable") or "").upper()
+            == "NO"
+            for row in rows
+        }
+    else:
+        raise SchemaMigrationError(
+            f"HR key nullability cannot be verified for database type {db_type!r}"
+        )
+    missing = [column for column in _HR_KEY_COLUMNS if not not_null.get(column.lower(), False)]
+    if missing:
+        raise SchemaMigrationError(
+            f"HR storage {table_name} key columns must be NOT NULL: {missing}"
+        )
+
+
+def verify_hr_storage_schema(
+    database: BaseDatabase,
+    table_name: str,
+    *,
+    allow_missing_columns: bool = False,
+) -> bool:
+    """Fail closed unless HR storage preserves all fields and its official key."""
+
+    if table_name not in _HR_STORAGE_TABLES:
+        return False
+    from src.database.migration import verify_table_schema
+    from src.database.schema import SCHEMAS
+    from src.database.schema_jravan import JRAVAN_SCHEMAS
+
+    schema_sql = SCHEMAS.get(table_name) or JRAVAN_SCHEMAS.get(table_name)
+    if schema_sql is None:
+        raise SchemaMigrationError(f"HR storage schema is undefined: {table_name}")
+    verify_table_schema(
+        database,
+        table_name,
+        schema_sql,
+        allow_missing_columns=allow_missing_columns,
+    )
+    _verify_strict_storage_column_contract(
+        database,
+        table_name,
+        schema_sql,
+        allow_missing_columns=allow_missing_columns,
+        storage_label="HR",
+    )
+    _verify_hr_key_storage_types(database, table_name)
+    _verify_hr_key_not_null_constraints(database, table_name)
+    _verify_replacement_key_constraints(database, table_name, "HR storage")
+    return True
+
+
+def validate_hr_record(record: dict, table_name: str | None = None) -> bool:
+    """Validate caller-built HR rows and reject live standard alias conflicts."""
+
+    if table_name is not None and table_name not in _HR_STORAGE_TABLES:
+        return False
+    if _record_type_from_record(record) != "HR":
+        if table_name is None:
+            return False
+        raise SchemaMigrationError(f"{table_name} received a non-HR record")
+
+    from src.parser.hr_parser import HRParser
+
+    try:
+        data_kubun = resolve_record_data_kubun(record)
+        normalized = dict(record)
+        if data_kubun not in {"0", "9"}:
+            conflicts = []
+            for native_name, standard_name in _STANDARD_FIELD_ALIASES["HARAI"].items():
+                native_value = record.get(native_name)
+                standard_value = record.get(standard_name)
+                if native_value not in (None, "") and standard_value not in (None, ""):
+                    if str(native_value) != str(standard_value):
+                        conflicts.append(f"{native_name}/{standard_name}")
+                elif native_value in (None, "") and standard_value not in (None, ""):
+                    normalized[native_name] = standard_value
+            if conflicts:
+                raise ValueError(f"conflicting HR alias values: {conflicts}")
+        HRParser.validate_current_fields(normalized, data_kubun=data_kubun)
+    except ValueError as error:
+        raise SchemaMigrationError(str(error)) from error
+    return True
+
+
 def _verify_jc_key_storage_types(database: BaseDatabase, table_name: str) -> None:
     """Reject affinities that can coerce or split one JC identity."""
 
@@ -1189,14 +1327,10 @@ def _verify_jc_key_storage_types(database: BaseDatabase, table_name: str) -> Non
         if not actual or not _is_lossless_text_type(actual):
             problems.append(f"{column} existing={actual or '<unknown>'} expected=text")
     if problems:
-        raise SchemaMigrationError(
-            f"JC key type mismatch for {table_name}: {', '.join(problems)}"
-        )
+        raise SchemaMigrationError(f"JC key type mismatch for {table_name}: {', '.join(problems)}")
 
 
-def _verify_jc_key_not_null_constraints(
-    database: BaseDatabase, table_name: str
-) -> None:
+def _verify_jc_key_not_null_constraints(database: BaseDatabase, table_name: str) -> None:
     """Require every component of the JC identity to reject NULL."""
 
     from src.database.migration import _migration_targets
@@ -1210,10 +1344,7 @@ def _verify_jc_key_not_null_constraints(
     db_type = database.get_db_type()
     if db_type == "sqlite":
         rows = database.fetch_all(f'PRAGMA table_info("{table_name}")')
-        not_null = {
-            str(row.get("name") or "").lower(): bool(row.get("notnull"))
-            for row in rows
-        }
+        not_null = {str(row.get("name") or "").lower(): bool(row.get("notnull")) for row in rows}
     elif db_type == "postgresql":
         rows = database.fetch_all(
             "SELECT column_name, is_nullable FROM information_schema.columns "
@@ -1221,9 +1352,7 @@ def _verify_jc_key_not_null_constraints(
             (table_name.lower(),),
         )
         not_null = {
-            str(row.get("column_name") or "").lower(): str(
-                row.get("is_nullable") or ""
-            ).upper()
+            str(row.get("column_name") or "").lower(): str(row.get("is_nullable") or "").upper()
             == "NO"
             for row in rows
         }
@@ -1231,9 +1360,7 @@ def _verify_jc_key_not_null_constraints(
         raise SchemaMigrationError(
             f"JC key nullability cannot be verified for database type {db_type!r}"
         )
-    missing = [
-        column for column in _JC_KEY_COLUMNS if not not_null.get(column.lower(), False)
-    ]
+    missing = [column for column in _JC_KEY_COLUMNS if not not_null.get(column.lower(), False)]
     if missing:
         raise SchemaMigrationError(
             f"JC storage {table_name} key columns must be NOT NULL: {missing}"
@@ -1369,9 +1496,7 @@ def validate_se_record(record: dict, table_name: str | None = None) -> bool:
     return True
 
 
-def _verify_cs_kyori_storage_type(
-    database: BaseDatabase, table_name: str
-) -> None:
+def _verify_cs_kyori_storage_type(database: BaseDatabase, table_name: str) -> None:
     """Require an integral identity type on every concrete CS backend."""
 
     from src.database.migration import _get_existing_column_types, _migration_targets
@@ -1421,11 +1546,7 @@ def _preflight_course_additive_storage(database: BaseDatabase) -> None:
     if definitions is None:
         raise SchemaMigrationError("Could not parse standard COURSE schema")
     existing = {column.lower() for column in _get_existing_columns(database, "COURSE")}
-    missing = {
-        column
-        for column in definitions
-        if column.lower() not in existing
-    }
+    missing = {column for column in definitions if column.lower() not in existing}
     unexpected = sorted(column for column in missing if column.lower() != "courseex")
     if unexpected:
         raise SchemaMigrationError(
@@ -1557,16 +1678,12 @@ def validate_jg_record(record: dict, table_name: str) -> bool:
     if syusso not in JGParser.SYUSSO_KUBUN_VALUES and not (
         data_kubun == "0" and syusso in (None, "")
     ):
-        raise SchemaMigrationError(
-            f"JG record SyussoKubun has unsupported code: {syusso!r}"
-        )
+        raise SchemaMigrationError(f"JG record SyussoKubun has unsupported code: {syusso!r}")
     jyogai = value_for("JyogaiStateKubun")
     if jyogai not in JGParser.JYOGAI_STATE_KUBUN_VALUES and not (
         data_kubun == "0" and jyogai in (None, "")
     ):
-        raise SchemaMigrationError(
-            f"JG record JyogaiStateKubun has unsupported code: {jyogai!r}"
-        )
+        raise SchemaMigrationError(f"JG record JyogaiStateKubun has unsupported code: {jyogai!r}")
     return True
 
 
@@ -1631,9 +1748,7 @@ def validate_wc_record(record: dict, table_name: str) -> bool:
             or not value.isascii()
             or not value.isdigit()
         ):
-            raise SchemaMigrationError(
-                f"WC record {name} must be exactly {width} ASCII digits"
-            )
+            raise SchemaMigrationError(f"WC record {name} must be exactly {width} ASCII digits")
 
     for field_name, width in WCParser.KEY_FIXED_FIELDS:
         require_digits(field_name, width)
@@ -1751,10 +1866,9 @@ def _verify_wf_postgresql_foreign_key(database: BaseDatabase) -> None:
         (int(row["constraint_oid"]),),
     )
     expected = [column.lower() for column in _WF_KEY_COLUMNS]
-    if (
-        [str(key_row["local_name"]).lower() for key_row in key_rows] != expected
-        or [str(key_row["remote_name"]).lower() for key_row in key_rows] != expected
-    ):
+    if [str(key_row["local_name"]).lower() for key_row in key_rows] != expected or [
+        str(key_row["remote_name"]).lower() for key_row in key_rows
+    ] != expected:
         raise SchemaMigrationError(
             f"WF child foreign key columns mismatch for {_WF_STANDARD_CHILD_TABLE}: "
             f"expected ordered ({', '.join(_WF_KEY_COLUMNS)})"
@@ -1779,9 +1893,7 @@ def _verify_wf_postgresql_foreign_key(database: BaseDatabase) -> None:
 def _normalize_wf_column_type(declared_type: str) -> str:
     """Return the exact logical type used by the frozen WF storage contract."""
     normalized = re.sub(r"\s+", " ", declared_type.strip().lower())
-    match = re.fullmatch(
-        r"(?:varchar|character varying)\s*\(\s*(\d+)\s*\)", normalized
-    )
+    match = re.fullmatch(r"(?:varchar|character varying)\s*\(\s*(\d+)\s*\)", normalized)
     if match:
         return f"varchar({int(match.group(1))})"
     match = re.fullmatch(r"(?:char|character)\s*\(\s*(\d+)\s*\)", normalized)
@@ -1801,9 +1913,7 @@ def _normalize_wf_column_type(declared_type: str) -> str:
     return aliases.get(normalized, f"unsupported:{normalized or '<empty>'}")
 
 
-def _verify_wf_column_types(
-    database: BaseDatabase, table_name: str, schema_sql: str
-) -> None:
+def _verify_wf_column_types(database: BaseDatabase, table_name: str, schema_sql: str) -> None:
     """Require every existing WF column to retain its declared logical type."""
     from src.database.migration import (
         _definition_type,
@@ -1821,9 +1931,7 @@ def _verify_wf_column_types(
         actual_raw = actual_types.get(column.lower(), "")
         actual = _normalize_wf_column_type(actual_raw)
         if actual != expected:
-            mismatches.append(
-                f"{column} existing={actual_raw or '<unknown>'} expected={expected}"
-            )
+            mismatches.append(f"{column} existing={actual_raw or '<unknown>'} expected={expected}")
     if mismatches:
         raise SchemaMigrationError(
             f"WF column type mismatch for {table_name}: {', '.join(mismatches)}"
@@ -1850,8 +1958,7 @@ def _verify_replacement_key_constraints(
         unexpected = [
             str(row.get("name") or "<unnamed>")
             for row in indexes
-            if int(row.get("unique") or 0) == 1
-            and str(row.get("origin") or "").lower() != "pk"
+            if int(row.get("unique") or 0) == 1 and str(row.get("origin") or "").lower() != "pk"
         ]
         if unexpected:
             raise SchemaMigrationError(
@@ -1861,8 +1968,7 @@ def _verify_replacement_key_constraints(
         return
     if db_type != "postgresql":
         raise SchemaMigrationError(
-            f"{storage_label} constraints cannot be verified for database type "
-            f"{db_type!r}"
+            f"{storage_label} constraints cannot be verified for database type " f"{db_type!r}"
         )
 
     indexes = database.fetch_all(
@@ -1917,16 +2023,12 @@ def _verify_replacement_key_constraints(
         )
 
 
-def _verify_wf_unique_and_primary_constraints(
-    database: BaseDatabase, table_name: str
-) -> None:
+def _verify_wf_unique_and_primary_constraints(database: BaseDatabase, table_name: str) -> None:
     """Retain the named WF boundary while sharing the catalog verifier."""
     _verify_replacement_key_constraints(database, table_name, "WF storage")
 
 
-def _verify_wf_table_contract(
-    database: BaseDatabase, table_name: str, schema_sql: str
-) -> None:
+def _verify_wf_table_contract(database: BaseDatabase, table_name: str, schema_sql: str) -> None:
     """Verify one concrete WF table without applying any migration."""
     from src.database.migration import verify_table_schema
 
@@ -1953,9 +2055,7 @@ def verify_wf_coupled_tables(database: BaseDatabase) -> None:
                     f"WF import requires table {required_table} before mutation"
                 )
         for required_table in (_WF_STANDARD_HEAD_TABLE, _WF_STANDARD_CHILD_TABLE):
-            _verify_wf_table_contract(
-                target, required_table, JRAVAN_SCHEMAS[required_table]
-            )
+            _verify_wf_table_contract(target, required_table, JRAVAN_SCHEMAS[required_table])
         db_type = target.get_db_type()
         if db_type == "sqlite":
             _verify_wf_sqlite_foreign_key(target)
@@ -2068,6 +2168,7 @@ def validate_wf_record(record: dict, table_name: str) -> bool:
         )
 
     aliases = _STANDARD_FIELD_ALIASES.get(table_name, {})
+
     def value_for(native_name: str):
         if native_name in record:
             return record[native_name]
@@ -2100,9 +2201,7 @@ def validate_wf_record(record: dict, table_name: str) -> bool:
         # A caller-built row may carry None for a blank optional field; that is
         # the same stored NULL as the parser's "" and is not a coercion hole.
         # Payout slots stay strict text because PayoutsJson is stored verbatim.
-        values = {
-            name: "" if value_for(name) is None else value_for(name) for name in body_names
-        }
+        values = {name: "" if value_for(name) is None else value_for(name) for name in body_names}
         payouts = _wf_payout_tuples(record.get("PayoutsJson"))
         WFParser.validate_body(values, payouts, data_kubun, make_date)
     except ValueError as error:
@@ -2112,8 +2211,7 @@ def validate_wf_record(record: dict, table_name: str) -> bool:
         split_conflicts = _wf_split_conflicts(record)
         if split_conflicts:
             raise SchemaMigrationError(
-                "WF record split race fields contradict RaceInfo composites: "
-                f"{split_conflicts}"
+                "WF record split race fields contradict RaceInfo composites: " f"{split_conflicts}"
             )
     return True
 
@@ -2127,9 +2225,7 @@ def prepare_wf_standard_record(record: dict) -> tuple[str, dict, list[dict]]:
     from src.parser.wf_parser import WFParser
 
     validate_wf_record(record, _WF_STANDARD_HEAD_TABLE)
-    source = translate_standard_field_names(
-        clean_record_metadata(record), _WF_STANDARD_HEAD_TABLE
-    )
+    source = translate_standard_field_names(clean_record_metadata(record), _WF_STANDARD_HEAD_TABLE)
     status = resolve_record_data_kubun(record)
     if status != "0":
         for index in range(1, WFParser.RACE_COUNT + 1):
@@ -2246,7 +2342,9 @@ def insert_wf_standard_batch(
             if any(value in (None, "") for value in key_values):
                 raise SchemaMigrationError("WF write has an incomplete parent key")
             if status == "0":
-                database.execute(f"DELETE FROM {_WF_STANDARD_CHILD_TABLE} WHERE {where}", key_values)
+                database.execute(
+                    f"DELETE FROM {_WF_STANDARD_CHILD_TABLE} WHERE {where}", key_values
+                )
                 database.execute(f"DELETE FROM {_WF_STANDARD_HEAD_TABLE} WHERE {where}", key_values)
                 continue
             if len(children) != WFParser.PAYOUT_COUNT:
@@ -2306,6 +2404,8 @@ def preflight_standard_schema_migrations(
             verify_we_storage_schema(database, standard_name)
         if standard_name == "TORIKESI_JYOGAI":
             verify_av_storage_schema(database, standard_name)
+        if standard_name == "HARAI":
+            verify_hr_storage_schema(database, standard_name)
         if standard_name == "KISYU_CHANGE":
             verify_jc_storage_schema(database, standard_name)
         if standard_name in {"UMA", "COURSE"}:
@@ -2591,13 +2691,9 @@ def prepare_tk_coupled_record(
     expected_header_table = _tk_header_table_name(child_table_name)
     if expected_header_table is None:
         return None
-    header_table = verified_header_table or verify_tk_coupled_tables(
-        database, child_table_name
-    )
+    header_table = verified_header_table or verify_tk_coupled_tables(database, child_table_name)
     if header_table != expected_header_table:
-        raise SchemaMigrationError(
-            f"TK import expected header table {expected_header_table}"
-        )
+        raise SchemaMigrationError(f"TK import expected header table {expected_header_table}")
     if _record_type_from_record(record) != "TK":
         raise SchemaMigrationError("TK storage received a non-TK record")
 
@@ -2632,8 +2728,7 @@ def prepare_tk_coupled_record(
     if missing_header:
         raise SchemaMigrationError(f"TK header is missing fields: {missing_header}")
     header_record = {
-        field: translated_header[field]
-        for field in get_table_column_types(header_table)
+        field: translated_header[field] for field in get_table_column_types(header_table)
     }
     converted_header = convert_record_types(header_record, header_table)
     if not DataImporter._has_complete_primary_key(header_table, converted_header):
@@ -2743,9 +2838,7 @@ def insert_tk_coupled_batch(
             if insert_rows(header_table, [header]) != 1:
                 raise DatabaseError(f"TK header insert failed for {header_table}")
             if insert_rows(child_table_name, child_rows) != len(child_rows):
-                raise DatabaseError(
-                    f"TK child insert count mismatch for {child_table_name}"
-                )
+                raise DatabaseError(f"TK child insert count mismatch for {child_table_name}")
         if commit_batch:
             database.commit()
         return len(prepared), 0
@@ -2897,8 +2990,7 @@ _STANDARD_ODDS_CONFIG: dict[str, dict[str, Any]] = {
     },
 }
 _STANDARD_ODDS_CONFIG_BY_OWNER = {
-    config["owner"]: (record_type, config)
-    for record_type, config in _STANDARD_ODDS_CONFIG.items()
+    config["owner"]: (record_type, config) for record_type, config in _STANDARD_ODDS_CONFIG.items()
 }
 
 
@@ -2937,6 +3029,8 @@ def validate_import_record_header(record: dict) -> tuple[str, str]:
             validate_we_record(record)
         if record_type == "AV":
             validate_av_record(record)
+        if record_type == "HR":
+            validate_hr_record(record)
         if record_type == "JC":
             validate_jc_record(record)
         return record_type, data_kubun
@@ -2968,6 +3062,23 @@ def clean_record_metadata(record: dict) -> dict:
     ):
         cleaned["DataKubun"] = resolve_record_data_kubun(record)
     cleaned.pop("headDataKubun", None)
+    if record_type == "HR" and cleaned.get("DataKubun") == "9":
+        from src.parser.hr_parser import HRParser
+
+        preserved = {
+            "RecordSpec",
+            "DataKubun",
+            "MakeDate",
+            *HRParser.KEY_COLUMNS,
+            HRParser.STATUS9_OPAQUE_FIELD,
+        }
+        preserved_values = {key: value for key, value in cleaned.items() if key in preserved}
+        # PostgreSQL's one-row ON CONFLICT update only touches columns present
+        # in the input mapping. Emit explicit NULLs for every ordinary HR
+        # column so a status-9 update cannot retain payout values from an
+        # earlier status-1/2 row. SQLite REPLACE then has the same semantics.
+        cleaned = {column: None for column in get_table_column_types("NL_HR")}
+        cleaned.update(preserved_values)
     if record_type == "CS" and cleaned.get("DataKubun") == "0":
         # The official delete command body is opaque. Do not let arbitrary
         # caller payload reach backend-specific VARCHAR enforcement or storage.
@@ -2985,9 +3096,7 @@ def _standard_odds_config(
         return None
     record_type, config = configured
     if _record_type_from_record(record) != record_type:
-        raise SchemaMigrationError(
-            f"{table_name} received a non-{record_type} standard odds row"
-        )
+        raise SchemaMigrationError(f"{table_name} received a non-{record_type} standard odds row")
     return record_type, config
 
 
@@ -2998,9 +3107,7 @@ def _standard_odds_physical_fingerprint(
     """Identify all normalized rows emitted from one physical odds record."""
     configured = _standard_odds_config(record, owner_table_name)
     if configured is None:
-        raise SchemaMigrationError(
-            f"{owner_table_name} is not a standard odds owner table"
-        )
+        raise SchemaMigrationError(f"{owner_table_name} is not a standard odds owner table")
     raw = record.get("_raw")
     if isinstance(raw, (bytes, bytearray, memoryview)):
         # Fetchers attach the same raw buffer object to every expanded row.
@@ -3025,9 +3132,7 @@ def verify_standard_odds_tables(
     """Require every header/child table and add safe uniqueness indexes."""
     configured = _STANDARD_ODDS_CONFIG_BY_OWNER.get(owner_table_name)
     if configured is None:
-        raise SchemaMigrationError(
-            f"Unknown standard odds owner table: {owner_table_name}"
-        )
+        raise SchemaMigrationError(f"Unknown standard odds owner table: {owner_table_name}")
 
     from src.database.migration import migrate_table_if_needed, verify_table_schema
     from src.database.schema_jravan import JRAVAN_SCHEMAS
@@ -3054,8 +3159,7 @@ def verify_standard_odds_tables(
         columns = ", ".join(key_columns)
         try:
             database.execute(
-                f"CREATE UNIQUE INDEX IF NOT EXISTS {index_name} "
-                f"ON {table_name} ({columns})"
+                f"CREATE UNIQUE INDEX IF NOT EXISTS {index_name} " f"ON {table_name} ({columns})"
             )
         except DatabaseError as error:
             raise SchemaMigrationError(
@@ -3101,29 +3205,23 @@ def prepare_standard_odds_record(
     """Build one standard header and at most one routed child row."""
     configured = _standard_odds_config(record, owner_table_name)
     if configured is None:
-        raise SchemaMigrationError(
-            f"{owner_table_name} is not a standard odds owner table"
-        )
+        raise SchemaMigrationError(f"{owner_table_name} is not a standard odds owner table")
     record_type, config = configured
     source = _standard_odds_header_source(record_type, record)
     header = convert_record_types(source, owner_table_name)
     missing_header_key = [
-        column
-        for column in _STANDARD_ODDS_RACE_KEY_COLUMNS
-        if header.get(column) in (None, "")
+        column for column in _STANDARD_ODDS_RACE_KEY_COLUMNS if header.get(column) in (None, "")
     ]
     if missing_header_key:
         raise SchemaMigrationError(
-            f"{record_type} standard odds header has incomplete key: "
-            f"{missing_header_key}"
+            f"{record_type} standard odds header has incomplete key: " f"{missing_header_key}"
         )
 
     if resolve_record_data_kubun(record) == "0":
         return header, None, None
 
     child_source = {
-        column: source.get(column)
-        for column in ("MakeDate", *_STANDARD_ODDS_RACE_KEY_COLUMNS)
+        column: source.get(column) for column in ("MakeDate", *_STANDARD_ODDS_RACE_KEY_COLUMNS)
     }
     child_table: str | None = None
     if record_type == "O1":
@@ -3175,13 +3273,10 @@ def prepare_standard_odds_record(
         return header, None, None
     child = convert_record_types(child_source, child_table)
     child_keys = config["children"][child_table]
-    missing_child_key = [
-        column for column in child_keys if child.get(column) in (None, "")
-    ]
+    missing_child_key = [column for column in child_keys if child.get(column) in (None, "")]
     if missing_child_key:
         raise SchemaMigrationError(
-            f"{record_type} standard odds child has incomplete key: "
-            f"{missing_child_key}"
+            f"{record_type} standard odds child has incomplete key: " f"{missing_child_key}"
         )
     return header, child_table, child
 
@@ -3204,9 +3299,7 @@ def _upsert_rows_by_official_key(
                 if column in key_columns or value is not None
             }
         columns = tuple(row)
-        grouped_rows.setdefault(columns, []).append(
-            tuple(row[column] for column in columns)
-        )
+        grouped_rows.setdefault(columns, []).append(tuple(row[column] for column in columns))
 
     total = 0
     for columns, parameter_rows in grouped_rows.items():
@@ -3214,9 +3307,7 @@ def _upsert_rows_by_official_key(
         conflict_columns = ", ".join(key_columns)
         update_columns = [column for column in columns if column not in key_columns]
         if update_columns:
-            updates = ", ".join(
-                f"{column} = EXCLUDED.{column}" for column in update_columns
-            )
+            updates = ", ".join(f"{column} = EXCLUDED.{column}" for column in update_columns)
             conflict_action = f"DO UPDATE SET {updates}"
         else:
             conflict_action = "DO NOTHING"
@@ -3259,21 +3350,16 @@ def insert_standard_odds_batch(
         if commit_batch:
             database.begin_transaction()
         verified = (
-            verification_cache.get(owner_table_name)
-            if verification_cache is not None
-            else None
+            verification_cache.get(owner_table_name) if verification_cache is not None else None
         )
         if verified is None:
             verified = verify_standard_odds_tables(database, owner_table_name)
         _, config = verified
         fingerprints = {
-            _standard_odds_physical_fingerprint(record, owner_table_name)
-            for record in records
+            _standard_odds_physical_fingerprint(record, owner_table_name) for record in records
         }
         if len(fingerprints) != 1:
-            raise SchemaMigrationError(
-                "standard odds batch spans multiple physical records"
-            )
+            raise SchemaMigrationError("standard odds batch spans multiple physical records")
         header_by_key: dict[tuple, dict] = {}
         child_by_table: dict[str, dict[tuple, dict]] = {
             table_name: {} for table_name in config["children"]
@@ -3287,19 +3373,13 @@ def insert_standard_odds_batch(
                 raise SchemaMigrationError(
                     "standard odds erase must be applied at the physical-record boundary"
                 )
-            header_key = tuple(
-                header[column] for column in _STANDARD_ODDS_RACE_KEY_COLUMNS
-            )
+            header_key = tuple(header[column] for column in _STANDARD_ODDS_RACE_KEY_COLUMNS)
             existing_header = header_by_key.get(header_key)
             if existing_header is None:
                 header_by_key[header_key] = header
             else:
                 existing_header.update(
-                    {
-                        column: value
-                        for column, value in header.items()
-                        if value is not None
-                    }
+                    {column: value for column, value in header.items() if value is not None}
                 )
             if child_table is not None and child is not None:
                 child_keys = config["children"][child_table]
@@ -3307,13 +3387,9 @@ def insert_standard_odds_batch(
                 child_by_table[child_table][child_key] = child
 
         if len(header_by_key) != 1:
-            raise SchemaMigrationError(
-                "standard odds physical record spans multiple race keys"
-            )
+            raise SchemaMigrationError("standard odds physical record spans multiple race keys")
         current_header = next(iter(header_by_key.values()))
-        where = " AND ".join(
-            f"{column} = ?" for column in _STANDARD_ODDS_RACE_KEY_COLUMNS
-        )
+        where = " AND ".join(f"{column} = ?" for column in _STANDARD_ODDS_RACE_KEY_COLUMNS)
         race_key_values = tuple(
             current_header[column] for column in _STANDARD_ODDS_RACE_KEY_COLUMNS
         )
@@ -3363,20 +3439,14 @@ def delete_standard_odds_record(
         if commit_batch:
             database.begin_transaction()
         verified = (
-            verification_cache.get(owner_table_name)
-            if verification_cache is not None
-            else None
+            verification_cache.get(owner_table_name) if verification_cache is not None else None
         )
         if verified is None:
             verified = verify_standard_odds_tables(database, owner_table_name)
         _, config = verified
         header, _, _ = prepare_standard_odds_record(record, owner_table_name)
-        where = " AND ".join(
-            f"{column} = ?" for column in _STANDARD_ODDS_RACE_KEY_COLUMNS
-        )
-        values = tuple(
-            header[column] for column in _STANDARD_ODDS_RACE_KEY_COLUMNS
-        )
+        where = " AND ".join(f"{column} = ?" for column in _STANDARD_ODDS_RACE_KEY_COLUMNS)
+        values = tuple(header[column] for column in _STANDARD_ODDS_RACE_KEY_COLUMNS)
         deleted = 0
         for table_name in (*config["children"], owner_table_name):
             deleted += max(database.execute(f"DELETE FROM {table_name} WHERE {where}", values), 0)
@@ -3412,8 +3482,7 @@ _STANDARD_VOTE_CONFIG: dict[str, dict[str, Any]] = {
     },
 }
 _STANDARD_VOTE_CONFIG_BY_OWNER = {
-    config["owner"]: (record_type, config)
-    for record_type, config in _STANDARD_VOTE_CONFIG.items()
+    config["owner"]: (record_type, config) for record_type, config in _STANDARD_VOTE_CONFIG.items()
 }
 _H1_TOTAL_NAMES = (
     "TanHyoTotal",
@@ -3443,9 +3512,7 @@ def _standard_vote_config(
         return None
     record_type, config = configured
     if _record_type_from_record(record) != record_type:
-        raise SchemaMigrationError(
-            f"{table_name} received a non-{record_type} standard vote row"
-        )
+        raise SchemaMigrationError(f"{table_name} received a non-{record_type} standard vote row")
     return record_type, config
 
 
@@ -3456,9 +3523,7 @@ def _standard_vote_physical_fingerprint(
     """Identify all normalized rows emitted from one physical H1/H6 record."""
     configured = _standard_vote_config(record, owner_table_name)
     if configured is None:
-        raise SchemaMigrationError(
-            f"{owner_table_name} is not a standard vote owner table"
-        )
+        raise SchemaMigrationError(f"{owner_table_name} is not a standard vote owner table")
     raw = record.get("_raw")
     if isinstance(raw, (bytes, bytearray, memoryview)):
         return owner_table_name, "raw", id(raw)
@@ -3486,9 +3551,7 @@ def verify_standard_vote_tables(
     """Require all vote header/child tables and fail closed on duplicate keys."""
     configured = _STANDARD_VOTE_CONFIG_BY_OWNER.get(owner_table_name)
     if configured is None:
-        raise SchemaMigrationError(
-            f"Unknown standard vote owner table: {owner_table_name}"
-        )
+        raise SchemaMigrationError(f"Unknown standard vote owner table: {owner_table_name}")
 
     from src.database.migration import migrate_table_if_needed, verify_table_schema
     from src.database.schema_jravan import JRAVAN_SCHEMAS
@@ -3510,8 +3573,7 @@ def verify_standard_vote_tables(
         columns = ", ".join(key_columns)
         try:
             database.execute(
-                f"CREATE UNIQUE INDEX IF NOT EXISTS {index_name} "
-                f"ON {table_name} ({columns})"
+                f"CREATE UNIQUE INDEX IF NOT EXISTS {index_name} " f"ON {table_name} ({columns})"
             )
         except DatabaseError as error:
             raise SchemaMigrationError(
@@ -3530,9 +3592,7 @@ def _expand_standard_vote_flags(
         return
     packed = str(source.get(field_name) or "")
     for index in range(count):
-        source[f"{field_name}{index + 1}"] = (
-            packed[index : index + 1] or None
-        )
+        source[f"{field_name}{index + 1}"] = packed[index : index + 1] or None
 
 
 def _standard_vote_header_source(record_type: str, record: dict) -> dict:
@@ -3564,37 +3624,27 @@ def prepare_standard_vote_record(
     """Build one standard vote header and its routed partial child rows."""
     configured = _standard_vote_config(record, owner_table_name)
     if configured is None:
-        raise SchemaMigrationError(
-            f"{owner_table_name} is not a standard vote owner table"
-        )
+        raise SchemaMigrationError(f"{owner_table_name} is not a standard vote owner table")
     record_type, config = configured
     source = _standard_vote_header_source(record_type, record)
     header = convert_record_types(source, owner_table_name)
     missing_header_key = [
-        column
-        for column in _STANDARD_VOTE_RACE_KEY_COLUMNS
-        if header.get(column) in (None, "")
+        column for column in _STANDARD_VOTE_RACE_KEY_COLUMNS if header.get(column) in (None, "")
     ]
     if missing_header_key:
         raise SchemaMigrationError(
-            f"{record_type} standard vote header has incomplete key: "
-            f"{missing_header_key}"
+            f"{record_type} standard vote header has incomplete key: " f"{missing_header_key}"
         )
     if resolve_record_data_kubun(record) == "0":
         return header, []
 
-    base = {
-        column: source.get(column)
-        for column in ("MakeDate", *_STANDARD_VOTE_RACE_KEY_COLUMNS)
-    }
+    base = {column: source.get(column) for column in ("MakeDate", *_STANDARD_VOTE_RACE_KEY_COLUMNS)}
     child_sources: list[tuple[str, dict]] = []
 
     def append_child(table_name: str, key_name: str, key_value: Any, **values: Any) -> None:
         if not _valid_vote_combination(key_value):
             return
-        child_sources.append(
-            (table_name, {**base, key_name: key_value, **values})
-        )
+        child_sources.append((table_name, {**base, key_name: key_value, **values}))
 
     if record_type == "H1":
         bet_type = source.get("BetType")
@@ -3616,28 +3666,43 @@ def prepare_standard_vote_record(
             )
         elif bet_type == "Wakuren":
             append_child(
-                "HYOSU_WAKU", "Kumi", source.get("Kumi"),
-                Hyo=source.get("Hyo"), Ninki=source.get("Ninki")
+                "HYOSU_WAKU",
+                "Kumi",
+                source.get("Kumi"),
+                Hyo=source.get("Hyo"),
+                Ninki=source.get("Ninki"),
             )
         elif bet_type == "Umaren":
             append_child(
-                "HYOSU_UMARENWIDE", "Kumi", source.get("Kumi"),
-                UmarenHyo=source.get("Hyo"), UmarenNinki=source.get("Ninki")
+                "HYOSU_UMARENWIDE",
+                "Kumi",
+                source.get("Kumi"),
+                UmarenHyo=source.get("Hyo"),
+                UmarenNinki=source.get("Ninki"),
             )
         elif bet_type == "Wide":
             append_child(
-                "HYOSU_UMARENWIDE", "Kumi", source.get("Kumi"),
-                WideHyo=source.get("Hyo"), WideNinki=source.get("Ninki")
+                "HYOSU_UMARENWIDE",
+                "Kumi",
+                source.get("Kumi"),
+                WideHyo=source.get("Hyo"),
+                WideNinki=source.get("Ninki"),
             )
         elif bet_type == "Umatan":
             append_child(
-                "HYOSU_UMATAN", "Kumi", source.get("Kumi"),
-                Hyo=source.get("Hyo"), Ninki=source.get("Ninki")
+                "HYOSU_UMATAN",
+                "Kumi",
+                source.get("Kumi"),
+                Hyo=source.get("Hyo"),
+                Ninki=source.get("Ninki"),
             )
         elif bet_type == "Sanrenpuku":
             append_child(
-                "HYOSU_SANREN", "Kumi", source.get("Kumi"),
-                Hyo=source.get("Hyo"), Ninki=source.get("Ninki")
+                "HYOSU_SANREN",
+                "Kumi",
+                source.get("Kumi"),
+                Hyo=source.get("Hyo"),
+                Ninki=source.get("Ninki"),
             )
         elif bet_type not in (None, "", "Total"):
             raise SchemaMigrationError(
@@ -3646,52 +3711,71 @@ def prepare_standard_vote_record(
 
         if bet_type in (None, ""):
             append_child(
-                "HYOSU_TANPUKU", "Umaban", source.get("TanUma"),
-                TanHyo=source.get("TanHyo"), TanNinki=source.get("TanNinki")
+                "HYOSU_TANPUKU",
+                "Umaban",
+                source.get("TanUma"),
+                TanHyo=source.get("TanHyo"),
+                TanNinki=source.get("TanNinki"),
             )
             append_child(
-                "HYOSU_TANPUKU", "Umaban", source.get("FukuUma"),
-                FukuHyo=source.get("FukuHyo"), FukuNinki=source.get("FukuNinki")
+                "HYOSU_TANPUKU",
+                "Umaban",
+                source.get("FukuUma"),
+                FukuHyo=source.get("FukuHyo"),
+                FukuNinki=source.get("FukuNinki"),
             )
             append_child(
-                "HYOSU_WAKU", "Kumi", source.get("WakuKumi"),
-                Hyo=source.get("WakuHyo"), Ninki=source.get("WakuNinki")
+                "HYOSU_WAKU",
+                "Kumi",
+                source.get("WakuKumi"),
+                Hyo=source.get("WakuHyo"),
+                Ninki=source.get("WakuNinki"),
             )
             append_child(
-                "HYOSU_UMARENWIDE", "Kumi", source.get("UmarenKumi"),
+                "HYOSU_UMARENWIDE",
+                "Kumi",
+                source.get("UmarenKumi"),
                 UmarenHyo=source.get("UmarenHyo"),
-                UmarenNinki=source.get("UmarenNinki")
+                UmarenNinki=source.get("UmarenNinki"),
             )
             append_child(
-                "HYOSU_UMARENWIDE", "Kumi", source.get("WideKumi"),
-                WideHyo=source.get("WideHyo"), WideNinki=source.get("WideNinki")
+                "HYOSU_UMARENWIDE",
+                "Kumi",
+                source.get("WideKumi"),
+                WideHyo=source.get("WideHyo"),
+                WideNinki=source.get("WideNinki"),
             )
             append_child(
-                "HYOSU_UMATAN", "Kumi", source.get("UmatanKumi"),
-                Hyo=source.get("UmatanHyo"), Ninki=source.get("UmatanNinki")
+                "HYOSU_UMATAN",
+                "Kumi",
+                source.get("UmatanKumi"),
+                Hyo=source.get("UmatanHyo"),
+                Ninki=source.get("UmatanNinki"),
             )
             append_child(
-                "HYOSU_SANREN", "Kumi", source.get("SanrenfukuKumi"),
+                "HYOSU_SANREN",
+                "Kumi",
+                source.get("SanrenfukuKumi"),
                 Hyo=source.get("SanrenfukuHyo"),
-                Ninki=source.get("SanrenfukuNinki")
+                Ninki=source.get("SanrenfukuNinki"),
             )
     else:
         append_child(
-            "HYOSU_SANRENTAN", "Kumi", source.get("SanrentanKumi"),
-            Hyo=source.get("SanrentanHyo"), Ninki=source.get("SanrentanNinki")
+            "HYOSU_SANRENTAN",
+            "Kumi",
+            source.get("SanrentanKumi"),
+            Hyo=source.get("SanrentanHyo"),
+            Ninki=source.get("SanrentanNinki"),
         )
 
     children: list[tuple[str, dict]] = []
     for child_table, child_source in child_sources:
         child = convert_record_types(child_source, child_table)
         child_keys = config["children"][child_table]
-        missing_child_key = [
-            column for column in child_keys if child.get(column) in (None, "")
-        ]
+        missing_child_key = [column for column in child_keys if child.get(column) in (None, "")]
         if missing_child_key:
             raise SchemaMigrationError(
-                f"{record_type} standard vote child has incomplete key: "
-                f"{missing_child_key}"
+                f"{record_type} standard vote child has incomplete key: " f"{missing_child_key}"
             )
         children.append((child_table, child))
     return header, children
@@ -3712,21 +3796,16 @@ def insert_standard_vote_batch(
         if commit_batch:
             database.begin_transaction()
         verified = (
-            verification_cache.get(owner_table_name)
-            if verification_cache is not None
-            else None
+            verification_cache.get(owner_table_name) if verification_cache is not None else None
         )
         if verified is None:
             verified = verify_standard_vote_tables(database, owner_table_name)
         _, config = verified
         fingerprints = {
-            _standard_vote_physical_fingerprint(record, owner_table_name)
-            for record in records
+            _standard_vote_physical_fingerprint(record, owner_table_name) for record in records
         }
         if len(fingerprints) != 1:
-            raise SchemaMigrationError(
-                "standard vote batch spans multiple physical records"
-            )
+            raise SchemaMigrationError("standard vote batch spans multiple physical records")
 
         header_by_key: dict[tuple, dict] = {}
         child_by_table: dict[str, dict[tuple, dict]] = {
@@ -3738,9 +3817,7 @@ def insert_standard_vote_batch(
                 raise SchemaMigrationError(
                     "standard vote erase must be applied at the physical-record boundary"
                 )
-            header_key = tuple(
-                header[column] for column in _STANDARD_VOTE_RACE_KEY_COLUMNS
-            )
+            header_key = tuple(header[column] for column in _STANDARD_VOTE_RACE_KEY_COLUMNS)
             existing_header = header_by_key.get(header_key)
             if existing_header is None:
                 header_by_key[header_key] = header
@@ -3760,20 +3837,14 @@ def insert_standard_vote_batch(
                     )
 
         if len(header_by_key) != 1:
-            raise SchemaMigrationError(
-                "standard vote physical record spans multiple race keys"
-            )
+            raise SchemaMigrationError("standard vote physical record spans multiple race keys")
         current_header = next(iter(header_by_key.values()))
-        where = " AND ".join(
-            f"{column} = ?" for column in _STANDARD_VOTE_RACE_KEY_COLUMNS
-        )
+        where = " AND ".join(f"{column} = ?" for column in _STANDARD_VOTE_RACE_KEY_COLUMNS)
         race_key_values = tuple(
             current_header[column] for column in _STANDARD_VOTE_RACE_KEY_COLUMNS
         )
         for child_table in config["children"]:
-            database.execute(
-                f"DELETE FROM {child_table} WHERE {where}", race_key_values
-            )
+            database.execute(f"DELETE FROM {child_table} WHERE {where}", race_key_values)
         _upsert_rows_by_official_key(
             database,
             owner_table_name,
@@ -3814,20 +3885,14 @@ def delete_standard_vote_record(
         if commit_batch:
             database.begin_transaction()
         verified = (
-            verification_cache.get(owner_table_name)
-            if verification_cache is not None
-            else None
+            verification_cache.get(owner_table_name) if verification_cache is not None else None
         )
         if verified is None:
             verified = verify_standard_vote_tables(database, owner_table_name)
         _, config = verified
         header, _ = prepare_standard_vote_record(record, owner_table_name)
-        where = " AND ".join(
-            f"{column} = ?" for column in _STANDARD_VOTE_RACE_KEY_COLUMNS
-        )
-        values = tuple(
-            header[column] for column in _STANDARD_VOTE_RACE_KEY_COLUMNS
-        )
+        where = " AND ".join(f"{column} = ?" for column in _STANDARD_VOTE_RACE_KEY_COLUMNS)
+        values = tuple(header[column] for column in _STANDARD_VOTE_RACE_KEY_COLUMNS)
         deleted = 0
         for table_name in (*config["children"], owner_table_name):
             deleted += max(
@@ -3882,10 +3947,7 @@ def _delete_official_record(database: BaseDatabase, record: dict, table_name: st
     converted = convert_record_types(record, table_name)
     # Some legacy standard schemas omit type metadata for an otherwise valid
     # race key. Preserve the raw key only for those columns.
-    key_values = {
-        column: converted.get(column, record.get(column))
-        for column in key_columns
-    }
+    key_values = {column: converted.get(column, record.get(column)) for column in key_columns}
     missing = [column for column, value in key_values.items() if value in (None, "")]
     if missing:
         raise ValueError(f"{record_type} record erase has incomplete key: {missing}")
@@ -3919,11 +3981,7 @@ def _delete_mining_race_rows(database: BaseDatabase, record: dict, table_name: s
         raise ValueError(f"{table_name} is not storage for record {record.get('RecordSpec')!r}")
     record_type, _ = configured
     converted = convert_record_types(record, table_name)
-    missing = [
-        column
-        for column in _MINING_RACE_KEY_COLUMNS
-        if converted.get(column) in (None, "")
-    ]
+    missing = [column for column in _MINING_RACE_KEY_COLUMNS if converted.get(column) in (None, "")]
     if missing:
         raise ValueError(f"{record_type} race delete has incomplete key: {missing}")
     where = " AND ".join(f"{column} = ?" for column in _MINING_RACE_KEY_COLUMNS)
@@ -3952,11 +4010,7 @@ def _is_mining_snapshot_follower(record: dict, table_name: str) -> bool:
         return False
     _, config = configured
     rows = record.get(config["snapshot_rows_key"])
-    return (
-        isinstance(rows, list)
-        and bool(rows)
-        and record.get(config["snapshot_index_key"]) != 0
-    )
+    return isinstance(rows, list) and bool(rows) and record.get(config["snapshot_index_key"]) != 0
 
 
 def verify_mining_native_schema(
@@ -4017,9 +4071,7 @@ def replace_mining_native_snapshot(
         seen_primary_keys.add(primary_key)
 
     converted_record = convert_record_types(record, table_name)
-    record_race_key = tuple(
-        converted_record.get(column) for column in _MINING_RACE_KEY_COLUMNS
-    )
+    record_race_key = tuple(converted_record.get(column) for column in _MINING_RACE_KEY_COLUMNS)
     if record_race_key != expected_race_key:
         raise ValueError(f"{record_type} snapshot metadata does not match its expanded row")
 
@@ -4725,20 +4777,24 @@ def _ck_postgresql_check_cases(
                 for metric in metrics:
                     for bucket in buckets:
                         accepted = (
-                            entity == "UMA"
-                            and period == 0
-                            and metric in horse_maximum
-                            and 1 <= bucket <= horse_maximum[metric]
-                        ) or (
-                            entity in {"KISYU", "CHOKYOSI"}
-                            and period in {1, 2}
-                            and metric in professional_maximum
-                            and 1 <= bucket <= professional_maximum[metric]
-                        ) or (
-                            entity in {"BANUSI", "BREEDER"}
-                            and period in {1, 2}
-                            and metric == "ChakuKaisu"
-                            and bucket == 1
+                            (
+                                entity == "UMA"
+                                and period == 0
+                                and metric in horse_maximum
+                                and 1 <= bucket <= horse_maximum[metric]
+                            )
+                            or (
+                                entity in {"KISYU", "CHOKYOSI"}
+                                and period in {1, 2}
+                                and metric in professional_maximum
+                                and 1 <= bucket <= professional_maximum[metric]
+                            )
+                            or (
+                                entity in {"BANUSI", "BREEDER"}
+                                and period in {1, 2}
+                                and metric == "ChakuKaisu"
+                                and bucket == 1
+                            )
                         )
                         cases.append(((entity, period, metric, bucket), accepted))
         return columns, cases
@@ -4756,9 +4812,9 @@ def _ck_postgresql_check_cases(
                 for count5 in (None, 1):
                     for count6 in (None, 1):
                         running_style = entity == "UMA" and metric == "Kyakusitu"
-                        accepted = (
-                            running_style and count5 is None and count6 is None
-                        ) or (not running_style and count5 is not None and count6 is not None)
+                        accepted = (running_style and count5 is None and count6 is None) or (
+                            not running_style and count5 is not None and count6 is not None
+                        )
                         cases.append(((entity, metric, count5, count6), accepted))
         return columns, cases
 
@@ -4918,9 +4974,7 @@ def _ck_postgresql_check_signature(
             elif number_match:
                 values.append(number_match.group(0))
             else:
-                raise SchemaMigrationError(
-                    "CK PostgreSQL CHECK array contains a non-literal value"
-                )
+                raise SchemaMigrationError("CK PostgreSQL CHECK array contains a non-literal value")
         atoms[f"any:{column}:{','.join(values)}"] += 1
         return " atom "
 
@@ -4973,9 +5027,7 @@ def _ck_postgresql_check_signature(
     operators: Counter[str] = Counter(
         word for word in remaining_words if word in {"and", "or", "not"}
     )
-    unrecognized = [
-        word for word in remaining_words if word not in {"atom", "and", "or", "not"}
-    ]
+    unrecognized = [word for word in remaining_words if word not in {"atom", "and", "or", "not"}]
     if unrecognized:
         raise SchemaMigrationError(
             f"CK PostgreSQL CHECK contains unrecognized structure: {unrecognized[:5]}"
@@ -5039,9 +5091,7 @@ def _verify_ck_child_on_target(
 
     for required_table in (main_table_name, table_name):
         if not target.table_exists_strict(required_table):
-            raise SchemaMigrationError(
-                f"CK import requires table {required_table} before mutation"
-            )
+            raise SchemaMigrationError(f"CK import requires table {required_table} before mutation")
         verify_table_schema(target, required_table, SCHEMAS[required_table])
 
     schema_sql = SCHEMAS[table_name]
@@ -5293,9 +5343,7 @@ DIVIDE_BY_10_PREFIXES = frozenset(
 )
 
 # 完全一致で10で割るべきフィールド名
-DIVIDE_BY_10_EXACT = frozenset(
-    ["AtoFutan", "MaeFutan", "Odds", "SyogaiMileTime", "Time"]
-)
+DIVIDE_BY_10_EXACT = frozenset(["AtoFutan", "MaeFutan", "Odds", "SyogaiMileTime", "Time"])
 
 # Explicit-unit fields are already canonicalized by the parser contract.
 CANONICAL_SE_FIELDS = frozenset(
@@ -5511,9 +5559,7 @@ class DataImporter:
         self._records_imported = 0
         self._records_failed = 0
         self._batches_processed = 0
-        self._single_record_stats_checkpoint: Optional[
-            tuple[int, int, int, int]
-        ] = None
+        self._single_record_stats_checkpoint: Optional[tuple[int, int, int, int]] = None
         self._jravan_tables_ready = not use_jravan_schema
         self._verified_mining_native_tables: set[str] = set()
         self._verified_hy_tables: set[str] = set()
@@ -5521,6 +5567,7 @@ class DataImporter:
         self._verified_se_tables: set[str] = set()
         self._verified_we_tables: set[str] = set()
         self._verified_av_tables: set[str] = set()
+        self._verified_hr_tables: set[str] = set()
         self._verified_jc_tables: set[str] = set()
         self._verified_cs_tables: set[str] = set()
         self._verified_jg_tables: set[str] = set()
@@ -5772,6 +5819,7 @@ class DataImporter:
                     validate_se_record(first_record, first_table_name)
                     validate_we_record(first_record, first_table_name)
                     validate_av_record(first_record, first_table_name)
+                    validate_hr_record(first_record, first_table_name)
                     validate_jc_record(first_record, first_table_name)
                 records = chain((first_record,), records)
         except Exception:
@@ -5782,10 +5830,7 @@ class DataImporter:
                         context="first-header failure in caller-owned import",
                     )
                 except TransactionRecoveryError:
-                    if (
-                        self.database.is_connected()
-                        and previous_transaction_generation is not None
-                    ):
+                    if self.database.is_connected() and previous_transaction_generation is not None:
                         (
                             self._records_imported,
                             self._records_failed,
@@ -5852,6 +5897,10 @@ class DataImporter:
                     if verify_av_storage_schema(self.database, table_name):
                         self._verified_av_tables.add(table_name)
                 validate_av_record(record, table_name)
+                if table_name not in self._verified_hr_tables:
+                    if verify_hr_storage_schema(self.database, table_name):
+                        self._verified_hr_tables.add(table_name)
+                validate_hr_record(record, table_name)
                 if table_name not in self._verified_jc_tables:
                     if verify_jc_storage_schema(self.database, table_name):
                         self._verified_jc_tables.add(table_name)
@@ -5950,9 +5999,7 @@ class DataImporter:
                     if auto_commit:
                         self.database.begin_transaction()
                     try:
-                        rows = replace_mining_native_snapshot(
-                            self.database, record, table_name
-                        )
+                        rows = replace_mining_native_snapshot(self.database, record, table_name)
                         if auto_commit:
                             self.database.commit()
                     except TransactionRecoveryError:
@@ -6198,9 +6245,8 @@ class DataImporter:
             prepared_ck: list[tuple[dict, str, list[dict], str, list[dict]]] = []
             for original_record, record in zip(batch, clean_batch, strict=True):
                 converted_record = self._convert_record(record, table_name)
-                if (
-                    table_name in _ORDERED_MASTER_STORAGE_TABLES
-                    or self._has_complete_primary_key(table_name, converted_record)
+                if table_name in _ORDERED_MASTER_STORAGE_TABLES or self._has_complete_primary_key(
+                    table_name, converted_record
                 ):
                     converted_batch.append(converted_record)
                     coupled = prepare_ch_coupled_rows(
@@ -6338,14 +6384,12 @@ class DataImporter:
                 return
 
             # Insert batch using INSERT OR REPLACE
-            affected_rows = self.database.insert_many(
-                table_name, converted_batch, use_replace=True
-            )
-            # PostgreSQL collapses same-key AV operations before one upsert.
+            affected_rows = self.database.insert_many(table_name, converted_batch, use_replace=True)
+            # PostgreSQL collapses same-key replacement operations before one upsert.
             # Statistics count accepted provider operations, not final rows.
             rows = (
                 len(converted_batch)
-                if table_name in _AV_STORAGE_TABLES
+                if table_name in _PROVIDER_OPERATION_COUNT_STORAGE_TABLES
                 else affected_rows
             )
 
@@ -6448,9 +6492,7 @@ class DataImporter:
             self.database.begin_transaction()
         generation = self.database.get_transaction_generation()
         if generation is None:
-            raise DatabaseError(
-                "Database did not expose an active transaction generation"
-            )
+            raise DatabaseError("Database did not expose an active transaction generation")
         checkpoint_generation = (
             self._single_record_stats_checkpoint[0]
             if self._single_record_stats_checkpoint is not None
@@ -6506,6 +6548,7 @@ class DataImporter:
                 validate_se_record(record, table_name)
                 validate_we_record(record, table_name)
                 validate_av_record(record, table_name)
+                validate_hr_record(record, table_name)
                 validate_jc_record(record, table_name)
         except SchemaMigrationError:
             if not auto_commit:
@@ -6516,8 +6559,7 @@ class DataImporter:
                 )
                 active_generation = self.database.get_transaction_generation()
                 checkpoint_is_active = (
-                    checkpoint_generation is not None
-                    and checkpoint_generation == active_generation
+                    checkpoint_generation is not None and checkpoint_generation == active_generation
                 )
                 try:
                     pending_transaction = inspect_pending_transaction_or_invalidate(
@@ -6580,6 +6622,10 @@ class DataImporter:
                 if verify_av_storage_schema(self.database, table_name):
                     self._verified_av_tables.add(table_name)
             validate_av_record(record, table_name)
+            if table_name not in self._verified_hr_tables:
+                if verify_hr_storage_schema(self.database, table_name):
+                    self._verified_hr_tables.add(table_name)
+            validate_hr_record(record, table_name)
             if table_name not in self._verified_jc_tables:
                 if verify_jc_storage_schema(self.database, table_name):
                     self._verified_jc_tables.add(table_name)

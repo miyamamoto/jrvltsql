@@ -9,6 +9,8 @@ from src.database.migration import SchemaMigrationError
 from src.database.schema import SCHEMAS, create_all_tables
 from src.database.sqlite_handler import SQLiteDatabase
 from src.importer.importer import DataImporter
+from src.parser.hr_parser import HRParser
+from tests.fixtures.record_factory import make_hr_record
 
 
 class TestDataImporter:
@@ -178,20 +180,17 @@ class TestDataImporter:
                     "KettoNum": "2024012345",
                     "Bamei": "テスト馬",
                 },
-                {
-                    "headRecordSpec": "HR",
-                    "RecordSpec": "HR",
-                    "DataKubun": "1",
-                    "MakeDate": "20240601",
-                    "Year": 2024,
-                    "MonthDay": 601,
-                    "JyoCD": "06",
-                    "Kaiji": 3,
-                    "Nichiji": 8,
-                    "RaceNum": 1,
-                    "TorokuTosu": 18,
-                    "SyussoTosu": 18,
-                },
+                HRParser().parse(
+                    make_hr_record(
+                        make_date="20240601",
+                        year="2024",
+                        month_day="0601",
+                        jyo_cd="06",
+                        kaiji="03",
+                        nichiji="08",
+                        race_num="01",
+                    )
+                ),
             ]
 
             stats = importer.import_records(iter(records), auto_commit=False)

@@ -275,12 +275,12 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             RecordSpec                     CHAR(2)             ,  -- レコード種別ID
             DataKubun                      CHAR(1)             ,  -- データ区分
             MakeDate                       DATE                ,  -- YYYYMMDD形式の日付
-            Year                           SMALLINT            ,  -- 年(4桁)
-            MonthDay                       SMALLINT            ,  -- 月日(MMDD)
-            JyoCD                          CHAR(2)             ,  -- 競馬場コード
-            Kaiji                          SMALLINT            ,  -- 開催回
-            Nichiji                        SMALLINT            ,  -- 開催日目
-            RaceNum                        SMALLINT            ,  -- レース番号
+            Year                           SMALLINT NOT NULL   ,  -- 年(4桁)
+            MonthDay                       SMALLINT NOT NULL   ,  -- 月日(MMDD)
+            JyoCD                          CHAR(2) NOT NULL    ,  -- 競馬場コード
+            Kaiji                          SMALLINT NOT NULL   ,  -- 開催回
+            Nichiji                        SMALLINT NOT NULL   ,  -- 開催日目
+            RaceNum                        SMALLINT NOT NULL   ,  -- レース番号
             TorokuTosu                     SMALLINT            ,  -- 登録頭数
             SyussoTosu                     SMALLINT            ,  -- 出走頭数
             FuseirituFlag1                 VARCHAR(255)        ,  -- テキスト
@@ -470,7 +470,10 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             PaySanrentanNinki5             VARCHAR(255)        ,  -- テキスト
             PaySanrentanKumi6              VARCHAR(255)        ,  -- テキスト
             PaySanrentanPay6               VARCHAR(255)        ,  -- テキスト
-            PaySanrentanNinki6             VARCHAR(255)          -- テキスト
+            PaySanrentanNinki6             VARCHAR(255)        ,  -- テキスト
+            LegacyReserved604_717Hex       VARCHAR(228)        ,  -- 2004年以前の同長予備領域
+            OpaqueStatus9Body28_717Hex     VARCHAR(1380)       ,  -- 中止時の未規定本文
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
         )
     """,
     "HASSOU_JIKOKU_CHANGE": """

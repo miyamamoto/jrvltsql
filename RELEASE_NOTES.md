@@ -46,6 +46,16 @@ Public API replacements:
   reason-field initial representations remain supported. Existing keyless,
   nullable-key, legacy `AVOIDENCE`-only, or otherwise unsafe AV tables require
   rebuild and reimport
+- HR payout/refund storage now preserves every official repeat in the 719-byte
+  record, including all three reserved entries, and uses the exact six-part
+  race key in `NL_HR`, `RT_HR`, and standard `HARAI`. Existing keyless,
+  nullable-key, incomplete-repeat, or otherwise unsafe HR tables require
+  backup, rebuild, and RACE reimport. Records before trifecta sales began on
+  2004-08-14 preserve bytes 604-717 as an opaque hexadecimal compatibility
+  value instead of labeling undocumented old reserved bytes as trifecta
+  payouts. Status 0 remains an exact-key erase. Status 9 remains stored as a
+  cancellation state, while its unspecified body is retained only as an opaque
+  raw audit value instead of being interpreted as ordinary payout fields
 - imports and realtime updates preserve provider order and use fail-closed
   transaction recovery so returned statistics agree with durable rows across
   SQLite and PostgreSQL

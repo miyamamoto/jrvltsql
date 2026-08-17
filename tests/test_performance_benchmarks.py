@@ -24,6 +24,8 @@ import pytest
 from src.database.schema import SchemaManager
 from src.database.sqlite_handler import SQLiteDatabase
 from src.importer.importer import DataImporter
+from src.parser.hr_parser import HRParser
+from tests.fixtures.record_factory import make_hr_record
 
 
 class PerformanceTestBase(unittest.TestCase):
@@ -72,6 +74,20 @@ class PerformanceTestBase(unittest.TestCase):
                     'Umaban': f'{(index - 1) % 18 + 1:02d}',
                     'KettoNum': f'2024{index:06d}',
                 })
+        if record_type == 'HR':
+            records = []
+            parser = HRParser()
+            for index in range(count):
+                event_date = date(2024, 1, 1) + timedelta(days=index)
+                record = parser.parse(
+                    make_hr_record(
+                        make_date=event_date.strftime('%Y%m%d'),
+                        year=event_date.strftime('%Y'),
+                        month_day=event_date.strftime('%m%d'),
+                    )
+                )
+                assert record is not None
+                records.append(record)
         return records
 
 
