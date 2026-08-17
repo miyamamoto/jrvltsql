@@ -14,11 +14,12 @@ from uuid import uuid4
 
 import pytest
 
+from src.database.dual_handler import DualDatabase
 from src.database.migration import SchemaMigrationError
 from src.database.schema_jravan import JRAVAN_SCHEMAS
 from src.database.schema_types import get_table_column_types, get_table_primary_key_columns
 from src.database.sqlite_handler import SQLiteDatabase
-from src.importer.importer import DataImporter
+from src.importer.importer import DataImporter, translate_standard_field_names
 from src.importer.importer_optimized import OptimizedDataImporter
 from src.parser.um_parser import UMParser
 
@@ -211,6 +212,7 @@ def parsed_record(**kwargs):
 def test_um_standard_schema_preserves_the_official_registration_key():
     column_types = get_table_column_types("UMA")
     assert column_types["KettoNum"] == "TEXT"
+    assert column_types["TorokuRaceSu"] == "TEXT"
     assert get_table_primary_key_columns("UMA") == ["KettoNum"]
     database = SQLiteDatabase({"path": ":memory:"})
     with database:
@@ -220,6 +222,56 @@ def test_um_standard_schema_preserves_the_official_registration_key():
         }
     assert declared_types["KettoNum"] == "VARCHAR(10)"
     assert declared_types["DelDate"] == "VARCHAR(8)"
+    assert declared_types["TorokuRaceSu"] == "VARCHAR(3)"
+
+
+def test_um_standard_translation_covers_every_schema_field():
+    translated = translate_standard_field_names(parsed_record(), "UMA")
+    schema_columns = set(get_table_column_types("UMA"))
+    assert set(translated) - {"Reserved_1608"} == schema_columns
+    assert all(name not in translated for name in CHAKU_NAMES)
+    assert "KyakusituKeiko" not in translated
+
+    expected_prefixes = (
+        "Sogo",
+        "Chuo",
+        "Ba1",
+        "Ba2",
+        "Ba3",
+        "Ba4",
+        "Ba5",
+        "Ba6",
+        "Ba7",
+        "Jyotai1",
+        "Jyotai2",
+        "Jyotai3",
+        "Jyotai4",
+        "Jyotai5",
+        "Jyotai6",
+        "Jyotai7",
+        "Jyotai8",
+        "Jyotai9",
+        "Jyotai10",
+        "Jyotai11",
+        "Jyotai12",
+        "Kyori1",
+        "Kyori2",
+        "Kyori3",
+        "Kyori4",
+        "Kyori5",
+        "Kyori6",
+    )
+    for value, prefix in enumerate(expected_prefixes, start=1):
+        assert [translated[f"{prefix}Chakukaisu{index}"] for index in range(1, 7)] == [
+            f"{value:03d}"
+        ] * 6
+    assert [translated[f"Kyakusitu{index}"] for index in range(1, 5)] == [
+        "001",
+        "002",
+        "003",
+        "004",
+    ]
+    assert translated["TorokuRaceSu"] == "042"
 
 
 @pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
@@ -250,15 +302,44 @@ def test_um_standard_storage_keeps_distinct_keys_and_updates_exact_key(
                 ]
             )
         )
-        rows = database.fetch_all("SELECT KettoNum, Bamei FROM UMA ORDER BY KettoNum")
+        rows = database.fetch_all(
+            "SELECT KettoNum, Bamei, DelDate, SogoChakukaisu1, "
+            "SogoChakukaisu6, Ba4Chakukaisu1, Jyotai12Chakukaisu6, "
+            "Kyori6Chakukaisu6, Kyakusitu1, Kyakusitu4, TorokuRaceSu "
+            "FROM UMA ORDER BY KettoNum"
+        )
 
     assert created["records_imported"] == 2
     assert created["records_failed"] == 0
     assert updated["records_imported"] == 1
     assert updated["records_failed"] == 0
     assert rows == [
-        {"KettoNum": "2019900001", "Bamei": "第一更新馬"},
-        {"KettoNum": "2019900002", "Bamei": "第二登録馬"},
+        {
+            "KettoNum": "2019900001",
+            "Bamei": "第一更新馬",
+            "DelDate": "00000000",
+            "SogoChakukaisu1": "001",
+            "SogoChakukaisu6": "001",
+            "Ba4Chakukaisu1": "006",
+            "Jyotai12Chakukaisu6": "021",
+            "Kyori6Chakukaisu6": 27,
+            "Kyakusitu1": "001",
+            "Kyakusitu4": "004",
+            "TorokuRaceSu": "042",
+        },
+        {
+            "KettoNum": "2019900002",
+            "Bamei": "第二登録馬",
+            "DelDate": "00000000",
+            "SogoChakukaisu1": "001",
+            "SogoChakukaisu6": "001",
+            "Ba4Chakukaisu1": "006",
+            "Jyotai12Chakukaisu6": "021",
+            "Kyori6Chakukaisu6": 27,
+            "Kyakusitu1": "001",
+            "Kyakusitu4": "004",
+            "TorokuRaceSu": "042",
+        },
     ]
 
 
@@ -271,6 +352,102 @@ OBSOLETE_STANDARD_UMA_SCHEMA = """
         PRIMARY KEY (Bamei)
     )
 """
+
+UNSAFE_UNIQUE_STANDARD_UMA_SCHEMA = JRAVAN_SCHEMAS["UMA"].replace(
+    "PRIMARY KEY (KettoNum)",
+    "PRIMARY KEY (KettoNum), UNIQUE (DelDate)",
+)
+
+
+def _import_standard_um_records(database, entrypoint, records, auto_commit):
+    if entrypoint == "data-batch":
+        return DataImporter(database, use_jravan_schema=True).import_records(
+            iter(records), auto_commit=auto_commit
+        )
+    if entrypoint == "optimized-batch":
+        return OptimizedDataImporter(database, use_jravan_schema=True).import_records(
+            iter(records), auto_commit=auto_commit
+        )
+    importer = DataImporter(database, use_jravan_schema=True)
+    return [importer.import_single_record(record, auto_commit=auto_commit) for record in records]
+
+
+@pytest.mark.parametrize("entrypoint", ("data-batch", "optimized-batch", "single"))
+@pytest.mark.parametrize("auto_commit", (True, False), ids=("owned", "caller-owned"))
+def test_um_standard_extra_unique_is_rejected_before_mutation(tmp_path, entrypoint, auto_commit):
+    primary = SQLiteDatabase({"path": str(tmp_path / f"unique-{entrypoint}.db")})
+    with primary:
+        primary.execute(UNSAFE_UNIQUE_STANDARD_UMA_SCHEMA)
+        primary.commit()
+        before = primary.fetch_all(
+            "SELECT name, sql FROM sqlite_master "
+            "WHERE type IN ('table', 'index') ORDER BY type, name"
+        )
+        with pytest.raises(SchemaMigrationError, match="UNIQUE"):
+            _import_standard_um_records(
+                primary,
+                entrypoint,
+                [
+                    parsed_record(ketto_num="2019900001"),
+                    parsed_record(ketto_num="2019900002"),
+                ],
+                auto_commit,
+            )
+        assert (
+            primary.fetch_all(
+                "SELECT name, sql FROM sqlite_master "
+                "WHERE type IN ('table', 'index') ORDER BY type, name"
+            )
+            == before
+        )
+        assert primary.fetch_one("SELECT COUNT(*) AS count FROM UMA")["count"] == 0
+
+
+def test_um_standard_dual_rejects_extra_unique_on_either_backend(tmp_path):
+    primary = SQLiteDatabase({"path": str(tmp_path / "unsafe-primary.db")})
+    secondary = SQLiteDatabase({"path": str(tmp_path / "canonical-secondary.db")})
+    with primary, secondary:
+        primary.execute(UNSAFE_UNIQUE_STANDARD_UMA_SCHEMA)
+        secondary.execute(JRAVAN_SCHEMAS["UMA"])
+        primary.commit()
+        secondary.commit()
+        dual = DualDatabase(primary, secondary)
+        with pytest.raises(SchemaMigrationError, match="UNIQUE"):
+            DataImporter(dual, use_jravan_schema=True).import_records(iter([parsed_record()]))
+        assert primary.fetch_one("SELECT COUNT(*) AS count FROM UMA")["count"] == 0
+        assert secondary.fetch_one("SELECT COUNT(*) AS count FROM UMA")["count"] == 0
+
+
+@pytest.mark.parametrize("entrypoint", ("data-batch", "optimized-batch", "single"))
+@pytest.mark.parametrize(
+    "invalid_key",
+    ("123456789", "12345678901", "ABCDEFGHIJ", "１２３４５６７８９０"),
+    ids=("short", "long", "letters", "non-ascii"),
+)
+def test_um_standard_invalid_official_key_is_rejected_before_mutation(
+    tmp_path, entrypoint, invalid_key
+):
+    database = SQLiteDatabase({"path": str(tmp_path / f"invalid-{entrypoint}.db")})
+    record = parsed_record()
+    record["KettoNum"] = invalid_key
+    with database:
+        database.execute(JRAVAN_SCHEMAS["UMA"])
+        database.commit()
+        with pytest.raises(SchemaMigrationError, match="KettoNum"):
+            _import_standard_um_records(database, entrypoint, [record], True)
+        assert database.fetch_one("SELECT COUNT(*) AS count FROM UMA")["count"] == 0
+
+
+def test_um_standard_malformed_compact_body_is_rejected_before_mutation(tmp_path):
+    database = SQLiteDatabase({"path": str(tmp_path / "malformed-body.db")})
+    record = parsed_record()
+    record["SogoChaku"] = "001"
+    with database:
+        database.execute(JRAVAN_SCHEMAS["UMA"])
+        database.commit()
+        with pytest.raises(SchemaMigrationError, match="SogoChaku"):
+            DataImporter(database, use_jravan_schema=True).import_records(iter([record]))
+        assert database.fetch_one("SELECT COUNT(*) AS count FROM UMA")["count"] == 0
 
 
 @pytest.fixture
@@ -303,6 +480,48 @@ def postgresql_db():
             database.commit()
         finally:
             database.disconnect()
+
+
+@pytest.mark.parametrize(
+    ("replacement", "message"),
+    (
+        pytest.param(
+            "PRIMARY KEY (KettoNum), UNIQUE (DelDate)",
+            "UNIQUE",
+            id="extra-unique",
+        ),
+        pytest.param(
+            "PRIMARY KEY (KettoNum) DEFERRABLE INITIALLY DEFERRED",
+            "primary key",
+            id="deferrable-primary-key",
+        ),
+    ),
+)
+def test_um_postgresql_constraint_drift_is_rejected_before_mutation(
+    postgresql_db, replacement, message
+):
+    postgresql_db.execute(JRAVAN_SCHEMAS["UMA"].replace("PRIMARY KEY (KettoNum)", replacement))
+    postgresql_db.commit()
+    before = postgresql_db.fetch_all(
+        "SELECT contype AS type, condeferrable AS deferrable, "
+        "condeferred AS deferred, pg_get_constraintdef(oid) AS definition "
+        "FROM pg_constraint WHERE conrelid = to_regclass(?) ORDER BY contype, conname",
+        ("uma",),
+    )
+    with pytest.raises(SchemaMigrationError, match=message):
+        DataImporter(postgresql_db, use_jravan_schema=True).import_records(iter([parsed_record()]))
+    postgresql_db.rollback()
+    assert (
+        postgresql_db.fetch_all(
+            "SELECT contype AS type, condeferrable AS deferrable, "
+            "condeferred AS deferred, pg_get_constraintdef(oid) AS definition "
+            "FROM pg_constraint WHERE conrelid = to_regclass(?) "
+            "ORDER BY contype, conname",
+            ("uma",),
+        )
+        == before
+    )
+    assert postgresql_db.fetch_one('SELECT COUNT(*) AS "count" FROM uma')["count"] == 0
 
 
 @pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
@@ -338,7 +557,18 @@ def test_um_standard_single_record_respects_the_caller_transaction(tmp_path):
         assert database.fetch_one("SELECT COUNT(*) AS count FROM UMA")["count"] == 0
 
         assert importer.import_single_record(parsed_record(), auto_commit=True) is True
-        assert database.fetch_one("SELECT KettoNum FROM UMA") == {"KettoNum": "2019900001"}
+        assert database.fetch_one(
+            "SELECT KettoNum, DelDate, SogoChakukaisu1, Jyotai12Chakukaisu6, "
+            "Kyori6Chakukaisu6, Kyakusitu4, TorokuRaceSu FROM UMA"
+        ) == {
+            "KettoNum": "2019900001",
+            "DelDate": "00000000",
+            "SogoChakukaisu1": "001",
+            "Jyotai12Chakukaisu6": "021",
+            "Kyori6Chakukaisu6": 27,
+            "Kyakusitu4": "004",
+            "TorokuRaceSu": "042",
+        }
 
 
 @pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
@@ -362,7 +592,12 @@ def test_um_postgresql_standard_key_roundtrip_and_legacy_preflight(
         iter([parsed_record(ketto_num="2019900001", bamei="第一更新馬")])
     )
     rows = postgresql_db.fetch_all(
-        'SELECT kettonum AS "KettoNum", bamei AS "Bamei" FROM uma ORDER BY kettonum'
+        'SELECT kettonum AS "KettoNum", bamei AS "Bamei", '
+        'deldate AS "DelDate", sogochakukaisu1 AS "SogoChakukaisu1", '
+        'jyotai12chakukaisu6 AS "Jyotai12Chakukaisu6", '
+        'kyori6chakukaisu6 AS "Kyori6Chakukaisu6", '
+        'kyakusitu4 AS "Kyakusitu4", torokuracesu AS "TorokuRaceSu" '
+        "FROM uma ORDER BY kettonum"
     )
 
     assert created["records_imported"] == 2
@@ -370,8 +605,26 @@ def test_um_postgresql_standard_key_roundtrip_and_legacy_preflight(
     assert updated["records_imported"] == 1
     assert updated["records_failed"] == 0
     assert rows == [
-        {"KettoNum": "2019900001", "Bamei": "第一更新馬"},
-        {"KettoNum": "2019900002", "Bamei": "第二登録馬"},
+        {
+            "KettoNum": "2019900001",
+            "Bamei": "第一更新馬",
+            "DelDate": "00000000",
+            "SogoChakukaisu1": "001",
+            "Jyotai12Chakukaisu6": "021",
+            "Kyori6Chakukaisu6": 27,
+            "Kyakusitu4": "004",
+            "TorokuRaceSu": "042",
+        },
+        {
+            "KettoNum": "2019900002",
+            "Bamei": "第二登録馬",
+            "DelDate": "00000000",
+            "SogoChakukaisu1": "001",
+            "Jyotai12Chakukaisu6": "021",
+            "Kyori6Chakukaisu6": 27,
+            "Kyakusitu4": "004",
+            "TorokuRaceSu": "042",
+        },
     ]
 
     postgresql_db.execute("DROP TABLE uma")
@@ -402,3 +655,24 @@ def test_um_postgresql_standard_key_roundtrip_and_legacy_preflight(
         == before_columns
     )
     assert postgresql_db.fetch_all("SELECT * FROM uma") == before_rows
+
+
+def test_um_postgresql_single_record_preserves_expanded_body(postgresql_db):
+    postgresql_db.execute(JRAVAN_SCHEMAS["UMA"])
+    postgresql_db.commit()
+    importer = DataImporter(postgresql_db, use_jravan_schema=True)
+
+    assert importer.import_single_record(parsed_record(), auto_commit=True) is True
+    assert postgresql_db.fetch_one(
+        'SELECT kettonum AS "KettoNum", deldate AS "DelDate", '
+        'sogochakukaisu1 AS "SogoChakukaisu1", '
+        'jyotai12chakukaisu6 AS "Jyotai12Chakukaisu6", '
+        'kyakusitu4 AS "Kyakusitu4", torokuracesu AS "TorokuRaceSu" FROM uma'
+    ) == {
+        "KettoNum": "2019900001",
+        "DelDate": "00000000",
+        "SogoChakukaisu1": "001",
+        "Jyotai12Chakukaisu6": "021",
+        "Kyakusitu4": "004",
+        "TorokuRaceSu": "042",
+    }

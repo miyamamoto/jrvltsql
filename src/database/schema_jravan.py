@@ -1793,6 +1793,7 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             Kyakusitu2                     VARCHAR(3)          ,  -- 文字列(3)
             Kyakusitu3                     VARCHAR(3)          ,  -- 文字列(3)
             Kyakusitu4                     VARCHAR(3)          ,  -- 文字列(3)
+            TorokuRaceSu                   VARCHAR(3)          ,  -- 登録レース数
             PRIMARY KEY (KettoNum)
         )
     """,

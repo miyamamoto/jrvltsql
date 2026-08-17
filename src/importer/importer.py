@@ -274,8 +274,88 @@ _STANDARD_FIELD_ALIASES = {
 }
 
 
+_UMA_COMPACT_CHAKU_TARGETS = (
+    ("SogoChaku", "Sogo"),
+    ("ChuoGokeiChaku", "Chuo"),
+    ("SibaChokuChaku", "Ba1"),
+    ("SibaMigiChaku", "Ba2"),
+    ("SibaHidariChaku", "Ba3"),
+    ("DirtChokuChaku", "Ba4"),
+    ("DirtMigiChaku", "Ba5"),
+    ("DirtHidariChaku", "Ba6"),
+    ("SyogaiChaku", "Ba7"),
+    ("SibaRyoChaku", "Jyotai1"),
+    ("SibaYayaomoChaku", "Jyotai2"),
+    ("SibaOmoChaku", "Jyotai3"),
+    ("SibaFuryoChaku", "Jyotai4"),
+    ("DirtRyoChaku", "Jyotai5"),
+    ("DirtYayaomoChaku", "Jyotai6"),
+    ("DirtOmoChaku", "Jyotai7"),
+    ("DirtFuryoChaku", "Jyotai8"),
+    ("SyogaiRyoChaku", "Jyotai9"),
+    ("SyogaiYayaomoChaku", "Jyotai10"),
+    ("SyogaiOmoChaku", "Jyotai11"),
+    ("SyogaiFuryoChaku", "Jyotai12"),
+    ("SibaShortChaku", "Kyori1"),
+    ("SibaMiddleChaku", "Kyori2"),
+    ("SibaLongChaku", "Kyori3"),
+    ("DirtShortChaku", "Kyori4"),
+    ("DirtMiddleChaku", "Kyori5"),
+    ("DirtLongChaku", "Kyori6"),
+)
+
+
+def _expand_standard_uma_fields(record: dict) -> dict:
+    """Expand the official compact UM body into the standard UMA columns."""
+    translated = dict(record)
+    for source, target_prefix in _UMA_COMPACT_CHAKU_TARGETS:
+        if source not in translated:
+            continue
+        value = translated.pop(source)
+        if (
+            not isinstance(value, str)
+            or len(value) != 18
+            or not value.isascii()
+            or not value.isdigit()
+        ):
+            raise SchemaMigrationError(
+                f"UM {source} must contain exactly six 3-digit ASCII counts"
+            )
+        for index in range(1, 7):
+            target = f"{target_prefix}Chakukaisu{index}"
+            chunk = value[(index - 1) * 3 : index * 3]
+            if target in translated and str(translated[target]) != chunk:
+                raise SchemaMigrationError(
+                    f"UM compact field {source} conflicts with standard field {target}"
+                )
+            translated[target] = chunk
+
+    if "KyakusituKeiko" in translated:
+        value = translated.pop("KyakusituKeiko")
+        if (
+            not isinstance(value, str)
+            or len(value) != 12
+            or not value.isascii()
+            or not value.isdigit()
+        ):
+            raise SchemaMigrationError(
+                "UM KyakusituKeiko must contain exactly four 3-digit ASCII counts"
+            )
+        for index in range(1, 5):
+            target = f"Kyakusitu{index}"
+            chunk = value[(index - 1) * 3 : index * 3]
+            if target in translated and str(translated[target]) != chunk:
+                raise SchemaMigrationError(
+                    f"UM KyakusituKeiko conflicts with standard field {target}"
+                )
+            translated[target] = chunk
+    return translated
+
+
 def translate_standard_field_names(record: dict, table_name: str) -> dict:
     """Translate legacy native parser names for a standard-name table."""
+    if table_name == "UMA":
+        record = _expand_standard_uma_fields(record)
     aliases = _STANDARD_FIELD_ALIASES.get(table_name)
     if not aliases:
         return record
@@ -732,10 +812,20 @@ def _verify_wf_column_types(
         )
 
 
-def _verify_wf_unique_and_primary_constraints(
-    database: BaseDatabase, table_name: str
+def _verify_replacement_key_constraints(
+    database: BaseDatabase,
+    table_name: str,
+    storage_label: str,
 ) -> None:
     """Reject replacement-changing UNIQUEs and unusable PostgreSQL PKs."""
+    from src.database.migration import _migration_targets
+
+    targets = _migration_targets(database)
+    if targets != (database,):
+        for target in targets:
+            _verify_replacement_key_constraints(target, table_name, storage_label)
+        return
+
     db_type = database.get_db_type()
     if db_type == "sqlite":
         indexes = database.fetch_all(f'PRAGMA index_list("{table_name}")')
@@ -747,13 +837,14 @@ def _verify_wf_unique_and_primary_constraints(
         ]
         if unexpected:
             raise SchemaMigrationError(
-                f"WF storage {table_name} has unsupported additional UNIQUE "
+                f"{storage_label} {table_name} has unsupported additional UNIQUE "
                 f"constraints/indexes: {unexpected}"
             )
         return
     if db_type != "postgresql":
         raise SchemaMigrationError(
-            f"WF constraints cannot be verified for database type {db_type!r}"
+            f"{storage_label} constraints cannot be verified for database type "
+            f"{db_type!r}"
         )
 
     indexes = database.fetch_all(
@@ -781,13 +872,15 @@ def _verify_wf_unique_and_primary_constraints(
     ]
     if unexpected:
         raise SchemaMigrationError(
-            f"WF storage {table_name} has unsupported additional UNIQUE/exclusion "
+            f"{storage_label} {table_name} has unsupported additional "
+            "UNIQUE/exclusion "
             f"indexes: {unexpected}"
         )
     primary = [row for row in indexes if bool(row.get("is_primary"))]
     if len(primary) != 1:
         raise SchemaMigrationError(
-            f"WF primary key catalog mismatch for {table_name}: expected one primary key"
+            f"{storage_label} primary key catalog mismatch for {table_name}: "
+            "expected one primary key"
         )
     key = primary[0]
     if (
@@ -800,9 +893,17 @@ def _verify_wf_unique_and_primary_constraints(
         or not bool(key.get("is_validated"))
     ):
         raise SchemaMigrationError(
-            f"WF primary key for {table_name} must be valid, ready, immediate, "
+            f"{storage_label} primary key for {table_name} must be valid, ready, "
+            "immediate, "
             "non-deferrable, and usable by ON CONFLICT"
         )
+
+
+def _verify_wf_unique_and_primary_constraints(
+    database: BaseDatabase, table_name: str
+) -> None:
+    """Retain the named WF boundary while sharing the catalog verifier."""
+    _verify_replacement_key_constraints(database, table_name, "WF storage")
 
 
 def _verify_wf_table_contract(
@@ -1175,6 +1276,12 @@ def preflight_standard_schema_migrations(
             allow_missing_columns=(standard_name not in _STRICT_NONADDITIVE_STANDARD_TABLES),
             allow_primary_key_mismatch=(standard_name in _ORDERED_MASTER_STORAGE_TABLES),
         )
+        if standard_name == "UMA":
+            _verify_replacement_key_constraints(
+                database,
+                standard_name,
+                "Standard UMA storage",
+            )
 
     for child_table in ("CHOKYO_SEISEKI", "KISYU_SEISEKI"):
         child_schema = JRAVAN_SCHEMAS.get(child_table)
@@ -1767,10 +1874,20 @@ def validate_import_record_header(record: dict) -> tuple[str, str]:
     """Fail closed on a non-official accumulated/import header."""
 
     try:
-        return validate_record_header(
+        record_type, data_kubun = validate_record_header(
             record,
             context=DataKubunContext.ACCUMULATED,
         )
+        if record_type == "UM":
+            ketto_num = record.get("KettoNum")
+            if (
+                not isinstance(ketto_num, str)
+                or len(ketto_num) != 10
+                or not ketto_num.isascii()
+                or not ketto_num.isdigit()
+            ):
+                raise ValueError("UM KettoNum must be exactly 10 ASCII digits")
+        return record_type, data_kubun
     except ValueError as error:
         raise SchemaMigrationError(str(error)) from error
 

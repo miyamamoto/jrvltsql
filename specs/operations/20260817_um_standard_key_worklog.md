@@ -107,3 +107,63 @@
   inspect the final diff, commit a frozen candidate, then request one batched
   independent Codex critical review. STOP on any row-count/statistics mismatch,
   mutation of a legacy table, test failure, or candidate drift.
+
+## 2026-08-17 — frozen-candidate critical review and batched repair
+
+- Frozen candidate: `c1c6e55fa7f0d8640c0aec468c7397412a9b17a4`,
+  clean at the start and end of both read-only reviews.
+- Review method: two independent Codex critical reviewers, one bound to the
+  official 4.8.0.2/4.9.0.1 + SDK 5.0 oracle and one attacking migration,
+  transaction, Dual, and actual-database integrity. Claude Code remained
+  unavailable and was not counted. Findings were collected before editing and
+  repaired together to avoid a per-finding review loop.
+- Adopted findings:
+  1. The successful standard import silently discarded the compact 27x6
+     placing-count leaves, four running-style leaves, and `TorokuRaceSu`.
+  2. An extra `UNIQUE`/exclusion constraint, or a PostgreSQL deferrable or
+     otherwise unusable primary key, could change replacement semantics after
+     passing preflight and silently remove a different horse.
+  3. Caller-built `KettoNum` values were not constrained to the official exact
+     ten ASCII digits, so SQLite and PostgreSQL accepted different invalid
+     identities.
+- Red-first evidence on exact `c1c6e55...`: the combined focused selection
+  produced `22 failed`; the additional compact-cardinality case separately
+  failed because malformed `SogoChaku="001"` was imported successfully. The
+  failures covered the missing schema column/readback, six extra-UNIQUE entry
+  modes plus Dual, and short/long/alphabetic/non-ASCII keys through normal,
+  optimized, and single-record entry points.
+- Repair boundary:
+  - Standard UM translation now expands all 27 compact 18-character groups to
+    162 three-character columns and the 12-character running-style group to
+    four columns. Present compact fields must have exact ASCII-digit
+    cardinality and cannot conflict with pre-expanded fields.
+  - Standard `UMA` now includes `TorokuRaceSu VARCHAR(3)`. A completeness test
+    binds all 227 schema columns to parser output (excluding only the physical
+    CRLF delimiter), not just selected sentinels.
+  - The existing WF catalog verifier was generalized without weakening WF.
+    Standard `UMA` preflight now rejects additional UNIQUE/exclusion indexes
+    and requires one valid, ready, immediate, non-deferrable PostgreSQL primary
+    key before any additive migration.
+  - Shared import-header validation now requires UM `KettoNum` to be exactly
+    ten ASCII digits before schema preflight or DML. It intentionally does not
+    invent a semantic year/all-zero restriction unsupported by this iteration's
+    official evidence.
+- Green evidence after the batched repair:
+  - UM file: `127 passed, 4 skipped` on SQLite.
+  - Affected UM/migration/WF catalog selection: `164 passed, 6 skipped, 103
+    deselected`.
+  - Fresh disposable PostgreSQL 16: `5 passed, 127 deselected`, covering both
+    batch importers' complete expanded-body readback, representative single
+    record readback, extra UNIQUE rejection, deferrable-PK rejection, sentinel
+    preservation, exact-key update, and old wrong-key no-mutation.
+  - The PostgreSQL container was removed and its exact-name container listing
+    was empty after cleanup. `git diff --check` and compileall passed.
+- Final local gate on the repaired tree: full suite `2823 passed, 136 skipped,
+  22 subtests passed` in 57.67 seconds. `uv lock --check`,
+  `scripts/validate_test_gate.py`, compileall, fatal flake8
+  (`E9,F63,F7,F82`), strict MkDocs, and `git diff --check` all passed.
+- Remaining iteration action: run final required local gates on one frozen
+  full SHA, request one bounded two-reviewer confirmation of the repaired
+  finding classes, then publish PR/review/merge only if the worktree is clean,
+  tests are green, and unresolved GitHub threads are zero. Do not release from
+  this iteration; the dependent key/erase/release work remains separate.
