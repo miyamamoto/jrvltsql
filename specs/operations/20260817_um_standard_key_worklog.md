@@ -189,3 +189,36 @@
   finding classes, then publish PR/review/merge only if the worktree is clean,
   tests are green, and unresolved GitHub threads are zero. Do not release from
   this iteration; the dependent key/erase/release work remains separate.
+
+## 2026-08-17 — PR #204 review response
+
+- PR #204 was opened from exact candidate
+  `6cd699aa3bc9b82b902e06be2625243a02ad1e33`. GitHub lint, test, and Windows
+  batch-syntax jobs passed; the performance job was conditionally skipped.
+  CodeRabbit completed successfully. Copilot was requested once at PR creation
+  but reported quota exhaustion and was not re-requested.
+- CodeRabbit reported two test-only improvements after reviewing the complete
+  change set. They were collected and handled in one batch: the DualDatabase
+  unsafe-UNIQUE regression now exercises both the primary and secondary
+  migration target, and the PostgreSQL fixture rolls back an aborted
+  transaction before dropping its temporary schema. Production code was not
+  changed by this response.
+- Next safe action: run the UM-focused SQLite and disposable PostgreSQL tests,
+  required static/documentation gates, commit and push one review-response
+  candidate, reply to and resolve the inline thread, then require exact PR head,
+  successful checks, unresolved thread count zero, and a clean worktree before
+  merge. STOP on any focused failure or head/worktree drift.
+- Review-response verification is green: the complete UM file passed `133
+  passed` against SQLite and a fresh disposable PostgreSQL 16 instance. This
+  includes the new primary/secondary Dual cases and all five PostgreSQL
+  contracts. The exact-name PostgreSQL container was removed and its filtered
+  container listing was empty afterward.
+- `uv lock --check`, `scripts/validate_test_gate.py`, compileall, fatal flake8
+  (`E9,F63,F7,F82`), strict MkDocs, and `git diff --check` all passed on the
+  review-response tree. The MkDocs output directory was a disposable external
+  `mktemp` directory and was deleted after the build.
+- The response changed only the UM test file and this tracked worklog. The
+  production source diff from `6cd699aa...` remains empty. Next safe action is
+  one commit/push, exact-head CI, a courteous inline reply, thread resolution,
+  and final merge gate; no broad review or full-suite replay is warranted for
+  this test-only follow-up under the review-loop policy.

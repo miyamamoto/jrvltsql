@@ -406,12 +406,27 @@ def test_um_standard_extra_unique_is_rejected_before_mutation(tmp_path, entrypoi
         assert primary.fetch_one("SELECT COUNT(*) AS count FROM UMA")["count"] == 0
 
 
-def test_um_standard_dual_rejects_extra_unique_on_either_backend(tmp_path):
-    primary = SQLiteDatabase({"path": str(tmp_path / "unsafe-primary.db")})
-    secondary = SQLiteDatabase({"path": str(tmp_path / "canonical-secondary.db")})
+@pytest.mark.parametrize("unsafe_target", ("primary", "secondary"))
+def test_um_standard_dual_rejects_extra_unique_on_either_backend(
+    tmp_path, unsafe_target
+):
+    primary = SQLiteDatabase(
+        {"path": str(tmp_path / f"{unsafe_target}-primary.db")}
+    )
+    secondary = SQLiteDatabase(
+        {"path": str(tmp_path / f"{unsafe_target}-secondary.db")}
+    )
     with primary, secondary:
-        primary.execute(UNSAFE_UNIQUE_STANDARD_UMA_SCHEMA)
-        secondary.execute(JRAVAN_SCHEMAS["UMA"])
+        primary.execute(
+            UNSAFE_UNIQUE_STANDARD_UMA_SCHEMA
+            if unsafe_target == "primary"
+            else JRAVAN_SCHEMAS["UMA"]
+        )
+        secondary.execute(
+            UNSAFE_UNIQUE_STANDARD_UMA_SCHEMA
+            if unsafe_target == "secondary"
+            else JRAVAN_SCHEMAS["UMA"]
+        )
         primary.commit()
         secondary.commit()
         dual = DualDatabase(primary, secondary)
@@ -479,6 +494,7 @@ def postgresql_db():
         yield database
     finally:
         try:
+            database.rollback()
             database.execute(f"DROP SCHEMA IF EXISTS {schema_name} CASCADE")
             database.commit()
         finally:
