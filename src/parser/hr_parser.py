@@ -11,6 +11,7 @@ from collections.abc import Mapping
 from datetime import date
 from typing import Dict, Optional
 
+from src.jvlink.constants import ENCODING_JVDATA
 from src.parser.base import validate_fixed_record
 from src.parser.code_domains import OFFICIAL_JYO_CODES_2001
 from src.utils.logger import get_logger
@@ -355,7 +356,12 @@ class HRParser:
             elif race_date < self.SANRENTAN_AVAILABLE_FROM:
                 decode_data[603:717] = b" " * 114
             data = bytes(decode_data)
-            validate_fixed_record(data, self.RECORD_TYPE, self.RECORD_LENGTH)
+            # The fixed-record envelope and central DataKubun domain were
+            # validated above. This second pass is deliberately limited to
+            # CP932 validation of the status/date-specific interpreted view;
+            # calling validate_fixed_record again would run the central gate
+            # twice for HR while every other parser reaches it exactly once.
+            data.decode(ENCODING_JVDATA, errors="strict")
 
             # 10. 登録頭数 (位置:28, 長さ:2)
             result["TorokuTosu"] = self.decode_field(data[pos : pos + 2])

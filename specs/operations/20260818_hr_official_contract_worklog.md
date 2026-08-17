@@ -349,3 +349,30 @@
   as an opaque lookup failure. These results precede the repair commit; exact
   candidate review and GitHub thread resolution remain required before
   ready/merge.
+
+## Exact opaque-policy candidate and CI follow-up
+
+- The aggregated opaque-policy/E-5 repair was committed and pushed as exact
+  candidate `d21c4a13c67c7a4fcc492adf9fb10f8a3b184607`. Its affected SQLite
+  selection passed `64` tests with `25` skips, a fresh PostgreSQL 16 selection
+  passed `89` tests, fatal flake8 and the fail-closed test gate passed, and the
+  disposable database was removed. Three independent bounded Codex reviews
+  returned P0/P1/P2 = 0. All three GitHub review threads were answered with the
+  relevant official/project-policy boundary and resolved.
+- GitHub Actions run `32079318069` was not waived: its Linux `test` job executed
+  and failed, while `lint` and `windows-batch-syntax` succeeded and performance
+  was the intentional zero-step PR skip. The exact failure was
+  `test_all_factory_parsers_reach_the_central_status_gate`: HR alone reached
+  `validate_data_kubun` twice. The parser used `validate_fixed_record` both for
+  the fixed-record envelope and again for the status/date-specific CP932 view.
+  The second call was redundant; its only intended duty was strict decoding of
+  the masked interpretation view.
+- Red evidence is the exact d21 CI assertion: the observed status-gate sequence
+  contained a duplicate `HR` and differed from the all-38 oracle at index 14.
+  The repair retains the first `validate_fixed_record` call, so HR still reaches
+  the central fail-closed status gate exactly once, and narrows the second pass
+  to `ENCODING_JVDATA` strict decode. The previously failing central-gate test
+  plus all HR contract tests then passed `53` with `25` skips. The complete
+  GitHub-equivalent Linux suite passed `3208`, skipped `273`, deselected `14`,
+  and passed `20` subtests with 78% coverage. A new exact commit, push, CI, and
+  final clean/thread gate remain required before merge.
