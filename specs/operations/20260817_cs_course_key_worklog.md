@@ -313,3 +313,39 @@
 - Next safe action: commit and package the exact candidate, then perform one
   final two-reviewer exact-SHA gate without broadening the iteration. STOP on
   any P0/P1 or candidate drift.
+
+## 2026-08-17 — PR #205 review-response batch
+
+- Pushed exact clean candidate
+  `d9041b180f2a797560347a6f6b2313a2a347042d` and opened ready PR #205 against
+  unchanged `origin/master` `17335604e0f951ae1cc39ebb447c6fb1b7b683be`.
+  GitHub `test`, `lint`, and `windows-batch-syntax` jobs completed successfully;
+  `performance-test` was the expected zero-step conditional skip. The one
+  requested native Copilot review reported quota exhaustion and was not
+  re-requested. The two local independent Codex final reviews remained GREEN.
+- GitHub Codex produced one actionable P1 on the same exact head. For a physical
+  status 1/2 record whose 6,800-byte `CourseEx` is entirely padding spaces,
+  `BaseParser` returned `None`; the new strict CS body validator then rejected
+  it despite the official/caller/storage contract accepting a blank body.
+  CodeRabbit remained in its explicit `review in progress` state with zero
+  inline threads throughout the aggregation wait; its state and all threads
+  must be re-read after the repair push.
+- Added the smallest parser-level regression before production repair. On
+  `d9041b1`, the selection reported `2 failed, 140 deselected`; both status 1
+  and 2 failed with `CS CourseEx must be a string`. The parser now converts
+  `None` back to `""` only when the exact raw CourseEx slice is all ASCII padding
+  spaces. Caller-built missing/non-string bodies are still rejected, and other
+  whitespace/control bytes are not accepted by this normalization.
+- Post-repair validation: SQLite CS contract `106 passed, 36 skipped`; fresh
+  PostgreSQL 16 CS contract `142 passed`; full suite `2930 passed, 172 skipped,
+  22 subtests passed`. `uv lock --check`, fail-closed test-gate validation,
+  fatal Flake8 (`0`), compileall, strict MkDocs, changed-test Black/Ruff, and
+  `git diff --check` pass. A broad Black run requested unrelated pre-existing
+  generated-parser formatting, so those mechanical unrelated hunks were not
+  retained; the production delta remains four parser lines plus the six-line
+  regression.
+- Next safe action: commit and push this one review-response batch, reply to and
+  resolve the GitHub Codex thread, wait for CodeRabbit's terminal state, and
+  require exact PR head, successful checks, unresolved thread count zero, clean
+  worktree, and one bounded final delta review before merge. STOP on any new
+  P0/P1, check failure, or head/worktree drift.

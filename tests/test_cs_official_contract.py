@@ -157,6 +157,12 @@ def test_cs_parser_preserves_the_full_6800_byte_body_and_rejects_bad_length():
         CSParser().parse(build_cs_record() + b" ")
 
 
+@pytest.mark.parametrize("data_kubun", ("1", "2"), ids=("new", "update"))
+def test_cs_parser_preserves_an_official_blank_physical_body(data_kubun):
+    parsed = CSParser().parse(build_cs_record(data_kubun=data_kubun, course_ex=""))
+    assert parsed["CourseEx"] == ""
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     (

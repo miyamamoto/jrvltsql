@@ -98,6 +98,10 @@ class CSParser(BaseParser):
         """Parse one exact current CS record and reject malformed identities."""
 
         parsed = super().parse(record)
+        course_ex = self.get_field_def("CourseEx")
+        raw_course_ex = record[course_ex.start : course_ex.start + course_ex.length]
+        if parsed.get("CourseEx") is None and raw_course_ex == b" " * course_ex.length:
+            parsed["CourseEx"] = ""
         self.validate_current_fields(parsed)
         return parsed
 
