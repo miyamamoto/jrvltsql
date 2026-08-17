@@ -205,6 +205,19 @@
   subtests passed`; strict MkDocs also passes. The venue-code domain is now a
   single production constant shared by CS and WF, and the existing WF complete-
   domain contract passed after that mechanical centralization.
+- Committed the material repair as exact production candidate
+  `dd4eff0af33240a21eb7ce5340ea80923e8e91d1` (parent reviewed candidate
+  `94a0104440c40f413cba9cceeaa89b5f9dfd42c2`) and confirmed a clean tree.
+  Rebuilt wheel and sdist from `git archive` of that exact SHA. The content gate,
+  extracted-wheel init/config/version/SQLite smoke, `specs/` exclusion, and the
+  required shared code-domain module all passed. Exact artifact hashes were:
+  wheel `a9fcf141cda56179168ef44a539b7dd49c094908ed7176b22d29bca30aa1a677`,
+  sdist `0efc71eda21bbe981fec3796db920b3c2aa28379631153b1404b564fabcc4394`;
+  member counts were 100 and 121 respectively. Temporary artifacts were removed.
+- Next safe action: commit this evidence-only worklog update and request one
+  bounded carry-forward pass from both original reviewers against the resulting
+  exact clean SHA. The pass must verify closure of the four aggregated P1s and
+  the official-oracle P2 without reopening unrelated record-family scope.
 - Current state is intentionally dirty only with this aggregated repair,
   tests/fixture, docs, and this tracked worklog. Next safe action: rerun full
   suite, strict docs, fatal/static gates, actual-PG cleanup check, and exact
