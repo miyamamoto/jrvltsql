@@ -44,6 +44,26 @@ WE_KEY = (
     "HenkoID",
 )
 
+WE_SDK_FIELD_NAMES = {
+    ("head", "RecordSpec"): "RecordSpec",
+    ("head", "DataKubun"): "DataKubun",
+    ("head", "MakeDate"): "MakeDate",
+    ("id", "Year"): "Year",
+    ("id", "MonthDay"): "MonthDay",
+    ("id", "JyoCD"): "JyoCD",
+    ("id", "Kaiji"): "Kaiji",
+    ("id", "Nichiji"): "Nichiji",
+    ("HappyoTime",): "HappyoTime",
+    ("HenkoID",): "HenkoID",
+    ("TenkoBaba", "TenkoCD"): "TenkoState",
+    ("TenkoBaba", "SibaBabaCD"): "SibaBabaState",
+    ("TenkoBaba", "DirtBabaCD"): "DirtBabaState",
+    ("TenkoBabaBefore", "TenkoCD"): "TenkoState2",
+    ("TenkoBabaBefore", "SibaBabaCD"): "SibaBabaState2",
+    ("TenkoBabaBefore", "DirtBabaCD"): "DirtBabaState2",
+    ("crlf",): "RecordDelimiter",
+}
+
 
 def build_we_record(
     *,
@@ -102,6 +122,49 @@ def import_records(database, entrypoint, records, *, standard, auto_commit):
         database.commit()
 
 
+def lossless_strict_we_schema(standard: bool) -> tuple[str, str]:
+    """Return a safe noncanonical WE schema for strict-verifier positives."""
+
+    table_name = "TENKO_BABA" if standard else "NL_WE"
+    schema = JRAVAN_SCHEMAS[table_name] if standard else SCHEMAS[table_name]
+    if standard:
+        schema = schema.replace(
+            "AtoTenkoCD                     VARCHAR(1)          ,",
+            "AtoTenkoCD                     VARCHAR(1) NOT NULL,",
+            1,
+        )
+    else:
+        schema = schema.replace("JyoCD TEXT NOT NULL", "JyoCD CHAR(2) NOT NULL", 1)
+        schema = schema.replace(
+            "HappyoTime TEXT NOT NULL", "HappyoTime VARCHAR(8) NOT NULL", 1
+        )
+        schema = schema.replace("TenkoState TEXT,", "TenkoState TEXT NOT NULL,", 1)
+    return table_name, schema
+
+
+def sdk_we_parser_contract() -> list[tuple[str, int, int]]:
+    """Collapse only the SDK composites that WEParser intentionally exposes whole."""
+
+    structures = OFFICIAL_MANIFEST["structures"]
+    contract: list[tuple[str, int, int]] = []
+
+    def visit(structure_name: str, start: int, path: tuple[str, ...]) -> None:
+        structure = structures[structure_name]
+        for field in structure["fields"]:
+            field_start = start + field["start"] - 1
+            field_path = (*path, field["name"])
+            parser_name = WE_SDK_FIELD_NAMES.get(field_path)
+            if parser_name is not None:
+                contract.append((parser_name, field_start, field["width"]))
+            elif field["kind"] == "nested":
+                visit(field["struct"], field_start, field_path)
+            else:
+                raise AssertionError(f"unmapped WE SDK scalar: {field_path}")
+
+    visit("JV_WE_WEATHER", 1, ())
+    return contract
+
+
 def test_we_layout_and_all_storage_keys_match_the_pinned_official_sources() -> None:
     assert WE_CONTRACT["format_sources"] == [
         {
@@ -119,9 +182,11 @@ def test_we_layout_and_all_storage_keys_match_the_pinned_official_sources() -> N
     ]
     assert WE_CONTRACT["record_length"] == 42
     assert tuple(WE_CONTRACT["primary_key"]) == WE_KEY
-    assert [(field.name, field.start + 1, field.length) for field in WEParser()._fields] == [
-        tuple(field) for field in WE_CONTRACT["fields"]
+    parser_contract = [
+        (field.name, field.start + 1, field.length) for field in WEParser()._fields
     ]
+    assert parser_contract == [tuple(field) for field in WE_CONTRACT["fields"]]
+    assert parser_contract == sdk_we_parser_contract()
     assert OFFICIAL_MANIFEST["root_records"]["WE"] == {
         "struct": "JV_WE_WEATHER",
         "length": 42,
@@ -276,13 +341,9 @@ def test_we_historical_status_zero_exactly_erases_one_official_key(
 
 
 def test_realtime_we_uses_happyo_time_for_targeted_historical_erase(tmp_path) -> None:
-    corrected_schema = SCHEMAS["RT_WE"].replace(
-        "PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, HenkoID)",
-        "PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, HappyoTime, HenkoID)",
-    )
     database = SQLiteDatabase({"path": str(tmp_path / "realtime.db")})
     with database:
-        database.execute(corrected_schema)
+        database.execute(SCHEMAS["RT_WE"])
         database.commit()
         updater = RealtimeUpdater(database)
         inserted = updater.process_parsed_records_batch(
@@ -308,7 +369,10 @@ def test_realtime_we_uses_happyo_time_for_targeted_historical_erase(tmp_path) ->
     assert rows == [{"HappyoTime": "07091000"}]
 
 
-@pytest.mark.parametrize("defect", ("legacy-key", "nullable-key", "wrong-key-type", "extra-unique"))
+@pytest.mark.parametrize(
+    "defect",
+    ("legacy-key", "nullable-key", "wrong-key-type", "short-key-text", "extra-unique"),
+)
 def test_we_unsafe_schema_is_rejected_before_mutation(tmp_path, defect: str) -> None:
     schema = SCHEMAS["NL_WE"]
     if defect == "legacy-key":
@@ -317,6 +381,10 @@ def test_we_unsafe_schema_is_rejected_before_mutation(tmp_path, defect: str) -> 
         schema = schema.replace("HappyoTime TEXT NOT NULL", "HappyoTime TEXT", 1)
     elif defect == "wrong-key-type":
         schema = schema.replace("Year INTEGER NOT NULL", "Year TEXT NOT NULL", 1)
+    elif defect == "short-key-text":
+        schema = schema.replace(
+            "HappyoTime TEXT NOT NULL", "HappyoTime VARCHAR(7) NOT NULL", 1
+        )
     else:
         schema = schema.replace("PRIMARY KEY (", "UNIQUE (HenkoID),\n            PRIMARY KEY (", 1)
     database = SQLiteDatabase({"path": str(tmp_path / "unsafe.db")})
@@ -359,6 +427,56 @@ def test_realtime_we_rejects_caller_malformed_row_before_mutation(tmp_path) -> N
         assert result["success"] is False
         assert result["inserted"] == 0
         assert database.fetch_one("SELECT COUNT(*) AS n FROM RT_WE") == {"n": 0}
+
+
+@pytest.mark.parametrize("entrypoint", ("batch", "single"))
+def test_realtime_we_rejects_live_body_alias_conflict_but_keeps_delete_opaque(
+    tmp_path, entrypoint: str
+) -> None:
+    database = SQLiteDatabase({"path": str(tmp_path / f"alias-{entrypoint}.db")})
+    with database:
+        database.execute(SCHEMAS["RT_WE"])
+        database.commit()
+        updater = RealtimeUpdater(database)
+
+        conflict = parsed_we()
+        conflict["AtoTenkoCD"] = "2"
+        if entrypoint == "batch":
+            rejected = updater.process_parsed_records_batch([conflict])
+        else:
+            rejected = updater.process_parsed_record(conflict)
+        assert rejected["success"] is False
+        assert database.fetch_one("SELECT COUNT(*) AS n FROM RT_WE") == {"n": 0}
+
+        consistent = parsed_we()
+        consistent["AtoTenkoCD"] = consistent["TenkoState"]
+        if entrypoint == "batch":
+            accepted = updater.process_parsed_records_batch([consistent])
+        else:
+            accepted = updater.process_parsed_record(consistent)
+        assert accepted["success"] is True
+
+        delete = parsed_we(data_kubun="0", make_date="20030710", body="1999999")
+        delete["AtoTenkoCD"] = "2"
+        if entrypoint == "batch":
+            erased = updater.process_parsed_records_batch([delete])
+        else:
+            erased = updater.process_parsed_record(delete)
+        assert erased["success"] is True
+        assert database.fetch_one("SELECT COUNT(*) AS n FROM RT_WE") == {"n": 0}
+
+
+@pytest.mark.parametrize("standard", (False, True), ids=("native", "standard"))
+def test_we_schema_accepts_lossless_fixed_width_key_and_required_live_body(
+    tmp_path, standard: bool
+) -> None:
+    table_name, schema = lossless_strict_we_schema(standard)
+
+    database = SQLiteDatabase({"path": str(tmp_path / f"lossless-{standard}.db")})
+    with database:
+        database.execute(schema)
+        database.commit()
+        assert verify_we_storage_schema(database, table_name) is True
 
 
 def test_we_executable_metadata_exposes_the_complete_identity() -> None:
@@ -492,11 +610,17 @@ def test_we_postgresql_identity_update_and_historical_exact_erase(
     ]
 
 
-@pytest.mark.parametrize("defect", ("wrong-key-type", "extra-unique", "deferrable-pk"))
+@pytest.mark.parametrize(
+    "defect", ("wrong-key-type", "short-key-text", "extra-unique", "deferrable-pk")
+)
 def test_we_postgresql_rejects_unsafe_identity_schema(postgresql_db, defect: str) -> None:
     schema = SCHEMAS["NL_WE"]
     if defect == "wrong-key-type":
         schema = schema.replace("Year INTEGER NOT NULL", "Year TEXT NOT NULL", 1)
+    elif defect == "short-key-text":
+        schema = schema.replace(
+            "HappyoTime TEXT NOT NULL", "HappyoTime VARCHAR(7) NOT NULL", 1
+        )
     elif defect == "extra-unique":
         schema = schema.replace("PRIMARY KEY (", "UNIQUE (HenkoID),\n            PRIMARY KEY (", 1)
     else:
@@ -509,6 +633,16 @@ def test_we_postgresql_rejects_unsafe_identity_schema(postgresql_db, defect: str
     postgresql_db.commit()
     with pytest.raises(SchemaMigrationError):
         verify_we_storage_schema(postgresql_db, "NL_WE")
+
+
+@pytest.mark.parametrize("standard", (False, True), ids=("native", "standard"))
+def test_we_postgresql_accepts_lossless_fixed_width_key_and_required_live_body(
+    postgresql_db, standard: bool
+) -> None:
+    table_name, schema = lossless_strict_we_schema(standard)
+    postgresql_db.execute(schema)
+    postgresql_db.commit()
+    assert verify_we_storage_schema(postgresql_db, table_name) is True
 
 
 def test_we_postgresql_realtime_preserves_times_and_erases_one_key(

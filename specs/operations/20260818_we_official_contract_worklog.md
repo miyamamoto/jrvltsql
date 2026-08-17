@@ -122,7 +122,7 @@
   manifest, all 17 parser fields, ordered seven-part key, paired valid shapes,
   malformed raw/caller rows, identity/idempotency, historical exact erase,
   realtime erase, and one unsafe-schema negative.
-- Command (locked Python 3.12 environment, external basetemp):
+- Command (repository test environment, CPython 3.13.5, external basetemp):
   `/home/keiba/work/jrvltsql/.venv/bin/python -m pytest
   tests/test_we_official_contract.py -q --no-cov
   --basetemp=/tmp/jrvltsql-we-red`
@@ -229,3 +229,104 @@
   independent Codex critical reviews on that exact SHA, aggregate findings
   once, and do not merge until required checks, comments, thread count, and
   clean-worktree gates are green.
+
+## First immutable candidate and aggregated review
+
+- Candidate commit and PR head:
+  `012b090768ab095f2c4ae163dff8bbabf21ffb71`, PR #208.
+- The repository Actions run for that exact SHA completed `test`, `lint`, and
+  `windows-batch-syntax` successfully; `performance-test` was intentionally
+  skipped before executing a step. CodeRabbit completed one review. Copilot
+  was requested once, but its separate native review workflow executed and
+  failed because the requesting account had exhausted its review quota. That
+  failed executed workflow is not counted as a green gate, and the candidate
+  was not merged.
+- Two independent Codex reviewers audited the exact clean SHA:
+  - storage/key/schema/Dual/PostgreSQL review found no P0/P1 or durable-data
+    defect. It reproduced a repository-wide PostgreSQL batch-statistics P2 in
+    both this candidate and exact base `2e7aa556...`: three accepted provider
+    operations containing one same-key correction are deduplicated to two
+    writes and reported as `records_imported=2`, while SQLite reports three.
+    The handler and importer accounting code are byte-identical across the
+    base/candidate boundary. This is tracked for a separate focused iteration;
+    it is not hidden or misclassified as a WE delta fix.
+  - official-source/caller-boundary review confirmed all physical/key/status/
+    history results, but reproduced one WE P1: realtime batch and single entry
+    points accepted conflicting native/canonical live body aliases because
+    `RT_WE` was excluded from the shared conflict check. It also identified
+    over-strict rejection of lossless fixed-width storage, lack of a direct
+    parser-to-SDK-manifest binding, and the incorrect Python-version record.
+- CodeRabbit's one major comment claimed that current/noncurrent WE statuses
+  were not enforced. This was independently disproved: every raw parse passes
+  through `BaseParser`'s shared status-domain gate, every caller dictionary
+  passes `validate_record_header`, and that registry defines current WE as
+  `{1}` plus date-proven historical `0` only before 2003-07-11. Existing raw
+  boundary and shared 38-format tests cover rejection at and after the cutoff.
+  The thread will receive this evidence and be resolved without duplicating
+  the validator. Its stale no-op schema replacement and benchmark-docstring
+  nitpicks were accepted; shared strict-storage helper names were generalized.
+
+## Red-first review-repair evidence
+
+- Before changing production, the existing WE contract module was minimally
+  extended for the two accepted behavior changes: realtime batch/single alias
+  conflict rejection with same-alias and opaque-delete positives, and
+  lossless fixed-width/required-live-body schema compatibility.
+- Command:
+  `/home/keiba/work/jrvltsql/.venv/bin/python -m pytest
+  tests/test_we_official_contract.py -q --no-cov
+  --basetemp=/tmp/jrvltsql-we-review-red`
+- Result on exact candidate production code `012b0907...` with only the test
+  delta present: **4 failed, 55 passed, 16 skipped**. Both realtime entrypoints
+  returned `success=True` for the unequal live aliases. Native lossless
+  `CHAR(2)`/`VARCHAR(8)` keys plus a required body column, and the corresponding
+  standard required body column, were rejected by the column gate. The paired
+  valid aliases, historical opaque delete, official parser layout, and unsafe
+  schema negatives stayed green.
+
+## Aggregated review repair
+
+- Live WE alias conflicts are now checked for every WE target; historical
+  status-0 bodies remain opaque. Canonical-to-native fill remains limited to
+  the validation/standard path, so native realtime writes cannot silently
+  choose one side of a conflict.
+- The strict column verifier now accepts only the WE fields whose official
+  finite width proves the conversion lossless: unbounded text, a sufficient
+  `VARCHAR`, or an exact-width `CHAR`. Only the six mandatory live body fields
+  may be stricter `NOT NULL`; key nullability remains mandatory and unsafe
+  numeric/coercing/short/padded layouts remain rejected.
+- The WE test recursively reads the SDK manifest structures and directly binds
+  all 17 production parser spans, rather than checking only the root length and
+  a separately transcribed JSON fixture. The realtime erase test now executes
+  the shipped corrected schema directly. The benchmark helper docstring and
+  this CPython 3.13.5 evidence record were corrected.
+- The focused review-repair rerun passed **59 passed, 16 skipped**. Final
+  PostgreSQL/focused/full tests, immutable commit, GitHub thread handling, and
+  exact-SHA review remain pending; no merge or release claim is made here.
+
+## Final local verification before repair commit
+
+- The compact WE module, including one capacity negative for the changed
+  verifier, passed **60 passed, 19 skipped** without the opt-in PostgreSQL
+  environment.
+- A fresh disposable PostgreSQL 16 container was exercised through `psycopg`.
+  The WE module passed 77 tests before the final duplicate capacity negative
+  was added; WE plus `HappyoTime` integration passed **100 passed**. This run
+  directly covered both native/standard safe fixed-width/required-body schema
+  positives. The final PostgreSQL capacity negative will be replayed against
+  the committed repair SHA before merge rather than inferred from SQLite.
+- The full CPython 3.13.5 suite passed
+  **3042 passed, 215 skipped, 21 subtests passed** in 66.27 seconds.
+- `uv lock --check`, `scripts/validate_test_gate.py`, strict MkDocs with an
+  external output directory, fatal workflow-equivalent flake8, fresh PEP 517
+  wheel/sdist build, archive-content gate, installed-wheel init smoke, and
+  `git diff --check` all passed. The fresh artifacts contained no `specs/`.
+- The disposable PostgreSQL container auto-removed successfully. All build,
+  site, pytest, cache, bytecode, log, and external basetemp artifacts created
+  by this repair verification were moved to trash; only the six intentional
+  tracked repair files remain modified.
+- Next safe action: inspect the final tracked diff, commit it once, replay the
+  focused SQLite/PostgreSQL and mechanical gates against the exact new full
+  SHA, push, answer/resolve every thread, and perform one bounded independent
+  carry-forward review. Do not merge if the new head has an executed failing
+  check, unresolved thread, dirty worktree, or review blocker.

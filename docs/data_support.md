@@ -267,9 +267,12 @@ additive migrationは維持します。標準名モードでは4つの予約領�
 確認します。これを超える状態間の推測規則は適用しません。
 
 nativeの`NL_WE`/`RT_WE`と標準名モードの`TENKO_BABA`は同じ順序の
-`NOT NULL`主キーを使います。旧6項目キー、主キーなし、キー型/NULL契約の不一致、
-追加の`UNIQUE`/exclusion、PostgreSQLの遅延主キーがある既存表は、取込や他表の
-additive migrationより前に停止します。時刻別履歴や重複行から正しいキーを
+`NOT NULL`主キーを使います。公式幅を保てる非paddingの文字列型と、公式幅ちょうどの
+`CHAR`はlossless storageとして許容します。通常行で必須の6つの本文コードは、
+既存表側の`NOT NULL`も安全です。旧6項目キー、主キーなし、容量不足・数値化など
+losslessでないキー型、キーのNULL許容、追加の`UNIQUE`/exclusion、PostgreSQLの
+遅延主キーがある既存表は、取込や他表のadditive migrationより前に停止します。
+時刻別履歴や重複行から正しいキーを
 自動復元できないため、自動ALTERは行いません。DBをバックアップし、対象表を
 現行DDLで再作成して、保持範囲に合う公式42バイトWE sourceを再取込してください。
 `0B14`の新しい応答が前回の日付snapshotを置換する既存の一括更新契約は維持し、

@@ -2741,7 +2741,7 @@ STRICT_SE_STORAGE_TABLES = frozenset({"NL_SE", "RT_SE"})
 STRICT_WE_STORAGE_TABLES = frozenset({"NL_WE", "RT_WE"})
 
 
-def _preflight_existing_se_storage(db: BaseDatabase) -> None:
+def _preflight_existing_strict_storage(db: BaseDatabase) -> None:
     """Reject unsafe SE/WE identities before unrelated additive migration."""
 
     from src.database.migration import _migration_targets
@@ -2821,7 +2821,7 @@ class SchemaManager:
             )
 
             schema_sql = SCHEMAS[table_name]
-            _preflight_existing_se_storage(self.db)
+            _preflight_existing_strict_storage(self.db)
             if table_name not in STRICT_RECREATE_TABLES:
                 migrate_table_if_needed(self.db, table_name, schema_sql)
             self.db.execute(schema_sql)
@@ -2854,9 +2854,9 @@ class SchemaManager:
 
         logger.info("Creating all tables...")
         try:
-            _preflight_existing_se_storage(self.db)
+            _preflight_existing_strict_storage(self.db)
         except Exception as error:
-            logger.error(f"SE schema preflight failed before migration: {error}")
+            logger.error(f"Strict schema preflight failed before migration: {error}")
             return dict.fromkeys(SCHEMAS, False)
         migrate_all_tables(
             self.db,
@@ -3205,7 +3205,7 @@ def create_all_tables(db: BaseDatabase) -> None:
 
     logger.info("Creating tables...")
 
-    _preflight_existing_se_storage(db)
+    _preflight_existing_strict_storage(db)
 
     # Check and migrate existing tables with mismatched schemas
     migrate_all_tables(

@@ -39,7 +39,8 @@ class PerformanceTestBase(unittest.TestCase):
     def generate_sample_records(self, count, record_type='RA'):
         """Generate sample records for testing.
 
-        Uses English column names matching the NL_RA schema.
+        Uses English column names matching the NL_RA schema. SE samples also
+        receive the complete official key shape required by its validator.
         """
         records = [
             {

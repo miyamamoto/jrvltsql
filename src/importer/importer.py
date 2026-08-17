@@ -415,6 +415,46 @@ _WE_KEY_COLUMNS = (
     "HappyoTime",
     "HenkoID",
 )
+_WE_KEY_TEXT_WIDTHS = {"JyoCD": 2, "HappyoTime": 8, "HenkoID": 1}
+_WE_NATIVE_LIVE_BODY_COLUMNS = frozenset(
+    {
+        "TenkoState",
+        "SibaBabaState",
+        "DirtBabaState",
+        "TenkoState2",
+        "SibaBabaState2",
+        "DirtBabaState2",
+    }
+)
+_WE_STANDARD_LIVE_BODY_COLUMNS = frozenset(
+    {
+        "AtoTenkoCD",
+        "AtoSibaBabaCD",
+        "AtoDirtBabaCD",
+        "MaeTenkoCD",
+        "MaeSibaBabaCD",
+        "MaeDirtBabaCD",
+    }
+)
+_WE_LOSSLESS_TEXT_WIDTHS = {
+    "NL_WE": {
+        **_WE_KEY_TEXT_WIDTHS,
+        **{column: 1 for column in _WE_NATIVE_LIVE_BODY_COLUMNS},
+    },
+    "RT_WE": {
+        **_WE_KEY_TEXT_WIDTHS,
+        **{column: 1 for column in _WE_NATIVE_LIVE_BODY_COLUMNS},
+    },
+    "TENKO_BABA": {
+        **_WE_KEY_TEXT_WIDTHS,
+        **{column: 1 for column in _WE_STANDARD_LIVE_BODY_COLUMNS},
+    },
+}
+_WE_LIVE_BODY_COLUMNS = {
+    "NL_WE": _WE_NATIVE_LIVE_BODY_COLUMNS,
+    "RT_WE": _WE_NATIVE_LIVE_BODY_COLUMNS,
+    "TENKO_BABA": _WE_STANDARD_LIVE_BODY_COLUMNS,
+}
 _CS_STORAGE_TABLES = frozenset({"NL_CS", "COURSE"})
 _JG_STORAGE_TABLES = frozenset({"NL_JG", "JOGAIBA"})
 _JG_KEY_COLUMNS = (
@@ -559,8 +599,8 @@ def _verify_se_key_not_null_constraints(
         )
 
 
-def _normalize_se_storage_type(declared_type: str) -> str:
-    """Normalize backend spellings without weakening the SE column contract."""
+def _normalize_strict_storage_type(declared_type: str) -> str:
+    """Normalize backend spellings without weakening a strict column contract."""
 
     normalized = re.sub(r"\s+", " ", str(declared_type or "").strip().lower())
     sized_patterns = (
@@ -588,8 +628,8 @@ def _normalize_se_storage_type(declared_type: str) -> str:
     return aliases.get(normalized, f"unsupported:{normalized or '<empty>'}")
 
 
-def _se_storage_type_is_compatible(actual: str, expected: str) -> bool:
-    """Allow only lossless widening within one SE logical type family."""
+def _strict_storage_type_is_compatible(actual: str, expected: str) -> bool:
+    """Allow only lossless widening within one strict logical type family."""
 
     if actual == expected:
         return True
@@ -635,13 +675,27 @@ def _se_storage_type_is_compatible(actual: str, expected: str) -> bool:
     return False
 
 
-def _verify_se_column_contract(
+def _fixed_width_text_type_is_lossless(actual: str, minimum_width: int) -> bool:
+    """Accept unbounded text, sufficient VARCHAR, or an exact-width CHAR."""
+
+    if actual == "text":
+        return True
+    if actual.startswith("varchar("):
+        return int(actual.split("(", 1)[1][:-1]) >= minimum_width
+    if actual.startswith("char("):
+        return int(actual.split("(", 1)[1][:-1]) == minimum_width
+    return False
+
+
+def _verify_strict_storage_column_contract(
     database: BaseDatabase,
     table_name: str,
     schema_sql: str,
     *,
     allow_missing_columns: bool,
     storage_label: str = "SE",
+    lossless_text_widths: dict[str, int] | None = None,
+    allow_stricter_not_null: frozenset[str] = frozenset(),
 ) -> None:
     """Verify every present strict-storage column's type and nullability."""
 
@@ -654,14 +708,21 @@ def _verify_se_column_contract(
     targets = _migration_targets(database)
     if targets != (database,):
         for target in targets:
-            _verify_se_column_contract(
+            _verify_strict_storage_column_contract(
                 target,
                 table_name,
                 schema_sql,
                 allow_missing_columns=allow_missing_columns,
                 storage_label=storage_label,
+                lossless_text_widths=lossless_text_widths,
+                allow_stricter_not_null=allow_stricter_not_null,
             )
         return
+
+    text_widths = {
+        column.lower(): width for column, width in (lossless_text_widths or {}).items()
+    }
+    stricter_not_null = {column.lower() for column in allow_stricter_not_null}
 
     definitions = _extract_column_definitions(schema_sql)
     if definitions is None:
@@ -697,15 +758,25 @@ def _verify_se_column_contract(
                 mismatches.append(f"{column_name} missing")
             continue
         actual_type, actual_not_null = actual[column]
-        expected_type = _normalize_se_storage_type(_definition_type(definition))
-        normalized_actual_type = _normalize_se_storage_type(actual_type)
-        if not _se_storage_type_is_compatible(normalized_actual_type, expected_type):
+        expected_type = _normalize_strict_storage_type(_definition_type(definition))
+        normalized_actual_type = _normalize_strict_storage_type(actual_type)
+        compatible_type = _strict_storage_type_is_compatible(
+            normalized_actual_type, expected_type
+        )
+        if not compatible_type and column in text_widths:
+            compatible_type = _fixed_width_text_type_is_lossless(
+                normalized_actual_type, text_widths[column]
+            )
+        if not compatible_type:
             mismatches.append(
                 f"{column_name} type existing={actual_type or '<unknown>'} "
                 f"expected={expected_type}"
             )
         expected_not_null = "NOT NULL" in definition.upper()
-        if actual_not_null != expected_not_null:
+        safely_stricter = (
+            actual_not_null and not expected_not_null and column in stricter_not_null
+        )
+        if actual_not_null != expected_not_null and not safely_stricter:
             mismatches.append(
                 f"{column_name} nullability existing="
                 f"{'NOT NULL' if actual_not_null else 'NULL'} expected="
@@ -741,7 +812,7 @@ def verify_se_storage_schema(
         schema_sql,
         allow_missing_columns=allow_missing_columns,
     )
-    _verify_se_column_contract(
+    _verify_strict_storage_column_contract(
         database,
         table_name,
         schema_sql,
@@ -852,12 +923,14 @@ def verify_we_storage_schema(database: BaseDatabase, table_name: str) -> bool:
     if schema_sql is None:
         raise SchemaMigrationError(f"WE storage schema is undefined: {table_name}")
     verify_table_schema(database, table_name, schema_sql)
-    _verify_se_column_contract(
+    _verify_strict_storage_column_contract(
         database,
         table_name,
         schema_sql,
         allow_missing_columns=False,
         storage_label="WE",
+        lossless_text_widths=_WE_LOSSLESS_TEXT_WIDTHS[table_name],
+        allow_stricter_not_null=_WE_LIVE_BODY_COLUMNS[table_name],
     )
     _verify_we_key_storage_types(database, table_name)
     _verify_we_key_not_null_constraints(database, table_name)
@@ -879,7 +952,7 @@ def validate_we_record(record: dict, table_name: str | None = None) -> bool:
 
     normalized = dict(record)
     data_kubun = record.get("DataKubun") or record.get("headDataKubun")
-    if data_kubun != "0" and table_name in (None, "TENKO_BABA"):
+    if data_kubun != "0":
         aliases = _STANDARD_FIELD_ALIASES["TENKO_BABA"]
         conflicts = [
             (native_name, standard_name)
@@ -890,9 +963,10 @@ def validate_we_record(record: dict, table_name: str | None = None) -> bool:
         ]
         if conflicts:
             raise SchemaMigrationError(f"conflicting WE alias values: {conflicts}")
-        for native_name, standard_name in aliases.items():
-            if native_name not in normalized and standard_name in normalized:
-                normalized[native_name] = normalized[standard_name]
+        if table_name in (None, "TENKO_BABA"):
+            for native_name, standard_name in aliases.items():
+                if native_name not in normalized and standard_name in normalized:
+                    normalized[native_name] = normalized[standard_name]
     try:
         WEParser.validate_current_fields(normalized, data_kubun=data_kubun)
     except ValueError as error:
