@@ -260,8 +260,9 @@
   single P1 and no P0/P2: the new status-0 `CourseEx=NULL` normalization passed
   canonical schemas but the CS verifier had historically accepted an otherwise
   exact `CourseEx VARCHAR(6800) NOT NULL` table. Both SQLite and fresh
-  PostgreSQL 16 passed preflight and then failed at DML. Reviewers independently
-  reproduced native and standard paths and removed their disposable resources.
+  PostgreSQL 16 passed preflight and then failed at DML. Across the two reviews,
+  native and standard paths were reproduced and all disposable resources were
+  removed.
 - Aggregated repair choice: retain accepted-schema compatibility and normalize
   the opaque status-0 body to the parser's blank physical-field representation
   (`""`) instead of broadening the schema contract to require nullability. The
@@ -282,3 +283,33 @@
 - Next safe action: commit and freeze a new exact SHA, rebuild exact artifacts,
   then ask the same two reviewers for one closure-only verification. STOP on any
   failure or worktree drift.
+
+## 2026-08-17 — live blank-body compatibility closure
+
+- Closure-only review of clean exact
+  `b854a295551d8d3f79ea68f8ef5ad16340bd311b` confirmed the status-0 fix on all
+  requested paths. One reviewer returned GREEN; the official-contract reviewer
+  found one adjacent P1 and one worklog-precision P2. Because status 1/2 also
+  officially permit a blank `CourseEx`, limiting blank preservation to status 0
+  still converted a valid live blank to `NULL` and failed on the accepted NOT
+  NULL schema. The worklog also overstated the per-reviewer reproduction scope;
+  the preceding paragraph now states only the combined evidence.
+- Added one representative native/standard × status 1/2 readback contract for
+  each backend before changing production. The SQLite selection reported
+  `4 failed, 4 skipped, 132 deselected`, with all four failures occurring at
+  NOT NULL DML after successful header/schema validation. This is the observed
+  red-first evidence for the final conversion-boundary change.
+- Generalized only the CS `CourseEx` branch: any already validated blank string
+  is preserved as `""` during shared type conversion. Status 0 still discards an
+  arbitrary caller body in the cleaner before this point; status 1/2 nonblank,
+  non-string, CP932, and 6,800-byte validation remains unchanged. Post-repair
+  SQLite CS contract: `104 passed, 36 skipped`; fresh PostgreSQL 16 CS contract:
+  `140 passed`. The temporary container was stopped with `--rm` and is absent.
+- The final full suite reports `2928 passed, 172 skipped, 22 subtests passed`.
+  `uv lock --check`, fail-closed test-gate validation, fatal Flake8 (`0`),
+  compileall, strict MkDocs, changed-test Black/Ruff, and `git diff --check`
+  pass. Black initially requested only mechanical line wrapping in the newly
+  added test; after applying it, the SQLite CS contract remained `104/36`.
+- Next safe action: commit and package the exact candidate, then perform one
+  final two-reviewer exact-SHA gate without broadening the iteration. STOP on
+  any P0/P1 or candidate drift.

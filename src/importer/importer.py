@@ -4437,7 +4437,8 @@ def convert_record_types(record: dict, table_name: str) -> dict:
         if (
             field_name == "CourseEx"
             and record.get("RecordSpec") == "CS"
-            and record.get("DataKubun") == "0"
+            and isinstance(value, str)
+            and not value.strip()
         ):
             converted[field_name] = ""
             continue

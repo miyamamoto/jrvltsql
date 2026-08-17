@@ -254,6 +254,28 @@ def test_cs_status_zero_discards_opaque_body_before_sqlite_storage(
         assert row["CourseEx"] == ""
 
 
+@pytest.mark.parametrize("standard", (False, True), ids=("native", "standard"))
+@pytest.mark.parametrize("data_kubun", ("1", "2"), ids=("new", "update"))
+def test_cs_live_blank_body_remains_compatible_with_sqlite_not_null(tmp_path, standard, data_kubun):
+    table_name = "COURSE" if standard else "NL_CS"
+    database = SQLiteDatabase({"path": str(tmp_path / f"blank-{table_name}-{data_kubun}.db")})
+    schema_sql = JRAVAN_SCHEMAS[table_name] if standard else SCHEMAS[table_name]
+    record = parsed_record(data_kubun=data_kubun, course_ex="placeholder")
+    record["CourseEx"] = ""
+    with database:
+        database.execute(schema_sql.replace("VARCHAR(6800)", "VARCHAR(6800) NOT NULL"))
+        database.commit()
+        _import_records(
+            database,
+            "data-batch",
+            [record],
+            standard=standard,
+            auto_commit=True,
+        )
+        row = database.fetch_one(f"SELECT DataKubun, CourseEx FROM {table_name}")
+        assert row == {"DataKubun": data_kubun, "CourseEx": ""}
+
+
 def test_cs_native_standard_and_metadata_schemas_preserve_the_official_contract():
     assert get_table_primary_key_columns("NL_CS") == list(CS_KEY)
     assert get_table_primary_key_columns("COURSE") == list(CS_KEY)
@@ -673,6 +695,30 @@ def test_cs_postgresql_status_zero_discards_opaque_body_before_storage(
     )
     assert row["DataKubun"] == "0"
     assert row["CourseEx"] == ""
+
+
+@pytest.mark.parametrize("standard", (False, True), ids=("native", "standard"))
+@pytest.mark.parametrize("data_kubun", ("1", "2"), ids=("new", "update"))
+def test_cs_postgresql_live_blank_body_remains_compatible_with_not_null(
+    postgresql_db, standard, data_kubun
+):
+    table_name = "COURSE" if standard else "NL_CS"
+    schema_sql = JRAVAN_SCHEMAS[table_name] if standard else SCHEMAS[table_name]
+    postgresql_db.execute(schema_sql.replace("VARCHAR(6800)", "VARCHAR(6800) NOT NULL"))
+    postgresql_db.commit()
+    record = parsed_record(data_kubun=data_kubun, course_ex="placeholder")
+    record["CourseEx"] = ""
+    _import_records(
+        postgresql_db,
+        "data-batch",
+        [record],
+        standard=standard,
+        auto_commit=True,
+    )
+    row = postgresql_db.fetch_one(
+        f'SELECT datakubun AS "DataKubun", courseex AS "CourseEx" FROM {table_name}'
+    )
+    assert row == {"DataKubun": data_kubun, "CourseEx": ""}
 
 
 def test_cs_postgresql_rejects_a_nonempty_course_missing_the_body_before_alter(
