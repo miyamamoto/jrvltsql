@@ -9,12 +9,12 @@ from uuid import uuid4
 
 import pytest
 
-from src.database.migration import SchemaMigrationError
 from src.database.dual_handler import DualDatabase
+from src.database.migration import SchemaMigrationError
 from src.database.schema import SCHEMAS
 from src.database.schema_jravan import JRAVAN_SCHEMAS
-from src.database.sqlite_handler import SQLiteDatabase
 from src.database.schema_types import get_table_column_types
+from src.database.sqlite_handler import SQLiteDatabase
 from src.importer.importer import (
     DataImporter,
     clean_record_metadata,
@@ -103,11 +103,63 @@ def test_hr_layout_status_key_and_all_reserved_repeats_match_official_sources() 
     assert CONTRACT["record_length"] == HRParser.RECORD_LENGTH == 719
     assert tuple(CONTRACT["primary_key"]) == HR_KEY
     assert frozenset(CONTRACT["current_data_kubun"]) == CURRENT_ACCUMULATED_DATA_KUBUN["HR"]
+    assert CONTRACT["same_length_history"]["availability_source"] == {
+        "artifact": "JV-Data4901.xlsx",
+        "sheet": "特記事項",
+        "rows": "97,134",
+    }
     assert SDK_MANIFEST["root_records"]["HR"] == {
         "struct": "JV_HR_PAY",
         "length": 719,
     }
     assert SDK_MANIFEST["structures"]["JV_HR_PAY"]["expanded_leaf_count"] == 202
+
+    sdk_repeat_names = {
+        "Tan": "PayTansyo",
+        "Fuku": "PayFukusyo",
+        "Waku": "PayWakuren",
+        "Umaren": "PayUmaren",
+        "Wide": "PayWide",
+        "Reserved": "PayReserved1",
+        "Umatan": "PayUmatan",
+        "Sanrenfuku": "PaySanrenpuku",
+        "Sanrentan": "PaySanrentan",
+    }
+    sdk_fields = {
+        field["name"]: field for field in SDK_MANIFEST["structures"]["JV_HR_PAY"]["fields"]
+    }
+    for group_name, start, count, stride, widths in CONTRACT["repeat_groups"]:
+        sdk_field = sdk_fields[sdk_repeat_names[group_name]]
+        nested = SDK_MANIFEST["structures"][sdk_field["struct"]]
+        assert (sdk_field["start"], sdk_field["count"], sdk_field["stride"]) == (
+            start,
+            count,
+            stride,
+        )
+        assert [field["width"] for field in nested["fields"]] == widths
+
+    sentinel = bytearray(build_hr_record())
+    output_names = {
+        group: (first, pay, popularity)
+        for group, first, pay, popularity, *_ in HRParser.PAYOUT_GROUPS
+    }
+    expected_sentinels: dict[str, str] = {}
+    for group_name, start, count, stride, widths in CONTRACT["repeat_groups"]:
+        for entry in {1, (count + 1) // 2, count}:
+            offset = start - 1 + (entry - 1) * stride
+            for part, width in enumerate(widths):
+                value = str(entry * 10 + part + 1).zfill(width)
+                _put(sentinel, offset, width, value)
+                offset += width
+                if group_name == "Reserved":
+                    output_name = f"Yobi{(entry - 1) * 3 + part + 1}"
+                else:
+                    suffix = "" if entry == 1 else str(entry)
+                    output_name = f"{output_names[group_name][part]}{suffix}"
+                expected_sentinels[output_name] = value
+    sentinel_parsed = HRParser().parse(bytes(sentinel))
+    assert sentinel_parsed is not None
+    assert {name: sentinel_parsed[name] for name in expected_sentinels} == expected_sentinels
 
     parsed = parsed_hr()
     assert [
@@ -124,6 +176,10 @@ def test_hr_layout_status_key_and_all_reserved_repeats_match_official_sources() 
     # storage. Representative-value tests alone missed most HARAI fields in
     # the previous implementation.
     assert set(parsed) == set(get_table_column_types("NL_HR"))
+    assert all(
+        get_table_column_types("NL_HR")[f"Yobi{index}"] == "TEXT"
+        for index in range(1, 10)
+    )
     translated = translate_standard_field_names(clean_record_metadata(parsed), "HARAI")
     converted = convert_record_types(translated, "HARAI")
     assert set(converted) == set(get_table_column_types("HARAI"))
@@ -146,13 +202,16 @@ def test_hr_parser_rejects_malformed_official_keys(changes: dict[str, str]) -> N
     "field,value",
     (
         ("FuseirituFlag1", "9"),
+        ("FuseirituFlag6", "1"),
         ("HenkanUma28", "X"),
         ("TanPay", "notnumber"),
         ("WideKumi7", "123"),
+        ("WideKumi2", 711),
+        ("Yobi8", 333),
     ),
 )
 def test_hr_caller_body_rejects_non_official_values_but_allows_blank_popularity(
-    field: str, value: str
+    field: str, value: object
 ) -> None:
     valid = parsed_hr()
     valid["TanNinki"] = ""
@@ -168,6 +227,23 @@ def test_hr_status_zero_rejects_a_coercible_wrong_key_before_delete() -> None:
     record["RaceNum"] = "1X"
     with pytest.raises(SchemaMigrationError):
         validate_import_record_header(record)
+
+
+@pytest.mark.parametrize("standard", (False, True), ids=("native", "standard"))
+def test_hr_storage_rejects_an_integer_fixed_width_identifier_before_mutation(
+    tmp_path, standard: bool
+) -> None:
+    table_name = "HARAI" if standard else "NL_HR"
+    schema = JRAVAN_SCHEMAS[table_name] if standard else SCHEMAS[table_name]
+    record = parsed_hr()
+    record["WideKumi2"] = 711
+    database = SQLiteDatabase({"path": str(tmp_path / f"short-id-{standard}.db")})
+    with database:
+        database.execute(schema)
+        database.commit()
+        with pytest.raises(SchemaMigrationError):
+            DataImporter(database, use_jravan_schema=standard).import_records(iter([record]))
+        assert database.fetch_one(f"SELECT COUNT(*) AS n FROM {table_name}") == {"n": 0}
 
 
 def test_hr_same_length_2004_boundary_keeps_old_bytes_opaque() -> None:
@@ -324,8 +400,8 @@ def test_hr_storage_preserves_payouts_provider_order_and_exact_erase(
                 "FukuPay2": 280,
                 "WidePay2": 1370,
                 "Yobi7": "0333",
-                "Yobi8": 333,
-                "Yobi9": 333,
+                "Yobi8": "000000333",
+                "Yobi9": "333",
                 "SanrentanPay": 15800,
             }
         assert row == expected
@@ -362,6 +438,8 @@ def test_hr_storage_preserves_payouts_provider_order_and_exact_erase(
         erase_record = parsed_hr(data_kubun="0")
         erase_record["FukuPay2"] = "not-interpreted"
         erase_record["PayFukusyoPay2"] = "conflicting-opaque-body"
+        erase_record["LegacyReserved604_717Hex"] = "not-interpreted"
+        erase_record["OpaqueStatus9Body28_717Hex"] = "not-interpreted"
         erased = import_records(
             database,
             entrypoint,
@@ -582,6 +660,33 @@ def test_hr_postgresql_realtime_status_nine_clears_prior_payouts(
     assert row["DataKubun"] == "9"
     assert row["FukuPay2"] is None
     assert len(row["OpaqueBody"]) == 1380
+
+
+@pytest.mark.parametrize("standard", (False, True), ids=("native", "standard"))
+def test_hr_postgresql_resolves_a_visible_table_after_an_empty_search_path_schema(
+    postgresql_db, standard: bool
+) -> None:
+    table_name = "HARAI" if standard else "NL_HR"
+    schema_sql = JRAVAN_SCHEMAS[table_name] if standard else SCHEMAS[table_name]
+    owner = postgresql_db.fetch_one('SELECT current_schema() AS "owner"')["owner"]
+    empty_schema = f"empty_hr_{uuid4().hex[:12]}"
+    postgresql_db.execute(schema_sql)
+    postgresql_db.execute(f"CREATE SCHEMA {empty_schema}")
+    postgresql_db.execute(f"SET search_path TO {empty_schema}, {owner}")
+    postgresql_db.commit()
+    try:
+        result = DataImporter(postgresql_db, use_jravan_schema=standard).import_records(
+            iter([parsed_hr()])
+        )
+        assert result["records_imported"] == 1
+        assert postgresql_db.fetch_one(
+            f'SELECT COUNT(*) AS "n" FROM {table_name}'
+        ) == {"n": 1}
+    finally:
+        postgresql_db.rollback()
+        postgresql_db.execute(f"SET search_path TO {owner}")
+        postgresql_db.execute(f"DROP SCHEMA IF EXISTS {empty_schema} CASCADE")
+        postgresql_db.commit()
 
 
 @pytest.mark.parametrize("standard", (False, True), ids=("native", "standard"))

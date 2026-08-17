@@ -77,17 +77,19 @@
   final state is correct, but importer statistics undercount accepted provider
   operations; SQLite and sequential imports count them all.
 - Official change history row 249 records the 2004 same-length reuse of an HR
-  reserved span for trifecta data. The current provider still returns one
-  719-byte layout for historical RACE setup. The contract will not invent an
-  unsupported old physical parser: races before 2004-08-14 may carry the
-  blank/zero non-sale representation, while nonblank trifecta-like payload for
-  that period is rejected rather than mislabeled. The boundary is based on
-  race date, not MakeDate.
+  reserved span for trifecta data; official special-notes rows 97 and 134,
+  rather than row 249, establish the 2004-08-14 availability boundary. No
+  HR-specific official source proving a separate historical physical envelope
+  was found. The project therefore uses the current 719-byte envelope as an
+  explicit fail-closed policy instead of claiming an independently documented
+  old parser: races before 2004-08-14 preserve bytes 604-717 as opaque data and
+  reject trifecta-like canonical fields. The boundary is race date, not
+  MakeDate.
 - Official community topic 304 confirms that realtime HR popularity may remain
   blank until all finish positions are finalized. Validation must therefore
   allow blank popularity and must not make it a live-row requirement. Topic 64
-  also supports storing the complete provider payload instead of filtering
-  child values by flags.
+  concerns H1/H6 sample flag handling and is not used as direct evidence for
+  HR body semantics.
 
 ## Independent reviewers and Claude attempt
 
@@ -197,3 +199,64 @@
   recorded base, the worktree was clean, and the local test/package evidence
   above was complete. Independent Codex review is the next gate; do not mark
   the PR ready or merge before its findings are aggregated and resolved.
+
+## Aggregated review of published candidate
+
+- Three independent read-only Codex reviews examined exact candidate
+  `0a07e3d21121945632fca527afcb71d848cc9b97`. GitHub `lint`, `test`, and
+  `windows-batch-syntax` were successful, the conditional performance job was
+  intentionally skipped, and unresolved review threads were zero. The single
+  requested GitHub Copilot review returned quota exhaustion, so it supplied no
+  correctness evidence. The PR remained draft and was not mergeable by policy.
+- P1 findings accepted as one repair batch:
+  1. nonempty native HR tables with an exact non-null key but missing payout or
+     audit columns were additively altered and the unrecoverable historical
+     values silently became `NULL`;
+  2. a status-0 exact erase was rejected when the caller supplied a nonempty
+     status-9 audit field, contradicting full body opacity;
+  3. integer horse/combination identifiers passed validation and lost leading
+     zeroes (`0711` became `711`);
+  4. PostgreSQL HR nullability verification searched only `current_schema()`
+     and rejected a valid relation resolved later in `search_path`;
+  5. E2E check E-5 passed when no status-1/2 HR row existed, so the check could
+     still certify an unmeasured scope.
+- P2 findings were also adopted where they strengthen the same official
+  contract: all nine reserved subfields use text storage, the three reserved
+  flag positions require official value `0`, the HR repeat oracle is bound to
+  SDK top-level start/count/stride and nested widths with first/middle/last
+  parser sentinels, and history/community citations distinguish official fact
+  from project policy.
+
+### Review red-first evidence
+
+- Production remained at exact `0a07e3d21121945632fca527afcb71d848cc9b97`
+  while the minimum regression assertions were added. SQLite command covering
+  HR storage, migration, and E2E returned `17 failed, 28 passed, 25 skipped`.
+  The failures included missing-column migration, reserved flag `1`, integer
+  `WideKumi2`/`Yobi8`, native reserved-value truncation, status-0 opaque-field
+  rejection across the existing entrypoint matrix, and empty-scope E-5.
+- Fresh PostgreSQL 16 then ran only the new later-`search_path` contract on the
+  unchanged production code and returned `2 failed, 66 deselected` for native
+  and standard storage. This proves the new verifier regression can say no on
+  the old implementation rather than only exercising a green path.
+
+### Aggregated repair and provisional verification
+
+- Native `Yobi1..9` are now text; caller horse/combination identifiers require
+  exact-width ASCII strings; reserved flag element 6 requires `0`; reserved
+  subfields remain CP932 text without invented numeric meaning. Status 0
+  returns immediately after status/key validation and ignores every body and
+  audit alias.
+- Existing native HR tables no longer allow any missing column during strict
+  preflight. PostgreSQL nullability uses the relation selected by
+  `to_regclass`, matching the key/type/constraint verifiers across the full
+  visible `search_path`. E-5 now requires a nonempty eligible scope as well as
+  zero bad payouts.
+- On the repaired working tree, official-oracle/HR/SQLite coverage passed
+  `119` tests with `25` skips; the full affected selection passed `703` with
+  `32` skips and `9` subtests. Fresh PostgreSQL 16 passed `73` HR cases. The
+  full Python 3.12 suite passed `3207`, skipped `279`, and passed `20`
+  subtests. Fatal flake8 reported `0`, the test gate and `uv lock --check`
+  passed, and strict MkDocs passed. These runs precede the repair commit and
+  are provisional; exact clean-SHA verification and package gates remain
+  required before ready/merge.

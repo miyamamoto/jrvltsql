@@ -1,25 +1,21 @@
 # -*- coding: utf-8 -*-
-"""Legacy HR identities must be rebuilt instead of additively blessed.
+"""Incomplete HR storage must be rebuilt instead of additively blessed.
 
-Old HR tables have nullable keys and incomplete repeated payout storage.  The
-missing values cannot be reconstructed from stored rows, so strict preflight
-must stop before adding columns and require backup/rebuild/reimport.
+Even with the current non-null key, missing repeated payout values cannot be
+reconstructed from stored rows. Strict preflight must therefore stop before
+adding columns and require backup/rebuild/reimport.
 """
 
 import pytest
 
-from src.database.schema import SCHEMAS
 from src.database.migration import SchemaMigrationError
-from src.database.schema import create_all_tables
+from src.database.schema import SCHEMAS, create_all_tables
 from src.database.sqlite_handler import SQLiteDatabase
 
 
-def _old_nl_hr_schema() -> str:
-    """numbered 列追加前の旧 NL_HR 定義 (1件目のみ) を再現。"""
-    sql = SCHEMAS["NL_HR"]
-    drop_markers = [
-        "TanUmaban2", "TanPay2", "TanNinki2", "TanUmaban3", "TanPay3", "TanNinki3",
-    ]
+def _old_hr_schema(table_name: str) -> str:
+    """numbered 列追加前の旧HR定義（1件目のみ）を再現。"""
+    sql = SCHEMAS[table_name]
     lines = []
     for line in sql.splitlines():
         stripped = line.strip()
@@ -36,27 +32,44 @@ def _old_nl_hr_schema() -> str:
             continue
         if any(f"Yobi{i} " in line for i in range(4, 10)):
             continue
-        if "LegacyReserved604_717Hex" in line:
+        if "LegacyReserved604_717Hex" in line or "OpaqueStatus9Body28_717Hex" in line:
             continue
-        lines.append(line.replace(" INTEGER NOT NULL", " INTEGER").replace(" TEXT NOT NULL", " TEXT"))
+        lines.append(line)
     return "\n".join(lines)
 
 
-def test_legacy_nonempty_hr_requires_rebuild_before_any_additive_migration(tmp_path):
-    database = SQLiteDatabase({"path": str(tmp_path / "old.db")})
+@pytest.mark.parametrize("table_name", ("NL_HR", "RT_HR"))
+def test_legacy_nonempty_hr_requires_rebuild_before_any_additive_migration(
+    tmp_path, table_name: str
+):
+    database = SQLiteDatabase({"path": str(tmp_path / f"old-{table_name}.db")})
     with database:
-        database.execute(_old_nl_hr_schema())
+        database.execute(_old_hr_schema(table_name))
         database.execute(
-            "INSERT INTO NL_HR (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, FukuUmaban, FukuPay)"
+            f"INSERT INTO {table_name} "
+            "(Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, FukuUmaban, FukuPay)"
             " VALUES ('2026', 611, '05', 3, 8, 11, '07', 150)"
         )
         database.commit()
-        before = database.fetch_all('PRAGMA table_info("NL_HR")')
+        before = database.fetch_all(f'PRAGMA table_info("{table_name}")')
+        key_nullability = {
+            row["name"]: row["notnull"]
+            for row in before
+            if row["name"] in {"Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum"}
+        }
+        assert key_nullability == {
+            "Year": 1,
+            "MonthDay": 1,
+            "JyoCD": 1,
+            "Kaiji": 1,
+            "Nichiji": 1,
+            "RaceNum": 1,
+        }
 
         with pytest.raises(SchemaMigrationError):
             create_all_tables(database)
 
-        assert database.fetch_all('PRAGMA table_info("NL_HR")') == before
+        assert database.fetch_all(f'PRAGMA table_info("{table_name}")') == before
         assert database.fetch_one(
-            "SELECT FukuUmaban, FukuPay FROM NL_HR"
+            f"SELECT FukuUmaban, FukuPay FROM {table_name}"
         ) == {"FukuUmaban": "07", "FukuPay": 150}

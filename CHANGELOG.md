@@ -39,7 +39,8 @@
 
 ### Fixed
 
-- `HR`を公式719バイト・6項目キーへ結び付け、3件の予備領域を含む全repeatを
+- `HR`を公式719バイト・6項目キーへ結び付け、3件の予備領域を数値化せず文字列で
+  保持する全repeatを
   native/速報/JRA-VAN標準名`HARAI`へ保存。`HARAI`の払戻NULL化・重複行、
   coercion前validation欠落、unsafe schemaの見逃し、PostgreSQL同一キー操作の
   統計過少計上を修正。2004-08-14より前の同長114バイト領域は三連単と誤解釈せず

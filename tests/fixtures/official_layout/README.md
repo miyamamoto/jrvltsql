@@ -23,6 +23,9 @@ JV-Data. They do not contain provider records or a copy of the SDK source.
 - `av_contract_4901.json` records the AV scratch/exclusion layout, seven-part
   key, status history, reason-code representation change, and provider specs
   independently transcribed from both pinned current workbooks.
+- `hr_contract_4901.json` records the HR payout/refund layout, all repeat
+  offsets, the six-part key, current status domain, and the separately sourced
+  2004 same-length field change and trifecta-availability boundary.
 
 The manifest is intentionally independent of jrvltsql parser and schema code.
 When the official source changes, regenerate it from a separately obtained SDK

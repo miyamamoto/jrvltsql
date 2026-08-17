@@ -38,16 +38,17 @@
       "artifact": "JV-Data4901.xlsx",
       "sheet": "変更履歴",
       "row": 249
+    },
+    "availability_source": {
+      "artifact": "JV-Data4901.xlsx",
+      "sheet": "特記事項",
+      "rows": "97,134"
     }
   },
   "community_contracts": [
     {
       "topic": 304,
       "contract": "Realtime popularity may be blank until every finish position is finalized."
-    },
-    {
-      "topic": 64,
-      "contract": "Persist provider payload without suppressing fields according to mutable flags."
     }
   ]
 }

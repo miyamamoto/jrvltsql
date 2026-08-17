@@ -1907,7 +1907,9 @@ for _hr_table in ("NL_HR", "RT_HR", "HARAI"):
         elif _column["name"].startswith("Yobi") or _column["name"].startswith(
             "PayReserved1"
         ):
-            _column["description"] = "公式PayReserved1の3反復（組番・払戻・人気）"
+            _column["description"] = (
+                "公式予備領域PayReserved1の3反復を4/9/3バイトの文字列として保持"
+            )
 
 for _jc_table in ("NL_JC", "RT_JC"):
     for _column in TABLE_METADATA[_jc_table]["columns"]:

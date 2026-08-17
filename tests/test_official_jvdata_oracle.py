@@ -25,7 +25,7 @@ OFFICIAL_MANIFEST_CONTRACT_SHA256 = (
     "f35859d252fd20e4d7e38ee8d0a224deae87a62bae9db1995ed897bdccef6c45"
 )
 OFFICIAL_HISTORY_CONTRACT_SHA256 = (
-    "620e2a7716a62685d3b50ad0d8e7ef6045919a3531196158a0e889362a9917be"
+    "31df780bd9303f6361d082d670da57b10152a98642180854c5cd3998bb724134"
 )
 
 
@@ -851,7 +851,7 @@ def _assert_history_truth_contract(history):
             "data before trifecta sales began; the race date selects canonical "
             "fields versus opaque preservation."
         ),
-        "source": "JV-Data4901.xlsx:変更履歴:249",
+        "source": "JV-Data4901.xlsx:変更履歴:249;特記事項:97,134",
     }
 
 

@@ -147,6 +147,35 @@ class HRParser:
         qualifier = "exactly" if fixed else "at most"
         raise ValueError(f"HR {field_name} must contain {qualifier} {width} ASCII digits")
 
+    @staticmethod
+    def _require_optional_identifier(field_name: str, value: object, width: int) -> None:
+        """Keep fixed-width horse/combination identifiers byte-exact."""
+
+        if value in (None, ""):
+            return
+        if (
+            not isinstance(value, str)
+            or len(value) != width
+            or not value.isascii()
+            or not value.isdigit()
+        ):
+            raise ValueError(f"HR {field_name} must contain exactly {width} ASCII digits")
+
+    @staticmethod
+    def _require_optional_reserved_text(field_name: str, value: object, width: int) -> None:
+        """Preserve official reserved bytes as text without inventing numeric meaning."""
+
+        if value in (None, ""):
+            return
+        if not isinstance(value, str):
+            raise ValueError(f"HR {field_name} must be CP932 text")
+        try:
+            encoded = value.encode("cp932", errors="strict")
+        except UnicodeEncodeError as error:
+            raise ValueError(f"HR {field_name} must be CP932 text") from error
+        if len(encoded) > width:
+            raise ValueError(f"HR {field_name} must be at most {width} CP932 bytes")
+
     @classmethod
     def validate_current_fields(
         cls,
@@ -158,6 +187,8 @@ class HRParser:
 
         race_date = cls.validate_key_fields(record)
         status = data_kubun if data_kubun is not None else record.get("DataKubun")
+        if status == "0":
+            return
         opaque_status9 = record.get(cls.STATUS9_OPAQUE_FIELD)
         if opaque_status9 not in (None, ""):
             if (
@@ -171,7 +202,7 @@ class HRParser:
                 )
             if status != "9":
                 raise ValueError(f"HR {cls.STATUS9_OPAQUE_FIELD} is only valid for DataKubun 9")
-        if status in {"0", "9"}:
+        if status == "9":
             return
 
         for field_name in ("TorokuTosu", "SyussoTosu"):
@@ -185,7 +216,11 @@ class HRParser:
             ("HenkanDoWaku", 8),
         ):
             for index in range(1, count + 1):
-                cls._require_bit(f"{prefix}{index}", record.get(f"{prefix}{index}"))
+                field_name = f"{prefix}{index}"
+                value = record.get(field_name)
+                cls._require_bit(field_name, value)
+                if index == 6 and value not in ("0", 0):
+                    raise ValueError(f"HR {field_name} is reserved and must be 0")
 
         for (
             _,
@@ -213,11 +248,10 @@ class HRParser:
                 continue
             for index in range(1, count + 1):
                 suffix = "" if index == 1 else str(index)
-                cls._require_optional_digits(
+                cls._require_optional_identifier(
                     f"{first}{suffix}",
                     record.get(f"{first}{suffix}"),
                     first_width,
-                    fixed=True,
                 )
                 cls._require_optional_digits(
                     f"{pay}{suffix}",
@@ -237,7 +271,7 @@ class HRParser:
         for index, widths in enumerate(((4, 9, 3),) * 3):
             for offset, width in enumerate(widths, start=1):
                 field_name = f"Yobi{index * 3 + offset}"
-                cls._require_optional_digits(field_name, record.get(field_name), width, fixed=True)
+                cls._require_optional_reserved_text(field_name, record.get(field_name), width)
 
         legacy = record.get(cls.LEGACY_RESERVED_FIELD)
         if legacy not in (None, ""):

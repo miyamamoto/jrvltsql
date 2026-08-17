@@ -47,7 +47,8 @@ Public API replacements:
   nullable-key, legacy `AVOIDENCE`-only, or otherwise unsafe AV tables require
   rebuild and reimport
 - HR payout/refund storage now preserves every official repeat in the 719-byte
-  record, including all three reserved entries, and uses the exact six-part
+  record, including all three reserved entries as text rather than invented
+  numeric values, and uses the exact six-part
   race key in `NL_HR`, `RT_HR`, and standard `HARAI`. Existing keyless,
   nullable-key, incomplete-repeat, or otherwise unsafe HR tables require
   backup, rebuild, and RACE reimport. Records before trifecta sales began on

@@ -18,9 +18,8 @@ keiba.db に格納済みの実データに対して、異常レースやエッ�
 """
 
 import io
-import os
-import sys
 import sqlite3
+import sys
 from pathlib import Path
 
 # Windows UTF-8 対応
@@ -372,11 +371,16 @@ def test_null_zero_values(conn: sqlite3.Connection):
     # HRにはstatus 7が存在しないため、7を条件にすると常に空集合で緑になる。
     c.execute("""
         SELECT COUNT(*) FROM NL_HR
+        WHERE DataKubun IN ('1', '2')
+    """)
+    eligible_pay = c.fetchone()[0]
+    c.execute("""
+        SELECT COUNT(*) FROM NL_HR
         WHERE DataKubun IN ('1', '2') AND TanPay = 0
     """)
     zero_pay = c.fetchone()[0]
-    record("E-5 確定レースの単勝払戻>0", zero_pay == 0,
-           f"TanPay=0: {zero_pay} 件")
+    record("E-5 確定レースの単勝払戻>0", eligible_pay > 0 and zero_pay == 0,
+           f"対象: {eligible_pay} 件 / TanPay=0: {zero_pay} 件")
 
     # E-6: DataKubun の分布確認（想定外の値がないこと）
     c.execute("SELECT DataKubun, COUNT(*) FROM NL_RA GROUP BY DataKubun ORDER BY DataKubun")

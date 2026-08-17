@@ -214,7 +214,7 @@
       ],
       "provenance_required": true,
       "reason": "The unchanged 114-byte span is not safe to label as trifecta payout data before trifecta sales began; the race date selects canonical fields versus opaque preservation.",
-      "source": "JV-Data4901.xlsx:変更履歴:249"
+      "source": "JV-Data4901.xlsx:変更履歴:249;特記事項:97,134"
     }
   ]
 }

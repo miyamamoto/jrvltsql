@@ -1203,13 +1203,14 @@ def _verify_hr_key_not_null_constraints(database: BaseDatabase, table_name: str)
         not_null = {str(row.get("name") or "").lower(): bool(row.get("notnull")) for row in rows}
     elif db_type == "postgresql":
         rows = database.fetch_all(
-            "SELECT column_name, is_nullable FROM information_schema.columns "
-            "WHERE table_schema = current_schema() AND table_name = ?",
-            (table_name.lower(),),
+            "SELECT a.attname AS column_name, a.attnotnull AS not_null "
+            "FROM pg_attribute AS a "
+            "WHERE a.attrelid = to_regclass(?) "
+            "AND a.attnum > 0 AND NOT a.attisdropped",
+            (table_name,),
         )
         not_null = {
-            str(row.get("column_name") or "").lower(): str(row.get("is_nullable") or "").upper()
-            == "NO"
+            str(row.get("column_name") or "").lower(): bool(row.get("not_null"))
             for row in rows
         }
     else:
