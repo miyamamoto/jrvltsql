@@ -1469,6 +1469,33 @@ def test_wf_single_record_owned_transaction_rolls_back_on_validation_failure(
         if standard:
             assert _count(database, "JYUSYOSIKI") == 486
 
+        # A caller may commit one importer sequence and start the next
+        # transaction before the importer observes the inactive boundary. A
+        # failure in that new transaction must not restore the already
+        # committed sequence's older statistics checkpoint.
+        database.begin_transaction()
+        invalid = parsed_record(month_day="0819")
+        invalid["PayoutsJson"] = "[]"
+        with pytest.raises(SchemaMigrationError):
+            importer.import_single_record(invalid, auto_commit=False)
+        assert database.is_transaction_active() is False
+        assert _count(database, target) == 2
+        assert importer.get_statistics() == expected_stats
+        if standard:
+            assert _count(database, "JYUSYOSIKI") == 486
+
+        assert (
+            importer.import_single_record(parsed_record(month_day="0819"), auto_commit=False)
+            is True
+        )
+        database.commit()
+        assert _count(database, target) == 3
+        expected_stats["records_imported"] += 1
+        if standard:
+            expected_stats["batches_processed"] += 1
+            assert _count(database, "JYUSYOSIKI") == 729
+        assert importer.get_statistics() == expected_stats
+
 
 def _corrupt_caller_records(*, standard: bool) -> list[tuple[str, dict]]:
     cases = []
@@ -1972,6 +1999,26 @@ def test_wf_postgresql_auto_commit_false_validation_failure_rolls_back(
     assert single.get_statistics() == expected_stats
     if standard:
         assert _count(postgresql_db, "JYUSYOSIKI") == 486
+
+    postgresql_db.begin_transaction()
+    invalid = parsed_record(month_day="0819")
+    invalid["PayoutsJson"] = "[]"
+    with pytest.raises(SchemaMigrationError):
+        single.import_single_record(invalid, auto_commit=False)
+    assert postgresql_db.is_transaction_active() is False
+    assert _count(postgresql_db, target) == 2
+    assert single.get_statistics() == expected_stats
+    if standard:
+        assert _count(postgresql_db, "JYUSYOSIKI") == 486
+
+    assert single.import_single_record(parsed_record(month_day="0819"), auto_commit=False) is True
+    postgresql_db.commit()
+    assert _count(postgresql_db, target) == 3
+    expected_stats["records_imported"] += 1
+    if standard:
+        expected_stats["batches_processed"] += 1
+        assert _count(postgresql_db, "JYUSYOSIKI") == 729
+    assert single.get_statistics() == expected_stats
 
 
 @pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))

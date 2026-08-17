@@ -237,7 +237,7 @@ class PostgreSQLDatabase(BaseDatabase):
         try:
             if DRIVER == "pg8000":
                 self._connection.run("BEGIN")
-            self._transaction_active = True
+            self._mark_transaction_started()
         except Exception as e:
             raise DatabaseError(f"Failed to begin transaction: {e}")
 

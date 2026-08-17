@@ -51,6 +51,7 @@ class BaseDatabase(ABC):
         self._connection = None
         self._cursor = None
         self._transaction_active = False
+        self._transaction_generation = 0
         self._context_exit_invalidated = False
         logger.info(f"{self.__class__.__name__} initialized")
 
@@ -294,11 +295,29 @@ class BaseDatabase(ABC):
         PostgreSQL overrides this method because pg8000 otherwise executes
         every statement separately.
         """
+        self._mark_transaction_started()
+
+    def _mark_transaction_started(self) -> None:
+        """Activate a new explicit transaction and advance its identity."""
+        if not self._transaction_active:
+            self._transaction_generation += 1
         self._transaction_active = True
 
     def is_transaction_active(self) -> bool:
         """Return whether a caller-owned explicit transaction is active."""
         return self._transaction_active
+
+    def get_transaction_generation(self) -> Optional[int]:
+        """Return the current explicit transaction identity, if active.
+
+        The generation advances on every inactive-to-active transition. It
+        lets higher-level state, such as importer statistics checkpoints,
+        distinguish two caller-owned transactions even when the caller commits
+        one and begins the next before re-entering that higher-level object.
+        """
+        if not self._transaction_active:
+            return None
+        return self._transaction_generation
 
     def rollback(self) -> None:
         """Rollback current transaction.

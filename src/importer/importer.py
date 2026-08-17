@@ -4284,7 +4284,9 @@ class DataImporter:
         self._records_imported = 0
         self._records_failed = 0
         self._batches_processed = 0
-        self._single_record_stats_checkpoint: Optional[tuple[int, int, int]] = None
+        self._single_record_stats_checkpoint: Optional[
+            tuple[int, int, int, int]
+        ] = None
         self._jravan_tables_ready = not use_jravan_schema
         self._verified_mining_native_tables: set[str] = set()
         self._verified_hy_tables: set[str] = set()
@@ -5132,16 +5134,23 @@ class DataImporter:
                 self._single_record_stats_checkpoint = None
             return
         if not self.database.is_transaction_active():
-            self._single_record_stats_checkpoint = (
-                self._records_imported,
-                self._records_failed,
-                self._batches_processed,
-            )
             self.database.begin_transaction()
-        elif self._single_record_stats_checkpoint is None:
-            # The transaction was opened outside this importer. Counter deltas
-            # still need a local baseline if a strict failure rolls it back.
+        generation = self.database.get_transaction_generation()
+        if generation is None:
+            raise DatabaseError(
+                "Database did not expose an active transaction generation"
+            )
+        checkpoint_generation = (
+            self._single_record_stats_checkpoint[0]
+            if self._single_record_stats_checkpoint is not None
+            else None
+        )
+        if checkpoint_generation != generation:
+            # The transaction may have been opened outside this importer. Its
+            # generation distinguishes that new caller transaction from a
+            # previously committed sequence whose checkpoint is still cached.
             self._single_record_stats_checkpoint = (
+                generation,
                 self._records_imported,
                 self._records_failed,
                 self._batches_processed,
@@ -5152,6 +5161,7 @@ class DataImporter:
         rollback_failed_import(self.database, context=context)
         if self._single_record_stats_checkpoint is not None:
             (
+                _,
                 self._records_imported,
                 self._records_failed,
                 self._batches_processed,

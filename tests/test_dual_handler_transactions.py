@@ -18,12 +18,19 @@ def test_dual_transaction_begins_and_rolls_back_both_backends():
     database, primary, secondary = _dual_database()
 
     database.begin_transaction()
+    first_generation = database.get_transaction_generation()
+    assert first_generation is not None
+    database.rollback()
+    assert database.get_transaction_generation() is None
+
+    database.begin_transaction()
+    assert database.get_transaction_generation() == first_generation + 1
     database.rollback()
 
-    primary.begin_transaction.assert_called_once_with()
-    secondary.begin_transaction.assert_called_once_with()
-    primary.rollback.assert_called_once_with()
-    secondary.rollback.assert_called_once_with()
+    assert primary.begin_transaction.call_count == 2
+    assert secondary.begin_transaction.call_count == 2
+    assert primary.rollback.call_count == 2
+    assert secondary.rollback.call_count == 2
     assert not database._transaction_active
 
 

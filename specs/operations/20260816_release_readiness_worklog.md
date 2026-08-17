@@ -2877,3 +2877,81 @@
   require commit-specific CI, and perform one carry-forward review limited to
   this new delta and the two closed findings. No merge/release/provider claim
   is authorized until that gate is green.
+
+### 2026-08-17 12:08-12:14 JST — carry-forward review found one transaction-generation blocker
+
+- The provider-order/statistics repair was committed and pushed as exact PR
+  head `1dc48c1c6d5603936577290f6f1baeaeec34e196`; the implementation worktree
+  was clean at the start of this follow-up. GitHub Actions run `31990051925`
+  completed lint, test, and Windows batch syntax successfully; performance was
+  a zero-step conditional skip. PR #201 remains draft and no Copilot review
+  has yet been requested.
+- The bounded independent Codex carry-forward review returned
+  `NEEDS_CHANGES` with exactly one adjacent P1. A single-record statistics
+  checkpoint is currently associated only with the boolean transaction-active
+  state. If a caller commits a successful `auto_commit=False` operation,
+  begins a different transaction before the next importer call, and then
+  supplies an invalid record, that later rollback restores the stale checkpoint
+  from the already committed transaction. SQLite and fresh PostgreSQL 16,
+  native and standard storage, retained the committed row but reduced
+  `records_imported` from one to zero.
+- The repair boundary is a monotonically changing database transaction
+  generation/token. The importer checkpoint must be paired with the active
+  generation, reused only within that generation, and replaced when the caller
+  has committed and begun a new transaction without an intervening importer
+  call. The existing cumulative single-record contract will first be extended
+  with `commit -> caller begin -> invalid` and run red on this exact production
+  candidate on SQLite and PostgreSQL 16. Then the shared database abstraction,
+  PostgreSQL override, DualDatabase wrapper, and importer checkpoint will be
+  repaired once. STOP on any durable-row/statistics divergence, generation
+  reuse across transaction boundaries, backend mismatch, or candidate drift.
+- Red-first evidence was then recorded before any production edit. On exact
+  production SHA `1dc48c1c6d5603936577290f6f1baeaeec34e196`, the extended
+  SQLite selection returned `2 failed, 106 deselected`; both native and
+  standard retained two durable parent records but restored
+  `records_imported` from two to one (and standard `batches_processed` from
+  two to one). A fresh PostgreSQL 16 container on loopback port 55440 returned
+  `2 failed, 2 passed, 104 deselected`; the two DataImporter native/standard
+  cases reproduced the identical durable-two/statistics-one divergence, while
+  the OptimizedDataImporter batch-only cases remained green. The test therefore
+  rejects the exact stale-generation behavior rather than merely asserting an
+  exception. The disposable container remains running only for the immediate
+  green rerun and will be removed after the PostgreSQL gate.
+- `BaseDatabase` now advances a monotonic generation on each explicit
+  inactive-to-active transaction transition and exposes it only while that
+  transaction is active. PostgreSQL marks the generation after its backend
+  `BEGIN` succeeds; DualDatabase marks it only after both backends begin and
+  resets active ownership on connect/disconnect. The single-record importer
+  now stores `(generation, counter baseline)` and replaces a cached baseline
+  whenever the active generation changes, while preserving one baseline
+  across multiple calls in the same transaction.
+- The formerly red selection is green: SQLite `2 passed, 106 deselected` and
+  fresh PostgreSQL 16 `4 passed, 104 deselected`. The complete grouped WF
+  contract passes `96 passed, 12 skipped` on SQLite and `108 passed` on the
+  same PostgreSQL 16 instance. Dual/PostgreSQL transaction unit tests pass
+  `19 passed, 3 skipped`, including generation advance across rollback and a
+  second begin. The disposable PostgreSQL container was stopped and its exact
+  name no longer appears in `docker ps -a`. Next safe action is the affected
+  and full local gate on this unchanged dirty candidate, followed by one
+  commit/push and a strictly bounded review of this transaction-generation
+  delta.
+- The affected database/importer/realtime selection passes `141 passed, 3
+  skipped, 11 subtests passed`. The final captured Python 3.12.11
+  CI-equivalent run passes `2660 passed, 121 skipped, 14 deselected, 14
+  subtests passed` with 76% coverage. One prior orchestration cell detached its
+  output stream before reporting an exit status, so it was not counted as
+  evidence; the unchanged candidate was rerun once with a scratch log and
+  explicit exit propagation to obtain the recorded result.
+- `TEST GATE PASS`, `OFFICIAL ORACLE PASS`, compileall, fatal isolated flake8
+  with zero findings, strict MkDocs, and `git diff --check` all pass. Fresh
+  wheel and sdist for package version 1.6.10 build successfully and the
+  distribution-content gate passes both artifacts, including continued
+  exclusion of tracked `specs/` and official audit fixtures. Setuptools emits
+  only its existing future license-metadata deprecation. No x64 runtime claim
+  or provider-acquisition/release claim is made by these local gates.
+- The candidate is ready for one intentional commit and push to draft PR #201.
+  The only subsequent local review requested for this iteration is the
+  carry-forward transaction-generation check on that immutable full SHA; do
+  not restart a broad speculative review loop. STOP on candidate drift,
+  commit-specific CI failure, reviewer blocker, or a nonzero unresolved PR
+  thread count.
