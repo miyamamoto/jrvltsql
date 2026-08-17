@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 """Performance benchmark tests for JLTSQL.
 
 Tests performance characteristics under various loads:
@@ -14,15 +13,16 @@ Use pytest -m "not slow" to skip them in CI/CD.
 DuckDB is outside this project's supported database matrix.
 """
 
-import os
 import tempfile
-import unittest
 import time
+import unittest
+from datetime import date, timedelta
 from pathlib import Path
+
 import pytest
 
-from src.database.sqlite_handler import SQLiteDatabase
 from src.database.schema import SchemaManager
+from src.database.sqlite_handler import SQLiteDatabase
 from src.importer.importer import DataImporter
 
 
@@ -41,7 +41,7 @@ class PerformanceTestBase(unittest.TestCase):
 
         Uses English column names matching the NL_RA schema.
         """
-        return [
+        records = [
             {
                 'RecordSpec': record_type,
                 'DataKubun': '1',
@@ -54,6 +54,24 @@ class PerformanceTestBase(unittest.TestCase):
             }
             for i in range(1, count + 1)
         ]
+        if record_type == 'SE':
+            # SE now rejects the old benchmark's impossible dates and partial
+            # key. Keep this a performance sample, but make every row an
+            # official-shape caller record rather than bypassing validation.
+            for index, record in enumerate(records, start=1):
+                event_date = date(2024, 1, 1) + timedelta(days=index - 1)
+                record.update({
+                    'MakeDate': event_date.strftime('%Y%m%d'),
+                    'Year': event_date.strftime('%Y'),
+                    'MonthDay': event_date.strftime('%m%d'),
+                    'JyoCD': '05',
+                    'Kaiji': '01',
+                    'Nichiji': '01',
+                    'RaceNum': f'{(index - 1) % 12 + 1:02d}',
+                    'Umaban': f'{(index - 1) % 18 + 1:02d}',
+                    'KettoNum': f'2024{index:06d}',
+                })
+        return records
 
 
 @pytest.mark.slow

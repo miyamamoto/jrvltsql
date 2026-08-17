@@ -921,23 +921,16 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
         "indexes": ["開催年月日"]
     },
 
-    "NL_WE": {
-        "table_name": "NL_WE",
-        "record_type": "WE",
-        "description": "天候・馬場状態変更情報",
-        "purpose": "天候と馬場状態の変更情報を格納",
-        "columns": [
-            {"name": "レコード種別ID", "type": "TEXT", "description": "レコード種別識別子（'WE'）", "example": "WE", "nullable": False},
-            {"name": "開催年月日", "type": "TEXT", "description": "開催日", "example": "20240601", "nullable": False},
-            {"name": "競馬場コード", "type": "TEXT", "description": "競馬場コード", "example": "05", "nullable": False},
-            {"name": "発表月日時分", "type": "TEXT", "description": "発表日時", "example": "06010900", "nullable": False},
-            {"name": "天候状態", "type": "TEXT", "description": "天候（1=晴、2=曇、3=雨、4=小雨、5=雪、6=小雪）", "example": "1", "nullable": True},
-            {"name": "馬場状態_芝", "type": "TEXT", "description": "芝馬場状態（1=良、2=稍重、3=重、4=不良）", "example": "1", "nullable": True},
-            {"name": "馬場状態_ダート", "type": "TEXT", "description": "ダート馬場状態（1=良、2=稍重、3=重、4=不良）", "example": "2", "nullable": True}
-        ],
-        "primary_key": ["開催年月日", "競馬場コード", "発表月日時分"],
-        "indexes": ["開催年月日"]
-    },
+    "NL_WE": _schema_backed_metadata(
+        "NL_WE",
+        record_type="WE",
+        description="天候・馬場状態変更情報",
+        purpose=(
+            "開催・発表月日時分・変更識別の公式7要素キーで、初期値と複数の"
+            "天候・馬場発表履歴を共存させる"
+        ),
+        indexes=[],
+    ),
 
     "NL_WH": {
         "table_name": "NL_WH",
@@ -1521,22 +1514,15 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
         "indexes": ["開催年月日"]
     },
 
-    "RT_WE": {
-        "table_name": "RT_WE",
-        "record_type": "WE",
-        "description": "天候・馬場状態変更情報（速報）",
-        "purpose": "リアルタイムでの天候・馬場状態変更を格納（NL_WEと同構造）",
-        "columns": [
-            {"name": "レコード種別ID", "type": "TEXT", "description": "レコード種別識別子（'WE'）", "example": "WE", "nullable": False},
-            {"name": "開催年月日", "type": "TEXT", "description": "開催日", "example": "20240601", "nullable": False},
-            {"name": "競馬場コード", "type": "TEXT", "description": "競馬場コード", "example": "05", "nullable": False},
-            {"name": "天候状態", "type": "TEXT", "description": "天候", "example": "1", "nullable": True},
-            {"name": "馬場状態_芝", "type": "TEXT", "description": "芝馬場状態", "example": "1", "nullable": True},
-            {"name": "馬場状態_ダート", "type": "TEXT", "description": "ダート馬場状態", "example": "2", "nullable": True}
-        ],
-        "primary_key": ["開催年月日", "競馬場コード"],
-        "indexes": ["開催年月日"]
-    },
+    "RT_WE": _schema_backed_metadata(
+        "RT_WE",
+        record_type="WE",
+        description="天候・馬場状態変更情報（速報）",
+        purpose=(
+            "NL_WEと同じ公式7要素キーで、発表時刻ごとの速報天候・馬場状態を格納"
+        ),
+        indexes=[],
+    ),
 
     "RT_WF": _schema_backed_metadata(
         "RT_WF",

@@ -38,7 +38,7 @@ PREVIOUS_OFFICIAL_LENGTHS = tuple(
 # These parsers also require populated domain-specific arrays or master fields.
 # Their valid payloads are covered by dedicated official-contract tests; this
 # module limits their positive case to the shared physical-record envelope.
-# CS, JG, SE, WC, and WF additionally require their official fixed-width keys,
+# CS, JG, SE, WC, WE, and WF additionally require their official fixed-width keys,
 # bodies, race composites, and current status/code domains, so a generic
 # space-filled envelope is not valid.
 DOMAIN_PAYLOAD_REQUIRED = {
@@ -51,6 +51,7 @@ DOMAIN_PAYLOAD_REQUIRED = {
     "TK",
     "TM",
     "WC",
+    "WE",
     "WF",
     "WH",
 }

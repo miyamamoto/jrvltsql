@@ -1472,19 +1472,20 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             RecordSpec                     CHAR(2)             ,  -- レコード種別ID
             DataKubun                      CHAR(1)             ,  -- データ区分
             MakeDate                       DATE                ,  -- YYYYMMDD形式の日付
-            Year                           SMALLINT            ,  -- 年(4桁)
-            MonthDay                       SMALLINT            ,  -- 月日(MMDD)
-            JyoCD                          CHAR(2)             ,  -- 競馬場コード
-            Kaiji                          SMALLINT            ,  -- 開催回
-            Nichiji                        SMALLINT            ,  -- 開催日目
-            HappyoTime                     VARCHAR(8)          ,  -- 発表月日時分(MMDDhhmm)
-            HenkoID                        VARCHAR(1)          ,  -- 文字列(1)
+            Year                           SMALLINT NOT NULL   ,  -- 年(4桁)
+            MonthDay                       SMALLINT NOT NULL   ,  -- 月日(MMDD)
+            JyoCD                          CHAR(2) NOT NULL    ,  -- 競馬場コード
+            Kaiji                          SMALLINT NOT NULL   ,  -- 開催回
+            Nichiji                        SMALLINT NOT NULL   ,  -- 開催日目
+            HappyoTime                     VARCHAR(8) NOT NULL,  -- 発表月日時分(MMDDhhmm)
+            HenkoID                        VARCHAR(1) NOT NULL,  -- 文字列(1)
             AtoTenkoCD                     VARCHAR(1)          ,  -- 文字列(1)
             AtoSibaBabaCD                  VARCHAR(1)          ,  -- 文字列(1)
             AtoDirtBabaCD                  VARCHAR(1)          ,  -- 文字列(1)
             MaeTenkoCD                     VARCHAR(1)          ,  -- 文字列(1)
             MaeSibaBabaCD                  VARCHAR(1)          ,  -- 文字列(1)
-            MaeDirtBabaCD                  VARCHAR(1)            -- 文字列(1)
+            MaeDirtBabaCD                  VARCHAR(1)          ,  -- 文字列(1)
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, HappyoTime, HenkoID)
         )
     """,
     "TOKU": """

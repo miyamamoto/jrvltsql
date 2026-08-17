@@ -1459,7 +1459,15 @@ class TestRealtimeUpdater(unittest.TestCase):
         )
         self.assertEqual(
             self.updater._get_primary_keys("RT_WE"),
-            ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "HenkoID"],
+            [
+                "Year",
+                "MonthDay",
+                "JyoCD",
+                "Kaiji",
+                "Nichiji",
+                "HappyoTime",
+                "HenkoID",
+            ],
         )
         self.assertEqual(
             self.updater._get_primary_keys("TS_SOKUHO_O2"),

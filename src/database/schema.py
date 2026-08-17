@@ -72,7 +72,7 @@ Change Information Tables:
     RT_RC: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
 
 Weather and Horse-Weight Tables:
-    NL_WE, RT_WE: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, HenkoID)
+    NL_WE, RT_WE: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, HappyoTime, HenkoID)
     NL_WH, RT_WH: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
 
 Pace/Data Mining Tables:
@@ -1478,13 +1478,13 @@ SCHEMAS = {
             RecordSpec TEXT,
             DataKubun TEXT,
             MakeDate TEXT,
-            Year INTEGER,
-            MonthDay INTEGER,
-            JyoCD TEXT,
-            Kaiji INTEGER,
-            Nichiji INTEGER,
-            HappyoTime TEXT,
-            HenkoID TEXT,
+            Year INTEGER NOT NULL,
+            MonthDay INTEGER NOT NULL,
+            JyoCD TEXT NOT NULL,
+            Kaiji INTEGER NOT NULL,
+            Nichiji INTEGER NOT NULL,
+            HappyoTime TEXT NOT NULL,
+            HenkoID TEXT NOT NULL,
             TenkoState TEXT,
             SibaBabaState TEXT,
             DirtBabaState TEXT,
@@ -1492,7 +1492,7 @@ SCHEMAS = {
             SibaBabaState2 TEXT,
             DirtBabaState2 TEXT,
             RecordDelimiter TEXT,
-            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, HenkoID)
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, HappyoTime, HenkoID)
         )
     """,
 
@@ -2397,13 +2397,13 @@ SCHEMAS = {
             RecordSpec TEXT,
             DataKubun TEXT,
             MakeDate TEXT,
-            Year INTEGER,
-            MonthDay INTEGER,
-            JyoCD TEXT,
-            Kaiji INTEGER,
-            Nichiji INTEGER,
-            HappyoTime TEXT,
-            HenkoID TEXT,
+            Year INTEGER NOT NULL,
+            MonthDay INTEGER NOT NULL,
+            JyoCD TEXT NOT NULL,
+            Kaiji INTEGER NOT NULL,
+            Nichiji INTEGER NOT NULL,
+            HappyoTime TEXT NOT NULL,
+            HenkoID TEXT NOT NULL,
             TenkoState TEXT,
             SibaBabaState TEXT,
             DirtBabaState TEXT,
@@ -2411,7 +2411,7 @@ SCHEMAS = {
             SibaBabaState2 TEXT,
             DirtBabaState2 TEXT,
             RecordDelimiter TEXT,
-            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, HenkoID)
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, HappyoTime, HenkoID)
         )
     """,
     "RT_WH": """
@@ -2738,13 +2738,14 @@ SCHEMAS.update(
 )
 STRICT_RECREATE_TABLES = frozenset({"NL_CK_CHAKU", "NL_CK_RUIKEI"})
 STRICT_SE_STORAGE_TABLES = frozenset({"NL_SE", "RT_SE"})
+STRICT_WE_STORAGE_TABLES = frozenset({"NL_WE", "RT_WE"})
 
 
 def _preflight_existing_se_storage(db: BaseDatabase) -> None:
-    """Reject unsafe SE tables before any unrelated additive migration."""
+    """Reject unsafe SE/WE identities before unrelated additive migration."""
 
     from src.database.migration import _migration_targets
-    from src.importer.importer import verify_se_storage_schema
+    from src.importer.importer import verify_se_storage_schema, verify_we_storage_schema
 
     targets = _migration_targets(db)
     for target in targets:
@@ -2755,6 +2756,9 @@ def _preflight_existing_se_storage(db: BaseDatabase) -> None:
                     table_name,
                     allow_missing_columns=True,
                 )
+        for table_name in STRICT_WE_STORAGE_TABLES:
+            if target.table_exists_strict(table_name):
+                verify_we_storage_schema(target, table_name)
 
 
 def _normalize_metadata_catalog_type(declared_type: str) -> str | None:
@@ -2826,6 +2830,10 @@ class SchemaManager:
                 from src.importer.importer import verify_se_storage_schema
 
                 verify_se_storage_schema(self.db, table_name)
+            if table_name in STRICT_WE_STORAGE_TABLES:
+                from src.importer.importer import verify_we_storage_schema
+
+                verify_we_storage_schema(self.db, table_name)
             if table_name in STRICT_RECREATE_TABLES:
                 from src.importer.importer import verify_ck_child_table
 
@@ -2868,6 +2876,10 @@ class SchemaManager:
                     from src.importer.importer import verify_se_storage_schema
 
                     verify_se_storage_schema(self.db, table_name)
+                if table_name in STRICT_WE_STORAGE_TABLES:
+                    from src.importer.importer import verify_we_storage_schema
+
+                    verify_we_storage_schema(self.db, table_name)
                 logger.debug(f"Created table: {table_name}")
                 results[table_name] = True
             except Exception as e:
@@ -3213,6 +3225,10 @@ def create_all_tables(db: BaseDatabase) -> None:
                 from src.importer.importer import verify_se_storage_schema
 
                 verify_se_storage_schema(db, table_name)
+            if table_name in STRICT_WE_STORAGE_TABLES:
+                from src.importer.importer import verify_we_storage_schema
+
+                verify_we_storage_schema(db, table_name)
             logger.debug(f"Created table: {table_name}")
         except Exception as e:
             logger.error(f"Failed to create table {table_name}: {e}")

@@ -191,6 +191,18 @@ class TestIndividualParsers:
                 mutable[36:37] = b"0"
                 mutable[37:103] = b"0" * 66
                 data = bytes(mutable)
+            if record_type == "WE":
+                # WE requires its complete seven-part key and one of the
+                # official body shapes; a blank envelope is not a positive.
+                mutable = bytearray(data)
+                mutable[11:15] = b"2024"
+                mutable[15:19] = b"0601"
+                mutable[19:21] = b"05"
+                mutable[21:23] = b"03"
+                mutable[23:25] = b"08"
+                mutable[25:33] = b"06010930"
+                mutable[33:40] = b"1111000"
+                data = bytes(mutable)
             if record_type == "TK":
                 mutable = bytearray(data)
                 mutable[11:15] = b"2024"

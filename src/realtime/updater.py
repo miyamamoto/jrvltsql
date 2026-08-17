@@ -17,8 +17,10 @@ from src.importer.importer import (
     resolve_record_data_kubun,
     rollback_failed_import,
     validate_se_record,
+    validate_we_record,
     validate_wf_record,
     verify_se_storage_schema,
+    verify_we_storage_schema,
     verify_wf_storage_schema,
 )
 from src.jvlink.constants import (
@@ -192,13 +194,14 @@ class RealtimeUpdater:
         self.cache_manager = cache_manager
         self._verified_mining_native_tables: set[str] = set()
         self._verified_se_tables: set[str] = set()
+        self._verified_we_tables: set[str] = set()
         self._verified_wf_tables: set[str] = set()
 
         logger.info("RealtimeUpdater initialized")
 
     # Realtime tables whose caller-built rows are revalidated against the
     # official contract before any coercion or mutation.
-    STRICT_RECORD_TABLES = frozenset({"RT_SE", "RT_WF"})
+    STRICT_RECORD_TABLES = frozenset({"RT_SE", "RT_WE", "RT_WF"})
 
     def _canonicalize_strict_record_aliases(
         self, record: Dict
@@ -245,6 +248,11 @@ class RealtimeUpdater:
                     if verify_se_storage_schema(self.database, table_name):
                         self._verified_se_tables.add(table_name)
                 validate_se_record(record, table_name)
+            elif table_name == "RT_WE":
+                if table_name not in self._verified_we_tables:
+                    if verify_we_storage_schema(self.database, table_name):
+                        self._verified_we_tables.add(table_name)
+                validate_we_record(record, table_name)
             else:
                 if table_name not in self._verified_wf_tables:
                     if verify_wf_storage_schema(self.database, table_name):
@@ -1319,7 +1327,10 @@ class RealtimeUpdater:
             ],
 
             # Weather and horse-weight tables
-            "RT_WE": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "HenkoID"],
+            "RT_WE": [
+                "Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji",
+                "HappyoTime", "HenkoID",
+            ],
             "RT_WH": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "Umaban"],
 
             # Other realtime tables

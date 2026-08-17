@@ -60,7 +60,7 @@ def _record(record_type: str, length: int, announcement_start: int) -> bytes:
     if record_type in {"AV", "JC"}:
         record[35:37] = b"01"
     if record_type == "WE":
-        record[33:40] = b"1123456"
+        record[33:40] = b"1111000"
     record[-2:] = b"\r\n"
     return bytes(record)
 
@@ -141,7 +141,7 @@ def _assert_standard_storage(database, importer_class=DataImporter) -> None:
         "MaeTenkoCD, MaeSibaBabaCD, MaeDirtBabaCD FROM TENKO_BABA"
     )
     assert weather is not None
-    assert tuple(weather.values()) == ("1", "2", "3", "4", "5", "6")
+    assert tuple(weather.values()) == ("1", "1", "1", "0", "0", "0")
 
 
 @pytest.mark.parametrize(
