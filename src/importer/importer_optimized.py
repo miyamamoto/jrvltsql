@@ -67,6 +67,7 @@ from src.importer.importer import (
     validate_wc_record,
     validate_wf_record,
     verify_bt_storage_schema,
+    verify_cs_storage_schema,
     verify_ch_coupled_table,
     verify_ck_coupled_tables,
     verify_hy_storage_schema,
@@ -115,6 +116,7 @@ class OptimizedDataImporter:
         self._verified_mining_native_tables: set[str] = set()
         self._verified_hy_tables: set[str] = set()
         self._verified_bt_tables: set[str] = set()
+        self._verified_cs_tables: set[str] = set()
         self._verified_jg_tables: set[str] = set()
         self._verified_wc_tables: set[str] = set()
         self._verified_wf_tables: set[str] = set()
@@ -383,6 +385,9 @@ class OptimizedDataImporter:
                 if table_name not in self._verified_bt_tables:
                     if verify_bt_storage_schema(self.database, table_name):
                         self._verified_bt_tables.add(table_name)
+                if table_name not in self._verified_cs_tables:
+                    if verify_cs_storage_schema(self.database, table_name):
+                        self._verified_cs_tables.add(table_name)
                 if table_name not in self._verified_jg_tables:
                     if verify_jg_storage_schema(self.database, table_name):
                         self._verified_jg_tables.add(table_name)

@@ -140,6 +140,15 @@ class TestIndividualParsers:
                 ):
                     mutable[start:end] = b"0" * (end - start)
                 data = bytes(mutable)
+            if record_type == "CS":
+                # CS requires all four official key fields. A generic
+                # space-filled record is not a valid positive fixture.
+                mutable = bytearray(data)
+                mutable[11:13] = b"08"
+                mutable[13:17] = b"2400"
+                mutable[17:19] = b"18"
+                mutable[19:27] = b"20100101"
+                data = bytes(mutable)
             if record_type == "JG":
                 # JG has fixed-width official key/code domains; a generic
                 # space-filled record is not a valid positive fixture.

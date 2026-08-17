@@ -388,6 +388,7 @@ _TK_KEY_COLUMNS = ("Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum")
 _TK_ROWS_KEY = "_tk_registered_horse_rows"
 _HY_STORAGE_TABLES = frozenset({"NL_HY", "BAMEIORIGIN"})
 _BT_STORAGE_TABLES = frozenset({"NL_BT", "KEITO"})
+_CS_STORAGE_TABLES = frozenset({"NL_CS", "COURSE"})
 _JG_STORAGE_TABLES = frozenset({"NL_JG", "JOGAIBA"})
 _JG_KEY_COLUMNS = (
     "Year",
@@ -440,6 +441,23 @@ def verify_bt_storage_schema(database: BaseDatabase, table_name: str) -> bool:
     if schema_sql is None:
         raise SchemaMigrationError(f"BT storage schema is undefined: {table_name}")
     verify_table_schema(database, table_name, schema_sql)
+    return True
+
+
+def verify_cs_storage_schema(database: BaseDatabase, table_name: str) -> bool:
+    """Fail closed unless CS storage preserves the full body and official key."""
+    if table_name not in _CS_STORAGE_TABLES:
+        return False
+
+    from src.database.migration import verify_table_schema
+    from src.database.schema import SCHEMAS
+    from src.database.schema_jravan import JRAVAN_SCHEMAS
+
+    schema_sql = SCHEMAS.get(table_name) or JRAVAN_SCHEMAS.get(table_name)
+    if schema_sql is None:
+        raise SchemaMigrationError(f"CS storage schema is undefined: {table_name}")
+    verify_table_schema(database, table_name, schema_sql)
+    _verify_replacement_key_constraints(database, table_name, "CS storage")
     return True
 
 
@@ -1276,11 +1294,11 @@ def preflight_standard_schema_migrations(
             allow_missing_columns=(standard_name not in _STRICT_NONADDITIVE_STANDARD_TABLES),
             allow_primary_key_mismatch=(standard_name in _ORDERED_MASTER_STORAGE_TABLES),
         )
-        if standard_name == "UMA":
+        if standard_name in {"UMA", "COURSE"}:
             _verify_replacement_key_constraints(
                 database,
                 standard_name,
-                "Standard UMA storage",
+                f"Standard {standard_name} storage",
             )
 
     for child_table in ("CHOKYO_SEISEKI", "KISYU_SEISEKI"):
@@ -1887,6 +1905,10 @@ def validate_import_record_header(record: dict) -> tuple[str, str]:
                 or not ketto_num.isdigit()
             ):
                 raise ValueError("UM KettoNum must be exactly 10 ASCII digits")
+        if record_type == "CS":
+            from src.parser.cs_parser import CSParser
+
+            CSParser.validate_key_fields(record)
         return record_type, data_kubun
     except ValueError as error:
         raise SchemaMigrationError(str(error)) from error
@@ -4453,6 +4475,7 @@ class DataImporter:
         self._verified_mining_native_tables: set[str] = set()
         self._verified_hy_tables: set[str] = set()
         self._verified_bt_tables: set[str] = set()
+        self._verified_cs_tables: set[str] = set()
         self._verified_jg_tables: set[str] = set()
         self._verified_wc_tables: set[str] = set()
         self._verified_wf_tables: set[str] = set()
@@ -4496,7 +4519,7 @@ class DataImporter:
             "RC": "NL_RC",  # レコードマスタ
             "CC": "NL_CC",  # コース変更
             "TC": "NL_TC",  # タイムコメント
-            "CS": "NL_CS",  # コメントショート
+            "CS": "NL_CS",  # コース情報
             "CK": "NL_CK",  # 勝利騎手・調教師コメント
             "WC": "NL_WC",  # ウッドチップ調教
             "AV": "NL_AV",  # 出走取消・競走除外
@@ -4764,6 +4787,9 @@ class DataImporter:
                 if table_name not in self._verified_bt_tables:
                     if verify_bt_storage_schema(self.database, table_name):
                         self._verified_bt_tables.add(table_name)
+                if table_name not in self._verified_cs_tables:
+                    if verify_cs_storage_schema(self.database, table_name):
+                        self._verified_cs_tables.add(table_name)
                 if table_name not in self._verified_jg_tables:
                     if verify_jg_storage_schema(self.database, table_name):
                         self._verified_jg_tables.add(table_name)
@@ -5458,6 +5484,9 @@ class DataImporter:
             if table_name not in self._verified_bt_tables:
                 if verify_bt_storage_schema(self.database, table_name):
                     self._verified_bt_tables.add(table_name)
+            if table_name not in self._verified_cs_tables:
+                if verify_cs_storage_schema(self.database, table_name):
+                    self._verified_cs_tables.add(table_name)
             if table_name not in self._verified_jg_tables:
                 if verify_jg_storage_schema(self.database, table_name):
                     self._verified_jg_tables.add(table_name)

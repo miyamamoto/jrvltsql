@@ -41,7 +41,7 @@ Master Tables:
     NL_BR: PRIMARY KEY (BreederCode)  -- Breeder code
     NL_BT: PRIMARY KEY (HansyokuNum)  -- Breeding lineage
     NL_HN: PRIMARY KEY (HansyokuNum)  -- Breeding horse
-    NL_CS: PRIMARY KEY (JyoCD, Kyori, TrackCD)  -- Course
+    NL_CS: PRIMARY KEY (JyoCD, Kyori, TrackCD, KaishuDate)  -- Course
 
 Odds Tables:
     NL_O1, RT_O1: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban, Kumi)
@@ -349,9 +349,9 @@ SCHEMAS = {
             Kyori INTEGER,
             TrackCD TEXT,
             KaishuDate TEXT,
-            CourseEx TEXT,
+            CourseEx VARCHAR(6800),
             RecordDelimiter TEXT,
-            PRIMARY KEY (JyoCD, Kyori, TrackCD)
+            PRIMARY KEY (JyoCD, Kyori, TrackCD, KaishuDate)
         )
     """,
     "NL_DM": """

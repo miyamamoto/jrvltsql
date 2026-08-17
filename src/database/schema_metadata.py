@@ -1015,22 +1015,16 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
         "indexes": ["開催年月日", "血統登録番号"]
     },
 
-    "NL_CS": {
-        "table_name": "NL_CS",
-        "record_type": "CS",
-        "description": "コース仕様情報",
-        "purpose": "競馬場の各コースの仕様・特性を格納",
-        "columns": [
-            {"name": "レコード種別ID", "type": "TEXT", "description": "レコード種別識別子（'CS'）", "example": "CS", "nullable": False},
-            {"name": "競馬場コード", "type": "TEXT", "description": "競馬場コード", "example": "05", "nullable": False},
-            {"name": "距離", "type": "TEXT", "description": "コース距離（メートル）", "example": "2400", "nullable": False},
-            {"name": "トラックコード", "type": "TEXT", "description": "トラック種別コード", "example": "10", "nullable": False},
-            {"name": "コース改修年月日", "type": "TEXT", "description": "コース改修日", "example": "20150401", "nullable": True},
-            {"name": "コース説明", "type": "TEXT", "description": "コースの特徴・説明", "example": "最後の直線が長く、末脚が活きやすい", "nullable": True}
-        ],
-        "primary_key": ["競馬場コード", "距離", "トラックコード", "コース改修年月日"],
-        "indexes": ["競馬場コード", "距離"]
-    },
+    "NL_CS": _schema_backed_metadata(
+        "NL_CS",
+        record_type="CS",
+        description="コース仕様情報",
+        purpose=(
+            "競馬場・距離・トラック・改修後初開催日の公式キーごとに、"
+            "6,800バイトのコース説明を格納"
+        ),
+        indexes=["JyoCD", "Kyori"],
+    ),
 
     "NL_HC": {
         "table_name": "NL_HC",

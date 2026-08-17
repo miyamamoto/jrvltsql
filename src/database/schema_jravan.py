@@ -170,7 +170,9 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             JyoCD                          CHAR(2)             ,  -- 競馬場コード
             Kyori                          SMALLINT            ,  -- 距離(m)
             TrackCD                        VARCHAR(2)          ,  -- 文字列(2)
-            KaishuDate                     VARCHAR(8)            -- 文字列(8)
+            KaishuDate                     VARCHAR(8)          ,  -- 文字列(8)
+            CourseEx                       VARCHAR(6800)        ,  -- コース説明
+            PRIMARY KEY (JyoCD, Kyori, TrackCD, KaishuDate)
         )
     """,
     "COURSE_CHANGE": """
