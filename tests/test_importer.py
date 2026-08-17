@@ -210,37 +210,31 @@ class TestDataImporter:
             assert se_count["cnt"] == 1
             assert hr_count["cnt"] == 1
 
-    def test_invalid_record_handling(self, db, importer):
+    @pytest.mark.parametrize(
+        ("invalid_record", "error_pattern"),
+        (
+            ({"Year": 2024, "RaceNum": 1}, "record-type"),
+            (
+                {
+                    "headRecordSpec": "XX",
+                    "DataKubun": "1",
+                    "MakeDate": "20240601",
+                    "Year": 2024,
+                },
+                "RecordSpec",
+            ),
+        ),
+        ids=("missing-record-type", "unknown-record-type"),
+    )
+    def test_invalid_record_handling(
+        self, db, importer, invalid_record, error_pattern
+    ):
         """A malformed header aborts the batch before any valid row is stored."""
         with db:
             db.execute(SCHEMAS["NL_RA"])
 
-            # Records with missing/invalid data
-            records = [
-                {  # Missing headRecordSpec
-                    "Year": 2024,
-                    "RaceNum": 1,
-                },
-                {  # Unknown record type
-                    "headRecordSpec": "XX",
-                    "Year": 2024,
-                },
-                {  # Valid record
-                    "headRecordSpec": "RA",
-                    "RecordSpec": "RA",
-                    "DataKubun": "1",
-                    "MakeDate": "20240601",
-                    "Year": 2024,
-                    "MonthDay": 601,
-                    "JyoCD": "06",
-                    "Kaiji": 3,
-                    "Nichiji": 8,
-                    "RaceNum": 1,
-                },
-            ]
-
-            with pytest.raises(SchemaMigrationError, match="record-type"):
-                importer.import_records(iter(records), auto_commit=False)
+            with pytest.raises(SchemaMigrationError, match=error_pattern):
+                importer.import_records(iter([invalid_record]), auto_commit=False)
 
             assert db.fetch_one("SELECT COUNT(*) AS count FROM NL_RA")["count"] == 0
 

@@ -1,6 +1,7 @@
 """Fail-closed gates for current JV-Data fixed-length records."""
 
 import json
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -227,7 +228,8 @@ def test_historical_status_requires_make_date_before_its_official_boundary(
 ):
     """Old and current generations share a length, so MakeDate is provenance."""
 
-    before = str(int(valid_before) - 1)
+    boundary = datetime.strptime(valid_before, "%Y%m%d").date()
+    before = (boundary - timedelta(days=1)).strftime("%Y%m%d")
     validate_fixed_record(
         _record_with_header(
             record_type,

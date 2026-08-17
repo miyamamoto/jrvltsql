@@ -286,7 +286,9 @@ def test_jravan_single_record_auto_commit_false_stays_in_caller_transaction(tmp_
         assert db.fetch_one("SELECT COUNT(*) AS n FROM UMA_RACE")["n"] == 0
 
 
-def test_optimized_importer_does_not_retry_inside_caller_transaction(tmp_path) -> None:
+def test_optimized_importer_does_not_retry_inside_caller_transaction(
+    tmp_path, monkeypatch
+) -> None:
     from src.database.sqlite_handler import SQLiteDatabase
     from src.importer.importer import ImporterError
     from src.importer.importer_optimized import OptimizedDataImporter
@@ -299,6 +301,16 @@ def test_optimized_importer_does_not_retry_inside_caller_transaction(tmp_path) -
             "WHEN NEW.RaceNum = 3 BEGIN SELECT RAISE(FAIL, 'rejected'); END"
         )
         db.commit()
+        attempted_batches = []
+        original_insert_many = db.insert_many
+
+        def recording_insert_many(table_name, data_list, use_replace=True):
+            attempted_batches.append(
+                (table_name, tuple(row.get("RaceNum") for row in data_list))
+            )
+            return original_insert_many(table_name, data_list, use_replace)
+
+        monkeypatch.setattr(db, "insert_many", recording_insert_many)
         importer = OptimizedDataImporter(db, batch_size=2)
         records = iter(
             [
@@ -321,6 +333,10 @@ def test_optimized_importer_does_not_retry_inside_caller_transaction(tmp_path) -
             importer.import_records(records, auto_commit=False)
         db.rollback()
 
+        assert sum(
+            table_name == "NL_RA" and 3 in race_nums
+            for table_name, race_nums in attempted_batches
+        ) == 1
         assert db.fetch_one("SELECT COUNT(*) AS n FROM NL_RA")["n"] == 0
 
 

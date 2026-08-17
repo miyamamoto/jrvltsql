@@ -233,7 +233,7 @@ class TestTransactionHandling(unittest.TestCase):
 
     def test_batch_import_partial_failure(self):
         """Test batch import with some invalid records."""
-        importer = DataImporter(self.database, batch_size=5)
+        importer = DataImporter(self.database, batch_size=1)
         factory = ParserFactory()
 
         records = [
@@ -244,7 +244,7 @@ class TestTransactionHandling(unittest.TestCase):
         self.assertTrue(all(record is not None for record in (records[0], records[2])))
 
         with self.assertRaises(SchemaMigrationError):
-            importer.import_records(records)
+            importer.import_records(records, auto_commit=False)
 
         self.assertEqual(
             self.database.fetch_one("SELECT COUNT(*) AS count FROM NL_RA")["count"],

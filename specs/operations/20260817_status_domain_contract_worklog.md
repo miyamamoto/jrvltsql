@@ -22,7 +22,7 @@
   official keys/standard storage; then implement the remaining physical erase
   paths; only after those and fresh provider-to-SQLite/PostgreSQL readback may
   final release preparation resume.
-- Implementation uses Codex. The change is a fail-open validator and therefore
+- Implementation uses Codex. The change is a fail-closed validator and therefore
   requires red-first tests, an independently regenerated official status
   manifest, and one frozen-candidate critical review. No unavailable reviewer
   is counted as evidence.
@@ -401,3 +401,39 @@
   PostgreSQL, docs, and package gates, then perform only a bounded delta review
   of the new immutable SHA. Do not broaden this into another whole-repository
   review.
+
+## 2026-08-17 — PR #203 review consolidation
+
+- Pushed exact candidate `57ec3fef1c993cb58f9454f5795f32efe3129696`
+  and opened PR #203. GitHub test, lint, and Windows batch checks succeeded;
+  the conditional performance job was intentionally skipped. GitHub Copilot
+  was requested exactly once but returned a quota-limit notice, so it supplied
+  no review evidence. The maintainer-authorized Codex fallback independently
+  replayed the two prior blockers on SQLite and fresh PostgreSQL 16 and returned
+  GREEN with no new P0/P1/P2 finding.
+- The completed GitHub review reported four actionable evidence gaps and five
+  non-blocking observations. Independent Codex review accepted the four gaps:
+  one reversed fail-closed worklog term and three tests that did not make the
+  claimed rollback, unknown-header, or no-retry behavior observable. Four
+  compact test-maintenance observations were also accepted: calendar-safe
+  history-boundary arithmetic, proof that the schema fixture was actually
+  modified, use of the parametrized importer class, and preservation of a
+  committed 18-row mining snapshot after an injected later-write failure.
+- The suggested shared first-header helper refactor is deferred. It identifies
+  legitimate duplication but changes high-risk transaction-recovery structure
+  without correcting a current behavior defect; it belongs in a separate
+  focused iteration with paired importer tests.
+- This review repair intentionally changes no production code. It strengthens
+  existing proof around behavior already independently reproduced as correct.
+  The first focused run correctly exposed an incomplete unknown-record fixture:
+  it stopped at missing DataKubun rather than reaching the unknown RecordSpec.
+  After supplying a complete invalid header and matching each explicit error,
+  the compact selection passed `16 passed`. The six affected test modules then
+  passed `285 passed, 11 subtests passed`, and the ordinary full suite passed
+  `2796 passed, 131 skipped, 22 subtests passed` in 57.16s. Fatal flake8 and
+  `git diff --check` passed. Repository-wide Black remains advisory debt for
+  existing modified test files and is not the fatal changed-file gate.
+- Next safe action: run the remaining lock/test-gate checks, commit this one
+  review batch, rerun the required exact-SHA gates, push once, and reply to all
+  four review threads with the evidence. Do not request another automated
+  review merely for these test/worklog-only changes.

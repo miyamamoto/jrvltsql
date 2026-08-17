@@ -138,6 +138,9 @@ def test_invalid_first_status_precedes_standard_schema_migration(
         "            YoubiCD                        VARCHAR(1)          ,  -- 文字列(1)\n",
         "",
     )
+    assert race_without_youbi != JRAVAN_SCHEMAS["RACE"], (
+        "RACE schema text changed; update the YoubiCD removal fixture"
+    )
     database = SQLiteDatabase({"path": str(tmp_path / "standard-preflight.db")})
     with database:
         database.execute(race_without_youbi)
@@ -300,7 +303,7 @@ def test_first_header_state_inspection_failure_invalidates_the_connection(
         with committed:
             committed.execute(SCHEMAS["NL_TC"])
             committed.commit()
-            importer = DataImporter(committed)
+            importer = importer_class(committed)
             assert importer.import_single_record(
                 _tc_record(), auto_commit=False
             ) is True

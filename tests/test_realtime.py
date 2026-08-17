@@ -490,6 +490,11 @@ def test_mining_snapshot_list_rejects_mixed_or_tampered_expansions(
         assert all(row["MakeHM"] == "0945" for row in ordered_rows)
 
         database.execute(f"DELETE FROM RT_{record_type}")
+        database.commit()
+        assert all(
+            item["success"] for item in updater.process_parsed_record(old_expansion)
+        )
+        database.commit()
         database.execute(
             f"CREATE TRIGGER reject_{record_type.lower()}_0945 "
             f"BEFORE INSERT ON RT_{record_type} "
@@ -503,9 +508,11 @@ def test_mining_snapshot_list_rejects_mixed_or_tampered_expansions(
         assert failed_batch["success"] is False
         assert failed_batch["inserted"] == 0
         assert failed_batch["transaction_rolled_back"] is True
-        assert database.fetch_one(
-            f"SELECT COUNT(*) AS count FROM RT_{record_type}"
-        )["count"] == 0
+        preserved_after_failure = database.fetch_all(
+            f"SELECT Umaban, MakeHM FROM RT_{record_type} ORDER BY Umaban"
+        )
+        assert len(preserved_after_failure) == 18
+        assert all(row["MakeHM"] == "0930" for row in preserved_after_failure)
 
         mixed_batch = updater.process_parsed_records_batch([race, *old_expansion])
         assert mixed_batch["success"] is True
