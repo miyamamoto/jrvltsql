@@ -3058,3 +3058,10 @@
   be answered politely and resolved only after that exact SHA is green. STOP on
   candidate drift, reviewer blocker, failed CI step, or any nonzero unresolved
   thread count; no merge/release/provider-acquisition claim is authorized yet.
+- The complete repair, tests, docs, and red/green evidence were committed and
+  pushed as exact code/test PR head
+  `20fc554b9db3abf244ed5dd0b848cf22a422ce5b`; the worktree was clean after
+  commit. This follow-up records that state transition only. The next review
+  must target this production tree plus the direct worklog-only child, verify
+  zero code/test drift, and then wait for commit-specific GitHub checks before
+  resolving the ownership thread. Copilot is not to be requested again.
