@@ -27,7 +27,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install uv
+        pip install uv==0.12.5
         uv lock --check
         pip install -e ".[dev,postgres]"
 

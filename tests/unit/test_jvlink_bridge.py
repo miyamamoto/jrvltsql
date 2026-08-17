@@ -78,6 +78,7 @@ class TestJVLinkBridgeInit:
     def test_non_windows_bridge_uses_only_the_explicit_external_runner(
         self, tmp_path, monkeypatch
     ):
+        monkeypatch.setattr("src.jvlink.bridge.sys.platform", "linux")
         exe = tmp_path / "JVLinkBridge.exe"
         exe.touch()
         monkeypatch.setenv("JVLINK_BRIDGE_RUNNER", "external-runner")
@@ -92,6 +93,7 @@ class TestJVLinkBridgeInit:
     def test_non_windows_bridge_fails_closed_without_an_external_runner(
         self, tmp_path, monkeypatch
     ):
+        monkeypatch.setattr("src.jvlink.bridge.sys.platform", "linux")
         exe = tmp_path / "JVLinkBridge.exe"
         exe.touch()
         monkeypatch.delenv("JVLINK_BRIDGE_RUNNER", raising=False)

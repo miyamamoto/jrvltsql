@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import yaml
+from packaging.version import Version
 
 from src.jvlink.constants import validate_jvopen_combination
 from src.utils.config import Config, get_default_config
@@ -147,6 +148,24 @@ def test_version_and_lock_metadata_are_consistent() -> None:
     assert __version__ == project["project"]["version"]
     assert cli_main.__version__ == __version__
     assert locked_project["version"] == __version__
+
+    build_requires = project["build-system"]["requires"]
+    setuptools_requirement = next(
+        requirement
+        for requirement in build_requires
+        if requirement.startswith("setuptools>=")
+    )
+    assert Version(setuptools_requirement.removeprefix("setuptools>=")) >= Version(
+        "77.0.3"
+    )
+
+    manifest = (REPOSITORY_ROOT / "MANIFEST.in").read_text(encoding="utf-8")
+    assert "prune specs" in manifest.splitlines()
+
+    workflow = (
+        REPOSITORY_ROOT / ".github/workflows/test.yml"
+    ).read_text(encoding="utf-8")
+    assert "pip install uv==" in workflow
 
 
 def test_architecture_documents_the_generic_non_windows_runner_contract() -> None:

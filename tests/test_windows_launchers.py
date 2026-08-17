@@ -124,6 +124,7 @@ def test_timeseries_fetch_requires_an_explicit_cli_override(tmp_path):
     assert "PATH_JLTSQL_SELECTED" not in path_only.stdout
 
     env["JLTSQL"] = f'"{bin_dir / "jltsql.cmd"}"'
+    env["PYTHON"] = str(tmp_path / "must-not-override-jltsql.exe")
     explicit = _run_batch(batch, "20260801", "20260801", env=env, cwd=checkout)
 
     assert explicit.returncode == 0, explicit.stdout + explicit.stderr

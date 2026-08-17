@@ -11,9 +11,9 @@ import subprocess
 import sys
 import tempfile
 import zipfile
+import zlib
 from collections.abc import Sequence
 from pathlib import Path
-
 
 _WHEEL_BOOTSTRAP = """
 import builtins
@@ -46,17 +46,32 @@ exit_code = 0
 try:
     runpy.run_module("src.cli.main", run_name="__main__")
 except SystemExit as exc:
-    exit_code = exc.code if isinstance(exc.code, int) else 1
+    if exc.code is None:
+        exit_code = 0
+    elif isinstance(exc.code, int):
+        exit_code = exc.code
+    else:
+        exit_code = 1
 finally:
+    origin_errors = []
     for module_name, module in tuple(sys.modules.items()):
         if module_name != "src" and not module_name.startswith("src."):
             continue
         module_file = getattr(module, "__file__", None)
         if module_file is None:
-            raise RuntimeError(f"{module_name} has no wheel origin")
-        origin = pathlib.Path(module_file).resolve()
-        if not origin.is_relative_to(wheel_root):
-            raise RuntimeError(f"{module_name} was not imported from the wheel")
+            module_origins = [
+                pathlib.Path(location).resolve()
+                for location in getattr(module, "__path__", ())
+            ]
+        else:
+            module_origins = [pathlib.Path(module_file).resolve()]
+        if not module_origins:
+            origin_errors.append(f"{module_name} has no wheel origin")
+            continue
+        if any(not origin.is_relative_to(wheel_root) for origin in module_origins):
+            origin_errors.append(f"{module_name} was not imported from the wheel")
+if origin_errors:
+    raise RuntimeError("; ".join(origin_errors))
 raise SystemExit(exit_code)
 """
 
@@ -116,14 +131,17 @@ def validate_wheel_init(wheel: Path) -> list[str]:
         tempfile.TemporaryDirectory(prefix="jltsql-wheel-extract-") as extract_raw,
         tempfile.TemporaryDirectory(prefix="jltsql-wheel-init-") as run_raw,
     ):
-        extract_dir = Path(extract_raw)
+        extract_dir = Path(extract_raw).resolve()
         run_dir = Path(run_raw)
         try:
             with zipfile.ZipFile(wheel) as archive:
                 members = {member.filename for member in archive.infolist()}
                 missing = sorted(_REQUIRED_WHEEL_MEMBERS - members)
                 if missing:
-                    return ["wheel is missing required runtime members"]
+                    return [
+                        "wheel is missing required runtime members: "
+                        + ", ".join(missing)
+                    ]
                 if not any(
                     member.endswith(".dist-info/METADATA") for member in members
                 ):
@@ -140,8 +158,10 @@ def validate_wheel_init(wheel: Path) -> list[str]:
                     if not target.is_relative_to(extract_dir):
                         return ["wheel contains an unsafe archive member"]
                 archive.extractall(extract_dir)
-        except (OSError, zipfile.BadZipFile) as error:
-            return [f"could not extract wheel {wheel.name}: {error}"]
+        except (OSError, RuntimeError, zipfile.BadZipFile, zlib.error) as error:
+            return [
+                f"could not extract wheel {wheel.name}: {type(error).__name__}"
+            ]
 
         env = os.environ.copy()
         env.pop("PYTHONPATH", None)
@@ -211,10 +231,13 @@ def validate_wheel_init(wheel: Path) -> list[str]:
         if not sqlite_path.is_file():
             errors.append("wheel SQLite bootstrap did not create data/keiba.db")
         else:
-            with sqlite3.connect(sqlite_path) as connection:
+            connection = sqlite3.connect(sqlite_path)
+            try:
                 table_count = connection.execute(
                     "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table'"
                 ).fetchone()[0]
+            finally:
+                connection.close()
             if table_count == 0:
                 errors.append("wheel SQLite bootstrap created no tables")
 

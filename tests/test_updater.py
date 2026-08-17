@@ -2,6 +2,7 @@
 
 import json
 import time
+from importlib import metadata
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -58,7 +59,10 @@ class TestGetCurrentVersion:
         mock_run.return_value = MagicMock(returncode=0, stdout="v2.2.0\n")
         with (
             patch("src.utils.updater.PROJECT_ROOT", tmp_path),
-            patch("importlib.metadata.version", side_effect=LookupError),
+            patch(
+                "importlib.metadata.version",
+                side_effect=metadata.PackageNotFoundError,
+            ),
         ):
             version = get_current_version()
             assert version == "v2.2.0"
@@ -82,6 +86,34 @@ class TestGetCurrentVersion:
         from src.utils.updater import get_current_version
 
         mock_run.return_value = MagicMock(returncode=1, stdout="")
+        with (
+            patch("src.utils.updater.PROJECT_ROOT", tmp_path),
+            patch("importlib.metadata.version", return_value="9.8.7"),
+        ):
+            assert get_current_version() == "9.8.7"
+
+    def test_unexpected_source_metadata_failure_is_not_silently_ignored(
+        self,
+        tmp_path,
+    ):
+        from src.utils.updater import get_current_version
+
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text('[project]\nversion = "1.0.0"\n', encoding="utf-8")
+        with (
+            patch("src.utils.updater.PROJECT_ROOT", tmp_path),
+            patch.object(Path, "read_text", side_effect=RuntimeError("unexpected")),
+            pytest.raises(RuntimeError, match="unexpected"),
+        ):
+            get_current_version()
+
+    def test_invalid_source_metadata_falls_back_to_installed_metadata(
+        self,
+        tmp_path,
+    ):
+        from src.utils.updater import get_current_version
+
+        (tmp_path / "pyproject.toml").write_text("not valid toml = [", encoding="utf-8")
         with (
             patch("src.utils.updater.PROJECT_ROOT", tmp_path),
             patch("importlib.metadata.version", return_value="9.8.7"),

@@ -10,7 +10,11 @@ import pytest
 
 from scripts import check_distribution_contents as content_gate
 from scripts.check_distribution_contents import validate_distributions
-from scripts.smoke_distribution_init import _wheel_cli_command, validate_wheel_init
+from scripts.smoke_distribution_init import (
+    _REQUIRED_WHEEL_MEMBERS,
+    _wheel_cli_command,
+    validate_wheel_init,
+)
 
 
 def _write_wheel(
@@ -282,9 +286,30 @@ def test_distribution_gate_rejects_archive_links(tmp_path: Path) -> None:
 
 def test_wheel_smoke_binds_execution_to_the_extracted_wheel(tmp_path: Path) -> None:
     command = _wheel_cli_command(tmp_path, ("init",))
+    bootstrap = next(argument for argument in command if "runpy.run_module" in argument)
 
     assert "-I" in command
     assert any("is_relative_to" in argument for argument in command)
+    assert "if exc.code is None:" in bootstrap
+    assert "__path__" in bootstrap
+
+
+def test_wheel_smoke_rejects_a_corrupt_extract_without_crashing(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    wheel = tmp_path / "jltsql-0-py3-none-any.whl"
+    _write_wheel(
+        wheel,
+        (*sorted(_REQUIRED_WHEEL_MEMBERS), "jltsql-0.dist-info/METADATA"),
+    )
+
+    def corrupt_extract(*_args, **_kwargs):
+        raise zlib.error("synthetic corrupt stream")
+
+    monkeypatch.setattr(zipfile.ZipFile, "extractall", corrupt_extract)
+
+    assert validate_wheel_init(wheel)
 
 
 def test_wheel_smoke_rejects_a_partial_wheel_despite_an_editable_install(
@@ -323,3 +348,16 @@ def test_distribution_gate_returns_an_error_for_corrupt_deflate_stream(
     monkeypatch.setattr(zipfile.ZipFile, "read", corrupt_read)
 
     assert validate_distributions((wheel, sdist))
+
+
+def test_distribution_gate_rejects_members_above_the_scan_limit(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    wheel, sdist = _clean_pair(tmp_path)
+    monkeypatch.setattr(content_gate, "MAX_SCANNED_TEXT_BYTES", 4)
+
+    errors = validate_distributions((wheel, sdist))
+
+    assert errors
+    assert any("content-scan size limit" in error for error in errors)

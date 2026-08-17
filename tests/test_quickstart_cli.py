@@ -383,7 +383,10 @@ class TestQuickstartBatchRoles:
 
         assert "where jltsql" not in text
         assert 'set "JLTSQL="' not in text.splitlines()
-        assert text.index("if defined PYTHON") < text.index("if defined VIRTUAL_ENV")
+        assert "if not defined JLTSQL if defined PYTHON" in text
+        assert text.index("if not defined JLTSQL if defined PYTHON") < text.index(
+            "if not defined JLTSQL if defined VIRTUAL_ENV"
+        )
         assert text.index("if defined VIRTUAL_ENV") < text.index("venv32\\Scripts")
         assert text.index("venv32\\Scripts") < text.index(".venv\\Scripts")
         assert text.index(".venv\\Scripts") < text.index("py -3.12-32 --version")

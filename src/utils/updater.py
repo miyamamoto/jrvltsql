@@ -5,7 +5,9 @@ import os
 import subprocess
 import sys
 import time
+import tomllib
 from datetime import datetime, timezone
+from importlib import metadata
 from pathlib import Path
 from typing import Optional
 
@@ -59,21 +61,31 @@ def get_current_version() -> str:
     try:
         toml_path = PROJECT_ROOT / "pyproject.toml"
         if toml_path.exists():
-            content = toml_path.read_text(encoding="utf-8")
-            for line in content.splitlines():
-                if line.strip().startswith("version"):
-                    # version = "2.2.0"
-                    return line.split("=")[1].strip().strip('"').strip("'")
-    except Exception:
-        pass
+            project = tomllib.loads(toml_path.read_text(encoding="utf-8"))
+            project_version = project["project"]["version"]
+            if not isinstance(project_version, str) or not project_version:
+                raise TypeError("project.version must be a non-empty string")
+            return project_version
+    except (
+        OSError,
+        UnicodeError,
+        tomllib.TOMLDecodeError,
+        KeyError,
+        TypeError,
+    ) as error:
+        logger.debug(
+            "Could not read source version metadata",
+            error_type=type(error).__name__,
+        )
 
     # Installed wheels do not carry their source pyproject.
     try:
-        from importlib.metadata import version
-
-        return version("jltsql")
-    except Exception:
-        pass
+        return metadata.version("jltsql")
+    except metadata.PackageNotFoundError as error:
+        logger.debug(
+            "Installed distribution metadata was not found",
+            error_type=type(error).__name__,
+        )
 
     # Last-resort compatibility for an unpacked git checkout without project
     # metadata. A tag is not allowed to override either authoritative source.
@@ -87,8 +99,11 @@ def get_current_version() -> str:
         )
         if result.returncode == 0:
             return result.stdout.strip()
-    except Exception:
-        pass
+    except (OSError, subprocess.SubprocessError) as error:
+        logger.debug(
+            "Could not read version from Git metadata",
+            error_type=type(error).__name__,
+        )
 
     return "unknown"
 
@@ -121,8 +136,8 @@ def check_for_updates() -> Optional[dict]:
         dict with 'latest_version', 'current_version', 'update_available', 'html_url'
         or None on failure
     """
-    import urllib.request
     import urllib.error
+    import urllib.request
 
     current = get_current_version()
 

@@ -3201,8 +3201,7 @@
 ### 2026-08-17 14:25 JST — public release-surface security iteration start
 
 - This bounded pre-release iteration targets repository
-  `miyamamoto/jrvltsql` in dedicated worktree
-  `/home/keiba/scratch/20260817_jrvltsql_public_surface`, branch
+  `miyamamoto/jrvltsql` in a dedicated release worktree, branch
   `agent/release-public-surface-20260817`, from exact current
   `origin/master` / base / HEAD
   `98ec163222aab3eadaa82f048273c8a0be8722e6`. The published production release
@@ -3224,8 +3223,8 @@
   a credential-shaped or private-runtime payload, then retain a paired safe
   archive case. Error output must name only the archive member and finding
   category, never the matched value.
-- Claude Code Fable is unavailable under the recorded service usage limit.
-  Per maintainer authorization, implementation and review use Codex with at
+- The optional secondary implementation reviewer was unavailable and is not
+  counted as evidence. Implementation and review use Codex with at
   least two independent critical reviews on one frozen candidate SHA after the
   audit findings are batched. STOP on any credential disclosure in output or
   tracked evidence, compatibility-layer regression, archive scanner
@@ -3361,9 +3360,9 @@
   followed by exact-full-SHA tests and the two bounded carry-forward critical
   reviews; no release or merge is authorized by these pre-commit results.
 - Three independent Codex carry-forward reviews of exact candidate
-  `c08b5170c59d30c630876a0ae976b4823ed32cd5` returned NEEDS_CHANGES. Claude
-  Code remained unavailable under its service usage limit, so this review
-  batch used the maintainer-authorized Codex fallback. Findings were
+  `c08b5170c59d30c630876a0ae976b4823ed32cd5` returned NEEDS_CHANGES. The
+  optional secondary reviewer remained unavailable and was not counted.
+  Findings were
   consolidated before any repair: the archive gate still missed several
   split/encoded sensitive-content and path/member-boundary cases and could
   expose a sensitive member through an exception; a partial wheel could borrow
@@ -3502,3 +3501,45 @@
   and is not a 64-bit support claim. Local Linux cannot execute this cmd.exe
   branch, so the exact follow-up SHA Windows Actions job is mandatory before
   merge.
+- Follow-up candidate `20b1926a190384f609e34aa5001ae39f93512425`
+  passed the locked full suite (`2738 passed, 131 skipped, 22 subtests
+  passed`), the static/artifact gates, and GitHub test/lint/32-bit Windows
+  launcher jobs. The bounded closure reviewer returned GREEN. After the draft
+  was marked ready, GitHub Codex and CodeRabbit supplied one aggregated final
+  review batch; no further reviewer was requested before evaluating the whole
+  batch.
+- Nine inline findings were independently checked. The actionable set is:
+  require a setuptools release that implements string SPDX metadata; preserve
+  an explicit `JLTSQL` command when `PYTHON` is also present; make the tracked
+  `specs/` exclusion explicit in `MANIFEST.in`; make wheel smoke exit/origin/
+  extraction/path/SQLite cleanup fail closed; narrow and log expected version
+  metadata fallbacks; and bind non-Windows bridge tests to a non-Windows
+  platform. The worklog keeps branch and full-SHA provenance required for
+  auditability, while replacing its maintainer-local absolute path and private
+  service-state detail with generic evidence.
+- Tests were extended before the production repair. On unchanged production
+  candidate `20b1926...`, the local review selection returned `5 failed, 153
+  passed`: the declared setuptools minimum was too old, explicit `JLTSQL` was
+  overwritten, wheel smoke mishandled a successful no-value exit and a corrupt
+  stream, and an unexpected source-version exception was silently swallowed.
+  The paired normal paths remained green. The Windows runtime half is also
+  encoded as PATH-only rejection plus explicit-command success and requires the
+  exact follow-up GitHub Windows job.
+- The grouped repair pins the build minimum at setuptools 77.0.3 and the CI uv
+  version at the version already exercised by the prior successful run. Wheel
+  smoke now accepts a no-value successful exit, validates regular and namespace
+  module origins without raising from `finally`, resolves the extraction root,
+  converts corrupt/encrypted archive failures into gate errors, and closes the
+  SQLite readback connection deterministically. The distribution gate retains
+  its intentionally conservative credential-shape rejection; weakening it for
+  hypothetical false positives was rejected because this security gate must
+  fail closed. The scan-cost micro-optimization is non-blocking and is not mixed
+  into this release-safety repair. Existing corrupt-member coverage plus one
+  bounded oversize-member case cover the unread/size-limit rejection paths.
+- The formerly red and adjacent affected selection now passes `189 passed`.
+  A no-isolation PEP 517 build using the declared minimum setuptools 77.0.3
+  produced both artifacts; the content gate and extracted-wheel init/config/
+  version/SQLite readback smoke passed. Fatal flake8, lock check, and diff check
+  pass. These are dirty-tree repair results only; next safe action is one commit,
+  exact-SHA affected/full/static/artifact validation, one bounded review of only
+  this final batch, and courteous replies resolving every review thread.
