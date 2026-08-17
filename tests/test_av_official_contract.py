@@ -18,7 +18,11 @@ from src.database.schema_types import (
     get_table_primary_key_columns,
 )
 from src.database.sqlite_handler import SQLiteDatabase
-from src.importer.importer import DataImporter, validate_import_record_header
+from src.importer.importer import (
+    DataImporter,
+    _verify_av_key_not_null_constraints,
+    validate_import_record_header,
+)
 from src.importer.importer_optimized import OptimizedDataImporter
 from src.parser.av_parser import AVParser
 from src.parser.status_domain import (
@@ -203,6 +207,43 @@ def test_av_preflight_allows_a_missing_non_key_column_to_be_added(
         }
 
     assert "Bamei" in columns
+
+
+@pytest.mark.parametrize("table_name", ("NL_AV", "RT_AV"))
+@pytest.mark.parametrize(
+    "defect", ("wrong-key", "nullable-key", "wrong-type", "short-text", "extra-unique")
+)
+def test_av_preflight_rejects_unsafe_identity_before_any_additive_migration(
+    tmp_path, table_name: str, defect: str
+) -> None:
+    unsafe = SCHEMAS[table_name].replace("            Bamei TEXT,\n", "", 1)
+    if defect == "wrong-key":
+        unsafe = unsafe.replace("RaceNum, Umaban)", "RaceNum, HappyoTime, Umaban)", 1)
+    elif defect == "nullable-key":
+        unsafe = unsafe.replace("Umaban INTEGER NOT NULL", "Umaban INTEGER", 1)
+    elif defect == "wrong-type":
+        unsafe = unsafe.replace("Year INTEGER NOT NULL", "Year TEXT NOT NULL", 1)
+    elif defect == "short-text":
+        unsafe = unsafe.replace("HappyoTime TEXT", "HappyoTime VARCHAR(7)", 1)
+    else:
+        unsafe = unsafe.replace(
+            "PRIMARY KEY (", "UNIQUE (HappyoTime),\n            PRIMARY KEY (", 1
+        )
+    incomplete_ra = SCHEMAS["NL_RA"].replace("            Crlf TEXT,\n", "", 1)
+    assert unsafe != SCHEMAS[table_name]
+    assert incomplete_ra != SCHEMAS["NL_RA"]
+    database = SQLiteDatabase({"path": str(tmp_path / f"{table_name}-{defect}.db")})
+    with database:
+        database.execute(unsafe)
+        database.execute(incomplete_ra)
+        database.commit()
+        before_av = database.fetch_all(f'PRAGMA table_info("{table_name}")')
+        before_ra = database.fetch_all('PRAGMA table_info("NL_RA")')
+        with pytest.raises(SchemaMigrationError):
+            create_all_tables(database)
+
+        assert database.fetch_all(f'PRAGMA table_info("{table_name}")') == before_av
+        assert database.fetch_all('PRAGMA table_info("NL_RA")') == before_ra
 
 
 @pytest.mark.parametrize(
@@ -582,6 +623,41 @@ def test_av_postgresql_resolves_a_visible_table_after_an_empty_search_path_schem
         assert postgresql_db.fetch_one(
             f'SELECT COUNT(*) AS "n" FROM {table_name}'
         ) == {"n": 1}
+    finally:
+        postgresql_db.rollback()
+        postgresql_db.execute(f"SET search_path TO {owner}")
+        postgresql_db.execute(f"DROP SCHEMA IF EXISTS {empty_schema} CASCADE")
+        postgresql_db.commit()
+
+
+@pytest.mark.parametrize("standard", (False, True), ids=("native", "standard"))
+def test_av_postgresql_rejects_a_nullable_key_in_a_later_search_path_schema(
+    postgresql_db, standard: bool
+) -> None:
+    table_name = "TORIKESI_JYOGAI" if standard else "NL_AV"
+    schema_sql = JRAVAN_SCHEMAS[table_name] if standard else SCHEMAS[table_name]
+    schema_sql = schema_sql.replace(
+        (
+            "Umaban                         SMALLINT NOT NULL"
+            if standard
+            else "Umaban INTEGER NOT NULL"
+        ),
+        "Umaban                         SMALLINT         " if standard else "Umaban INTEGER",
+        1,
+    )
+    schema_sql = schema_sql.replace("PRIMARY KEY (", "UNIQUE (", 1)
+    owner = postgresql_db.fetch_one('SELECT current_schema() AS "owner"')["owner"]
+    empty_schema = f"av_empty_{uuid4().hex[:12]}"
+    postgresql_db.execute(schema_sql)
+    postgresql_db.execute(f"CREATE SCHEMA {empty_schema}")
+    postgresql_db.execute(f"SET search_path TO {empty_schema}, {owner}")
+    postgresql_db.commit()
+    try:
+        with pytest.raises(SchemaMigrationError, match="Umaban"):
+            _verify_av_key_not_null_constraints(postgresql_db, table_name)
+        assert postgresql_db.fetch_one(
+            f'SELECT COUNT(*) AS "n" FROM {table_name}'
+        ) == {"n": 0}
     finally:
         postgresql_db.rollback()
         postgresql_db.execute(f"SET search_path TO {owner}")

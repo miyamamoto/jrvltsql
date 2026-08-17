@@ -185,6 +185,28 @@
   the local date was 2026-08-18. The parser micro-refactor and duplicate test
   builder suggestions are non-blocking scope expansions with no reproduced AV
   correctness defect and are not part of this iteration.
+- The final bounded oracle review found no production defect but identified a
+  P2 negative-oracle gap: the new missing-column and `attnotnull` tests proved
+  only successful cases. One existing test was minimally expanded rather than
+  creating one test per reviewer hypothesis. It now covers `NL_AV` / `RT_AV`
+  with a simultaneously missing non-key column plus wrong key, nullable key,
+  wrong key type, insufficient text capacity, or extra uniqueness, and verifies
+  that neither AV nor an unrelated additive table is altered. A paired actual-
+  PostgreSQL test directly exercises native/standard nullable-key rejection in
+  a later search-path schema.
+- Fail-open mutation evidence was recorded before accepting the test-only
+  repair: a temporary preflight bypass made all ten SQLite cases fail after AV
+  or unrelated schema mutation, and a temporary `attnotnull=True` mutant made
+  both PostgreSQL cases fail with `DID NOT RAISE`. Both production mutations
+  were immediately removed; the exact production diff returned to zero. With
+  the real implementation restored, the same SQLite matrix passed `10/10` and
+  the PostgreSQL negative passed `2/2`.
+- The final test-only oracle candidate passed the complete AV contract with
+  `67 passed, 22 skipped` on SQLite and `89/89` on fresh PostgreSQL 16. The
+  affected existing suite passed `341 tests`, skipped `29` opt-in tests, and
+  passed `10` subtests. `TEST GATE PASS`, fatal flake8, and `git diff --check`
+  remained green. No production, public documentation, packaging, or version
+  file changed after `ff75fb1b88f7e9d4226ebfa38622837e7502d70b`.
 
 ## STOP conditions
 
