@@ -6,6 +6,7 @@ from uuid import uuid4
 
 import pytest
 
+from src.database.base import DatabaseError
 from src.database.migration import SchemaMigrationError
 from src.database.schema import SCHEMAS
 from src.database.schema_jravan import JRAVAN_SCHEMAS
@@ -13,7 +14,7 @@ from src.database.schema_metadata import TABLE_METADATA
 from src.database.schema_types import get_table_column_types, get_table_primary_key_columns
 from src.database.sqlite_handler import SQLiteDatabase
 from src.database.table_mappings import JLTSQL_TO_JRAVAN, JRAVAN_TO_JLTSQL
-from src.importer.importer import DataImporter
+from src.importer.importer import DataImporter, TransactionRecoveryError
 from src.importer.importer_optimized import OptimizedDataImporter
 from src.parser.tm_parser import TMParser
 from src.realtime.updater import RealtimeUpdater
@@ -406,8 +407,66 @@ def test_tm_realtime_snapshot_recovery_failure_is_not_returned_as_safe(
             lambda: (_ for _ in ()).throw(RuntimeError("injected invalidation failure")),
         )
         try:
-            with pytest.raises(RuntimeError, match="connection invalidation failed"):
+            with pytest.raises(
+                TransactionRecoveryError, match="connection invalidation failed"
+            ):
                 updater.process_record(_tm_record())
+        finally:
+            monkeypatch.setattr(database, "insert_many", original_insert_many)
+            monkeypatch.setattr(database, "rollback", original_rollback)
+            monkeypatch.setattr(database, "invalidate_connection", original_invalidate)
+            database.rollback()
+
+
+@pytest.mark.parametrize(
+    ("importer_class", "entrypoint", "auto_commit"),
+    [
+        pytest.param(importer, "batch", auto_commit, id=f"{importer.__name__}-batch-{auto_commit}")
+        for importer in (DataImporter, OptimizedDataImporter)
+        for auto_commit in (True, False)
+    ]
+    + [
+        pytest.param(DataImporter, "single", auto_commit, id=f"single-{auto_commit}")
+        for auto_commit in (True, False)
+    ],
+)
+def test_tm_importers_propagate_unrecoverable_snapshot_transaction(
+    tmp_path, monkeypatch, importer_class, entrypoint, auto_commit
+) -> None:
+    database = SQLiteDatabase({"path": str(tmp_path / f"tm-{entrypoint}-{auto_commit}.db")})
+    with database:
+        database.execute(SCHEMAS["NL_TM"])
+        database.commit()
+        parsed = TMParser().parse(_tm_record())
+        assert parsed is not None
+        importer = importer_class(database)
+
+        original_insert_many = database.insert_many
+        original_rollback = database.rollback
+        original_invalidate = database.invalidate_connection
+        monkeypatch.setattr(
+            database,
+            "insert_many",
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                DatabaseError("injected snapshot insert failure")
+            ),
+        )
+        monkeypatch.setattr(
+            database,
+            "rollback",
+            lambda: (_ for _ in ()).throw(DatabaseError("injected rollback failure")),
+        )
+        monkeypatch.setattr(
+            database,
+            "invalidate_connection",
+            lambda: (_ for _ in ()).throw(DatabaseError("injected invalidation failure")),
+        )
+        try:
+            with pytest.raises(TransactionRecoveryError):
+                if entrypoint == "single":
+                    importer.import_single_record(parsed[0], auto_commit=auto_commit)
+                else:
+                    importer.import_records(iter(parsed), auto_commit=auto_commit)
         finally:
             monkeypatch.setattr(database, "insert_many", original_insert_many)
             monkeypatch.setattr(database, "rollback", original_rollback)

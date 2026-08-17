@@ -1042,7 +1042,6 @@ def test_wf_realtime_transaction_result_matches_durable_mixed_and_ordered_rows(
             "ordered-non-wf-failure",
             [
                 realtime_ra_record(),
-                realtime_ra_record(month_day="0817"),
                 {**realtime_ra_record(), "DataKubun": "0"},
             ],
         ),
@@ -1069,6 +1068,10 @@ def test_wf_realtime_transaction_result_matches_durable_mixed_and_ordered_rows(
             database.execute(
                 "CREATE TRIGGER reject_rt_ra_0817 BEFORE INSERT ON RT_RA "
                 "WHEN NEW.MonthDay = 817 BEGIN SELECT RAISE(FAIL, 'reject RA 0817'); END"
+            )
+            database.execute(
+                "CREATE TRIGGER reject_rt_ra_delete BEFORE DELETE ON RT_RA "
+                "BEGIN SELECT RAISE(FAIL, 'reject RA delete'); END"
             )
             result = RealtimeUpdater(database).process_parsed_records_batch(records)
             assert result["success"] is False, case_id
@@ -2224,12 +2227,21 @@ def test_wf_postgresql_realtime_database_failure_reports_no_success(
     assert result["errors"] == 2
     assert _count(postgresql_db, "RT_WF") == 0
 
+    postgresql_db.execute(
+        "CREATE FUNCTION reject_rt_ra_delete() RETURNS trigger LANGUAGE plpgsql AS $$ "
+        "BEGIN RAISE EXCEPTION 'simulated RT_RA delete failure'; END $$"
+    )
+    postgresql_db.execute(
+        "CREATE TRIGGER reject_rt_ra_delete BEFORE DELETE ON RT_RA "
+        "FOR EACH ROW EXECUTE FUNCTION reject_rt_ra_delete()"
+    )
+    postgresql_db.commit()
+
     for records in (
         [realtime_ra_record(), parsed_record(month_day="0817")],
         [parsed_record(), realtime_ra_record(month_day="0817")],
         [
             realtime_ra_record(),
-            realtime_ra_record(month_day="0817"),
             {**realtime_ra_record(), "DataKubun": "0"},
         ],
         [

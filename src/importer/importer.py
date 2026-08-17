@@ -4675,6 +4675,8 @@ class DataImporter:
                         )
                         if auto_commit:
                             self.database.commit()
+                    except TransactionRecoveryError:
+                        raise
                     except Exception:
                         self.database.rollback()
                         raise
@@ -4744,6 +4746,8 @@ class DataImporter:
 
             return stats
 
+        except TransactionRecoveryError:
+            raise
         except SchemaMigrationError:
             if not auto_commit:
                 rollback_failed_import(
@@ -5339,6 +5343,8 @@ class DataImporter:
                     rows = replace_mining_native_snapshot(self.database, record, table_name)
                     if auto_commit:
                         self.database.commit()
+                except TransactionRecoveryError:
+                    raise
                 except Exception:
                     self.database.rollback()
                     raise
@@ -5473,6 +5479,8 @@ class DataImporter:
 
             return True
 
+        except TransactionRecoveryError:
+            raise
         except SchemaMigrationError:
             if not auto_commit:
                 self._rollback_single_record_transaction(

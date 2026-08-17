@@ -24,6 +24,7 @@ from src.importer.importer import (
     _WF_NATIVE_STORAGE_TABLES,
     _WF_STANDARD_STORAGE_TABLES,
     _YS_STORAGE_TABLES,
+    TransactionRecoveryError,
     _ck_child_tables,
     _delete_mining_race_rows,
     _delete_official_record,
@@ -466,6 +467,8 @@ class OptimizedDataImporter:
                         )
                         if auto_commit:
                             self.database.commit()
+                    except TransactionRecoveryError:
+                        raise
                     except Exception:
                         self.database.rollback()
                         raise
@@ -647,6 +650,8 @@ class OptimizedDataImporter:
 
             return stats
 
+        except TransactionRecoveryError:
+            raise
         except SchemaMigrationError:
             if not auto_commit:
                 rollback_failed_import(

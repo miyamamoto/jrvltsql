@@ -311,7 +311,8 @@ CKのJRA-VAN標準名モードはまだ実装しておらず、`CHOKYO_DETAIL`�
 取り込みを停止して再構築を求めます。
 DM/TMのnative速報スナップショット置換は、既存レース行の削除後に書込が失敗した場合、caller所有を
 含むactive transaction全体をrollbackします。rollback不能時は接続を無効化し、それも失敗した場合は
-通常の失敗結果へ変換せず例外を送出します。
+batch・optimized・single・速報の全入口から`TransactionRecoveryError`を送出し、通常の失敗結果へ
+変換しません。
 
 ## 対象外
 

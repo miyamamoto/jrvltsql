@@ -3130,3 +3130,70 @@
   current GitHub threads must receive evidence-based replies and be resolved
   to zero. Copilot must not be re-requested. No merge, release, or provider
   acquisition claim is authorized before those gates.
+
+### 2026-08-17 13:40-13:50 JST — recovery exception propagation follow-up
+
+- The exact-SHA review of
+  `a81212f09ad534e073f56fefb61c9c216c259a9e` produced one adjacent P1 after
+  the realtime-only attack matrix had returned GREEN. The shared snapshot
+  helper correctly raised `TransactionRecoveryError` when write, rollback, and
+  connection invalidation all failed, but DataImporter and
+  OptimizedDataImporter performed a second raw rollback around the helper.
+  `import_single_record(auto_commit=True)` could replace the recovery exception
+  with `DatabaseError`, which its outer handler converted to `False` while the
+  connection remained active and pending. The broader review therefore
+  overrules the narrower GREEN result and keeps merge stopped.
+- Before production repair, the existing TM contract was expanded into one
+  six-case batch/optimized/single and auto-commit true/false matrix, and the
+  recovery assertion was tightened from generic `RuntimeError` to exact
+  `TransactionRecoveryError`. Exact production head `a81212f...` returned `3
+  failed, 4 passed`: DataImporter batch true and OptimizedDataImporter batch
+  true wrapped the failure as `ImporterError`, while single true returned
+  `False`. The auto-commit-false cases already propagated the type. The same
+  red run kept the ordered non-WF DELETE-trigger regression green.
+- The repair gives `TransactionRecoveryError` precedence over the three local
+  rollback wrappers and over generic wrapping/DatabaseError conversion in both
+  batch importers and DataImporter single-record entry. The local wrappers are
+  retained for commit failures and other exceptions that have not already
+  exhausted transaction recovery. Normal snapshot write failure still returns
+  or raises its existing recoverable error after rollback; unrecoverable
+  recovery now crosses every public entry unchanged.
+  The formerly red matrix plus realtime recovery and ordered DELETE tests pass
+  `8 passed`; affected TM/DM/importer/expanded/WF contracts pass `237 passed,
+  42 skipped`.
+- The reviewer also found two test-completeness P2s. The existing ordered
+  non-WF scenario now fails the same-key status1-to-status0 DELETE itself via a
+  DELETE trigger on SQLite and PostgreSQL rather than failing an earlier
+  insert. The recovery test now binds the exact exception type. Next safe
+  action is final affected/full validation, one commit/push, then one narrowly
+  bounded carry-forward review of this exception-propagation delta and
+  commit-specific CI. STOP on any normal return from an unrecoverable recovery,
+  exception type replacement, DELETE-path count/durability mismatch, candidate
+  drift, failed executed CI step, or unresolved thread.
+- Final validation of this dirty recovery candidate is complete. A fresh
+  PostgreSQL 16 run of the full opt-in WF/TM contract passes `162 passed`; the
+  disposable container `jlt_wf_pg16_recoveryfinal_20260817` was removed and its
+  filtered container listing is empty. The Python 3.12.11 CI-equivalent suite
+  passes `2676 passed, 125 skipped, 14 deselected, 14 subtests passed` with 77%
+  total coverage. The fatal CI flake8 selection reports zero findings;
+  compileall, `TEST GATE PASS`, `OFFICIAL ORACLE PASS`, strict MkDocs, and `git
+  diff --check` all pass. Ruff/Black continue to report the repository's known
+  advisory modernization/formatting debt and are not executed CI blockers.
+  A fresh version 1.6.10 wheel and sdist build succeeds and the two-artifact
+  distribution-content gate passes, preserving the exclusion of tracked
+  `specs/` and official audit fixtures. The next action remains a single
+  intentional commit/push followed by the two bounded exact-SHA reviews and
+  commit-specific CI; no further production edit is authorized unless one of
+  those gates supplies a concrete correctness, security, data-integrity, or
+  operational-safety blocker.
+- Final manual diff review narrowed the production change once more before
+  commit. Removing the three local wrappers entirely would also have removed
+  their existing rollback on a later commit failure. The candidate instead
+  keeps that established boundary and adds a preceding exact
+  `TransactionRecoveryError` re-raise, so only an already exhausted recovery
+  bypasses the second rollback. The exact eight-case recovery/ordered selection
+  passes `8 passed`; the affected TM/DM/importer/expanded/WF replay remains
+  `237 passed, 42 skipped`. This is a scope reduction, not a new behavior or
+  contract, so the already completed full/PG/oracle/package gates remain
+  applicable to the same production semantics; the bounded exact-commit
+  reviewers must nevertheless inspect this final form before merge.
