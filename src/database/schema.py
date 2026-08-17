@@ -2744,7 +2744,7 @@ STRICT_JC_STORAGE_TABLES = frozenset({"NL_JC", "RT_JC"})
 
 
 def _preflight_existing_strict_storage(db: BaseDatabase) -> None:
-    """Reject unsafe SE/WE/JC identities before unrelated additive migration."""
+    """Reject unsafe SE/WE/AV/JC identities before unrelated additive migration."""
 
     from src.database.migration import _migration_targets
     from src.importer.importer import (
@@ -2768,7 +2768,11 @@ def _preflight_existing_strict_storage(db: BaseDatabase) -> None:
                 verify_we_storage_schema(target, table_name)
         for table_name in STRICT_AV_STORAGE_TABLES:
             if target.table_exists_strict(table_name):
-                verify_av_storage_schema(target, table_name)
+                verify_av_storage_schema(
+                    target,
+                    table_name,
+                    allow_missing_columns=True,
+                )
         for table_name in STRICT_JC_STORAGE_TABLES:
             if target.table_exists_strict(table_name):
                 verify_jc_storage_schema(target, table_name)

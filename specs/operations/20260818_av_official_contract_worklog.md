@@ -8,7 +8,7 @@
   excluded unless an AV correctness or data-integrity repair cannot be made
   safely without them.
 - Repository: `miyamamoto/jrvltsql`
-- Worktree: `/home/keiba/scratch/20260818_jrvltsql_av_official`
+- Worktree: dedicated scratch worktree for this iteration; remove after merge.
 - Branch: `agent/av-official-contract-20260818`
 - Base / production master at start:
   `a152045c4bf9c6f9c53f483d2f2cfa0baa05dcb7`
@@ -150,6 +150,41 @@
   flake8, `uv lock --check`, `mkdocs build --strict`, and `git diff --check`
   also passed. The disposable PostgreSQL container was removed and its
   exact-name listing was empty.
+- GitHub Codex and CodeRabbit review comments were aggregated before one final
+  repair batch. Two actionable defects were independently reproduced: the AV
+  nullability query used `current_schema()` instead of resolving the visible
+  relation, and strict preflight rejected an otherwise safe missing non-key
+  column on existing `NL_AV` / `RT_AV`. The first made native and standard AV
+  imports fail when the correct table was visible later in PostgreSQL
+  `search_path`; the second blocked the additive migration that the public
+  schema contract permits.
+- Red-first evidence on unchanged candidate
+  `bf78af91da3146d2265c827b4e3e084457c58b67`: the SQLite missing-`Bamei`
+  preflight regression failed `2/2` with `missing columns=['Bamei']`; a fresh
+  PostgreSQL 16 search-path regression failed native and standard storage
+  `2/2` because all seven key columns were falsely reported nullable.
+- The final review repair resolves the PostgreSQL relation with
+  `to_regclass(?)` and reads `pg_attribute.attnotnull`. AV preflight now allows
+  only missing columns for existing native/realtime tables while retaining
+  exact key, type, nullability, primary-key, and additional-uniqueness checks;
+  normal post-migration verification remains strict. The worktree record was
+  generalized to avoid publishing a local absolute path while retaining the
+  repository-required handoff context. The public migration text now states
+  that NULL or incomplete legacy identities may be preserved only in backup,
+  not reused or inferred in the rebuilt table.
+- The paired regressions passed `2/2` on SQLite and `2/2` on fresh PostgreSQL
+  16 after the repair. The complete AV contract then passed `57` tests with
+  `20` PostgreSQL-only skips on SQLite and `77/77` on PostgreSQL. The affected
+  existing suite passed `331` tests, skipped `27` opt-in tests, and passed `10`
+  subtests. `TEST GATE PASS`, fatal flake8, `uv lock --check`, strict MkDocs,
+  and `git diff --check` also passed.
+- Review dispositions to record on PR #210: the missing-column and PostgreSQL
+  search-path findings were accepted and repaired; the absolute local path was
+  sanitized while retaining a worktree handoff entry; the 2026-08-18 worklog
+  date is retained because the repository-required timezone is Asia/Tokyo and
+  the local date was 2026-08-18. The parser micro-refactor and duplicate test
+  builder suggestions are non-blocking scope expansions with no reproduced AV
+  correctness defect and are not part of this iteration.
 
 ## STOP conditions
 

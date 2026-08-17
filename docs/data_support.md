@@ -293,7 +293,9 @@ losslessでないキー型、キーのNULL許容、追加の`UNIQUE`/exclusion�
 key、主キーなし・誤順序、losslessでない型や容量、追加の`UNIQUE`/exclusion、
 PostgreSQLの遅延主キーを持つ既存表はmutation前に停止します。自動的なPK変更は
 行わないため、DBをバックアップし、対象表だけを現行DDLで再作成して保持範囲内を
-再取込してください。旧標準名`AVOIDENCE`だけが存在する構成も、自動移行や別表への
+再取込してください。NULLまたは不完全なidentityを持つ旧行は正しい7項目キーへ
+安全にbackfillできないため、バックアップには残しても現行表へ再利用せず、公式provider
+から再取得してください。旧標準名`AVOIDENCE`だけが存在する構成も、自動移行や別表への
 誤保存を行わず、すべてのDB targetを変更前に停止します。標準名は
 `TORIKESI_JYOGAI`へ再作成してください。
 

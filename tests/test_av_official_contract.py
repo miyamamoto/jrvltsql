@@ -11,7 +11,7 @@ import pytest
 
 from src.database.dual_handler import DualDatabase
 from src.database.migration import SchemaMigrationError
-from src.database.schema import SCHEMAS
+from src.database.schema import SCHEMAS, create_all_tables
 from src.database.schema_jravan import JRAVAN_SCHEMAS
 from src.database.schema_types import (
     get_table_column_nullability,
@@ -185,6 +185,24 @@ def test_av_layout_status_and_storage_keys_match_official_sources() -> None:
         assert tuple(get_table_primary_key_columns(table_name)) == AV_KEY
         nullability = get_table_column_nullability(table_name)
         assert all(nullability[column] is False for column in AV_KEY)
+
+
+@pytest.mark.parametrize("table_name", ("NL_AV", "RT_AV"))
+def test_av_preflight_allows_a_missing_non_key_column_to_be_added(
+    tmp_path, table_name: str
+) -> None:
+    partial_schema = SCHEMAS[table_name].replace("            Bamei TEXT,\n", "", 1)
+    assert partial_schema != SCHEMAS[table_name]
+    database = SQLiteDatabase({"path": str(tmp_path / f"{table_name}.db")})
+    with database:
+        database.execute(partial_schema)
+        database.commit()
+        create_all_tables(database)
+        columns = {
+            row["name"] for row in database.fetch_all(f'PRAGMA table_info("{table_name}")')
+        }
+
+    assert "Bamei" in columns
 
 
 @pytest.mark.parametrize(
@@ -451,6 +469,7 @@ def test_realtime_av_rejects_malformed_rows_and_replaces_complete_date_snapshot(
         rows = database.fetch_all("SELECT Umaban FROM RT_AV ORDER BY Umaban")
 
     assert first["success"] is True
+    assert first["inserted"] == 2
     assert rejected["success"] is False
     assert rejected["inserted"] == 0
     assert replaced["success"] is True
@@ -530,11 +549,44 @@ def postgresql_db():
         yield database
     finally:
         try:
-            database.rollback()
+            try:
+                database.rollback()
+            except Exception:
+                pass
             database.execute(f"DROP SCHEMA IF EXISTS {schema_name} CASCADE")
             database.commit()
         finally:
             database.disconnect()
+
+
+@pytest.mark.parametrize("standard", (False, True), ids=("native", "standard"))
+def test_av_postgresql_resolves_a_visible_table_after_an_empty_search_path_schema(
+    postgresql_db, standard: bool
+) -> None:
+    table_name = "TORIKESI_JYOGAI" if standard else "NL_AV"
+    schema_sql = JRAVAN_SCHEMAS[table_name] if standard else SCHEMAS[table_name]
+    owner = postgresql_db.fetch_one('SELECT current_schema() AS "owner"')["owner"]
+    empty_schema = f"av_empty_{uuid4().hex[:12]}"
+    postgresql_db.execute(schema_sql)
+    postgresql_db.execute(f"CREATE SCHEMA {empty_schema}")
+    postgresql_db.execute(f"SET search_path TO {empty_schema}, {owner}")
+    postgresql_db.commit()
+    try:
+        import_records(
+            postgresql_db,
+            "data-batch",
+            [parsed_av()],
+            standard=standard,
+            auto_commit=True,
+        )
+        assert postgresql_db.fetch_one(
+            f'SELECT COUNT(*) AS "n" FROM {table_name}'
+        ) == {"n": 1}
+    finally:
+        postgresql_db.rollback()
+        postgresql_db.execute(f"SET search_path TO {owner}")
+        postgresql_db.execute(f"DROP SCHEMA IF EXISTS {empty_schema} CASCADE")
+        postgresql_db.commit()
 
 
 @pytest.mark.parametrize("standard", (False, True), ids=("native", "standard"))

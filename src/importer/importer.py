@@ -1076,13 +1076,14 @@ def _verify_av_key_not_null_constraints(database: BaseDatabase, table_name: str)
         not_null = {str(row.get("name") or "").lower(): bool(row.get("notnull")) for row in rows}
     elif db_type == "postgresql":
         rows = database.fetch_all(
-            "SELECT column_name, is_nullable FROM information_schema.columns "
-            "WHERE table_schema = current_schema() AND table_name = ?",
-            (table_name.lower(),),
+            "SELECT a.attname AS column_name, a.attnotnull AS not_null "
+            "FROM pg_attribute AS a "
+            "WHERE a.attrelid = to_regclass(?) "
+            "AND a.attnum > 0 AND NOT a.attisdropped",
+            (table_name,),
         )
         not_null = {
-            str(row.get("column_name") or "").lower(): str(row.get("is_nullable") or "").upper()
-            == "NO"
+            str(row.get("column_name") or "").lower(): bool(row.get("not_null"))
             for row in rows
         }
     else:
@@ -1096,7 +1097,12 @@ def _verify_av_key_not_null_constraints(database: BaseDatabase, table_name: str)
         )
 
 
-def verify_av_storage_schema(database: BaseDatabase, table_name: str) -> bool:
+def verify_av_storage_schema(
+    database: BaseDatabase,
+    table_name: str,
+    *,
+    allow_missing_columns: bool = False,
+) -> bool:
     """Fail closed unless AV storage preserves the official seven-part key."""
 
     if table_name not in _AV_STORAGE_TABLES:
@@ -1108,12 +1114,17 @@ def verify_av_storage_schema(database: BaseDatabase, table_name: str) -> bool:
     schema_sql = SCHEMAS.get(table_name) or JRAVAN_SCHEMAS.get(table_name)
     if schema_sql is None:
         raise SchemaMigrationError(f"AV storage schema is undefined: {table_name}")
-    verify_table_schema(database, table_name, schema_sql)
+    verify_table_schema(
+        database,
+        table_name,
+        schema_sql,
+        allow_missing_columns=allow_missing_columns,
+    )
     _verify_strict_storage_column_contract(
         database,
         table_name,
         schema_sql,
-        allow_missing_columns=False,
+        allow_missing_columns=allow_missing_columns,
         storage_label="AV",
         lossless_text_widths=_AV_LOSSLESS_TEXT_WIDTHS[table_name],
     )
