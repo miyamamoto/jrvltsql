@@ -168,6 +168,22 @@
   passed both the distribution-content gate and extracted-wheel init/SQLite
   bootstrap smoke. Both artifacts excluded `specs/`; the temporary archive
   and artifacts were removed after verification.
+- Bounded final review of exact
+  `9d068cf9f9198412729b11a281caa51a07964a8f` found no production
+  P0/P1/P2 issue. Both reviewers independently read back all 227 standard
+  columns on PostgreSQL; the migration reviewer also attacked extra/partial
+  UNIQUE, exclusion, deferrable/invalid primary keys, both Dual backend
+  orders, all entry/commit modes, and invalid keys without finding a bypass.
+- The official-oracle reviewer did find one test-only false-green: each
+  18-character placing group used one three-digit sentinel six times, so a
+  deliberately mutated expander that copied first-place into places 2-6 still
+  passed. This mutation was actually reproduced against the old fixture.
+  The fixture now uses 162 distinct ordered sentinels (`001` through `162`),
+  and the complete translation/readback expectations bind every rank. The UM
+  file passes `127 passed, 5 skipped`; a fresh PostgreSQL 16 rerun of all five
+  PostgreSQL UM contracts passes with the new first/middle/last values. The
+  disposable container was removed afterward. Production source did not
+  change for this test-oracle repair.
 - Remaining iteration action: run final required local gates on one frozen
   full SHA, request one bounded two-reviewer confirmation of the repaired
   finding classes, then publish PR/review/merge only if the worktree is clean,

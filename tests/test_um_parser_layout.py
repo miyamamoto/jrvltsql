@@ -38,7 +38,10 @@ def _pad(value, size, zenkaku=False):
 
 # 項番 -> (フィールド名, 位置(1始まり), バイト数, 値)。仕様書の「位置」をそのまま持つ。
 PEDIGREE = [(f"112990{i:04d}", f"テストケットウ{i:02d}") for i in range(1, 15)]
-CHAKU = [f"{i:03d}" * 6 for i in range(1, 28)]
+CHAKU = [
+    "".join(f"{group * 6 + rank:03d}" for rank in range(1, 7))
+    for group in range(27)
+]
 
 FIELDS = [
     ("RecordSpec", 1, 2, b"UM"),
@@ -261,10 +264,10 @@ def test_um_standard_translation_covers_every_schema_field():
         "Kyori5",
         "Kyori6",
     )
-    for value, prefix in enumerate(expected_prefixes, start=1):
+    for group, prefix in enumerate(expected_prefixes):
         assert [translated[f"{prefix}Chakukaisu{index}"] for index in range(1, 7)] == [
-            f"{value:03d}"
-        ] * 6
+            f"{group * 6 + rank:03d}" for rank in range(1, 7)
+        ]
     assert [translated[f"Kyakusitu{index}"] for index in range(1, 5)] == [
         "001",
         "002",
@@ -319,10 +322,10 @@ def test_um_standard_storage_keeps_distinct_keys_and_updates_exact_key(
             "Bamei": "第一更新馬",
             "DelDate": "00000000",
             "SogoChakukaisu1": "001",
-            "SogoChakukaisu6": "001",
-            "Ba4Chakukaisu1": "006",
-            "Jyotai12Chakukaisu6": "021",
-            "Kyori6Chakukaisu6": 27,
+            "SogoChakukaisu6": "006",
+            "Ba4Chakukaisu1": "031",
+            "Jyotai12Chakukaisu6": "126",
+            "Kyori6Chakukaisu6": 162,
             "Kyakusitu1": "001",
             "Kyakusitu4": "004",
             "TorokuRaceSu": "042",
@@ -332,10 +335,10 @@ def test_um_standard_storage_keeps_distinct_keys_and_updates_exact_key(
             "Bamei": "第二登録馬",
             "DelDate": "00000000",
             "SogoChakukaisu1": "001",
-            "SogoChakukaisu6": "001",
-            "Ba4Chakukaisu1": "006",
-            "Jyotai12Chakukaisu6": "021",
-            "Kyori6Chakukaisu6": 27,
+            "SogoChakukaisu6": "006",
+            "Ba4Chakukaisu1": "031",
+            "Jyotai12Chakukaisu6": "126",
+            "Kyori6Chakukaisu6": 162,
             "Kyakusitu1": "001",
             "Kyakusitu4": "004",
             "TorokuRaceSu": "042",
@@ -564,8 +567,8 @@ def test_um_standard_single_record_respects_the_caller_transaction(tmp_path):
             "KettoNum": "2019900001",
             "DelDate": "00000000",
             "SogoChakukaisu1": "001",
-            "Jyotai12Chakukaisu6": "021",
-            "Kyori6Chakukaisu6": 27,
+            "Jyotai12Chakukaisu6": "126",
+            "Kyori6Chakukaisu6": 162,
             "Kyakusitu4": "004",
             "TorokuRaceSu": "042",
         }
@@ -610,8 +613,8 @@ def test_um_postgresql_standard_key_roundtrip_and_legacy_preflight(
             "Bamei": "第一更新馬",
             "DelDate": "00000000",
             "SogoChakukaisu1": "001",
-            "Jyotai12Chakukaisu6": "021",
-            "Kyori6Chakukaisu6": 27,
+            "Jyotai12Chakukaisu6": "126",
+            "Kyori6Chakukaisu6": 162,
             "Kyakusitu4": "004",
             "TorokuRaceSu": "042",
         },
@@ -620,8 +623,8 @@ def test_um_postgresql_standard_key_roundtrip_and_legacy_preflight(
             "Bamei": "第二登録馬",
             "DelDate": "00000000",
             "SogoChakukaisu1": "001",
-            "Jyotai12Chakukaisu6": "021",
-            "Kyori6Chakukaisu6": 27,
+            "Jyotai12Chakukaisu6": "126",
+            "Kyori6Chakukaisu6": 162,
             "Kyakusitu4": "004",
             "TorokuRaceSu": "042",
         },
@@ -672,7 +675,7 @@ def test_um_postgresql_single_record_preserves_expanded_body(postgresql_db):
         "KettoNum": "2019900001",
         "DelDate": "00000000",
         "SogoChakukaisu1": "001",
-        "Jyotai12Chakukaisu6": "021",
+        "Jyotai12Chakukaisu6": "126",
         "Kyakusitu4": "004",
         "TorokuRaceSu": "042",
     }
