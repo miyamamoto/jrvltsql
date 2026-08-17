@@ -13,6 +13,7 @@ from src.importer.importer import (
     CANCELLATION_STATE_RECORD_TYPES,
     clean_record_metadata,
     insert_wf_native_batch,
+    rollback_failed_import,
     resolve_record_data_kubun,
     resolve_record_type,
     validate_wf_record,
@@ -408,9 +409,12 @@ class RealtimeUpdater:
         batch_collected_at = self._current_collected_at() if timeseries else None
         validated_records: list[Dict] = []
         ordered_mutation_required = False
+        strict_wf_present = False
 
         for record in records:
             record_type, alias_error = self._canonicalize_strict_record_aliases(record)
+            if record_type == "WF":
+                strict_wf_present = True
             if alias_error is not None:
                 logger.warning(f"Skipping record with conflicting header aliases: {alias_error}")
                 errors += 1
@@ -434,6 +438,15 @@ class RealtimeUpdater:
             ):
                 ordered_mutation_required = True
             validated_records.append(record)
+
+        if strict_wf_present:
+            return self._process_strict_wf_realtime_batch(
+                validated_records,
+                validation_errors=errors,
+                ordered_mutation_required=ordered_mutation_required,
+                timeseries=timeseries,
+                batch_collected_at=batch_collected_at,
+            )
 
         if ordered_mutation_required:
             if timeseries and batch_collected_at:
@@ -481,6 +494,7 @@ class RealtimeUpdater:
             grouped.setdefault(table_name, []).append(clean_data)
 
         inserted = 0
+        owns_batch_transaction = not self.database.is_transaction_active()
         for table_name, rows in grouped.items():
             if table_name in self.STRICT_RECORD_TABLES:
                 try:
@@ -501,6 +515,9 @@ class RealtimeUpdater:
             inserted += inserted_rows
             errors += failed_rows
 
+        if owns_batch_transaction:
+            self.database.commit()
+
         return {
             "operation": "batch_insert",
             "success": errors == 0,
@@ -508,6 +525,123 @@ class RealtimeUpdater:
             "errors": errors,
             "tables": sorted(grouped),
         }
+
+    def _process_strict_wf_realtime_batch(
+        self,
+        records: list[Dict],
+        *,
+        validation_errors: int,
+        ordered_mutation_required: bool,
+        timeseries: bool,
+        batch_collected_at: Optional[str],
+    ) -> Dict:
+        """Apply a realtime mutation containing WF without partial success.
+
+        The whole valid mutation set shares one explicit transaction. A
+        database failure rolls back every row whose success would otherwise be
+        reported, including non-WF rows in the same call. Provider ordering is
+        retained whenever an erase command is present.
+        """
+        owns_transaction = not self.database.is_transaction_active()
+        if owns_transaction:
+            self.database.begin_transaction()
+
+        tables: set[str] = set()
+        prepared_errors = 0
+        try:
+            if ordered_mutation_required:
+                successful: list[Dict] = []
+                for record in records:
+                    if timeseries and batch_collected_at:
+                        record.setdefault("CollectedAt", batch_collected_at)
+                    result = self._process_single_record(record, timeseries=timeseries)
+                    accepted, rejected = summarize_update_result(result)
+                    if rejected:
+                        rollback_failed_import(
+                            self.database,
+                            context="atomic realtime WF ordered mutation",
+                        )
+                        return {
+                            "operation": "batch_insert",
+                            "success": False,
+                            "inserted": 0,
+                            "errors": validation_errors + len(records),
+                            "tables": sorted(tables),
+                        }
+                    successful.extend(accepted)
+                    tables.update(
+                        item["table"] for item in accepted if item.get("table")
+                    )
+                if owns_transaction:
+                    self.database.commit()
+                return {
+                    "operation": "batch_insert",
+                    "success": validation_errors == 0,
+                    "inserted": len(successful),
+                    "errors": validation_errors,
+                    "tables": sorted(tables),
+                }
+
+            grouped: dict[str, list[Dict]] = {}
+            for record in records:
+                if timeseries and batch_collected_at:
+                    record.setdefault("CollectedAt", batch_collected_at)
+                record_type = record.get("RecordSpec")
+                table_name = self._resolve_timeseries_table(record) if timeseries else None
+                if table_name is None:
+                    table_name = self.RECORD_TYPE_TABLE.get(record_type)
+                if not table_name:
+                    prepared_errors += 1
+                    continue
+                clean_data = self._prepare_data_for_db(table_name, record)
+                if not self._has_complete_primary_key(table_name, clean_data):
+                    prepared_errors += 1
+                    continue
+                grouped.setdefault(table_name, []).append(clean_data)
+
+            inserted = 0
+            tables = set(grouped)
+            for table_name, rows in grouped.items():
+                if table_name in self.STRICT_RECORD_TABLES:
+                    row_count = insert_wf_native_batch(
+                        self.database,
+                        table_name,
+                        rows,
+                        commit_batch=False,
+                        optimized=False,
+                    )
+                else:
+                    row_count = self.database.insert_many(table_name, rows)
+                if row_count != len(rows):
+                    raise RuntimeError(
+                        f"Atomic realtime batch wrote {row_count} of {len(rows)} "
+                        f"rows to {table_name}"
+                    )
+                inserted += row_count
+
+            if owns_transaction:
+                self.database.commit()
+            total_errors = validation_errors + prepared_errors
+            return {
+                "operation": "batch_insert",
+                "success": total_errors == 0,
+                "inserted": inserted,
+                "errors": total_errors,
+                "tables": sorted(tables),
+            }
+        except Exception as exc:
+            rollback_failed_import(
+                self.database,
+                context="atomic realtime WF batch",
+            )
+            logger.error(f"Atomic realtime WF batch failed: {exc}")
+            return {
+                "operation": "batch_insert",
+                "success": False,
+                "inserted": 0,
+                "errors": validation_errors + len(records),
+                "tables": sorted(tables),
+            }
 
     def _resolve_timeseries_table(self, record: Dict) -> Optional[str]:
         """Resolve official vs速報 odds time-series table from source spec."""

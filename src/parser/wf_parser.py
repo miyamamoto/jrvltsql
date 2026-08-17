@@ -41,9 +41,9 @@ class WFParser:
     RESERVED_INITIAL_VALUES = {"Yobi1": "00", "Yobi2": "000000"}
     # 特記事項: 重勝式中止時の払戻情報 (組番 / 払戻金 / 的中票数)
     CANCELLATION_PAYOUT = ("0000000000", "000000100", "0000000000")
-    # コード表2001の現行・使用中競馬場コード。00は初期値、C4/F4/F6/
-    # G4/G6/G8は使用しない旨が明記されているため、必須RaceInfoでは
-    # 受理しない。公式追加時はmanifest/specとこの集合を同時に更新する。
+    # コード表2001の掲載値から、初期値00と明示的な未使用値C4/F4/F6/
+    # G4/G6/G8を除いた競馬場コード。廃止済みの競馬場・国も含むため
+    # 「現在使用中」の集合ではない。公式追加時はmanifest/specと同時更新する。
     OFFICIAL_JYO_CODES = frozenset(
         {f"{value:02d}" for value in range(1, 11)}
         | {str(value) for value in range(30, 62)}

@@ -5140,17 +5140,35 @@ class DataImporter:
         """
         if not auto_commit:
             self.database.begin_transaction()
-        self._ensure_jravan_tables_ready(auto_commit=auto_commit)
+        try:
+            self._ensure_jravan_tables_ready(auto_commit=auto_commit)
+        except Exception:
+            if not auto_commit:
+                rollback_failed_import(
+                    self.database,
+                    context="standard-schema preflight in single-record import",
+                )
+            raise
 
         # Note: Japanese parsers use 'レコード種別ID', JRA-VAN standard uses 'RecordSpec'
         record_type = _record_type_from_record(record)
         if not record_type:
             logger.warning("Record missing record type field")
+            if not auto_commit:
+                rollback_failed_import(
+                    self.database,
+                    context="missing record type in single-record import",
+                )
             return False
 
         table_name = self._get_table_name(record_type)
         if not table_name:
             logger.warning(f"Unknown record type: {record_type}")
+            if not auto_commit:
+                rollback_failed_import(
+                    self.database,
+                    context="unknown record type in single-record import",
+                )
             return False
 
         try:
@@ -5308,6 +5326,11 @@ class DataImporter:
                     table=table_name,
                     primary_key=get_table_primary_key_columns(table_name),
                 )
+                if not auto_commit:
+                    rollback_failed_import(
+                        self.database,
+                        context="incomplete key in single-record import",
+                    )
                 return False
             if table_name in _RC_STORAGE_TABLES:
                 rows = apply_rc_batch(
@@ -5396,10 +5419,29 @@ class DataImporter:
 
             return True
 
+        except SchemaMigrationError:
+            if not auto_commit:
+                rollback_failed_import(
+                    self.database,
+                    context="validation/schema failure in single-record import",
+                )
+            raise
         except DatabaseError as e:
+            if not auto_commit:
+                rollback_failed_import(
+                    self.database,
+                    context="database failure in single-record import",
+                )
             self._records_failed += 1
             logger.error("Failed to insert record", error=str(e))
             return False
+        except Exception:
+            if not auto_commit:
+                rollback_failed_import(
+                    self.database,
+                    context="unexpected failure in single-record import",
+                )
+            raise
 
     def get_statistics(self) -> Dict[str, int]:
         """Get import statistics.

@@ -123,6 +123,20 @@ def parsed_record(**kwargs) -> dict:
     return parsed
 
 
+def realtime_ra_record(*, month_day: str = "0816") -> dict:
+    """Build the minimum complete official key for one realtime RA row."""
+    return {
+        "RecordSpec": "RA",
+        "DataKubun": "1",
+        "Year": "2026",
+        "MonthDay": month_day,
+        "JyoCD": "05",
+        "Kaiji": "01",
+        "Nichiji": "01",
+        "RaceNum": "01",
+    }
+
+
 def cancellation_record() -> bytes:
     record = bytearray(build_record(data_kubun="9", populate_payload=False))
     record[166:176] = b"0000000000"
@@ -219,8 +233,9 @@ def test_wf_venue_domain_is_bound_to_official_code_table_2001() -> None:
     assert contract["source_sheet"] == "コード表"
     assert contract["source_rows"] == "10-126"
     assert contract["code_table"] == "2001.競馬場コード"
-    assert len(contract["active_codes"]) == len(set(contract["active_codes"])) == 108
-    assert WFParser.OFFICIAL_JYO_CODES == frozenset(contract["active_codes"])
+    listed_codes = contract["listed_non_initial_non_unused_codes"]
+    assert len(listed_codes) == len(set(listed_codes)) == 108
+    assert WFParser.OFFICIAL_JYO_CODES == frozenset(listed_codes)
     assert set(contract["excluded_codes"]) == {
         "00",
         "C4",
@@ -1016,6 +1031,77 @@ def test_wf_realtime_database_failure_rolls_back_without_split_success(tmp_path)
         assert _count(database, "RT_WF") == 0
 
 
+def test_wf_realtime_transaction_result_matches_durable_mixed_and_ordered_rows(
+    tmp_path,
+) -> None:
+    scenarios = (
+        ("non-wf-before-wf-failure", [realtime_ra_record(), parsed_record(month_day="0817")]),
+        ("wf-before-non-wf-failure", [parsed_record(), realtime_ra_record(month_day="0817")]),
+        (
+            "ordered-wf-failure",
+            [
+                parsed_record(),
+                parsed_record(month_day="0817"),
+                parsed_record(data_kubun="0"),
+            ],
+        ),
+    )
+    for case_id, records in scenarios:
+        database = SQLiteDatabase({"path": str(tmp_path / f"{case_id}.db")})
+        with database:
+            database.execute(SCHEMAS["RT_WF"])
+            database.execute(SCHEMAS["RT_RA"])
+            database.execute(
+                "CREATE TRIGGER reject_rt_wf_0817 BEFORE INSERT ON RT_WF "
+                "WHEN NEW.MonthDay = 817 BEGIN SELECT RAISE(FAIL, 'reject WF 0817'); END"
+            )
+            database.execute(
+                "CREATE TRIGGER reject_rt_ra_0817 BEFORE INSERT ON RT_RA "
+                "WHEN NEW.MonthDay = 817 BEGIN SELECT RAISE(FAIL, 'reject RA 0817'); END"
+            )
+            result = RealtimeUpdater(database).process_parsed_records_batch(records)
+            assert result["success"] is False, case_id
+            assert result["inserted"] == 0, case_id
+            assert result["errors"] == len(records), case_id
+            assert _count(database, "RT_WF") == 0, case_id
+            assert _count(database, "RT_RA") == 0, case_id
+
+    database = SQLiteDatabase({"path": str(tmp_path / "success-boundary.db")})
+    with database:
+        database.execute(SCHEMAS["RT_WF"])
+        database.execute(SCHEMAS["RT_RA"])
+        database.execute(
+            "CREATE TRIGGER reject_rt_wf_0817 BEFORE INSERT ON RT_WF "
+            "WHEN NEW.MonthDay = 817 BEGIN SELECT RAISE(FAIL, 'reject WF 0817'); END"
+        )
+        updater = RealtimeUpdater(database)
+        first = updater.process_parsed_records_batch([realtime_ra_record()])
+        assert first["success"] is True
+        assert first["inserted"] == 1
+        second = updater.process_parsed_records_batch([parsed_record(month_day="0817")])
+        assert second["success"] is False
+        assert second["inserted"] == 0
+        assert second["errors"] == 1
+        assert _count(database, "RT_RA") == 1
+        assert _count(database, "RT_WF") == 0
+
+        ordered = updater.process_parsed_records_batch(
+            [
+                parsed_record(data_kubun="1"),
+                parsed_record(data_kubun="2"),
+                parsed_record(data_kubun="0"),
+            ]
+        )
+        assert ordered == {
+            "operation": "batch_insert",
+            "success": True,
+            "inserted": 3,
+            "errors": 0,
+            "tables": ["RT_WF"],
+        }
+        assert _count(database, "RT_WF") == 0
+
+
 def test_wf_realtime_extra_unique_constraint_is_rejected_before_mutation(tmp_path) -> None:
     database = SQLiteDatabase({"path": str(tmp_path / "realtime-extra-unique.db")})
     malformed = SCHEMAS["RT_WF"].replace(
@@ -1323,6 +1409,35 @@ def test_wf_single_record_import_covers_native_and_standard_storage(tmp_path) ->
         assert _count(database, "JYUSYOSIKI") == 0
 
 
+@pytest.mark.parametrize("standard", (False, True), ids=("native", "standard"))
+def test_wf_single_record_owned_transaction_rolls_back_on_validation_failure(
+    tmp_path, standard
+) -> None:
+    database = SQLiteDatabase({"path": str(tmp_path / "single-owned-transaction.db")})
+    with database:
+        database.create_table("NL_WF", SCHEMAS["NL_WF"])
+        _standard_tables(database)
+        importer = DataImporter(database, use_jravan_schema=standard)
+        target = "JYUSYOSIKI_HEAD" if standard else "NL_WF"
+
+        assert importer.import_single_record(parsed_record(), auto_commit=False) is True
+        invalid = parsed_record(month_day="0817")
+        invalid["PayoutsJson"] = "[]"
+        with pytest.raises(SchemaMigrationError):
+            importer.import_single_record(invalid, auto_commit=False)
+
+        assert database.is_transaction_active() is False
+        assert _count(database, target) == 0
+        if standard:
+            assert _count(database, "JYUSYOSIKI") == 0
+
+        assert importer.import_single_record(parsed_record(), auto_commit=False) is True
+        database.commit()
+        assert _count(database, target) == 1
+        if standard:
+            assert _count(database, "JYUSYOSIKI") == 243
+
+
 def _corrupt_caller_records(*, standard: bool) -> list[tuple[str, dict]]:
     cases = []
 
@@ -1381,6 +1496,10 @@ def _corrupt_caller_records(*, standard: bool) -> list[tuple[str, dict]]:
     payouts[0]["Kumi"] = "01020304050"
     record["PayoutsJson"] = json.dumps(payouts)
     cases.append(("payout-overwidth-kumi", record))
+
+    record = parsed_record(data_kubun="3")
+    record["TekichuNasiFlag"] = "1"
+    cases.append(("no-hit-with-positive-pay-and-votes", record))
 
     record = parsed_record()
     record["RaceInfo2"] = "0501010"
@@ -1792,6 +1911,18 @@ def test_wf_postgresql_auto_commit_false_validation_failure_rolls_back(
         assert _count(postgresql_db, "JYUSYOSIKI") == 0
     postgresql_db.commit()
 
+    if importer_class is not DataImporter:
+        return
+    single = DataImporter(postgresql_db, use_jravan_schema=standard)
+    assert single.import_single_record(parsed_record(), auto_commit=False) is True
+    with pytest.raises(SchemaMigrationError):
+        single.import_single_record(invalid, auto_commit=False)
+    assert postgresql_db.is_transaction_active() is False
+    assert _count(postgresql_db, "JYUSYOSIKI_HEAD" if standard else "NL_WF") == 0
+    if standard:
+        assert _count(postgresql_db, "JYUSYOSIKI") == 0
+    postgresql_db.commit()
+
 
 @pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
 def test_wf_postgresql_native_database_failure_is_atomic(postgresql_db, importer_class) -> None:
@@ -1818,6 +1949,7 @@ def test_wf_postgresql_realtime_database_failure_reports_no_success(
     postgresql_db,
 ) -> None:
     postgresql_db.execute(SCHEMAS["RT_WF"])
+    postgresql_db.execute(SCHEMAS["RT_RA"])
     postgresql_db.execute(
         "CREATE FUNCTION reject_second_rt_wf() RETURNS trigger LANGUAGE plpgsql AS $$ "
         "BEGIN IF NEW.monthday = 817 THEN RAISE EXCEPTION 'simulated RT_WF failure'; "
@@ -1827,12 +1959,48 @@ def test_wf_postgresql_realtime_database_failure_reports_no_success(
         "CREATE TRIGGER reject_second_rt_wf BEFORE INSERT OR UPDATE ON RT_WF "
         "FOR EACH ROW EXECUTE FUNCTION reject_second_rt_wf()"
     )
+    postgresql_db.execute(
+        "CREATE FUNCTION reject_second_rt_ra() RETURNS trigger LANGUAGE plpgsql AS $$ "
+        "BEGIN IF NEW.monthday = 817 THEN RAISE EXCEPTION 'simulated RT_RA failure'; "
+        "END IF; RETURN NEW; END $$"
+    )
+    postgresql_db.execute(
+        "CREATE TRIGGER reject_second_rt_ra BEFORE INSERT OR UPDATE ON RT_RA "
+        "FOR EACH ROW EXECUTE FUNCTION reject_second_rt_ra()"
+    )
     postgresql_db.commit()
-    result = RealtimeUpdater(postgresql_db).process_parsed_records_batch(
+    updater = RealtimeUpdater(postgresql_db)
+    result = updater.process_parsed_records_batch(
         [parsed_record(), parsed_record(month_day="0817")]
     )
     assert result["success"] is False
     assert result["inserted"] == 0
     assert result["errors"] == 2
+    assert _count(postgresql_db, "RT_WF") == 0
+
+    for records in (
+        [realtime_ra_record(), parsed_record(month_day="0817")],
+        [parsed_record(), realtime_ra_record(month_day="0817")],
+        [
+            parsed_record(),
+            parsed_record(month_day="0817"),
+            parsed_record(data_kubun="0"),
+        ],
+    ):
+        result = updater.process_parsed_records_batch(records)
+        assert result["success"] is False
+        assert result["inserted"] == 0
+        assert result["errors"] == len(records)
+        assert _count(postgresql_db, "RT_WF") == 0
+        assert _count(postgresql_db, "RT_RA") == 0
+
+    first = updater.process_parsed_records_batch([realtime_ra_record()])
+    assert first["success"] is True
+    assert first["inserted"] == 1
+    second = updater.process_parsed_records_batch([parsed_record(month_day="0817")])
+    assert second["success"] is False
+    assert second["inserted"] == 0
+    assert second["errors"] == 1
+    assert _count(postgresql_db, "RT_RA") == 1
     assert _count(postgresql_db, "RT_WF") == 0
     postgresql_db.commit()
