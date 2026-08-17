@@ -2778,3 +2778,102 @@
   exact SHA, let CI complete, and run one final exact-SHA critical review of
   the aggregated delta. STOP on any drift, review blocker, CI failure, or
   unresolved thread; no release/provider claim is made by these local gates.
+
+### 2026-08-17 11:47-11:56 JST — exact-SHA review found two final P1 gaps
+
+- The transaction repair was committed and pushed as exact PR head
+  `97afd1b4fd509af987b7832e8fa7dd2d13be13ee`. GitHub Actions run
+  `31989083967` completed lint, test, and Windows batch syntax successfully;
+  performance was a zero-step conditional skip. The draft PR remained held
+  while the two independent reviewers reran against this exact clean SHA.
+- Both reviewers independently returned `NEEDS_CHANGES` for one backend
+  asymmetry: PostgreSQL intentionally coalesces same-primary-key rows before a
+  bulk upsert, so a valid same-day WF status sequence `1 -> 2 -> 3` physically
+  writes one final row. The new strict realtime path compared that physical
+  count with three provider operations, misclassified the legal sequence as
+  partial, and rolled it all back. Fresh PostgreSQL 16 reproduced
+  `inserted=0/errors=3/durable=0`, while SQLite accepted three operations and
+  retained status 3. The fix must preserve logical accepted-operation counts
+  and provider order on both backends; removing the count check without an
+  equivalent fail-closed write boundary is not acceptable.
+- The database reviewer also reproduced a cumulative-statistics divergence in
+  `import_single_record(auto_commit=False)`: the row transaction rolled back
+  correctly on a later validation error, but `records_imported` and
+  `batches_processed` retained the earlier uncommitted success. A later retry
+  then overcounted durable rows on SQLite and PostgreSQL, native and standard.
+  The repair must checkpoint only the counter baseline at the start of an
+  importer-owned transaction and restore that baseline on its internal
+  rollback; previously committed history must not be reset.
+- A documentation precision correction is accepted with the same batch:
+  `inserted` is a count of successful provider operations, not the final row
+  cardinality after updates or deletes. Public text must prohibit stale
+  successes from rolled-back operations rather than claiming those two counts
+  are always numerically equal.
+- Next safe action is one last red-first extension of the existing grouped
+  realtime and single-record transaction tests, including actual PostgreSQL
+  owned/caller-owned same-key positives and cumulative counter rollback. Then
+  implement provider-order writes and the importer counter checkpoint once.
+  STOP on backend-dependent counts, loss of caller-owned rollback, reset of
+  committed statistics, or candidate drift. PR #201 remains draft.
+
+### 2026-08-17 11:56-12:02 JST — backend/counting red-first evidence
+
+- The existing realtime durability test was extended so its mid-sequence
+  failure is injected at the per-operation write boundary that the repair will
+  use. The same grouped test now requires owned and caller-owned same-key
+  `1 -> 2 -> 3` updates to report three accepted operations and retain final
+  status 3; its mixed group also covers two same-key non-WF operations. The
+  existing single-record native/standard matrix now starts from a committed
+  cumulative-statistics baseline, requires an internal rollback to restore
+  exactly that baseline, and requires a later explicit commit to increment it
+  once.
+- Before production repair, the corrected SQLite selection returned `3
+  failed, 1 passed, 104 deselected`: the future per-operation failure injector
+  was not reached by the old bulk path, and native/standard counters remained
+  above the committed baseline after rollback. A fresh PostgreSQL 16 container
+  on loopback port 55437 then returned `3 failed, 2 passed, 103 deselected`:
+  both single-record counter baselines diverged and the legal same-key realtime
+  sequence returned failure after `1 of 3` physical bulk rows. This is the
+  required actual-backend red evidence on production SHA
+  `97afd1b4fd509af987b7832e8fa7dd2d13be13ee`.
+- The red PostgreSQL container was stopped and auto-removed. Only the grouped
+  test and tracked worklog are dirty; production files remain identical to the
+  pushed PR head. Next safe action is the one provider-order write and counter
+  checkpoint implementation, then the identical SQLite/PostgreSQL selections.
+
+### 2026-08-17 12:02-12:08 JST — backend-independent operations and stats repair
+
+- The strict realtime transaction now applies every prepared row as one
+  provider-order upsert inside the already-owned outer transaction. Each
+  operation must affect exactly one row; a middle failure still rolls the full
+  mutation back. This removes PostgreSQL bulk-deduplication from the logical
+  success count and also handles same-key non-WF rows in a WF-containing mixed
+  batch without weakening the partial-write check.
+- `DataImporter` now checkpoints its three cumulative counters when a
+  single-record `auto_commit=False` sequence starts (or when it first joins a
+  borrowed transaction). Internal rollback-or-invalidate restores and clears
+  that checkpoint. A later call after an external commit/rollback observes an
+  inactive database transaction and replaces/clears the stale checkpoint;
+  external rollback itself remains outside the importer's observable API.
+  `reset_statistics()` also clears the checkpoint.
+- The public support text now defines `inserted` as successfully applied
+  provider operations, not final table cardinality, and specifically prohibits
+  retaining rolled-back operations as successes.
+- The exact formerly red SQLite selection now passes `4 passed, 104
+  deselected`. A fresh PostgreSQL 16 container on loopback port 55438 passes
+  the formerly red selection with `5 passed, 103 deselected` and the complete
+  opt-in WF contract with `108 passed`. It covers owned/caller-owned same-key
+  `1 -> 2 -> 3`, a mixed same-key RA group, final status readback, explicit
+  caller rollback, both single-record storage modes, and counter restoration.
+  The container was stopped and auto-removed.
+- The complete SQLite WF contract passes `96 passed, 12 skipped`; affected
+  realtime/importer/database tests pass `154 passed, 20 skipped, 11 subtests
+  passed`. The full Python 3.12.11 CI-equivalent suite passes `2660 passed,
+  121 skipped, 14 deselected, 14 subtests passed` with 76% coverage. `TEST GATE
+  PASS`, `OFFICIAL ORACLE PASS`, fatal flake8 with zero findings, Black for the
+  grouped contract, strict MkDocs, and `git diff --check` pass.
+- PR #201 is still draft and remote head still points to the previous held
+  candidate. Next safe action is to commit/push this final bounded repair,
+  require commit-specific CI, and perform one carry-forward review limited to
+  this new delta and the two closed findings. No merge/release/provider claim
+  is authorized until that gate is green.

@@ -264,7 +264,8 @@ JRA-VAN標準名モードの保存先はproject canonical名`JYUSYOSIKI_HEAD`（
 （組番`0000000000`・払戻金`000000100`・的中票数`0000000000`）ごと状態として保持します。
 `DataKubun=0`ではheaderと公式キーだけを解釈し、仕様が定義しないbody値やbody aliasの差を
 削除拒否の根拠にしません。native・標準名・速報の各WF書込はbatch途中のDB例外で全体を
-rollbackし、行単位fallbackによる部分成功や、返却件数と永続行数の不一致を許しません。
+rollbackし、行単位fallbackによる部分成功や、rollbackされた操作を成功件数へ残すことを許しません。
+`inserted`は最終行数ではなく、提供順に正常適用された操作数です。
 `WIN5`は読み取り側の名前解決互換用のaliasであり、新規import先には使いません。
 主キーや`HatubaiHyosu`のない旧`JYUSYOSIKI_HEAD`、`Num`・主キー・外部キーのない旧`JYUSYOSIKI`、
 親子の片方だけが存在するDB、`WIN5`しか存在しない標準名DBは自動`ALTER`せず、

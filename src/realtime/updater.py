@@ -602,22 +602,18 @@ class RealtimeUpdater:
             inserted = 0
             tables = set(grouped)
             for table_name, rows in grouped.items():
-                if table_name in self.STRICT_RECORD_TABLES:
-                    row_count = insert_wf_native_batch(
-                        self.database,
+                for row in rows:
+                    row_count = self.database.insert(
                         table_name,
-                        rows,
-                        commit_batch=False,
-                        optimized=False,
+                        row,
+                        use_replace=True,
                     )
-                else:
-                    row_count = self.database.insert_many(table_name, rows)
-                if row_count != len(rows):
-                    raise RuntimeError(
-                        f"Atomic realtime batch wrote {row_count} of {len(rows)} "
-                        f"rows to {table_name}"
-                    )
-                inserted += row_count
+                    if row_count != 1:
+                        raise RuntimeError(
+                            f"Atomic realtime batch wrote {row_count} of one "
+                            f"provider operation to {table_name}"
+                        )
+                    inserted += 1
 
             if owns_transaction:
                 self.database.commit()

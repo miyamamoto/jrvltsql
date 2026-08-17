@@ -4284,6 +4284,7 @@ class DataImporter:
         self._records_imported = 0
         self._records_failed = 0
         self._batches_processed = 0
+        self._single_record_stats_checkpoint: Optional[tuple[int, int, int]] = None
         self._jravan_tables_ready = not use_jravan_schema
         self._verified_mining_native_tables: set[str] = set()
         self._verified_hy_tables: set[str] = set()
@@ -5124,6 +5125,39 @@ class DataImporter:
             if auto_commit and success_count > 0:
                 self.database.commit()
 
+    def _begin_single_record_transaction(self, *, auto_commit: bool) -> None:
+        """Start or join one single-record transaction and checkpoint counters."""
+        if auto_commit:
+            if not self.database.is_transaction_active():
+                self._single_record_stats_checkpoint = None
+            return
+        if not self.database.is_transaction_active():
+            self._single_record_stats_checkpoint = (
+                self._records_imported,
+                self._records_failed,
+                self._batches_processed,
+            )
+            self.database.begin_transaction()
+        elif self._single_record_stats_checkpoint is None:
+            # The transaction was opened outside this importer. Counter deltas
+            # still need a local baseline if a strict failure rolls it back.
+            self._single_record_stats_checkpoint = (
+                self._records_imported,
+                self._records_failed,
+                self._batches_processed,
+            )
+
+    def _rollback_single_record_transaction(self, *, context: str) -> None:
+        """Rollback a failed single-record sequence and restore its counters."""
+        rollback_failed_import(self.database, context=context)
+        if self._single_record_stats_checkpoint is not None:
+            (
+                self._records_imported,
+                self._records_failed,
+                self._batches_processed,
+            ) = self._single_record_stats_checkpoint
+            self._single_record_stats_checkpoint = None
+
     def import_single_record(
         self,
         record: dict,
@@ -5138,14 +5172,12 @@ class DataImporter:
         Returns:
             True if successful, False otherwise
         """
-        if not auto_commit:
-            self.database.begin_transaction()
+        self._begin_single_record_transaction(auto_commit=auto_commit)
         try:
             self._ensure_jravan_tables_ready(auto_commit=auto_commit)
         except Exception:
             if not auto_commit:
-                rollback_failed_import(
-                    self.database,
+                self._rollback_single_record_transaction(
                     context="standard-schema preflight in single-record import",
                 )
             raise
@@ -5155,8 +5187,7 @@ class DataImporter:
         if not record_type:
             logger.warning("Record missing record type field")
             if not auto_commit:
-                rollback_failed_import(
-                    self.database,
+                self._rollback_single_record_transaction(
                     context="missing record type in single-record import",
                 )
             return False
@@ -5165,8 +5196,7 @@ class DataImporter:
         if not table_name:
             logger.warning(f"Unknown record type: {record_type}")
             if not auto_commit:
-                rollback_failed_import(
-                    self.database,
+                self._rollback_single_record_transaction(
                     context="unknown record type in single-record import",
                 )
             return False
@@ -5327,8 +5357,7 @@ class DataImporter:
                     primary_key=get_table_primary_key_columns(table_name),
                 )
                 if not auto_commit:
-                    rollback_failed_import(
-                        self.database,
+                    self._rollback_single_record_transaction(
                         context="incomplete key in single-record import",
                     )
                 return False
@@ -5421,15 +5450,13 @@ class DataImporter:
 
         except SchemaMigrationError:
             if not auto_commit:
-                rollback_failed_import(
-                    self.database,
+                self._rollback_single_record_transaction(
                     context="validation/schema failure in single-record import",
                 )
             raise
         except DatabaseError as e:
             if not auto_commit:
-                rollback_failed_import(
-                    self.database,
+                self._rollback_single_record_transaction(
                     context="database failure in single-record import",
                 )
             self._records_failed += 1
@@ -5437,8 +5464,7 @@ class DataImporter:
             return False
         except Exception:
             if not auto_commit:
-                rollback_failed_import(
-                    self.database,
+                self._rollback_single_record_transaction(
                     context="unexpected failure in single-record import",
                 )
             raise
@@ -5460,6 +5486,7 @@ class DataImporter:
         self._records_imported = 0
         self._records_failed = 0
         self._batches_processed = 0
+        self._single_record_stats_checkpoint = None
 
     def add_table_mapping(self, record_type: str, table_name: str):
         """Add custom table mapping.

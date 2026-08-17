@@ -1010,21 +1010,24 @@ def test_wf_realtime_database_failure_rolls_back_without_split_success(tmp_path)
     database = SQLiteDatabase({"path": str(tmp_path / "realtime-db-failure.db")})
     with database:
         database.execute(SCHEMAS["RT_WF"])
-        original_insert_many = database.insert_many
+        original_insert = database.insert
 
-        def partially_failing_insert_many(table_name, rows, *args, **kwargs):
+        calls = {"RT_WF": 0}
+
+        def partially_failing_insert(table_name, row, *args, **kwargs):
             if table_name == "RT_WF":
-                original_insert_many(table_name, rows[:1], *args, **kwargs)
-                raise DatabaseError("simulated realtime WF failure after one row")
-            return original_insert_many(table_name, rows, *args, **kwargs)
+                calls["RT_WF"] += 1
+                if calls["RT_WF"] == 2:
+                    raise DatabaseError("simulated realtime WF failure after one row")
+            return original_insert(table_name, row, *args, **kwargs)
 
-        database.insert_many = partially_failing_insert_many
+        database.insert = partially_failing_insert
         try:
             result = RealtimeUpdater(database).process_parsed_records_batch(
                 [parsed_record(), parsed_record(month_day="0817")]
             )
         finally:
-            database.insert_many = original_insert_many
+            database.insert = original_insert
         assert result["success"] is False
         assert result["inserted"] == 0
         assert result["errors"] == 2
@@ -1084,6 +1087,18 @@ def test_wf_realtime_transaction_result_matches_durable_mixed_and_ordered_rows(
         assert second["errors"] == 1
         assert _count(database, "RT_RA") == 1
         assert _count(database, "RT_WF") == 0
+
+        same_key = updater.process_parsed_records_batch(
+            [
+                parsed_record(data_kubun="1"),
+                parsed_record(data_kubun="2"),
+                parsed_record(data_kubun="3"),
+            ]
+        )
+        assert same_key["success"] is True
+        assert same_key["inserted"] == 3
+        assert same_key["errors"] == 0
+        assert database.fetch_one("SELECT DataKubun FROM RT_WF") == {"DataKubun": "3"}
 
         ordered = updater.process_parsed_records_batch(
             [
@@ -1420,22 +1435,39 @@ def test_wf_single_record_owned_transaction_rolls_back_on_validation_failure(
         importer = DataImporter(database, use_jravan_schema=standard)
         target = "JYUSYOSIKI_HEAD" if standard else "NL_WF"
 
-        assert importer.import_single_record(parsed_record(), auto_commit=False) is True
-        invalid = parsed_record(month_day="0817")
+        assert importer.import_single_record(parsed_record()) is True
+        baseline_stats = importer.get_statistics()
+        assert baseline_stats["records_imported"] == 1
+        assert baseline_stats["records_failed"] == 0
+
+        assert (
+            importer.import_single_record(parsed_record(month_day="0817"), auto_commit=False)
+            is True
+        )
+        invalid = parsed_record(month_day="0818")
         invalid["PayoutsJson"] = "[]"
         with pytest.raises(SchemaMigrationError):
             importer.import_single_record(invalid, auto_commit=False)
 
         assert database.is_transaction_active() is False
-        assert _count(database, target) == 0
-        if standard:
-            assert _count(database, "JYUSYOSIKI") == 0
-
-        assert importer.import_single_record(parsed_record(), auto_commit=False) is True
-        database.commit()
         assert _count(database, target) == 1
+        assert importer.get_statistics() == baseline_stats
         if standard:
             assert _count(database, "JYUSYOSIKI") == 243
+
+        assert (
+            importer.import_single_record(parsed_record(month_day="0817"), auto_commit=False)
+            is True
+        )
+        database.commit()
+        assert _count(database, target) == 2
+        expected_stats = dict(baseline_stats)
+        expected_stats["records_imported"] += 1
+        if standard:
+            expected_stats["batches_processed"] += 1
+        assert importer.get_statistics() == expected_stats
+        if standard:
+            assert _count(database, "JYUSYOSIKI") == 486
 
 
 def _corrupt_caller_records(*, standard: bool) -> list[tuple[str, dict]]:
@@ -1914,14 +1946,32 @@ def test_wf_postgresql_auto_commit_false_validation_failure_rolls_back(
     if importer_class is not DataImporter:
         return
     single = DataImporter(postgresql_db, use_jravan_schema=standard)
-    assert single.import_single_record(parsed_record(), auto_commit=False) is True
+    target = "JYUSYOSIKI_HEAD" if standard else "NL_WF"
+    assert single.import_single_record(parsed_record()) is True
+    baseline_stats = single.get_statistics()
+    assert baseline_stats["records_imported"] == 1
+    assert baseline_stats["records_failed"] == 0
+    assert single.import_single_record(parsed_record(month_day="0817"), auto_commit=False) is True
+    invalid = parsed_record(month_day="0818")
+    invalid["PayoutsJson"] = "[]"
     with pytest.raises(SchemaMigrationError):
         single.import_single_record(invalid, auto_commit=False)
     assert postgresql_db.is_transaction_active() is False
-    assert _count(postgresql_db, "JYUSYOSIKI_HEAD" if standard else "NL_WF") == 0
+    assert _count(postgresql_db, target) == 1
+    assert single.get_statistics() == baseline_stats
     if standard:
-        assert _count(postgresql_db, "JYUSYOSIKI") == 0
+        assert _count(postgresql_db, "JYUSYOSIKI") == 243
+
+    assert single.import_single_record(parsed_record(month_day="0817"), auto_commit=False) is True
     postgresql_db.commit()
+    assert _count(postgresql_db, target) == 2
+    expected_stats = dict(baseline_stats)
+    expected_stats["records_imported"] += 1
+    if standard:
+        expected_stats["batches_processed"] += 1
+    assert single.get_statistics() == expected_stats
+    if standard:
+        assert _count(postgresql_db, "JYUSYOSIKI") == 486
 
 
 @pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
@@ -1970,6 +2020,51 @@ def test_wf_postgresql_realtime_database_failure_reports_no_success(
     )
     postgresql_db.commit()
     updater = RealtimeUpdater(postgresql_db)
+
+    same_key = updater.process_parsed_records_batch(
+        [
+            parsed_record(data_kubun="1"),
+            parsed_record(data_kubun="2"),
+            parsed_record(data_kubun="3"),
+        ]
+    )
+    assert same_key["success"] is True
+    assert same_key["inserted"] == 3
+    assert same_key["errors"] == 0
+    assert postgresql_db.fetch_one("SELECT DataKubun AS status FROM RT_WF") == {"status": "3"}
+    assert updater.process_parsed_record(parsed_record(data_kubun="0"))["success"] is True
+    postgresql_db.commit()
+
+    postgresql_db.begin_transaction()
+    caller_owned = updater.process_parsed_records_batch(
+        [
+            parsed_record(data_kubun="1", month_day="0818"),
+            parsed_record(data_kubun="2", month_day="0818"),
+            parsed_record(data_kubun="3", month_day="0818"),
+        ]
+    )
+    assert caller_owned["success"] is True
+    assert caller_owned["inserted"] == 3
+    assert postgresql_db.is_transaction_active() is True
+    assert postgresql_db.fetch_one(
+        "SELECT DataKubun AS status FROM RT_WF WHERE MonthDay = 818"
+    ) == {"status": "3"}
+    postgresql_db.rollback()
+    assert _count(postgresql_db, "RT_WF") == 0
+
+    ra_update = realtime_ra_record()
+    ra_update["DataKubun"] = "2"
+    mixed_same_key = updater.process_parsed_records_batch(
+        [parsed_record(data_kubun="1"), realtime_ra_record(), ra_update]
+    )
+    assert mixed_same_key["success"] is True
+    assert mixed_same_key["inserted"] == 3
+    assert postgresql_db.fetch_one("SELECT DataKubun AS status FROM RT_WF") == {"status": "1"}
+    assert postgresql_db.fetch_one("SELECT DataKubun AS status FROM RT_RA") == {"status": "2"}
+    postgresql_db.execute("DELETE FROM RT_RA")
+    assert updater.process_parsed_record(parsed_record(data_kubun="0"))["success"] is True
+    postgresql_db.commit()
+
     result = updater.process_parsed_records_batch(
         [parsed_record(), parsed_record(month_day="0817")]
     )
