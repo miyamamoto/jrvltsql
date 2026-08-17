@@ -302,7 +302,9 @@ def test_optimized_importer_does_not_retry_inside_caller_transaction(
         )
         db.commit()
         attempted_batches = []
+        attempted_individual_rows = []
         original_insert_many = db.insert_many
+        original_insert = db.insert
 
         def recording_insert_many(table_name, data_list, use_replace=True):
             attempted_batches.append(
@@ -310,7 +312,12 @@ def test_optimized_importer_does_not_retry_inside_caller_transaction(
             )
             return original_insert_many(table_name, data_list, use_replace)
 
+        def recording_insert(table_name, data, use_replace=True):
+            attempted_individual_rows.append((table_name, data.get("RaceNum")))
+            return original_insert(table_name, data, use_replace)
+
         monkeypatch.setattr(db, "insert_many", recording_insert_many)
+        monkeypatch.setattr(db, "insert", recording_insert)
         importer = OptimizedDataImporter(db, batch_size=2)
         records = iter(
             [
@@ -337,6 +344,7 @@ def test_optimized_importer_does_not_retry_inside_caller_transaction(
             table_name == "NL_RA" and 3 in race_nums
             for table_name, race_nums in attempted_batches
         ) == 1
+        assert attempted_individual_rows == []
         assert db.fetch_one("SELECT COUNT(*) AS n FROM NL_RA")["n"] == 0
 
 

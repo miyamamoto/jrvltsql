@@ -437,3 +437,26 @@
   review batch, rerun the required exact-SHA gates, push once, and reply to all
   four review threads with the evidence. Do not request another automated
   review merely for these test/worklog-only changes.
+
+## 2026-08-17 — PR #203 final test-evidence correction
+
+- Committed the consolidated review response as exact
+  `d9572477e5ea9b16f1b624d1aa868d3b9ba238f6`. On that clean SHA the focused
+  selection passed `16 passed`, the affected modules passed
+  `285 passed, 11 subtests passed`, the ordinary full suite passed
+  `2796 passed, 131 skipped, 22 subtests passed` in 57.35s, and fresh
+  PostgreSQL 16 DM/TM/WF integration passed `22 passed, 178 deselected`.
+  Lock, test gate, fatal lint, strict docs, fresh distributions, installed-wheel
+  smoke, and clean-tree checks also passed. All four inline threads were
+  answered and resolved before this final bounded check.
+- The bounded Codex carry-forward found one remaining P2 in the strengthened
+  optimized-importer test. Its new spy counted the failing batch attempt but
+  not the separate single-row API used by the forbidden fallback. A mutation
+  probe demonstrated that the batch count, raised `ImporterError`, and final
+  zero-row assertion could all remain green while individual retries for the
+  failing batch still occurred.
+- The minimal correction spies on both batch and individual insert APIs and
+  requires zero individual attempts inside the caller-owned transaction. No
+  production code changes. Next safe action: run the focused and affected
+  tests plus fatal/lock/test gates, commit, push once, and obtain one bounded
+  exact-SHA confirmation. Do not request another automated review.
