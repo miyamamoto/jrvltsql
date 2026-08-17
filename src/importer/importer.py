@@ -592,10 +592,16 @@ def _se_storage_type_is_compatible(actual: str, expected: str) -> bool:
             return actual_width >= expected_width
         return False
     if expected.startswith("char("):
-        # PostgreSQL CHAR pads reads to the declared width. Treat only the
-        # exact fixed-width declaration as equivalent; a wider CHAR or a
-        # VARCHAR/CHAR substitution changes either values or the accepted
-        # domain and is not a lossless schema migration.
+        # A wider CHAR pads reads and is not lossless. Unbounded TEXT or a
+        # sufficient VARCHAR removes that padding while preserving every
+        # provider value, so those remain safe widening targets (including
+        # SQLite's common TEXT affinity for an official fixed-width code).
+        if actual == "text":
+            return True
+        if actual.startswith("varchar("):
+            expected_width = int(expected.split("(", 1)[1][:-1])
+            actual_width = int(actual.split("(", 1)[1][:-1])
+            return actual_width >= expected_width
         return False
     integral_rank = {"smallint": 1, "integer": 2, "bigint": 3}
     if expected in integral_rank and actual in integral_rank:

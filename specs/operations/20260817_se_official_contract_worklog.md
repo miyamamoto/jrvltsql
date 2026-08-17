@@ -399,11 +399,17 @@ aggregated.
 - `validate_se_record()` now validates the official key first and returns for
   status 0 before inspecting any body alias. Non-delete rows retain the strict
   conflict, CP932, and physical-width validation.
-- The SE type verifier no longer treats fixed and variable text declarations as
-  one widening family. Expected `VARCHAR(n)` accepts only sufficient
-  `VARCHAR` or unbounded `TEXT`; expected `CHAR(n)` accepts only the exact
-  declaration. This prevents backend padding or accepted-domain changes.
+- The SE type verifier no longer accepts a fixed-width `CHAR` where the
+  contract expects `VARCHAR`, or a wider `CHAR` for an expected fixed-width
+  code. Safe padding-free widening to sufficient `VARCHAR` or unbounded `TEXT`
+  remains accepted, including SQLite's established text-affinity schemas.
 - Both formerly red tests pass after the repair. The complete SQLite SE file is
   **47 passed, 21 skipped** and the fresh PostgreSQL 16 SE file is **68
   passed**. Final commit, exact-SHA full gates, and bounded carry-forward review
   remain required before push.
+- The first post-commit full run then exposed three existing SQLite transaction
+  positives that deliberately use `TEXT` for official fixed-width codes. The
+  initial repair had over-rejected this padding-free widening while closing the
+  PostgreSQL padding bug. The compatibility rule was narrowed to reject actual
+  `CHAR` substitution/widening but retain sufficient `VARCHAR` and `TEXT`;
+  the three positives and both new regressions then passed together.
