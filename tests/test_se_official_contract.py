@@ -50,7 +50,8 @@ OFFICIAL_MANIFEST = json.loads(
 def _se_parser_slices() -> list[tuple[str, int, int]]:
     """Read every named fixed slice from the production SE parse method."""
 
-    tree = ast.parse(Path("src/parser/se_parser.py").read_text(encoding="utf-8-sig"))
+    parser_source = Path(__file__).resolve().parents[1] / "src/parser/se_parser.py"
+    tree = ast.parse(parser_source.read_text(encoding="utf-8-sig"))
     parser_class = next(
         node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "SEParser"
     )
@@ -132,14 +133,6 @@ def _official_se_slices() -> list[tuple[str, int, int]]:
         else:
             result.append((aliases.get(field["name"], field["name"]), start, int(field["width"])))
     return sorted(result, key=lambda item: item[1])
-
-
-def _official_pk_schema(schema: str) -> str:
-    """Return a native SE DDL with the official eighth key for red probes."""
-
-    seven = "PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)"
-    eight = "PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, " "Umaban, KettoNum)"
-    return schema.replace(seven, eight)
 
 
 def _parsed_se(
@@ -292,9 +285,7 @@ def test_native_se_keeps_records_that_differ_only_by_ketto_num(tmp_path, importe
 def test_native_se_erase_targets_one_complete_official_key(tmp_path) -> None:
     database = SQLiteDatabase({"path": str(tmp_path / "erase.db")})
     with database:
-        # Use the correct live-table key so this regression observes the
-        # erase predicate independently from the currently wrong shipped DDL.
-        database.execute(_official_pk_schema(SCHEMAS["NL_SE"]))
+        database.execute(SCHEMAS["NL_SE"])
         database.commit()
         importer = DataImporter(database)
         importer.import_records(
@@ -386,7 +377,7 @@ def test_se_canonical_key_and_status9_remain_valid() -> None:
     ],
 )
 def test_se_unsafe_schema_is_rejected_before_mutation(tmp_path, defect: str) -> None:
-    schema = _official_pk_schema(SCHEMAS["NL_SE"])
+    schema = SCHEMAS["NL_SE"]
     if defect == "wrong-key-type":
         schema = schema.replace("Year INTEGER", "Year TEXT", 1)
     elif defect == "wrong-body-type":
@@ -427,7 +418,7 @@ def test_se_unsafe_schema_is_rejected_before_mutation(tmp_path, defect: str) -> 
 def test_realtime_se_uses_the_complete_key_for_targeted_erase(tmp_path) -> None:
     database = SQLiteDatabase({"path": str(tmp_path / "realtime.db")})
     with database:
-        database.execute(_official_pk_schema(SCHEMAS["RT_SE"]))
+        database.execute(SCHEMAS["RT_SE"])
         database.commit()
         updater = RealtimeUpdater(database)
         inserted = updater.process_parsed_records_batch(

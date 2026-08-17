@@ -413,3 +413,24 @@ aggregated.
   PostgreSQL padding bug. The compatibility rule was narrowed to reject actual
   `CHAR` substitution/widening but retain sufficient `VARCHAR` and `TEXT`;
   the three positives and both new regressions then passed together.
+
+## GitHub review follow-up
+
+- PR #207 was opened at exact head
+  `79fee9d8f1d65801bc2a135c27034482164ca634`. GitHub Actions completed the
+  test, lint, distribution, and 32-bit Windows launcher jobs successfully;
+  performance was the intended zero-step conditional skip. The one requested
+  native Copilot review did not execute because its quota was exhausted, so no
+  Copilot finding was counted. The two exact-SHA Codex reviews above remained
+  the substantive independent evidence.
+- CodeRabbit reported two valid test-only minor findings: the parser-source AST
+  oracle depended on repository-root CWD, and an obsolete seven-key replacement
+  helper had become a silent no-op after the production DDL was corrected. Both
+  were fixed together without changing production code: source resolution is
+  now relative to the test file, and all call sites validate the shipped SE DDL
+  directly.
+- Focused evidence after the test-only repair: the AST oracle passes from a
+  non-repository CWD (`1 passed`), the SQLite SE file remains **47 passed, 21
+  skipped**, and the fresh PostgreSQL 16 SE file remains **68 passed**. A new
+  exact candidate, refreshed CI, replies, and unresolved-thread count zero are
+  still required before merge.
