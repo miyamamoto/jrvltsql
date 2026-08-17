@@ -200,3 +200,35 @@
   the focused SQLite/PostgreSQL/static/package gates on the resulting clean
   full SHA (without repeating the unaffected full suite), then begin the two
   bounded independent closure reviews.
+
+### Final local gates and independent closure reviews
+
+- Exact candidate `a7f69d82916884915eecc6a5ca745951b5a9bf00` was clean and
+  remained byte-identical to `99aea9e...` under `src/`. The test-only delta
+  commits PostgreSQL teardown after explicit catalog-table cleanup.
+- Exact-SHA gates passed:
+  - SQLite metadata file: `26 passed, 8 deselected`;
+  - fresh PostgreSQL 16 metadata file: `34 passed, 3 subtests passed`;
+  - fail-closed test gate, focused Ruff, fatal Flake8, compileall, strict
+    MkDocs, `uv lock --check`, and `git diff --check`;
+  - fresh wheel/sdist build, distribution-content gate, and isolated wheel
+    init smoke. Artifact SHA-256 values were wheel
+    `4ee272596ab2311defa9ae4dedeca160239905d3459114c7717286bc531d0369`
+    and sdist
+    `79a65574ec4f15bef8cf17bdd85598660e4c01bc72abf2054c9183163becc0b8`.
+  The disposable PostgreSQL container was removed.
+- Two independent Codex critical reviewers then examined the same exact SHA
+  read-only. Both returned `GREEN` with P0/P1/P2 all zero. Their independent
+  checks covered all 134 executable tables, live catalog/type/nullability/key
+  matching, stale-row cleanup, PostgreSQL comments, both Dual orientations,
+  mutation-before-rejection sentinels, index ownership, and MCP version and
+  semantics. Each confirmed the end SHA remained exact and the worktree clean,
+  and removed its disposable PostgreSQL container.
+- These results close this metadata/MCP iteration only. They do not constitute
+  a provider-layout, SDK acquisition, x64, full release-readiness, or release
+  verdict. Final candidate identity and merge evidence belong in the PR/GitHub
+  metadata rather than a self-referential follow-up commit.
+- Next safe command: commit this worklog-only review record, perform a bounded
+  carry-forward identity check, then push, open the PR, run the one review
+  cycle, resolve all threads, and merge only if the exact-head gates remain
+  green.
