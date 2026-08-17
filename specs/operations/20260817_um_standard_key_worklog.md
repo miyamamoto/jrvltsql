@@ -162,6 +162,12 @@
   22 subtests passed` in 57.67 seconds. `uv lock --check`,
   `scripts/validate_test_gate.py`, compileall, fatal flake8
   (`E9,F63,F7,F82`), strict MkDocs, and `git diff --check` all passed.
+- Exact committed code candidate
+  `2026fbc84e6cc7c93aed6d85de1b75ff852c73be` was exported with
+  `git archive`, built through isolated PEP 517 into wheel and sdist, and
+  passed both the distribution-content gate and extracted-wheel init/SQLite
+  bootstrap smoke. Both artifacts excluded `specs/`; the temporary archive
+  and artifacts were removed after verification.
 - Remaining iteration action: run final required local gates on one frozen
   full SHA, request one bounded two-reviewer confirmation of the repaired
   finding classes, then publish PR/review/merge only if the worktree is clean,
