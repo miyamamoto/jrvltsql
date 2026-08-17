@@ -1,7 +1,7 @@
 """Historical JVRead self-repair tests.
 
 Recovery uses the exact filename returned by JVRead and JVFiledelete. It does
-not inspect or unlink Wine cache paths directly.
+not inspect or unlink provider-managed cache paths directly.
 """
 
 from unittest.mock import MagicMock, patch

@@ -63,23 +63,17 @@ class TestInitCommand(unittest.TestCase):
         self.runner = CliRunner()
 
     def test_init_creates_directories(self):
-        """Test that init creates required directories."""
+        """An installed CLI initializes its writable current directory."""
         with self.runner.isolated_filesystem():
-            # Create config example file in current directory
-            config_dir = Path('config')
-            config_dir.mkdir(exist_ok=True)
-            example_file = config_dir / 'config.yaml.example'
-            example_file.write_text('# Example config')
+            installed_module = Path.cwd() / "site-packages/src/cli/main.py"
+            with patch("src.cli.main.__file__", str(installed_module)):
+                result = self.runner.invoke(cli, ["init"])
 
-            # Also create data and logs dirs to simulate init
-            Path('data').mkdir(exist_ok=True)
-            Path('logs').mkdir(exist_ok=True)
-
-            result = self.runner.invoke(cli, ['init'])
-
-            # Init should succeed and config should exist
             self.assertEqual(result.exit_code, 0)
-            self.assertTrue(Path('config').exists())
+            self.assertTrue(Path("config/config.yaml").is_file())
+            self.assertTrue(Path("data").is_dir())
+            self.assertTrue(Path("logs").is_dir())
+            self.assertNotIn("service key", result.output.lower())
 
     def test_init_with_force(self):
         """Test init with --force flag."""

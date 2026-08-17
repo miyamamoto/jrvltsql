@@ -9,18 +9,26 @@ import pytest
 from scripts.check_distribution_contents import validate_distributions
 
 
-def _write_wheel(path: Path, members: tuple[str, ...]) -> None:
+def _write_wheel(
+    path: Path,
+    members: tuple[str, ...],
+    payload: bytes = b"fixture",
+) -> None:
     with zipfile.ZipFile(path, "w") as archive:
         for member in members:
-            archive.writestr(member, b"fixture")
+            archive.writestr(member, payload)
 
 
-def _write_sdist(path: Path, members: tuple[str, ...]) -> None:
+def _write_sdist(
+    path: Path,
+    members: tuple[str, ...],
+    payload: bytes = b"fixture",
+) -> None:
     with tarfile.open(path, "w:gz") as archive:
         for member in members:
-            payload = path.parent / "payload"
-            payload.write_bytes(b"fixture")
-            archive.add(payload, arcname=member)
+            payload_path = path.parent / "payload"
+            payload_path.write_bytes(payload)
+            archive.add(payload_path, arcname=member)
 
 
 def _clean_pair(tmp_path: Path) -> tuple[Path, Path]:
@@ -75,3 +83,42 @@ def test_distribution_gate_fails_closed_when_an_artifact_kind_is_missing(
 
     assert errors
     assert any(missing in error for error in errors)
+
+
+@pytest.mark.parametrize(
+    ("artifact", "payload_parts"),
+    (
+        (
+            "wheel",
+            (b'example_key = "ABCD-', b"EFGH-IJKL-MNOP-Q\""),
+        ),
+        (
+            "sdist",
+            (
+                b"private-example-",
+                b"runtime through ",
+                b"deadbee acknowledges close",
+            ),
+        ),
+    ),
+)
+def test_distribution_gate_rejects_sensitive_text_without_echoing_it(
+    tmp_path: Path,
+    artifact: str,
+    payload_parts: tuple[bytes, ...],
+) -> None:
+    payload = b"".join(payload_parts)
+    wheel, sdist = _clean_pair(tmp_path)
+    member = "src/release_surface.py"
+    if artifact == "wheel":
+        _write_wheel(wheel, (member,), payload)
+    else:
+        member = f"jltsql-0/{member}"
+        _write_sdist(sdist, (member,), payload)
+
+    errors = validate_distributions((wheel, sdist))
+    rendered = "\n".join(errors)
+
+    assert errors
+    assert member in rendered
+    assert payload.decode("ascii") not in rendered

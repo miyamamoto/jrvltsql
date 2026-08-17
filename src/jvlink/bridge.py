@@ -7,7 +7,9 @@ evidence, not by the process boundary alone.
 
 Platform support:
 - Windows: runs JVLinkBridge.exe directly
-- Non-Windows: runs the native Win32 bridge through Wine
+- Non-Windows: runs JVLinkBridge.exe through an explicitly configured external
+  runner. The runner implementation belongs to the deployment environment and
+  is not selected or documented by this package.
 """
 
 import base64
@@ -80,7 +82,7 @@ def _require_string(response: dict, field: str, command: str) -> str:
 
 # Default bridge executable locations (searched in order)
 _BRIDGE_SEARCH_PATHS = [
-    # Native Win32 bridge (preferred for Wine; no .NET runtime dependency)
+    # Native Win32 bridge (no .NET runtime dependency)
     Path("tools/jvlink-bridge/bin/native/JVLinkBridge.exe"),
     # Relative to jrvltsql repo root (build output)
     Path("tools/jvlink-bridge/bin/x86/Release/net8.0-windows/JVLinkBridge.exe"),
@@ -94,7 +96,7 @@ _BRIDGE_SEARCH_PATHS = [
     Path(r"C:\Program Files (x86)\JVLinkBridge\JVLinkBridge.exe"),
 ]
 
-_BRIDGE_SEARCH_PATHS_LINUX = [
+_BRIDGE_SEARCH_PATHS_NON_WINDOWS = [
     Path("/opt/jvlink-bridge/JVLinkBridge.exe"),
     Path.home() / "jvlink-bridge" / "JVLinkBridge.exe",
     Path("tools/jvlink-bridge/bin/native/JVLinkBridge.exe"),
@@ -119,12 +121,13 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
-def _wine_executable() -> str:
-    return os.environ.get("JVLINK_WINE", "wine")
+def _external_runner() -> Optional[str]:
+    value = os.environ.get("JVLINK_BRIDGE_RUNNER", "").strip()
+    return value or None
 
 
-def _is_wine_available(wine: Optional[str] = None) -> bool:
-    return shutil.which(wine or _wine_executable()) is not None
+def _is_runner_available(runner: Optional[str]) -> bool:
+    return runner is not None and shutil.which(runner) is not None
 
 
 def find_bridge_executable() -> Optional[Path]:
@@ -144,7 +147,7 @@ def find_bridge_executable() -> Optional[Path]:
         return candidate
 
     search_paths = (
-        _BRIDGE_SEARCH_PATHS_LINUX
+        _BRIDGE_SEARCH_PATHS_NON_WINDOWS
         if sys.platform != "win32"
         else _BRIDGE_SEARCH_PATHS
     )
@@ -194,8 +197,8 @@ class JVLinkBridge:
         self._is_open = False
         self._needs_close = False
         self._download_count: Optional[int] = None
-        self._use_wine = sys.platform != "win32"
-        self._wine = _wine_executable()
+        self._use_external_runner = sys.platform != "win32"
+        self._runner = _external_runner()
         self._stderr_file: Optional[TextIO] = None
         self._dialog_watcher_stop: Optional[threading.Event] = None
         self._dialog_watcher_thread: Optional[threading.Thread] = None
@@ -215,38 +218,29 @@ class JVLinkBridge:
             "JVLinkBridge initialized",
             bridge_path=str(self._bridge_path),
             sid=sid,
-            use_wine=self._use_wine,
-            wine=self._wine if self._use_wine else None,
+            use_external_runner=self._use_external_runner,
+            runner_configured=self._runner is not None,
         )
 
     @property
-    def uses_wine(self) -> bool:
-        return self._use_wine
+    def uses_external_runner(self) -> bool:
+        return self._use_external_runner
 
     def _build_command(self) -> list[str]:
-        if not self._use_wine:
+        if not self._use_external_runner:
             return [str(self._bridge_path)]
-        if not _is_wine_available(self._wine):
+        if not _is_runner_available(self._runner):
             raise JVLinkBridgeError(
-                "非Windows環境ではWineが必要です。wine32/wine をインストールし、"
-                "必要なら JVLINK_WINE に実行ファイルを指定してください。"
+                "Non-Windows bridge execution requires JVLINK_BRIDGE_RUNNER "
+                "to name an available external runner executable"
             )
-        return [self._wine, str(self._bridge_path)]
+        return [self._runner, str(self._bridge_path)]
 
     def _build_env(self) -> dict[str, str]:
-        env = os.environ.copy()
-        if self._use_wine:
-            env.setdefault("WINEDEBUG", "-all")
-        wineprefix = env.get("JVLINK_WINEPREFIX")
-        if wineprefix:
-            env["WINEPREFIX"] = wineprefix
-        winearch = env.get("JVLINK_WINEARCH")
-        if winearch:
-            env["WINEARCH"] = winearch
-        return env
+        return os.environ.copy()
 
     def _dialog_watcher_enabled(self) -> bool:
-        if not self._use_wine:
+        if not self._use_external_runner:
             return False
         value = os.environ.get("JVLINK_AUTO_CLOSE_DIALOGS", "1").lower()
         if value in _DISABLED_VALUES:
@@ -261,7 +255,7 @@ class JVLinkBridge:
 
     def _dismiss_known_dialogs_once(self) -> int:
         """Reject only known blocking JV-Link dialogs visible on this X display."""
-        if not self._use_wine or not os.environ.get("DISPLAY"):
+        if not self._use_external_runner or not os.environ.get("DISPLAY"):
             return 0
         if shutil.which("xdotool") is None:
             return 0
@@ -431,7 +425,7 @@ class JVLinkBridge:
         logger.info(
             "Starting JVLinkBridge subprocess",
             path=str(self._bridge_path),
-            wine=self._use_wine,
+            external_runner=self._use_external_runner,
         )
 
         command = self._build_command()
@@ -566,14 +560,6 @@ class JVLinkBridge:
 
         logger.info("JV-Link initialized via bridge", code=code)
         return code
-
-    def jv_set_service_key(self, service_key: str) -> int:
-        """Set service key. Note: Bridge doesn't directly support this yet.
-
-        For JRA, the service key is typically set via registry by JRA-VAN DataLab installer.
-        """
-        logger.warning("jv_set_service_key not implemented in bridge; use JRA-VAN DataLab to configure")
-        return 0
 
     def jv_open(
         self,
@@ -720,9 +706,9 @@ class JVLinkBridge:
             if code != 0:
                 raise JVLinkBridgeError("JVClose failed", error_code=code)
         else:
-            # jrvltsql-wine-runtime through be759ee acknowledges close with
-            # only {"status":"ok"}. Preserve compatibility until that
-            # adapter propagates JVClose's official Long result code.
+            # Older bridge protocol revisions acknowledge close with only
+            # {"status":"ok"}. Preserve compatibility until every deployed
+            # bridge propagates JVClose's official Long result code.
             logger.warning(
                 "JVClose bridge response omitted the native result code; "
                 "accepting the legacy runtime acknowledgment"
@@ -749,9 +735,9 @@ class JVLinkBridge:
                 response.get("error", f"JVFiledelete failed for {filename}"),
                 error_code=code,
             )
-        # The production jrvltsql-wine-runtime bridge serializes the COM
-        # JVFiledelete return value as ``code``. A missing value is a protocol
-        # violation, not an implicit success.
+        # Current bridge protocol revisions serialize the COM JVFiledelete
+        # return value as ``code``. A missing value is a protocol violation,
+        # not an implicit success.
         return _require_response_code(response, f"JVFiledelete for {filename}")
 
     def wait_for_download(

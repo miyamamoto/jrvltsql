@@ -33,7 +33,7 @@ def test_historical_no_data_resets_statistics_from_previous_spec():
     fetcher._records_parsed = 8
     fetcher._records_failed = 1
     fetcher.jvlink = MagicMock()
-    fetcher.jvlink.uses_wine = False
+    fetcher.jvlink.uses_external_runner = False
     fetcher.jvlink.jv_open.return_value = (-1, 0, 0, "")
 
     assert list(fetcher.fetch("RACE", "20260701", "20260714")) == []

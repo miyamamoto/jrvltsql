@@ -54,17 +54,11 @@ data_fetch:
     # RACE: RA, SE, HR
     # DIFN: UM, KS, CH, BR, BN
     # YSCH: Schedule
-    # O1-O6: Odds
+    # O1-O6 are record IDs contained in RACE, not standalone JVOpen specs.
     data_specs:
       - "RACE"      # Race data (RA, SE, HR)
       - "DIFN"      # Master data (UM, KS, CH, BR, BN)
       - "YSCH"      # Schedule
-      - "O1"        # Win/Place/Bracket odds
-      - "O2"        # Quinella odds
-      - "O3"        # Wide odds
-      - "O4"        # Exacta odds
-      - "O5"        # Trio odds
-      - "O6"        # Trifecta odds
 
   # Real-time data fetch
   realtime:

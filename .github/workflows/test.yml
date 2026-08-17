@@ -44,6 +44,7 @@ jobs:
       run: |
         python -m build --outdir "$RUNNER_TEMP/jltsql-dist"
         python scripts/check_distribution_contents.py "$RUNNER_TEMP"/jltsql-dist/*
+        python scripts/smoke_distribution_init.py "$RUNNER_TEMP"/jltsql-dist/*.whl
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4

@@ -262,10 +262,10 @@ def test_sync_realtime_spec_stops_after_subscription_error(rt_database, error_co
 
 
 @pytest.mark.parametrize("error_code", sorted(SUBSCRIPTION_ERROR_CODES))
-def test_sync_realtime_spec_stops_after_wine_bridge_subscription_error(
+def test_sync_realtime_spec_stops_after_external_bridge_subscription_error(
     rt_database, error_code
 ):
-    """Wine bridge の未購読応答も spec 単位の正常スキップにする。"""
+    """External bridge subscription errors are skipped per data spec."""
     from src.jvlink.bridge import JVLinkBridgeError
 
     class UnsubscribedBridge(FakeJVLink):

@@ -33,8 +33,8 @@ class BaseFetcher(ABC):
     JV-Data records from JV-Link.
 
     Note:
-        Service key can be provided programmatically or configured in
-        JRA-VAN DataLab application/registry.
+        JV-Link registration is configured in the JRA-VAN DataLab
+        application before this fetcher is started.
 
     Attributes:
         jvlink: JV-Link wrapper instance

@@ -948,7 +948,7 @@ class TestRealtimeUpdater(unittest.TestCase):
         self.assertEqual((imported, failed), (0, 1))
         updater.replace_date_snapshot.assert_called_once_with("20260715")
 
-    def test_wine_bridge_unsubscribed_spec_does_not_fail_cycle(self):
+    def test_external_bridge_unsubscribed_spec_does_not_fail_cycle(self):
         from src.jvlink.bridge import JVLinkBridgeError
 
         monitor = RealtimeMonitor(database=self.mock_db)
@@ -964,7 +964,7 @@ class TestRealtimeUpdater(unittest.TestCase):
         self.assertEqual((imported, failed), (0, 0))
         jvlink.jv_close.assert_called_once()
 
-    def test_wine_bridge_busy_spec_retries_without_failing_cycle(self):
+    def test_external_bridge_busy_spec_retries_without_failing_cycle(self):
         from src.jvlink.bridge import JVLinkBridgeError
 
         monitor = RealtimeMonitor(database=self.mock_db)

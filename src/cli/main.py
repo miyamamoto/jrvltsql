@@ -1,13 +1,13 @@
 """JLTSQL Command Line Interface."""
 
-import sys
 import os
+import sys
 from pathlib import Path
 
 import click
 from rich.console import Console
 
-from src.utils.config import ConfigError, load_config
+from src.utils.config import ConfigError, get_default_config, load_config
 from src.utils.logger import get_logger, setup_logging_from_config
 from src.utils.updater import (
     auto_update_check_notice,
@@ -16,6 +16,7 @@ from src.utils.updater import (
     get_current_version,
     perform_update,
 )
+
 
 # Version - single source of truth from pyproject.toml
 def _read_version():
@@ -30,8 +31,9 @@ def _read_version():
     except Exception:
         pass
     try:
-        from pathlib import Path
         import re
+        from pathlib import Path
+
         pyproject = Path(__file__).resolve().parents[2] / "pyproject.toml"
         match = re.search(r'^version\s*=\s*"([^"]+)"', pyproject.read_text(), re.M)
         if match:
@@ -72,7 +74,7 @@ FETCH_NOTE_DATE_FIELDS = (
     "対応する日付を持たないレコードは JV-Link 取得時に除外されず、"
     "その取得範囲は完全キャッシュとして記録されません。"
 )
-CONFIG_OPTIONAL_COMMANDS = frozenset({"init", "status", "version"})
+CONFIG_OPTIONAL_COMMANDS = frozenset({"config", "init", "status", "version"})
 
 
 def _reject_retired_data_spec(data_spec: str) -> None:
@@ -149,14 +151,22 @@ def cli(ctx, config, verbose):
     """
     # Store context
     ctx.ensure_object(dict)
+    requested_config_path = (
+        Path(config) if config else Path.cwd() / "config" / "config.yaml"
+    )
+    ctx.obj["config_path"] = requested_config_path
 
     # Load configuration
-    if config:
-        config_path = config
+    if ctx.invoked_subcommand in {"config", "init"}:
+        # Bootstrap, --force repair, and config inspection must not parse a
+        # missing or malformed configuration before the command handles it.
+        config_path = None
+    elif config:
+        config_path = requested_config_path
     else:
-        # Try default path
-        project_root = Path(__file__).parent.parent.parent
-        config_path = project_root / "config" / "config.yaml"
+        # The default is user-writable and independent of the package install
+        # location. This is also the exact path created by ``jltsql init``.
+        config_path = requested_config_path
 
         if not config_path.exists():
             # Read-only bootstrap commands must work before initialization.
@@ -215,7 +225,7 @@ def init(ctx, force):
     """
     console.print("[bold cyan]Initializing JLTSQL project...[/bold cyan]")
 
-    project_root = Path(__file__).parent.parent.parent
+    project_root = Path.cwd()
     config_dir = project_root / "config"
     data_dir = project_root / "data"
     logs_dir = project_root / "logs"
@@ -228,8 +238,8 @@ def init(ctx, force):
         else:
             console.print(f"  Directory exists: {directory}")
 
-    # Create config.yaml from example
-    config_example = config_dir / "config.yaml.example"
+    # Generate a complete default without relying on a source-checkout-only
+    # template that is absent from installed wheels.
     config_yaml = config_dir / "config.yaml"
 
     if config_yaml.exists() and not force:
@@ -238,22 +248,23 @@ def init(ctx, force):
             "Use --force to overwrite."
         )
     else:
-        if config_example.exists():
-            import shutil
+        import yaml
 
-            shutil.copy(config_example, config_yaml)
-            console.print(f"[green]+[/green] Created configuration file: {config_yaml}")
-        else:
-            console.print(
-                f"[red]Error:[/red] {config_example} not found.",
-                style="bold",
-            )
-            sys.exit(1)
+        config_yaml.write_text(
+            yaml.safe_dump(
+                get_default_config(),
+                allow_unicode=True,
+                sort_keys=False,
+            ),
+            encoding="utf-8",
+        )
+        console.print(f"[green]+[/green] Created configuration file: {config_yaml}")
 
     console.print("\n[bold green]Initialization complete![/bold green]")
     console.print("\nNext steps:")
-    console.print("  1. Edit config/config.yaml and set your JV-Link service key")
-    console.print("  2. Run: jltsql fetch --help")
+    console.print("  1. Register JV-Link in the JRA-VAN DataLab application")
+    console.print("  2. Review config/config.yaml for database settings")
+    console.print("  3. Run: jltsql fetch --help")
 
 
 @cli.command()
@@ -1321,15 +1332,15 @@ def config(ctx, show, set_value, get_key):
     from pathlib import Path
     import yaml
 
-    # Find config file
+    # Find config file. The path is captured before the bootstrap command
+    # deliberately skips normal configuration loading.
+    config_path = Path(
+        ctx.obj.get("config_path", Path.cwd() / "config" / "config.yaml")
+    )
     if ctx.obj.get("config"):
         config_obj = ctx.obj["config"]
         config_dict = config_obj.to_dict()
-        config_path = Path(ctx.params.get("config", "config/config.yaml"))
     else:
-        project_root = Path(__file__).parent.parent.parent
-        config_path = project_root / "config" / "config.yaml"
-
         if not config_path.exists():
             console.print("[red]Error:[/red] Configuration file not found.")
             console.print("Run 'jltsql init' first.")

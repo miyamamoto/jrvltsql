@@ -198,7 +198,8 @@ if exist "%INSTALL_DIR%\config\config.yaml" (
 ) else if exist "%INSTALL_DIR%\config\config.yaml.example" (
     copy "%INSTALL_DIR%\config\config.yaml.example" "%INSTALL_DIR%\config\config.yaml" >nul
     echo   [OK] Created config.yaml from template
-    echo   [!!] Edit %INSTALL_DIR%\config\config.yaml to set your service keys
+    echo   [!!] Review %INSTALL_DIR%\config\config.yaml for database settings
+    echo   [!!] Register JV-Link in the JRA-VAN DataLab application
 ) else (
     echo   [!!] config.yaml.example not found, run 'jltsql init' later
 )

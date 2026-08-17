@@ -155,9 +155,8 @@ def load_config(config_path: Optional[Union[str, Path]] = None) -> Config:
     """
     resolved_path: Path
     if config_path is None:
-        # Default config path
-        project_root = Path(__file__).parent.parent.parent
-        resolved_path = project_root / "config" / "config.yaml"
+        # Keep the default writable and identical to the CLI bootstrap path.
+        resolved_path = Path.cwd() / "config" / "config.yaml"
     else:
         resolved_path = Path(config_path)
 

@@ -3197,3 +3197,87 @@
   contract, so the already completed full/PG/oracle/package gates remain
   applicable to the same production semantics; the bounded exact-commit
   reviewers must nevertheless inspect this final form before merge.
+
+### 2026-08-17 14:25 JST — public release-surface security iteration start
+
+- This bounded pre-release iteration targets repository
+  `miyamamoto/jrvltsql` in dedicated worktree
+  `/home/keiba/scratch/20260817_jrvltsql_public_surface`, branch
+  `agent/release-public-surface-20260817`, from exact current
+  `origin/master` / base / HEAD
+  `98ec163222aab3eadaa82f048273c8a0be8722e6`. The published production release
+  remains v1.6.10; this iteration does not select, tag, or publish a new
+  version.
+- The exact committed master is still undergoing separate read-only official
+  layout/status and authenticated-acquisition audits. This worktree exists so
+  an urgent independent public-surface finding can be prepared without moving
+  that evidence SHA. Minimum scope is: remove a credential-shaped value from
+  distributable source without recording it here, remove private runtime and
+  adapter provenance from the public archive, correct setup/config text that
+  contradicts the current provider contract, and make the distribution gate
+  fail closed on those content classes. No parser, schema, importer, provider
+  cache, release tag, or external credential state is changed in this branch.
+- The credential-shaped value must be treated as compromised unless the owner
+  proves it was synthetic. Source removal cannot revoke a value already
+  published in Git history, so owner-side rotation remains an explicit release
+  blocker if it was real. Tests must first show the current archive gate accepts
+  a credential-shaped or private-runtime payload, then retain a paired safe
+  archive case. Error output must name only the archive member and finding
+  category, never the matched value.
+- Claude Code Fable is unavailable under the recorded service usage limit.
+  Per maintainer authorization, implementation and review use Codex with at
+  least two independent critical reviews on one frozen candidate SHA after the
+  audit findings are batched. STOP on any credential disclosure in output or
+  tracked evidence, compatibility-layer regression, archive scanner
+  false-negative/secret echo, candidate drift during review, failed executed
+  CI step, unresolved review thread, or attempt to merge/release before the
+  official-status and fresh-acquisition blockers are independently cleared.
+- Red-first evidence was captured on unchanged production base `98ec163...`
+  before implementing the public-surface repair. The minimal selection returned
+  `4 failed`: the existing archive gate accepted both a synthetic complete
+  credential shape and synthetic private-runtime/short-SHA provenance; an
+  installed-module simulation made `jltsql init` exit 1 instead of creating a
+  writable-CWD config; and the public setup contract found stale service-key
+  config guidance. Synthetic values only were used and pytest did not print or
+  retain the repository's credential-shaped value. The paired clean archive
+  test remains green. The same tests must pass after one grouped repair.
+- A second two-case red selection binds the public subprocess boundary without
+  naming a compatibility implementation. On base `98ec163...`, the bridge
+  ignored `JVLINK_BRIDGE_RUNNER` and selected an implicit implementation; with
+  no generic runner configured it raised implementation-specific guidance
+  instead of failing on the generic contract. Both cases failed as intended.
+  The repair will require an explicit external runner on non-Windows hosts and
+  will preserve direct execution on Windows; private deployments must migrate
+  the environment before this breaking 2.0 release can be validated.
+- The grouped repair now generates bootstrap configuration in the caller's
+  writable current directory, keeps an explicitly requested config path for
+  the `config` command without parsing it during bootstrap, removes the
+  programmatic registry-writing API and its credential-shaped example,
+  requires an explicitly configured generic external bridge runner on
+  non-Windows systems, and removes private runtime/project provenance. The
+  example and installer guidance now direct registration through DataLab and
+  no longer advertise the retired standalone O1-O6 JVOpen specs. The release
+  archive checker scans bounded text members for credential-shaped values and
+  private runtime/commit provenance without echoing matched content. A new
+  built-wheel smoke runs `jltsql init` in a fresh writable directory.
+- The formerly red public-surface/config/bridge/content selection and the
+  broader affected selection are green: `77 passed`, then `257 passed, 11
+  subtests passed`. `git diff --check` passes. A fresh isolated PEP 517 build
+  produced the 1.6.10 wheel and sdist without the prior setuptools license
+  deprecation warning; the new two-artifact content scan and the extracted
+  wheel init smoke both pass. These artifacts are validation-only and are not
+  a release candidate because the version metadata and official status/key
+  contracts are separate blocked iterations.
+- Next safe action is one final static/focused gate, then commit this single
+  public-surface iteration and obtain two independent Codex reviews against
+  its frozen full SHA. STOP on any public occurrence of the private bridge
+  implementation/provenance, archive secret-scan false-negative or content
+  echo, non-Windows implicit runner selection, installed-wheel init failure,
+  test failure, or candidate drift during review.
+- The final pre-commit public/install surface selection passes `91 passed, 5
+  skipped`; the skips are existing environment-dependent launcher cases. The
+  fail-closed test gate reports `TEST GATE PASS`, compileall succeeds, fatal
+  flake8 (`E9,F63,F7,F82`) reports zero findings, and strict MkDocs succeeds.
+  The MkDocs tool emitted only its upstream 2.0 project warning. The dirty
+  candidate remains based on exact `98ec163...`; no release/version claim is
+  attached to these pre-commit results.

@@ -217,7 +217,8 @@ if (Test-Path $configFile) {
 } elseif (Test-Path $configExample) {
     Copy-Item $configExample $configFile
     Write-Ok "Created config.yaml from template"
-    Write-Warn "Edit $configFile to set your service keys"
+    Write-Warn "Review $configFile for database settings"
+    Write-Warn "Register JV-Link in the JRA-VAN DataLab application"
 } else {
     Write-Warn "config.yaml.example not found, run 'jltsql init' later"
 }

@@ -7,7 +7,7 @@ name = "jltsql"
 version = "1.6.10"
 description = "JRA-VAN DataLab の競馬データをSQLite・PostgreSQLにインポートするツール"
 readme = "README.md"
-license = {text = "Apache-2.0"}
+license = "Apache-2.0"
 authors = [
     {name = "JLTSQL Contributors"}
 ]
@@ -16,7 +16,6 @@ keywords = ["jra-van", "horse-racing", "data", "sqlite", "postgresql", "jvlink"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: Apache Software License",
     "Operating System :: Microsoft :: Windows",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
