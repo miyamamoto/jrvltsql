@@ -9,6 +9,7 @@ import re
 import stat
 import tarfile
 import zipfile
+import zlib
 from collections.abc import Iterable, Sequence
 from pathlib import Path, PurePosixPath
 
@@ -28,6 +29,7 @@ PROHIBITED_TOKEN_SHA256 = frozenset(
         "08c64f088046a0504f39c8b52ed474483d642ac4efdee5211a54ad41a10684e8",
         "1487241b177b0353807ec09be32c409de832fc657c93f7ed5eb23b444708d7e7",
         "32c4feed996880bc92a062dc476f9b8cdb2596a989f2cc5246e9cef605bd5c78",
+        "3958765b23d8a51d3445d91f98c1e76f62b896d615011d132b4ae85e4331d2fe",
         "454e0f9c502a52a6c351c9614bac911e22d42908a87dcaf47467645b6001fb17",
         "594f63ba499f2248fdf20c6472a7527a13be1a96e0642615c7f045bf886c3405",
         "684be438b04d22074ca4bb4b1d83bac553d09e3c02680e1ee3a4936d8af22a0a",
@@ -52,7 +54,7 @@ SENSITIVE_TEXT_PATTERNS = (
     (
         "credential-shaped value",
         re.compile(
-            rb"(?:service[_ -]?key|<key>)\s*[:=>\"']*\s*"
+            rb"(?:service[_ -]?key|<key>)[\s(:=>\"']*"
             rb"[A-Z0-9]{17}(?![A-Z0-9])",
             re.IGNORECASE,
         ),
@@ -78,7 +80,12 @@ def _artifact_kind(path: Path) -> str | None:
 
 
 def _sensitive_category(payload: bytes) -> str | None:
-    variants = (payload, payload.replace(b"\x00", b""))
+    without_nuls = payload.replace(b"\x00", b"")
+    variants = (
+        payload,
+        without_nuls,
+        re.sub(rb"[\s\"']", b"", without_nuls),
+    )
     for candidate in variants:
         for category, pattern in SENSITIVE_TEXT_PATTERNS:
             if pattern.search(candidate):
@@ -112,8 +119,8 @@ def _archive_entries(
                 payload = None
                 error = None
                 member_type = (member.external_attr >> 16) & 0o170000
-                if stat.S_ISLNK(member_type):
-                    error = "archive links are not permitted"
+                if member_type and not stat.S_ISREG(member_type) and not member.is_dir():
+                    error = "archive links and special members are not permitted"
                 elif not member.is_dir():
                     if member.file_size > MAX_SCANNED_TEXT_BYTES:
                         error = "member exceeds the content-scan size limit"
@@ -151,16 +158,31 @@ def _member_error(path: Path, member: str) -> str | None:
     if (
         pure_path.is_absolute()
         or ".." in parts
-        or re.match(r"^[A-Za-z]:/", normalized)
+        or re.match(r"^[A-Za-z]:", normalized)
         or normalized.startswith("//")
+        or "\x00" in normalized
+        or any(part.rstrip(" .") != part for part in parts)
+        or any(":" in part for part in parts)
     ):
         return f"{path_label}: unsafe archive member: {member_label}"
-    lowered = tuple(part.lower() for part in parts)
+    lowered = tuple(part.rstrip(" .").lower() for part in parts)
+    windows_reserved = {
+        "con",
+        "prn",
+        "aux",
+        "nul",
+        *(f"com{number}" for number in range(1, 10)),
+        *(f"lpt{number}" for number in range(1, 10)),
+    }
+    if any(part.split(".", 1)[0] in windows_reserved for part in lowered):
+        return f"{path_label}: unsafe archive member: {member_label}"
     if "specs" in lowered:
         return (
             f"{path_label}: repository specifications are not distributable: "
             f"{member_label}"
         )
+    if "tests" in lowered:
+        return f"{path_label}: test suite is not distributable: {member_label}"
     if lowered and lowered[-1] in SUPERSEDED_AUDIT_PAGES:
         return (
             f"{path_label}: superseded audit page is not distributable: "
@@ -237,8 +259,11 @@ def validate_distributions(paths: Sequence[Path]) -> list[str]:
             ValueError,
             tarfile.TarError,
             zipfile.BadZipFile,
+            zlib.error,
         ) as error:
-            errors.append(f"could not inspect {_artifact_label(path)}: {error}")
+            errors.append(
+                f"could not inspect {_artifact_label(path)}: {type(error).__name__}"
+            )
 
     return errors
 

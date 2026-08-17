@@ -7,6 +7,7 @@ from pathlib import Path
 import click
 from rich.console import Console
 
+from src import __version__
 from src.utils.config import ConfigError, get_default_config, load_config
 from src.utils.logger import get_logger, setup_logging_from_config
 from src.utils.updater import (
@@ -17,32 +18,6 @@ from src.utils.updater import (
     perform_update,
 )
 
-
-# Version - single source of truth from pyproject.toml
-def _read_version():
-    """Read version from pyproject.toml."""
-    try:
-        from importlib.metadata import version as _get_version
-        for dist_name in ("jltsql", "jrvltsql"):
-            try:
-                return _get_version(dist_name)
-            except Exception:
-                pass
-    except Exception:
-        pass
-    try:
-        import re
-        from pathlib import Path
-
-        pyproject = Path(__file__).resolve().parents[2] / "pyproject.toml"
-        match = re.search(r'^version\s*=\s*"([^"]+)"', pyproject.read_text(), re.M)
-        if match:
-            return match.group(1)
-    except Exception:
-        pass
-    return "unknown"
-
-__version__ = _read_version()
 
 # Console for rich output (Windows cp932-safe)
 console = Console(legacy_windows=True)
@@ -122,7 +97,7 @@ def _print_fetch_guardrail_notes(jv_option: int) -> None:
 @click.option(
     "--config",
     "-c",
-    type=click.Path(exists=True),
+    type=click.Path(exists=True, dir_okay=False, readable=True),
     default=None,
     help="Path to configuration file (default: config/config.yaml)",
 )
@@ -186,8 +161,15 @@ def cli(ctx, config, verbose):
             cfg = load_config(str(config_path))
             ctx.obj["config"] = cfg
 
-            # Setup logging from config
-            setup_logging_from_config(cfg.to_dict())
+            # Setup logging from config. Invalid leaf types are rejected by
+            # load_config; filesystem failures are still rendered as a
+            # controlled configuration error rather than a traceback.
+            try:
+                setup_logging_from_config(cfg.to_dict())
+            except (OSError, TypeError, ValueError) as exc:
+                raise ConfigError(
+                    f"Could not initialize logging ({type(exc).__name__})"
+                ) from exc
 
             # Override log level if verbose
             if verbose:
@@ -237,12 +219,24 @@ def init(ctx, force):
         )
         ctx.exit(2)
 
-    console.print("[bold cyan]Initializing JLTSQL project...[/bold cyan]")
-
     project_root = Path.cwd()
     config_dir = project_root / "config"
     data_dir = project_root / "data"
     logs_dir = project_root / "logs"
+    config_yaml = config_dir / "config.yaml"
+
+    if config_yaml.exists() and not force:
+        try:
+            load_config(config_yaml)
+        except ConfigError as exc:
+            console.print(
+                f"[red]Configuration Error:[/red] {exc}. "
+                "Repair the file or rerun with --force.",
+                style="bold",
+            )
+            ctx.exit(1)
+
+    console.print("[bold cyan]Initializing JLTSQL project...[/bold cyan]")
 
     # Create directories
     for directory in [config_dir, data_dir, logs_dir]:
@@ -254,8 +248,6 @@ def init(ctx, force):
 
     # Generate a complete default without relying on a source-checkout-only
     # template that is absent from installed wheels.
-    config_yaml = config_dir / "config.yaml"
-
     if config_yaml.exists() and not force:
         console.print(
             f"[yellow]Warning:[/yellow] {config_yaml} already exists. "
@@ -380,7 +372,7 @@ def update(ctx, force):
     else:
         console.print()
         console.print("[bold red][ERROR] Update failed.[/bold red]")
-        console.print("Try manually: git pull && pip install -e .")
+        console.print("Review the update guidance above and retry.")
         sys.exit(1)
 
 

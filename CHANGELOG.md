@@ -30,6 +30,12 @@
   リリース検証済みの 32-bit Python / JV-Link 経路を既定として維持
 - Python の実行要件を `pyproject.toml` と一致する 3.12 以上へ統一
 - 公式 64-bit 版と競合し得る旧レジストリ回避ツールを削除
+- 公式 fixed-width parser、DataKubun、primary key、native/standard child
+  schema を現行契約へ揃え、SQLite/PostgreSQL の transaction recovery と
+  durable statistics を fail closed 化
+- 1.x DB は事前 backup のうえ v2 schema で rebuild/reimport し、件数・key・
+  取消・readback を確認する。rollback は部分移行DBの再利用ではなく、backup と
+  旧releaseの復元で行う。詳細は `docs/data_support.md` と v2 release notes を参照
 
 ### Fixed
 

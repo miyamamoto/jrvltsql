@@ -149,9 +149,11 @@ class TestPerformUpdate:
     """Tests for perform_update."""
 
     @patch("subprocess.run")
-    def test_successful_update(self, mock_run):
+    def test_successful_update(self, mock_run, tmp_path):
         mock_run.return_value = MagicMock(returncode=0, stdout="Already up to date.\n")
-        result = perform_update(verbose=False)
+        (tmp_path / ".git").mkdir()
+        with patch("src.utils.updater.PROJECT_ROOT", tmp_path):
+            result = perform_update(verbose=False)
         assert result is True
         assert mock_run.call_count == 2  # git pull + pip install
 

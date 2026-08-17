@@ -467,27 +467,25 @@ class TestVersionComparisonEdgeCases:
         assert _version_newer("2.2.0", "2.2.0.1") is False
 
     def test_version_with_non_numeric(self):
-        """Versions with non-numeric parts default to 0."""
+        """PEP 440 prereleases compare normally; unknown text fails closed."""
         from src.utils.updater import _version_newer
 
-        # "beta" -> 0, so "2.2.0" vs "2.2.0" -> not newer
-        assert _version_newer("2.2.0", "2.2.beta") is False
-        # "2.2.1" vs "2.2.beta"(=2.2.0) -> newer
+        assert _version_newer("2.2.0", "2.2.beta") is True
         assert _version_newer("2.2.1", "2.2.beta") is True
+        assert _version_newer("2.2.1", "2.2.not-a-version") is False
 
     def test_version_empty_strings(self):
         """Empty version strings are handled."""
         from src.utils.updater import _version_newer
 
-        # Empty normalizes to [0]
-        assert _version_newer("1.0.0", "") is True
+        assert _version_newer("1.0.0", "") is False
         assert _version_newer("", "1.0.0") is False
 
     def test_version_just_v(self):
-        """'v' alone normalizes to [0]."""
+        """A bare prefix is not treated as a known old version."""
         from src.utils.updater import _version_newer
 
-        assert _version_newer("v1.0.0", "v") is True
+        assert _version_newer("v1.0.0", "v") is False
 
     def test_version_single_number(self):
         """Single number versions work."""

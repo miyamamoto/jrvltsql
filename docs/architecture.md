@@ -34,7 +34,9 @@ SQLite は単体検証や PostgreSQL がない環境のフォールバックで�
 公開 CLI の利用要件は Windows 10 / 11 です。`JVLinkBridge` クライアントを
 外部 collector から利用する場合は `JVLINK_BRIDGE_EXE` で実行可能な bridge を
 指定します。bridge、JV-Link、GUI セッションの準備とサービスキー登録は配備
-環境の責務です。
+環境の責務です。Windows では bridge を直接実行します。非Windows の検証環境で
+bridge を起動する場合は、外部 runner の実行ファイルを
+`JVLINK_BRIDGE_RUNNER` へ明示し、暗黙の実装選択に依存しないでください。
 
 JV-Link は `JVOpen` / `JVRTOpen` 中にお知らせや DataLab 更新確認を表示し、
 非対話実行を停止させる場合があります。クライアントは既知のダイアログだけを

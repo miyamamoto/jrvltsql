@@ -46,9 +46,9 @@ if defined VIRTUAL_ENV (
         echo ERROR: VIRTUAL_ENV must point to Python 3.12 or later.
         exit /b 1
     )
-    "%VIRTUAL_ENV%\Scripts\python.exe" -c "import sys; raise SystemExit(sys.version_info < (3, 12))" >nul 2>&1
+    "%VIRTUAL_ENV%\Scripts\python.exe" -c "import struct,sys; raise SystemExit(sys.version_info < (3, 12) or struct.calcsize('P') != 4)" >nul 2>&1
     if !errorlevel! neq 0 (
-        echo ERROR: VIRTUAL_ENV must point to Python 3.12 or later.
+        echo ERROR: VIRTUAL_ENV must point to 32-bit Python 3.12 or later.
         exit /b 1
     )
     set "PYTHON_CMD="!VIRTUAL_ENV!\Scripts\python.exe""
@@ -64,7 +64,7 @@ if exist "%~dp0venv32\Scripts\python.exe" (
 )
 
 if exist "%~dp0.venv\Scripts\python.exe" (
-    "%~dp0.venv\Scripts\python.exe" -c "import sys; raise SystemExit(sys.version_info < (3, 12))" >nul 2>&1
+    "%~dp0.venv\Scripts\python.exe" -c "import struct,sys; raise SystemExit(sys.version_info < (3, 12) or struct.calcsize('P') != 4)" >nul 2>&1
     if !errorlevel!==0 (
         set "PYTHON_CMD="%~dp0.venv\Scripts\python.exe""
         goto :run
@@ -77,28 +77,9 @@ if !errorlevel!==0 (
     goto :run
 )
 
-py -3.12 --version >nul 2>&1
-if !errorlevel!==0 (
-    set "PYTHON_CMD=py -3.12"
-    goto :run
-)
-
-py -3 -c "import sys; raise SystemExit(sys.version_info < (3, 12))" >nul 2>&1
-if !errorlevel!==0 (
-    set "PYTHON_CMD=py -3"
-    goto :run
-)
-
-REM Fallback: python in PATH
-python -c "import sys; raise SystemExit(sys.version_info < (3, 12))" >nul 2>&1
-if !errorlevel!==0 (
-    set "PYTHON_CMD=python"
-    goto :run
-)
-
 REM No Python found
 echo ERROR: Python not found
-echo Please install Python 3.12+ with the same bitness as JV-Link.
+echo Install 32-bit Python, or set PYTHON to a full path only for explicit SDK validation.
 echo Download: https://www.python.org/downloads/
 pause
 exit /b 1
@@ -119,7 +100,7 @@ if !SCRIPT_EXIT_CODE! neq 0 (
     echo   Please check the error messages above.
     echo   Common issues:
     echo     - Missing config/config.yaml
-    echo     - Invalid service key
+    echo     - DataLab registration is incomplete
     echo     - No data available for the specified date range
     echo.
     echo   Press Enter to close...

@@ -325,10 +325,11 @@ wheels = [
 
 [[package]]
 name = "jltsql"
-version = "1.6.10"
+version = "2.0.0.dev0"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
+    { name = "packaging" },
     { name = "python-dateutil" },
     { name = "pywin32", marker = "sys_platform == 'win32'" },
     { name = "pyyaml" },
@@ -364,6 +365,7 @@ requires-dist = [
     { name = "click", specifier = ">=8.1" },
     { name = "cryptography", marker = "extra == 's3'", specifier = ">=41.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.5" },
+    { name = "packaging", specifier = ">=23.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.0" },
     { name = "psycopg", extras = ["binary"], marker = "extra == 'postgres'" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.4" },

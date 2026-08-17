@@ -3,13 +3,14 @@
 import hashlib
 import tarfile
 import zipfile
+import zlib
 from pathlib import Path
 
 import pytest
 
 from scripts import check_distribution_contents as content_gate
 from scripts.check_distribution_contents import validate_distributions
-from scripts.smoke_distribution_init import _wheel_cli_command
+from scripts.smoke_distribution_init import _wheel_cli_command, validate_wheel_init
 
 
 def _write_wheel(
@@ -20,6 +21,13 @@ def _write_wheel(
     with zipfile.ZipFile(path, "w") as archive:
         for member in members:
             archive.writestr(member, payload)
+
+
+def _corrupt_zip_payload(path: Path, payload: bytes) -> None:
+    archive_bytes = bytearray(path.read_bytes())
+    payload_offset = archive_bytes.index(payload)
+    archive_bytes[payload_offset] ^= 0x01
+    path.write_bytes(archive_bytes)
 
 
 def _write_sdist(
@@ -63,6 +71,8 @@ def test_distribution_gate_accepts_clean_wheel_and_sdist(tmp_path: Path) -> None
         ("sdist", "jltsql-0/specs/operations/internal.md"),
         ("wheel", "docs/crawler_audit_02_ra_extended_layout.md"),
         ("sdist", "jltsql-0/docs/crawler_audit_04_se_layout.md"),
+        ("wheel", "tests/test_release_surface.py"),
+        ("sdist", "jltsql-0/tests/test_release_surface.py"),
     ),
 )
 def test_distribution_gate_rejects_nondistributable_content(
@@ -162,6 +172,16 @@ def test_distribution_gate_rejects_sensitive_text_without_echoing_it(
             ).encode("utf-16-le"),
         ),
         (
+            "wheel",
+            "src/provider.py",
+            b"JVSetServiceKey(" + b"".join((b"ABCD", b"EFGHIJKLMNOPQ")) + b")",
+        ),
+        (
+            "wheel",
+            "src/provider.py",
+            b'key = "ABCD-" "EFGH-" "IJKL-" "MNOP-Q"',
+        ),
+        (
             "sdist",
             "src/bridge.py",
             b"".join((b"jltsql-private-", b"runtime revision deadbeef")),
@@ -223,7 +243,17 @@ def test_distribution_gate_applies_the_hashed_private_token_denylist(
     assert validate_distributions((wheel, sdist))
 
 
-@pytest.mark.parametrize("member", ("C:/escape.py", "C:\\escape.py"))
+def test_distribution_gate_pins_the_private_runner_hash_without_plaintext() -> None:
+    assert (
+        "3958765b23d8a51d3445d91f98c1e76f62b896d615011d132b4ae85e4331d2fe"
+        in content_gate.PROHIBITED_TOKEN_SHA256
+    )
+
+
+@pytest.mark.parametrize(
+    "member",
+    ("C:/escape.py", "C:\\escape.py", "C:escape.py", "specs./internal.md"),
+)
 def test_distribution_gate_rejects_windows_absolute_members(
     tmp_path: Path,
     member: str,
@@ -250,3 +280,41 @@ def test_wheel_smoke_binds_execution_to_the_extracted_wheel(tmp_path: Path) -> N
 
     assert "-I" in command
     assert any("is_relative_to" in argument for argument in command)
+
+
+def test_wheel_smoke_rejects_a_partial_wheel_despite_an_editable_install(
+    tmp_path: Path,
+) -> None:
+    wheel = tmp_path / "jltsql-0-py3-none-any.whl"
+    _write_wheel(wheel, ("src/__init__.py",), b'__version__ = "0"')
+
+    assert validate_wheel_init(wheel)
+
+
+def test_distribution_gate_redacts_sensitive_names_on_crc_failure(
+    tmp_path: Path,
+) -> None:
+    wheel, sdist = _clean_pair(tmp_path)
+    secret = "".join(("ABCD-", "EFGH-IJKL-MNOP-Q"))
+    payload = b"CRC_UNIQUE_PAYLOAD"
+    _write_wheel(wheel, (f"src/{secret}.py",), payload)
+    _corrupt_zip_payload(wheel, payload)
+
+    rendered = "\n".join(validate_distributions((wheel, sdist)))
+
+    assert rendered
+    assert secret not in rendered
+
+
+def test_distribution_gate_returns_an_error_for_corrupt_deflate_stream(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    wheel, sdist = _clean_pair(tmp_path)
+
+    def corrupt_read(*_args, **_kwargs):
+        raise zlib.error("synthetic corrupt stream")
+
+    monkeypatch.setattr(zipfile.ZipFile, "read", corrupt_read)
+
+    assert validate_distributions((wheel, sdist))

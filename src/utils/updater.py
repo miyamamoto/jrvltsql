@@ -9,6 +9,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+from packaging.version import InvalidVersion, Version
+
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -177,25 +179,17 @@ def check_for_updates() -> Optional[dict]:
 
 
 def _version_newer(latest: str, current: str) -> bool:
-    """Compare version strings (strip 'v' prefix).
+    """Compare PEP 440 versions after stripping an optional ``v`` prefix.
 
     Returns:
         True if latest is newer than current
     """
-    def normalize(v: str) -> list[int]:
-        v = v.lstrip("v")
-        parts = []
-        for p in v.split("."):
-            try:
-                parts.append(int(p))
-            except ValueError:
-                parts.append(0)
-        return parts
-
     try:
-        return normalize(latest) > normalize(current)
-    except Exception:
-        return latest != current
+        return Version(latest.lstrip("v")) > Version(current.lstrip("v"))
+    except InvalidVersion:
+        # Unparseable or unavailable metadata is unknown, not evidence that an
+        # update is safe or required.
+        return False
 
 
 def should_check_updates(interval_hours: int = 24) -> bool:

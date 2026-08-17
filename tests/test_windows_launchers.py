@@ -95,7 +95,7 @@ def test_quickstart_rejects_invalid_active_virtual_environment(tmp_path):
     result = _run_batch(batch, "--yes", "--help", env=env, cwd=checkout)
 
     assert result.returncode != 0
-    assert "VIRTUAL_ENV must point to Python 3.12 or later" in result.stdout
+    assert "VIRTUAL_ENV must point to 32-bit Python 3.12 or later" in result.stdout
     assert "UNEXPECTED_FALLBACK" not in result.stdout
 
 

@@ -42,6 +42,11 @@ class TestVersionComparison:
         assert _version_newer("2.2.1", "2.2.0") is True
         assert _version_newer("2.2.0", "2.2.1") is False
 
+    def test_final_release_is_newer_than_its_development_prerelease(self):
+        from src.utils.updater import _version_newer
+
+        assert _version_newer("2.0.0", "2.0.0.dev0") is True
+
 
 class TestGetCurrentVersion:
     """Test getting current version."""
@@ -152,13 +157,23 @@ class TestPerformUpdate:
     """Test update execution."""
 
     @patch("subprocess.run")
-    def test_successful_update(self, mock_run):
+    def test_successful_update(self, mock_run, tmp_path):
         from src.utils.updater import perform_update
 
         mock_run.return_value = MagicMock(returncode=0, stdout="Already up to date.\n", stderr="")
-        result = perform_update(verbose=False)
+        (tmp_path / ".git").mkdir()
+        with patch("src.utils.updater.PROJECT_ROOT", tmp_path):
+            result = perform_update(verbose=False)
         assert result is True
         assert mock_run.call_count == 2  # git pull + pip install
+
+    @patch("subprocess.run")
+    def test_installed_distribution_update_fails_before_subprocess(self, mock_run, tmp_path):
+        from src.utils.updater import perform_update
+
+        with patch("src.utils.updater.PROJECT_ROOT", tmp_path):
+            assert perform_update(verbose=False) is False
+        mock_run.assert_not_called()
 
     @patch("subprocess.run")
     def test_git_pull_failure(self, mock_run):

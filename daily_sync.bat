@@ -134,9 +134,9 @@ if defined VIRTUAL_ENV (
         echo [ERROR] VIRTUAL_ENV must point to Python 3.12 or later.
         exit /b 1
     )
-    "%VIRTUAL_ENV%\Scripts\python.exe" -c "import sys; raise SystemExit(sys.version_info < (3, 12))" >nul 2>&1
+    "%VIRTUAL_ENV%\Scripts\python.exe" -c "import struct,sys; raise SystemExit(sys.version_info < (3, 12) or struct.calcsize('P') != 4)" >nul 2>&1
     if !errorlevel! neq 0 (
-        echo [ERROR] VIRTUAL_ENV must point to Python 3.12 or later.
+        echo [ERROR] VIRTUAL_ENV must point to 32-bit Python 3.12 or later.
         exit /b 1
     )
     "%VIRTUAL_ENV%\Scripts\python.exe" %SYNC_SCRIPT% !SYNC_ARGS!
@@ -154,7 +154,7 @@ if exist "%~dp0venv32\Scripts\python.exe" (
 )
 
 if exist "%~dp0.venv\Scripts\python.exe" (
-    "%~dp0.venv\Scripts\python.exe" -c "import sys; raise SystemExit(sys.version_info < (3, 12))" >nul 2>&1
+    "%~dp0.venv\Scripts\python.exe" -c "import struct,sys; raise SystemExit(sys.version_info < (3, 12) or struct.calcsize('P') != 4)" >nul 2>&1
     if !errorlevel!==0 (
         "%~dp0.venv\Scripts\python.exe" %SYNC_SCRIPT% !SYNC_ARGS!
         set "SCRIPT_EXIT_CODE=!errorlevel!"
@@ -169,28 +169,7 @@ if !errorlevel!==0 (
     goto :check_result
 )
 
-py -3.12 --version >nul 2>&1
-if !errorlevel!==0 (
-    py -3.12 %SYNC_SCRIPT% !SYNC_ARGS!
-    set "SCRIPT_EXIT_CODE=!errorlevel!"
-    goto :check_result
-)
-
-py -c "import sys; raise SystemExit(sys.version_info < (3, 12))" >nul 2>&1
-if !errorlevel!==0 (
-    py %SYNC_SCRIPT% !SYNC_ARGS!
-    set "SCRIPT_EXIT_CODE=!errorlevel!"
-    goto :check_result
-)
-
-python -c "import sys; raise SystemExit(sys.version_info < (3, 12))" >nul 2>&1
-if !errorlevel!==0 (
-    python %SYNC_SCRIPT% !SYNC_ARGS!
-    set "SCRIPT_EXIT_CODE=!errorlevel!"
-    goto :check_result
-)
-
-echo [ERROR] Python not found.
+echo [ERROR] 32-bit Python not found. Set PYTHON only for explicit SDK validation.
 exit /b 1
 
 :check_result

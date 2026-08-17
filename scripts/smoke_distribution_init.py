@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import os
 import sqlite3
+import stat
 import subprocess
 import sys
 import tempfile
@@ -41,8 +42,35 @@ if sys.argv[2] == "1":
     builtins.__import__ = import_without_optional_postgresql
 
 sys.argv = ["jltsql", *sys.argv[3:]]
-runpy.run_module("src.cli.main", run_name="__main__")
+exit_code = 0
+try:
+    runpy.run_module("src.cli.main", run_name="__main__")
+except SystemExit as exc:
+    exit_code = exc.code if isinstance(exc.code, int) else 1
+finally:
+    for module_name, module in tuple(sys.modules.items()):
+        if module_name != "src" and not module_name.startswith("src."):
+            continue
+        module_file = getattr(module, "__file__", None)
+        if module_file is None:
+            raise RuntimeError(f"{module_name} has no wheel origin")
+        origin = pathlib.Path(module_file).resolve()
+        if not origin.is_relative_to(wheel_root):
+            raise RuntimeError(f"{module_name} was not imported from the wheel")
+raise SystemExit(exit_code)
 """
+
+_REQUIRED_WHEEL_MEMBERS = frozenset(
+    {
+        "src/__init__.py",
+        "src/cli/main.py",
+        "src/database/__init__.py",
+        "src/database/sqlite_handler.py",
+        "src/utils/config.py",
+        "src/utils/logger.py",
+        "src/utils/updater.py",
+    }
+)
 
 
 def _wheel_cli_command(
@@ -92,6 +120,25 @@ def validate_wheel_init(wheel: Path) -> list[str]:
         run_dir = Path(run_raw)
         try:
             with zipfile.ZipFile(wheel) as archive:
+                members = {member.filename for member in archive.infolist()}
+                missing = sorted(_REQUIRED_WHEEL_MEMBERS - members)
+                if missing:
+                    return ["wheel is missing required runtime members"]
+                if not any(
+                    member.endswith(".dist-info/METADATA") for member in members
+                ):
+                    return ["wheel is missing distribution metadata"]
+                for member in archive.infolist():
+                    member_type = (member.external_attr >> 16) & 0o170000
+                    if (
+                        member_type
+                        and not stat.S_ISREG(member_type)
+                        and not member.is_dir()
+                    ):
+                        return ["wheel contains an unsafe archive member"]
+                    target = (extract_dir / member.filename).resolve()
+                    if not target.is_relative_to(extract_dir):
+                        return ["wheel contains an unsafe archive member"]
                 archive.extractall(extract_dir)
         except (OSError, zipfile.BadZipFile) as error:
             return [f"could not extract wheel {wheel.name}: {error}"]

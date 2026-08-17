@@ -119,9 +119,9 @@ if not defined PYTHON_CMD if defined VIRTUAL_ENV (
         echo [ERROR] VIRTUAL_ENV must point to Python 3.12 or later.
         exit /b 1
     )
-    "%VIRTUAL_ENV%\Scripts\python.exe" -c "import sys; raise SystemExit(sys.version_info < (3, 12))" >nul 2>&1
+    "%VIRTUAL_ENV%\Scripts\python.exe" -c "import struct,sys; raise SystemExit(sys.version_info < (3, 12) or struct.calcsize('P') != 4)" >nul 2>&1
     if !errorlevel! neq 0 (
-        echo [ERROR] VIRTUAL_ENV must point to Python 3.12 or later.
+        echo [ERROR] VIRTUAL_ENV must point to 32-bit Python 3.12 or later.
         exit /b 1
     )
     set "PYTHON_CMD="!VIRTUAL_ENV!\Scripts\python.exe""
@@ -131,7 +131,7 @@ if not defined PYTHON_CMD if exist "%~dp0venv32\Scripts\python.exe" (
     if !errorlevel!==0 set "PYTHON_CMD="%~dp0venv32\Scripts\python.exe""
 )
 if not defined PYTHON_CMD if exist "%~dp0.venv\Scripts\python.exe" (
-    "%~dp0.venv\Scripts\python.exe" -c "import sys; raise SystemExit(sys.version_info < (3, 12))" >nul 2>&1
+    "%~dp0.venv\Scripts\python.exe" -c "import struct,sys; raise SystemExit(sys.version_info < (3, 12) or struct.calcsize('P') != 4)" >nul 2>&1
     if !errorlevel!==0 set "PYTHON_CMD="%~dp0.venv\Scripts\python.exe""
 )
 if not defined PYTHON_CMD (
@@ -139,24 +139,12 @@ if not defined PYTHON_CMD (
     if !errorlevel!==0 set "PYTHON_CMD=py -3.12-32"
 )
 if not defined PYTHON_CMD (
-    py -3.12 --version >nul 2>&1
-    if !errorlevel!==0 set "PYTHON_CMD=py -3.12"
-)
-if not defined PYTHON_CMD (
     py -32 -c "import sys; raise SystemExit(sys.version_info < (3, 12))" >nul 2>&1
     if !errorlevel!==0 set "PYTHON_CMD=py -32"
 )
 if not defined PYTHON_CMD (
-    py -c "import sys; raise SystemExit(sys.version_info < (3, 12))" >nul 2>&1
-    if !errorlevel!==0 set "PYTHON_CMD=py"
-)
-if not defined PYTHON_CMD (
-    python -c "import sys; raise SystemExit(sys.version_info < (3, 12))" >nul 2>&1
-    if !errorlevel!==0 set "PYTHON_CMD=python"
-)
-if not defined PYTHON_CMD (
-    echo [ERROR] Python not found.
-    echo Please install Python 3.12+ with the same bitness as JV-Link.
+    echo [ERROR] 32-bit Python not found.
+    echo Set PYTHON only for explicit SDK validation.
     exit /b 1
 )
 

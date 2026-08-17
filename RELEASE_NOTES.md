@@ -15,6 +15,46 @@ Current migration boundary:
   runtime-state targets
 - 64-bit SDK execution remains unverified and is not claimed as supported
 
+## Data-contract and reliability changes since v1.6.10
+
+- parser contracts now bind current official fixed-width layouts, reject
+  malformed CP932 and unsupported historical/synthetic lengths, and preserve
+  explicitly supported old/new semantic boundaries instead of guessing them
+- native and standard schemas now verify primary keys, types, capacities,
+  child-table constraints, and cancellation/delete behavior before mutation;
+  several record families gained complete child storage or corrected keys
+- imports and realtime updates preserve provider order and use fail-closed
+  transaction recovery so returned statistics agree with durable rows across
+  SQLite and PostgreSQL
+- acquisition/cache handling now requires complete read/EOF/close evidence,
+  avoids false complete markers, and repairs only provider-identified corrupt
+  files under bounded rules
+- distribution and bootstrap gates now inspect built artifacts, isolate wheel
+  imports, and verify a base-dependency SQLite installation without writing
+  runtime state into the package tree
+
+The record-by-record support and storage details are maintained in
+[`docs/data_support.md`](docs/data_support.md).
+
+## Required database migration
+
+Treat v2 as a schema rebuild boundary; do not point the new importer at an
+unreviewed 1.x database and assume additive migration is sufficient.
+
+1. Stop collectors and take a verified backup of every SQLite/PostgreSQL
+   database plus the prior application release.
+2. Validate the backup can be opened/restored, then rebuild affected native or
+   standard tables with the v2 schema. A fail-closed preflight error means stop;
+   do not weaken keys or constraints to continue.
+3. Reimport retained provider data with the v2 parser and verify per-table
+   counts, official keys, cancellation behavior, and representative readback.
+4. Resume collection only after the real acquisition-to-database gate passes
+   for the exact release SHA.
+
+Rollback means stopping v2, restoring the backup, and running the previous
+release against that restored database. Do not reuse a partially migrated v2
+database with a 1.x binary.
+
 # jrvltsql v1.6.10 Release Notes
 
 Everything merged since v1.6.9: PR #149, #150, #151, #152, and #153.

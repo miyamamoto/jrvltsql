@@ -134,10 +134,27 @@ def _validate_config(config: Dict[str, Any]) -> None:
     if not isinstance(config["databases"], dict):
         raise ConfigError("Section databases must be a mapping")
 
+    database_selector = config.get("database", {})
+    if not isinstance(database_selector, dict):
+        raise ConfigError("Section database must be a mapping")
+    selected_database = database_selector.get("type")
+    if selected_database is not None:
+        if not isinstance(selected_database, str):
+            raise ConfigError("database.type must be a string")
+        if selected_database not in {"sqlite", "postgresql", "dual"}:
+            raise ConfigError(f"Unsupported database.type: {selected_database}")
+
     # Check at least one database is enabled
     databases = config.get("databases", {})
     if any(not isinstance(db_config, dict) for db_config in databases.values()):
         raise ConfigError("Every databases entry must be a mapping")
+    for name, db_config in databases.items():
+        enabled = db_config.get("enabled", False)
+        if not isinstance(enabled, bool):
+            raise ConfigError(f"databases.{name}.enabled must be a boolean")
+        path = db_config.get("path")
+        if path is not None and not isinstance(path, str):
+            raise ConfigError(f"databases.{name}.path must be a string")
     enabled_dbs = [
         name for name, db_config in databases.items() if db_config.get("enabled", False)
     ]
@@ -145,13 +162,37 @@ def _validate_config(config: Dict[str, Any]) -> None:
     if not enabled_dbs:
         raise ConfigError("At least one database must be enabled")
 
+    required_backends: tuple[str, ...] = ()
+    if selected_database in {"sqlite", "postgresql"}:
+        required_backends = (selected_database,)
+    elif selected_database == "dual":
+        required_backends = ("sqlite", "postgresql")
+    for backend in required_backends:
+        backend_config = databases.get(backend)
+        if not isinstance(backend_config, dict) or not backend_config.get(
+            "enabled", False
+        ):
+            raise ConfigError(
+                f"database.type {selected_database} requires enabled "
+                f"databases.{backend}"
+            )
+
     logging_config = config.get("logging", {})
     if not isinstance(logging_config, dict):
         raise ConfigError("Section logging must be a mapping")
+    logging_level = logging_config.get("level", "INFO")
+    if not isinstance(logging_level, str):
+        raise ConfigError("logging.level must be a string")
     for subsection in ("file", "console"):
         value = logging_config.get(subsection, {})
         if not isinstance(value, dict):
             raise ConfigError(f"Section logging.{subsection} must be a mapping")
+        enabled = value.get("enabled", True)
+        if not isinstance(enabled, bool):
+            raise ConfigError(f"logging.{subsection}.enabled must be a boolean")
+    log_path = logging_config.get("file", {}).get("path")
+    if log_path is not None and not isinstance(log_path, str):
+        raise ConfigError("logging.file.path must be a string")
 
 
 def load_config(config_path: Optional[Union[str, Path]] = None) -> Config:
@@ -184,7 +225,11 @@ def load_config(config_path: Optional[Union[str, Path]] = None) -> Config:
         with open(resolved_path, "r", encoding="utf-8") as f:
             config_dict = yaml.safe_load(f)
     except yaml.YAMLError as e:
-        raise ConfigError(f"Invalid YAML in configuration file: {e}")
+        raise ConfigError(f"Invalid YAML in configuration file: {e}") from e
+    except (OSError, UnicodeError) as e:
+        raise ConfigError(
+            f"Could not read configuration file ({type(e).__name__})"
+        ) from e
 
     if config_dict is None:
         raise ConfigError("Configuration file is empty")

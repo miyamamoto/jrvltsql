@@ -116,6 +116,35 @@ class TestInitCommand(unittest.TestCase):
             self.assertEqual(show_result.exit_code, 0, show_result.output)
             self.assertIn("Type: sqlite", show_result.output)
 
+    def test_init_rejects_an_existing_invalid_configuration(self):
+        with self.runner.isolated_filesystem():
+            Path("config").mkdir()
+            Path("config/config.yaml").write_text("database: invalid\n", encoding="utf-8")
+
+            result = self.runner.invoke(cli, ["init"])
+
+            self.assertNotEqual(result.exit_code, 0)
+            self.assertIn("Configuration Error", result.output)
+            self.assertNotIn("Initialization complete", result.output)
+
+
+class TestUpdateCommand(unittest.TestCase):
+    def setUp(self):
+        self.runner = CliRunner()
+
+    def test_failed_wheel_update_does_not_print_git_checkout_instructions(self):
+        with self.runner.isolated_filesystem():
+            self.assertEqual(self.runner.invoke(cli, ["init"]).exit_code, 0)
+            with (
+                patch("src.cli.main.check_for_updates", return_value=None),
+                patch("src.cli.main.perform_update", return_value=False),
+            ):
+                result = self.runner.invoke(cli, ["update", "--force"])
+
+            self.assertEqual(result.exit_code, 1)
+            self.assertIn("Update failed", result.output)
+            self.assertNotIn("git pull", result.output)
+
 
 class TestCreateTablesCommand(unittest.TestCase):
     """Test create-tables command."""
@@ -768,6 +797,65 @@ logging:
 
             self.assertEqual(result.exit_code, 1)
             self.assertIn("Configuration Error", result.output)
+            self.assertNotIn("Traceback", result.output)
+
+    def test_invalid_config_shapes_fail_with_a_controlled_error(self):
+        invalid_documents = (
+            """
+database: sqlite
+databases:
+  sqlite: {enabled: true, path: data/keiba.db}
+jvlink: {}
+""",
+            """
+database: {type: unsupported}
+databases:
+  sqlite: {enabled: true, path: data/keiba.db}
+jvlink: {}
+""",
+            """
+database: {type: postgresql}
+databases:
+  sqlite: {enabled: true, path: data/keiba.db}
+jvlink: {}
+""",
+            """
+database: {type: sqlite}
+databases:
+  sqlite: {enabled: true, path: data/keiba.db}
+jvlink: {}
+logging: {level: []}
+""",
+            """
+database: {type: sqlite}
+databases:
+  sqlite: {enabled: true, path: data/keiba.db}
+jvlink: {}
+logging:
+  file: {enabled: true, path: 123}
+""",
+        )
+        for document in invalid_documents:
+            with self.subTest(document=document), self.runner.isolated_filesystem():
+                Path("config").mkdir()
+                Path("config/config.yaml").write_text(document, encoding="utf-8")
+
+                result = self.runner.invoke(cli, ["config", "--show"])
+
+                self.assertEqual(result.exit_code, 1)
+                self.assertIn("Configuration Error", result.output)
+                self.assertNotIn("Traceback", result.output)
+
+    def test_config_option_rejects_a_directory_without_traceback(self):
+        with self.runner.isolated_filesystem():
+            Path("config-dir").mkdir()
+
+            result = self.runner.invoke(
+                cli,
+                ["--config", "config-dir", "config", "--show"],
+            )
+
+            self.assertNotEqual(result.exit_code, 0)
             self.assertNotIn("Traceback", result.output)
 
 

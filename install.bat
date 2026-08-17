@@ -42,33 +42,9 @@ if !errorlevel!==0 (
     goto :found_python
 )
 
-py -3.12 --version >nul 2>&1
-if !errorlevel!==0 (
-    set "PYTHON_CMD=py -3.12"
-    goto :found_python
-)
-
-py -3 --version >nul 2>&1
-if !errorlevel!==0 (
-    py -3 -c "import sys; raise SystemExit(sys.version_info < (3, 12))" >nul 2>&1
-    if !errorlevel!==0 (
-        set "PYTHON_CMD=py -3"
-        goto :found_python
-    )
-)
-
-python --version >nul 2>&1
-if !errorlevel!==0 (
-    python -c "import sys; raise SystemExit(sys.version_info < (3, 12))" >nul 2>&1
-    if !errorlevel!==0 (
-        set "PYTHON_CMD=python"
-        goto :found_python
-    )
-)
-
 echo   [NG] Python 3.12 or later not found.
 echo.
-echo   Install Python 3.12 or later with the same bitness as JV-Link:
+echo   Install 32-bit Python, or set PYTHON to a full path only for explicit SDK validation:
 echo     Download: https://www.python.org/downloads/
 echo     Check 'Add Python to PATH'
 echo.
@@ -237,7 +213,8 @@ echo.
 echo   Next steps:
 echo     1. Restart your terminal
 echo     2. Edit config: %INSTALL_DIR%\config\config.yaml
-echo     3. Run: jltsql --config "%INSTALL_DIR%\config\config.yaml" fetch --from 20240101 --to 20241231 --spec RACE
+echo     3. Run: cd /d "%INSTALL_DIR%"
+echo        jltsql --config "config\config.yaml" fetch --from 20240101 --to 20241231 --spec RACE
 echo.
 echo   Quick start ^(interactive^):
 echo     cd %INSTALL_DIR% ^&^& quickstart.bat

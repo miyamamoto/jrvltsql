@@ -3360,3 +3360,82 @@
   SQLite-create/readback smoke. The next safe action is one intentional commit,
   followed by exact-full-SHA tests and the two bounded carry-forward critical
   reviews; no release or merge is authorized by these pre-commit results.
+- Three independent Codex carry-forward reviews of exact candidate
+  `c08b5170c59d30c630876a0ae976b4823ed32cd5` returned NEEDS_CHANGES. Claude
+  Code remained unavailable under its service usage limit, so this review
+  batch used the maintainer-authorized Codex fallback. Findings were
+  consolidated before any repair: the archive gate still missed several
+  split/encoded sensitive-content and path/member-boundary cases and could
+  expose a sensitive member through an exception; a partial wheel could borrow
+  modules from an editable checkout; nested config values and backend selection
+  were not fully validated; `uv.lock` retained the prior package version;
+  automatic 64-bit interpreter fallbacks contradicted the explicit-validation-
+  only policy; and the 2.0 migration/rebuild/reimport documentation was too
+  narrow. No reviewer found a new sensitive value in the built candidate
+  artifacts, but the negative gates were insufficient to prove future absence.
+- Red-first evidence was captured before the second grouped production repair.
+  The minimal negative/positive selection returned `20 failed, 31 passed`
+  (`5` subtest failures), covering the archive split/setter/member/path and
+  no-echo boundaries, partial-wheel isolation, nested config/backend validation,
+  invalid existing bootstrap config, prerelease update comparison, installer
+  interpreter policy, source/CLI version parity, and migration documentation.
+  Separately, `uv lock --check` failed because the lock still identified
+  `1.6.10`. These failures bind the newly modified gates before their repair;
+  synthetic values only were used and no sensitive matched value was printed
+  or recorded.
+- The grouped repair now checks sensitive archive content in normalized and
+  adjacent-literal forms, rejects unsafe or ambiguous archive members across
+  platform path rules, redacts archive-read failures, and verifies a required
+  wheel member set plus every loaded package module origin. Configuration
+  loading validates nested value types, supported and enabled database
+  backends, and filesystem-read failures with controlled errors. Source and
+  installed CLI version identity share the package constant; the update
+  comparison is PEP 440 aware; `uv.lock` is regenerated and CI runs
+  `uv lock --check`.
+- Windows launchers and installers no longer choose an unvalidated 64-bit
+  interpreter automatically. The default discovery path is the validated
+  32-bit interpreter; a different architecture is available only through an
+  explicit operator override for separate SDK validation. This is not a
+  64-bit support claim. Manual installer commands now bind relative config,
+  database, and log paths to the installation directory. Release notes and
+  changelog now summarize the cumulative parser/schema/key/transaction changes
+  and require backup, schema rebuild, provider reimport, readback verification,
+  and rollback planning before migration.
+- The repaired focused selection passes `46 passed, 5 subtests passed`. The
+  broader affected CLI/config/updater/installer/logging/archive/public/Windows/
+  bridge/database/quickstart selection passes `270 passed, 5 skipped, 5
+  subtests passed`. `git diff --check` passes and the regenerated lock now
+  passes `uv lock --check`. The next safe step is the full dirty-tree suite and
+  static/build/install gates, followed by one intentional commit and two
+  independent exact-SHA reviews. STOP on any test/build/content/readback
+  failure, public sensitive identifier, implicit unvalidated architecture
+  fallback, candidate drift during review, unresolved review thread, or
+  release action before the later official DataKubun/key/storage iterations.
+- The first full dirty-tree suite stopped with `3 failed, 2731 passed, 131
+  skipped, 19 subtests passed`. All three failures were stale tests that treated
+  an empty, bare-prefix, or otherwise unknown version as numeric zero. The new
+  update gate deliberately treats unparseable metadata as unknown/non-update,
+  while valid PEP 440 prereleases compare normally. After correcting that test
+  oracle, the focused version selection passes `54 passed` and the complete
+  suite passes `2734 passed, 131 skipped, 19 subtests passed`.
+- Static gates then passed: fail-closed test-gate self-check, compileall, fatal
+  flake8 (`E9,F63,F7,F82`), strict MkDocs, lock check, and `git diff --check`.
+  The first real sdist content scan correctly failed because setuptools had
+  auto-included the repository test suite, whose negative scanner fixtures
+  intentionally contain synthetic sensitive shapes. This was not a product
+  source leak, but tests are not runtime distribution content. Before changing
+  the gate, two new negative cases proved that wheel/sdist `tests/` members
+  were accepted (`2 failed, 4 passed`). The repair adds an explicit sdist
+  prune and rejects any future test-suite archive member.
+- The repaired distribution negative suite passes `31 passed`. A fresh PEP 517
+  build now yields a 98-member wheel and a 119-member sdist; the sdist contains
+  zero `tests/` and zero `specs/` members. Both artifacts pass the all-member
+  content scan, and the extracted-wheel smoke passes init, config/version,
+  SQLite table creation, and readback. The built artifacts remain local
+  validation outputs outside the repository and are not a release claim.
+- After the archive exclusion contract and stale version-oracle corrections,
+  the final dirty-tree full suite passes `2736 passed, 131 skipped, 19 subtests
+  passed`. No broad suite is rerun again until the content is committed and an
+  exact full SHA exists. Next safe action: commit the complete grouped repair,
+  verify a clean worktree, replay the necessary exact-SHA full/static/artifact
+  gates once, push PR #202, and request two independent bounded reviews.

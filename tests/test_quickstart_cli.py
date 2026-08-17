@@ -289,11 +289,8 @@ class TestQuickstartBatchRoles:
 
         for launcher in launchers:
             text = launcher.read_text(encoding="utf-8")
-            assert "py -3.12 --version" in text, launcher.name
             assert "py -3.12-32 --version" in text, launcher.name
-            assert text.index("py -3.12-32 --version") < text.index(
-                "py -3.12 --version"
-            ), launcher.name
+            assert "py -3.12 --version" not in text, launcher.name
             assert "64-bit Python may not support JV-Link" not in text
             assert "Python 3.10+" not in text
 
@@ -388,11 +385,14 @@ class TestQuickstartBatchRoles:
         powershell = (root / "install.ps1").read_text(encoding="utf-8")
 
         assert "Checking Python 3.12" in batch
-        assert batch.index("py -3.12-32 --version") < batch.index("py -3.12 --version")
+        assert "py -3.12-32 --version" in batch
+        assert "py -3.12 --version" not in batch
         assert "Checking 32-bit Python" not in batch
         assert "32-bit Python 3.12 not found" not in batch
 
         assert "Checking Python $PYTHON_VERSION" in powershell
+        assert 'Arguments = @("-$PYTHON_VERSION-32")' in powershell
+        assert 'Arguments = @("-$PYTHON_VERSION")' not in powershell
         assert "Checking 32-bit Python" not in powershell
         assert "32-bit Python $PYTHON_VERSION not found" not in powershell
 
