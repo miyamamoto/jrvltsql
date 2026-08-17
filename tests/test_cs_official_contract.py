@@ -239,7 +239,8 @@ def test_cs_status_zero_discards_opaque_body_before_sqlite_storage(
     record = parsed_record(data_kubun="0", course_ex="ignored")
     record["CourseEx"] = "A" * 6801
     with database:
-        database.execute(JRAVAN_SCHEMAS[table_name] if standard else SCHEMAS[table_name])
+        schema_sql = JRAVAN_SCHEMAS[table_name] if standard else SCHEMAS[table_name]
+        database.execute(schema_sql.replace("VARCHAR(6800)", "VARCHAR(6800) NOT NULL"))
         database.commit()
         _import_records(
             database,
@@ -250,7 +251,7 @@ def test_cs_status_zero_discards_opaque_body_before_sqlite_storage(
         )
         row = database.fetch_one(f"SELECT DataKubun, CourseEx FROM {table_name}")
         assert row["DataKubun"] == "0"
-        assert row["CourseEx"] is None
+        assert row["CourseEx"] == ""
 
 
 def test_cs_native_standard_and_metadata_schemas_preserve_the_official_contract():
@@ -655,7 +656,8 @@ def test_cs_postgresql_status_zero_discards_opaque_body_before_storage(
     postgresql_db, standard, entrypoint, auto_commit
 ):
     table_name = "COURSE" if standard else "NL_CS"
-    postgresql_db.execute(JRAVAN_SCHEMAS[table_name] if standard else SCHEMAS[table_name])
+    schema_sql = JRAVAN_SCHEMAS[table_name] if standard else SCHEMAS[table_name]
+    postgresql_db.execute(schema_sql.replace("VARCHAR(6800)", "VARCHAR(6800) NOT NULL"))
     postgresql_db.commit()
     record = parsed_record(data_kubun="0", course_ex="ignored")
     record["CourseEx"] = "A" * 6801
@@ -670,7 +672,7 @@ def test_cs_postgresql_status_zero_discards_opaque_body_before_storage(
         f'SELECT datakubun AS "DataKubun", courseex AS "CourseEx" FROM {table_name}'
     )
     assert row["DataKubun"] == "0"
-    assert row["CourseEx"] is None
+    assert row["CourseEx"] == ""
 
 
 def test_cs_postgresql_rejects_a_nonempty_course_missing_the_body_before_alter(

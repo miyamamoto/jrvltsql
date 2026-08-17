@@ -252,3 +252,33 @@
   final bounded carry-forward verdict from both original independent reviewers.
   STOP on worktree drift, any failed gate, a packaging/privacy leak, or a new
   correctness/data-integrity finding.
+
+## 2026-08-17 — final review finding and NOT NULL compatibility repair
+
+- Froze clean exact candidate `f2736333e3571700f8c3202dd2f6a8065795eca0`
+  and obtained two independent bounded Codex reviews. Both returned the same
+  single P1 and no P0/P2: the new status-0 `CourseEx=NULL` normalization passed
+  canonical schemas but the CS verifier had historically accepted an otherwise
+  exact `CourseEx VARCHAR(6800) NOT NULL` table. Both SQLite and fresh
+  PostgreSQL 16 passed preflight and then failed at DML. Reviewers independently
+  reproduced native and standard paths and removed their disposable resources.
+- Aggregated repair choice: retain accepted-schema compatibility and normalize
+  the opaque status-0 body to the parser's blank physical-field representation
+  (`""`) instead of broadening the schema contract to require nullability. The
+  common cleaner discards the arbitrary caller value, and the shared type
+  conversion preserves this one CS/status-0 blank rather than converting it
+  back to `NULL`; all other blank/sentinel conversion remains unchanged.
+- The existing 12-path SQLite and PostgreSQL matrices now create `CourseEx
+  NOT NULL` for both native and standard schemas. Before the conversion repair,
+  the SQLite contract reported `12 failed, 88 passed, 32 skipped`, proving that
+  every data/optimized/single × owned/caller path exercised the defect. After
+  repair the SQLite contract reports `100 passed, 32 skipped`; a new fresh
+  PostgreSQL 16 run reports `132 passed`. The exact temporary container was
+  stopped with `--rm` and is absent afterward.
+- The final post-repair full suite again reports `2924 passed, 168 skipped, 22
+  subtests passed`. `uv lock --check`, fail-closed test-gate validation, fatal
+  Flake8 (`0`), compileall, strict MkDocs, changed-test Black/Ruff, and
+  `git diff --check` all pass.
+- Next safe action: commit and freeze a new exact SHA, rebuild exact artifacts,
+  then ask the same two reviewers for one closure-only verification. STOP on any
+  failure or worktree drift.

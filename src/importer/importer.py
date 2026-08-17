@@ -2018,7 +2018,7 @@ def clean_record_metadata(record: dict) -> dict:
     if record_type == "CS" and cleaned.get("DataKubun") == "0":
         # The official delete command body is opaque. Do not let arbitrary
         # caller payload reach backend-specific VARCHAR enforcement or storage.
-        cleaned["CourseEx"] = None
+        cleaned["CourseEx"] = ""
     return cleaned
 
 
@@ -4433,6 +4433,14 @@ def convert_record_types(record: dict, table_name: str) -> dict:
             continue
 
         col_type = column_types[field_name]
+
+        if (
+            field_name == "CourseEx"
+            and record.get("RecordSpec") == "CS"
+            and record.get("DataKubun") == "0"
+        ):
+            converted[field_name] = ""
+            continue
 
         if value is None or (isinstance(value, str) and not value.strip()):
             converted[field_name] = None
