@@ -10,7 +10,10 @@ JV-Data. They do not contain provider records or a copy of the SDK source.
   changes cited by the official 4.8.0.2 and 4.9.0.1 specification workbooks.
 - `jvdata_status_domain.json` records all 38 current DataKubun domains, the
   three explicit accumulated/realtime differences, and date-bounded historical
-  values cited by the official 4.9.0.1 format and change-history sheets.
+  values cited by the official 4.9.0.1 format and change-history sheets. Its
+  `current_accumulated` object is the base parser/import validation context; it
+  does not claim that all 38 formats are available from an accumulated-data
+  provider call.
 
 The manifest is intentionally independent of jrvltsql parser and schema code.
 When the official source changes, regenerate it from a separately obtained SDK

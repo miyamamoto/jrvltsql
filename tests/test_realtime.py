@@ -276,6 +276,86 @@ def test_process_parsed_record_preserves_failed_expanded_rows():
     assert failed == 1
 
 
+@pytest.mark.parametrize(
+    ("record_type", "payload", "rows_key", "index_key"),
+    (
+        (
+            "DM",
+            {"DMTime": "12345", "DMGosaP": "0123", "DMGosaM": "0456"},
+            "_dm_snapshot_rows",
+            "_dm_snapshot_index",
+        ),
+        ("TM", {"TMScore": "0100"}, "_tm_snapshot_rows", "_tm_snapshot_index"),
+    ),
+)
+def test_mining_snapshot_list_rejects_mixed_or_tampered_expansions(
+    tmp_path,
+    record_type,
+    payload,
+    rows_key,
+    index_key,
+):
+    """A list shortcut may consume only one exact parser expansion."""
+
+    from src.database.schema import SCHEMAS
+    from src.database.sqlite_handler import SQLiteDatabase
+
+    base = {
+        "RecordSpec": record_type,
+        "DataKubun": "1",
+        "MakeDate": "20260817",
+        "Year": "2026",
+        "MonthDay": "0817",
+        "JyoCD": "05",
+        "Kaiji": "03",
+        "Nichiji": "08",
+        "RaceNum": "11",
+        "MakeHM": "0930",
+        "Umaban": "01",
+        **payload,
+    }
+    snapshot_rows = [dict(base)]
+    expanded = {
+        **base,
+        rows_key: snapshot_rows,
+        index_key: 0,
+    }
+    race = {
+        "RecordSpec": "RA",
+        "DataKubun": "1",
+        "MakeDate": "20260817",
+        "Year": "2026",
+        "MonthDay": "0817",
+        "JyoCD": "05",
+        "Kaiji": "03",
+        "Nichiji": "08",
+        "RaceNum": "11",
+    }
+    variants = (
+        [expanded, race],
+        [{**expanded, index_key: 1}],
+        [{**expanded, "Umaban": "02"}],
+    )
+
+    database = SQLiteDatabase({"path": str(tmp_path / f"{record_type}-mixed.db")})
+    with database:
+        database.execute(SCHEMAS[f"RT_{record_type}"])
+        database.execute(SCHEMAS["RT_RA"])
+        database.commit()
+        updater = RealtimeUpdater(database)
+        for records in variants:
+            result = updater.process_parsed_record(records)
+            assert isinstance(result, list) and len(result) == len(records)
+            assert all(item["success"] is False for item in result)
+            assert database.fetch_one(
+                f"SELECT COUNT(*) AS count FROM RT_{record_type}"
+            )["count"] == 0
+            assert (
+                database.fetch_one("SELECT COUNT(*) AS count FROM RT_RA")["count"]
+                == 0
+            )
+
+
 class TestRealtimeMonitor(unittest.TestCase):
     """Test RealtimeMonitor class."""
 

@@ -203,6 +203,16 @@ def test_realtime_overrides_reject_only_accumulated_status_seven():
         )
 
 
+def test_status_context_normalizes_valid_text_and_rejects_unknown_values():
+    """A mistyped runtime context cannot silently select the wider domain."""
+
+    with pytest.raises(ValueError, match="DataKubun"):
+        validate_data_kubun("DM", "7", context="realtime")  # type: ignore[arg-type]
+    for context in (None, "typo"):
+        with pytest.raises(ValueError):
+            validate_data_kubun("DM", "1", context=context)  # type: ignore[arg-type]
+
+
 @pytest.mark.parametrize(
     ("record_type", "legacy_value", "valid_before"),
     [

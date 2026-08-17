@@ -4549,10 +4549,19 @@ class DataImporter:
         # rows are validated immediately before their own routing/mutation.
         records = iter(records)
         exhausted = object()
-        first_record = next(records, exhausted)
-        if first_record is not exhausted:
-            validate_import_record_header(first_record)
-            records = chain((first_record,), records)
+        try:
+            first_record = next(records, exhausted)
+            if first_record is not exhausted:
+                validate_import_record_header(first_record)
+                records = chain((first_record,), records)
+        except Exception:
+            if not auto_commit and self.database.has_pending_transaction():
+                rollback_failed_import(
+                    self.database,
+                    context="first-header failure in caller-owned import",
+                )
+                self.reset_statistics()
+            raise
 
         if not auto_commit:
             self.database.begin_transaction()
@@ -4767,6 +4776,7 @@ class DataImporter:
                     self.database,
                     context="validation/schema failure in caller-owned import",
                 )
+                self.reset_statistics()
             raise
         except Exception as e:
             if not auto_commit:
@@ -4774,6 +4784,7 @@ class DataImporter:
                     self.database,
                     context="unexpected failure in caller-owned import",
                 )
+                self.reset_statistics()
             logger.error("Import failed", error=str(e))
             raise ImporterError(f"Failed to import records: {e}")
 
@@ -5216,7 +5227,14 @@ class DataImporter:
         """
         # Header/domain validation must precede transaction ownership and
         # standard-schema migration. It cannot be rolled back after an ALTER.
-        record_type, _ = validate_import_record_header(record)
+        try:
+            record_type, _ = validate_import_record_header(record)
+        except SchemaMigrationError:
+            if not auto_commit and self.database.has_pending_transaction():
+                self._rollback_single_record_transaction(
+                    context="header failure in caller-owned single-record import",
+                )
+            raise
         self._begin_single_record_transaction(auto_commit=auto_commit)
         try:
             self._ensure_jravan_tables_ready(auto_commit=auto_commit)

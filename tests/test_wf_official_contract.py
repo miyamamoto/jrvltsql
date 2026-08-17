@@ -1908,8 +1908,8 @@ def test_wf_postgresql_native_standard_and_realtime_contract(postgresql_db) -> N
         [parsed_record(data_kubun="1"), parsed_record(data_kubun="7")]
     )
     assert batch["success"] is False
-    assert batch["inserted"] == 1
-    assert batch["errors"] == 1
+    assert batch["inserted"] == 0
+    assert batch["errors"] == 2
     assert updater.process_record(cancellation_record())["success"] is True
     assert postgresql_db.fetch_one("SELECT DataKubun AS status FROM RT_WF") == {"status": "9"}
     assert updater.process_record(build_record(data_kubun="0"))["success"] is True

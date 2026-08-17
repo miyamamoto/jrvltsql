@@ -495,7 +495,7 @@ def test_rc_postgresql_native_and_standard_preserve_keyed_deletion(
         RCParser().parse(build_rc_record()[0]),
         RCParser().parse(
             build_rc_record(
-                data_kubun="2",
+                data_kubun="1",
                 key_overrides={"SyubetuCD": "14"},
                 horse_prefix="OTHER",
             )[0]

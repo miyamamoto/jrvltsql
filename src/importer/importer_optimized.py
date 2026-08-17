@@ -299,10 +299,21 @@ class OptimizedDataImporter:
 
         records = iter(records)
         exhausted = object()
-        first_record = next(records, exhausted)
-        if first_record is not exhausted:
-            validate_import_record_header(first_record)
-            records = chain((first_record,), records)
+        try:
+            first_record = next(records, exhausted)
+            if first_record is not exhausted:
+                validate_import_record_header(first_record)
+                records = chain((first_record,), records)
+        except Exception:
+            if not auto_commit and self.database.has_pending_transaction():
+                rollback_failed_import(
+                    self.database,
+                    context="first-header failure in optimized caller-owned import",
+                )
+                self._records_imported = 0
+                self._records_failed = 0
+                self._batches_processed = 0
+            raise
 
         if not auto_commit:
             self.database.begin_transaction()
@@ -657,6 +668,9 @@ class OptimizedDataImporter:
                     self.database,
                     context="validation/schema failure in optimized caller-owned import",
                 )
+                self._records_imported = 0
+                self._records_failed = 0
+                self._batches_processed = 0
             raise
         except Exception as e:
             if not auto_commit:
@@ -664,6 +678,9 @@ class OptimizedDataImporter:
                     self.database,
                     context="unexpected failure in optimized caller-owned import",
                 )
+                self._records_imported = 0
+                self._records_failed = 0
+                self._batches_processed = 0
             logger.error("Import failed", error=str(e))
 
             from src.importer.importer import ImporterError

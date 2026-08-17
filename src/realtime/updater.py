@@ -348,6 +348,24 @@ class RealtimeUpdater:
                         parsed_data[0], table_name
                     )
                     if snapshot_rows is not None:
+                        expansion_error = self._mining_snapshot_expansion_error(
+                            parsed_data,
+                            snapshot_rows,
+                            record_type,
+                        )
+                        if expansion_error is not None:
+                            return [
+                                {
+                                    "operation": "validate",
+                                    "table": self.RECORD_TYPE_TABLE.get(
+                                        item.get("RecordSpec")
+                                    ),
+                                    "record_type": item.get("RecordSpec"),
+                                    "success": False,
+                                    "error": expansion_error,
+                                }
+                                for item in parsed_data
+                            ]
                         return self._replace_mining_native_snapshot(
                             parsed_data[0], snapshot_rows, table_name
                         )
@@ -364,6 +382,37 @@ class RealtimeUpdater:
         if timeseries and source_spec:
             parsed_data.setdefault("SourceSpec", source_spec)
         return self._process_single_record(parsed_data, timeseries=timeseries)
+
+    @staticmethod
+    def _mining_snapshot_expansion_error(
+        parsed_data: list[Dict],
+        snapshot_rows: list[Dict],
+        record_type: str,
+    ) -> Optional[str]:
+        """Reject a list that is not one exact parser-expanded DM/TM snapshot."""
+
+        metadata_keys = {
+            "DM": ("_dm_snapshot_rows", "_dm_snapshot_index"),
+            "TM": ("_tm_snapshot_rows", "_tm_snapshot_index"),
+        }
+        rows_key, index_key = metadata_keys[record_type]
+        if len(parsed_data) != len(snapshot_rows):
+            return (
+                f"{record_type} snapshot expansion count mismatch: "
+                f"expanded={len(parsed_data)}, snapshot={len(snapshot_rows)}"
+            )
+        for index, (expanded_row, snapshot_row) in enumerate(
+            zip(parsed_data, snapshot_rows, strict=True)
+        ):
+            if expanded_row.get("RecordSpec") != record_type:
+                return f"{record_type} snapshot expansion mixes record types"
+            if expanded_row.get(index_key) != index:
+                return f"{record_type} snapshot expansion index mismatch"
+            if expanded_row.get(rows_key) != snapshot_rows:
+                return f"{record_type} snapshot expansion metadata mismatch"
+            if any(expanded_row.get(key) != value for key, value in snapshot_row.items()):
+                return f"{record_type} snapshot expansion row mismatch"
+        return None
 
     def _replace_mining_native_snapshot(
         self,

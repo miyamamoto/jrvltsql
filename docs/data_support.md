@@ -99,10 +99,21 @@ cache の変更に入る前に、対応する現行種別名を示して停止�
 
 パーサー、通常インポート、1件インポート、速報保存は、レコード種別ごとの
 公式`DataKubun`を共通契約で検証します。値が無い、空欄、1文字でない、別名の値が
-食い違う、または下表に無い場合は、スキーマ変更・cache書き込み・DB更新より前に
-拒否します。未指定値を新規登録`1`として補うことはありません。
+食い違う、または下表に無いレコードは、そのレコードを使ったtable routing、cache
+書き込み、DB更新より前に拒否します。未指定値を新規登録`1`として補うことは
+ありません。
 
-| 蓄積系のレコード種別 | 現行の公式値 |
+通常インポートはstreaming処理です。`auto_commit=True`では完了したbatchを順次commit
+するため、後続レコードの検証失敗より前に確定済みの正常batchと、開始時のstandard
+schema preflightによる変更は保持されます。呼び出し全体をall-or-nothingにする場合は
+`auto_commit=False`を使います。この場合、後続検証失敗は同じ呼び出しまたは同じ
+caller-owned transactionで先に書いた行と統計をrollbackします。
+
+下表は全38形式について、通常import/parserで使うcurrent base domainを示します。
+providerがその形式を蓄積系・速報系のどちらで提供するかを表すavailability表では
+ありません。速報では、このbase domainから明示的な差分を次表で適用します。
+
+| current base domainのレコード種別 | 現行の公式値 |
 | --- | --- |
 | `WH`, `WE`, `JC`, `TC`, `CC` | `1` |
 | `AV` | `1`, `2` |

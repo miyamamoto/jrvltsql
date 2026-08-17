@@ -10,12 +10,15 @@ from typing import Final
 
 
 class DataKubunContext(StrEnum):
-    """Provider context whose explicitly documented status set is required."""
+    """Validation context, not a registry of provider-channel availability."""
 
     ACCUMULATED = "accumulated"
     REALTIME = "realtime"
 
 
+# The base/current contract covers every parser/importer record type, including
+# formats that the provider distributes only through realtime calls. It must
+# not be interpreted as an availability registry.
 CURRENT_ACCUMULATED_DATA_KUBUN: Final[dict[str, frozenset[str]]] = {
     "AV": frozenset({"1", "2"}),
     "BN": frozenset({"0", "1", "2"}),
@@ -106,8 +109,12 @@ def _make_date(value: object) -> date | None:
 
 def _current_values(
     record_type: str,
-    context: DataKubunContext,
+    context: DataKubunContext | str,
 ) -> frozenset[str]:
+    try:
+        context = DataKubunContext(context)
+    except (TypeError, ValueError) as error:
+        raise ValueError(f"Unknown DataKubun context: {context!r}") from error
     domains = (
         CURRENT_REALTIME_DATA_KUBUN
         if context is DataKubunContext.REALTIME
@@ -126,7 +133,7 @@ def validate_data_kubun(
     data_kubun: object,
     *,
     make_date: object = None,
-    context: DataKubunContext = DataKubunContext.ACCUMULATED,
+    context: DataKubunContext | str = DataKubunContext.ACCUMULATED,
 ) -> str:
     """Validate one status against current or date-proven historical truth."""
 
@@ -134,6 +141,7 @@ def validate_data_kubun(
         raise ValueError(
             f"{record_type} DataKubun must be one explicit character: " f"{data_kubun!r}"
         )
+    context = DataKubunContext(context)
     if data_kubun in _current_values(record_type, context):
         not_before = CURRENT_DATA_KUBUN_NOT_BEFORE.get((record_type, data_kubun))
         explicit_make_date = _make_date(make_date)

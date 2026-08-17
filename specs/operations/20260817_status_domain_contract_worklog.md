@@ -177,3 +177,55 @@
   inspect the complete diff, commit the worklog and implementation together,
   then run fresh SQLite/PostgreSQL mutation probes and independent review at
   that exact full SHA.
+
+## 2026-08-17 — exact candidate review and aggregated repair
+
+- Froze candidate `2ba07c6fb8f54ba79b84f3e4a7ecfa82b0919e37` and kept the
+  worktree clean throughout three independent read-only Codex reviews. Claude
+  Code was not used because its quota was unavailable; this follows the
+  maintainer-authorized Codex fallback. The exact ordinary full suite completed
+  with `2784 passed, 131 skipped, 22 subtests passed` in 71.78s.
+- All three reviewers independently matched the production table to the
+  official 38-format / 154-current-pair oracle. They also reconfirmed the
+  DM/TM/WF realtime overrides, the RC and WH/WE/AV/JC historical boundaries,
+  the UM status-9 not-before boundary, and the policy not to infer unknown RA
+  or DM historical intervals.
+- Aggregation retained four actionable implementation findings rather than
+  repairing and re-reviewing one by one: first-header rejection did not unwind
+  an already-active caller-owned importer transaction; a successful flush
+  remained in importer statistics after rollback; the DM/TM list shortcut
+  silently ignored rows outside or inconsistent with its snapshot metadata;
+  and a non-enum context value could select the wider base domain.
+- Before the repair, one compact regression selection produced exactly
+  `8 failed, 2 passed`: context text did not select realtime, two importer
+  statistics stayed at one after rollback, all three existing-transaction
+  entry paths stayed pending, and both DM/TM mixed-list cases returned only the
+  snapshot success. The two `auto_commit=True` streaming controls remained
+  green and retained their earlier committed row.
+- The repair normalizes the validation context, rolls back first-header
+  failures that enter with a pending caller-owned transaction, restores batch
+  statistics only after successful rollback, and verifies DM/TM expansion
+  count/type/index/metadata/row content before snapshot replacement. It also
+  corrects the opt-in PostgreSQL RC current-status fixture and WF atomic-error
+  expectation.
+- Public documentation now distinguishes per-record rejection from
+  call-wide atomicity: `auto_commit=True` preserves completed batches and
+  standard-schema preflight changes if a later streamed record is rejected;
+  `auto_commit=False` rolls back the active call/sequence and its statistics.
+  The 38-format base-domain table is explicitly not a provider availability
+  table.
+- Post-repair evidence so far: the exact red selection is now `10 passed`;
+  affected SQLite tests are `439 passed, 24 skipped, 11 subtests passed`;
+  focused live PostgreSQL official contracts are `24 passed`; and an
+  independent live PostgreSQL probe passed both importers' same-call and
+  cross-call rollback/statistics, single-record rollback, and DM mixed-list
+  no-mutation contracts (`POSTGRES_REPAIR_CONTRACT_OK`).
+- Enabling every opt-in PostgreSQL test exposed six failures before repair.
+  Two were the stale RC fixture, one was the stale WF partial-success
+  expectation, and those three are repaired here. The remaining three are an
+  unrelated pre-existing RA/SE executable-metadata mismatch; they are not
+  hidden as status-domain evidence and remain a separate release blocker for a
+  later minimal iteration. No release may proceed while that blocker remains.
+- Next safe action: run the final affected/full/static/document/package gates,
+  freeze one repaired full SHA, and request one aggregated carry-forward review
+  of that SHA. Do not merge on the parent review result.

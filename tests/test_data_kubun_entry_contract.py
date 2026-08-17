@@ -149,6 +149,65 @@ def test_caller_owned_batch_rolls_back_an_earlier_flush_on_later_invalid_status(
             )
         assert database.fetch_one("SELECT COUNT(*) AS count FROM NL_TC")["count"] == 0
         assert database.has_pending_transaction() is False
+        assert importer.get_statistics()["records_imported"] == 0
+        assert importer.get_statistics()["batches_processed"] == 0
+
+
+@pytest.mark.parametrize(("entry_name", "importer_class", "single"), ENTRY_POINTS)
+def test_first_header_failure_rolls_back_an_existing_caller_owned_sequence(
+    tmp_path,
+    entry_name: str,
+    importer_class: type,
+    single: bool,
+) -> None:
+    """Validation before setup must still unwind an already-active sequence."""
+
+    database = SQLiteDatabase({"path": str(tmp_path / f"existing-{entry_name}.db")})
+    with database:
+        database.execute(SCHEMAS["NL_TC"])
+        database.commit()
+        importer = importer_class(database)
+        if single:
+            assert importer.import_single_record(_tc_record(), auto_commit=False) is True
+        else:
+            stats = importer.import_records(iter([_tc_record()]), auto_commit=False)
+            assert stats["records_imported"] == 1
+        assert database.has_pending_transaction() is True
+
+        with pytest.raises(SchemaMigrationError, match="DataKubun"):
+            if single:
+                importer.import_single_record(
+                    _tc_record(DataKubun="0"),
+                    auto_commit=False,
+                )
+            else:
+                importer.import_records(
+                    iter([_tc_record(DataKubun="0")]),
+                    auto_commit=False,
+                )
+
+        assert database.has_pending_transaction() is False
+        assert database.fetch_one("SELECT COUNT(*) AS count FROM NL_TC")["count"] == 0
+        assert importer.get_statistics()["records_imported"] == 0
+        assert importer.get_statistics()["batches_processed"] == 0
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_auto_commit_stream_keeps_an_earlier_valid_flush_on_later_rejection(
+    tmp_path,
+    importer_class,
+) -> None:
+    """Auto-commit is incremental; only an uncommitted call is atomic."""
+
+    database = SQLiteDatabase({"path": str(tmp_path / "auto-commit-stream.db")})
+    with database:
+        database.execute(SCHEMAS["NL_TC"])
+        database.commit()
+        importer = importer_class(database, batch_size=1)
+        with pytest.raises(SchemaMigrationError, match="DataKubun"):
+            importer.import_records(iter([_tc_record(), _tc_record(DataKubun="0")]))
+        assert database.fetch_one("SELECT COUNT(*) AS count FROM NL_TC")["count"] == 1
+        assert database.has_pending_transaction() is False
 
 
 @pytest.mark.parametrize(
