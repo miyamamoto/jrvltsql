@@ -290,6 +290,7 @@ def test_process_parsed_record_preserves_failed_expanded_rows():
 )
 def test_mining_snapshot_list_rejects_mixed_or_tampered_expansions(
     tmp_path,
+    monkeypatch,
     record_type,
     payload,
     rows_key,
@@ -533,6 +534,42 @@ def test_mining_snapshot_list_rejects_mixed_or_tampered_expansions(
             == 0
         )
         database.rollback()
+
+        original_reject = updater._reject_strict_record
+
+        def reject_wf_after_starting_validation_transaction(table_name, record):
+            if table_name == "RT_WF":
+                database.begin_transaction()
+                return "injected invalid WF body"
+            return original_reject(table_name, record)
+
+        monkeypatch.setattr(
+            updater,
+            "_reject_strict_record",
+            reject_wf_after_starting_validation_transaction,
+        )
+        invalid_wf = {
+            "RecordSpec": "WF",
+            "DataKubun": "3",
+            "MakeDate": "20260817",
+            "Year": "2026",
+            "MonthDay": "0817",
+        }
+        validation_failure = updater.process_parsed_records_batch(
+            [invalid_wf, *old_expansion]
+        )
+        assert validation_failure["success"] is False
+        assert validation_failure["inserted"] == 0
+        assert database.has_pending_transaction() is False
+
+        following_success = updater.process_parsed_records_batch(old_expansion)
+        assert following_success["success"] is True
+        assert following_success["inserted"] == 18
+        assert database.has_pending_transaction() is False
+        database.rollback()
+        assert database.fetch_one(
+            f"SELECT COUNT(*) AS count FROM RT_{record_type}"
+        )["count"] == 18
 
 
 class TestRealtimeMonitor(unittest.TestCase):

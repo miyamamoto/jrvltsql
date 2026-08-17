@@ -1543,7 +1543,7 @@ def test_wf_single_record_owned_transaction_rolls_back_on_validation_failure(
         # committed sequence's older statistics checkpoint.
         database.begin_transaction()
         invalid = parsed_record(month_day="0819")
-        invalid["PayoutsJson"] = "[]"
+        invalid["DataKubun"] = "8"
         with pytest.raises(SchemaMigrationError):
             importer.import_single_record(invalid, auto_commit=False)
         assert database.is_transaction_active() is False
@@ -1834,16 +1834,16 @@ def test_wf_realtime_raw_and_parsed_paths_upsert_retain_and_erase(tmp_path) -> N
         assert conflict_result["operation"] == "validate"
         batch = updater.process_parsed_records_batch([corrupt, parsed_record(month_day="0817")])
         assert batch["success"] is False
-        assert batch["errors"] == 1
-        assert batch["inserted"] == 1
+        assert batch["errors"] == 2
+        assert batch["inserted"] == 0
         assert database.fetch_one("SELECT DataKubun FROM RT_WF WHERE MonthDay = 816") == {
             "DataKubun": "9"
         }
-        assert _count(database, "RT_WF") == 2
+        assert _count(database, "RT_WF") == 1
 
         erased = updater.process_record(build_record(data_kubun="0"))
         assert erased["success"] is True
-        assert database.fetch_all("SELECT MonthDay FROM RT_WF") == [{"MonthDay": 817}]
+        assert database.fetch_all("SELECT MonthDay FROM RT_WF") == []
 
 
 def test_wf_postgresql_native_standard_and_realtime_contract(postgresql_db) -> None:
@@ -2109,7 +2109,7 @@ def test_wf_postgresql_auto_commit_false_validation_failure_rolls_back(
 
     postgresql_db.begin_transaction()
     invalid = parsed_record(month_day="0819")
-    invalid["PayoutsJson"] = "[]"
+    invalid["DataKubun"] = "8"
     with pytest.raises(SchemaMigrationError):
         single.import_single_record(invalid, auto_commit=False)
     assert postgresql_db.is_transaction_active() is False

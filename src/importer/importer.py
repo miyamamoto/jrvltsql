@@ -5304,9 +5304,16 @@ class DataImporter:
                             self._single_record_stats_checkpoint = None
                     raise
                 if pending_transaction:
-                    self._rollback_single_record_transaction(
+                    rollback_failed_import(
+                        self.database,
                         context="header failure in caller-owned single-record import",
                     )
+                    if checkpoint_is_active:
+                        self._restore_single_record_statistics()
+                    else:
+                        self._single_record_stats_checkpoint = None
+                elif not checkpoint_is_active:
+                    self._single_record_stats_checkpoint = None
             raise
         self._begin_single_record_transaction(auto_commit=auto_commit)
         try:

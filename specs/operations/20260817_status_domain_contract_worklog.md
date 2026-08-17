@@ -354,3 +354,50 @@
   commit the complete third repair, and perform one final bounded review of the
   immutable full SHA. Do not open or merge the PR until that final review is
   GREEN.
+
+## 2026-08-17 — final bounded review findings and fourth repair
+
+- Committed and froze the third repair as exact
+  `a18ec0316228e93bc2f299715cef61255bb35db6`. Its exact ordinary full suite was
+  `2795 passed, 131 skipped, 22 subtests passed` in 57.29s. Fresh PostgreSQL 16
+  DM/TM contracts were `6 passed`; fatal lint, lock, test gate, strict docs,
+  fresh distribution content, and installed-wheel smoke were green on the same
+  clean SHA.
+- One bounded read-only Codex carry-forward review found two adjacent P1
+  boundaries. A strict WF body rejection could issue a PostgreSQL catalog
+  SELECT before the mining early return, leaving a call-created implicit
+  transaction open; the next successful DM batch then treated it as caller
+  owned and returned success without a durable commit. Separately, a caller
+  could commit a single-record sequence, begin a new transaction, and have a
+  header rejection rollback that new transaction while restoring the stale
+  prior checkpoint, reducing statistics below the durable row count.
+- Both checks were extended before production edits. On exact `a18ec031...`,
+  the compact SQLite selection produced `3 failed, 2 passed`: the stale
+  checkpoint reduced a durable count of one to statistics zero, and both DM/TM
+  left the validation-created transaction pending. A fresh PostgreSQL 16 run
+  of the mixed invalid-WF/valid-DM sequence produced `1 failed` at the required
+  `pending is False` assertion.
+- The fourth repair treats every pre-mutation body/header rejection as an
+  atomic batch rejection. If no caller transaction existed at entry, it rolls
+  back a lazy schema/catalog transaction created by the call; an existing
+  caller transaction remains untouched on validation-only rejection. Mining
+  structural rejection uses the same cleanup boundary. Single-record header
+  rollback now restores statistics only when the checkpoint generation equals
+  the active transaction generation; a stale checkpoint is discarded while
+  already committed counters are retained.
+- Initial post-repair evidence: compact SQLite controls are `4 passed`; actual
+  PostgreSQL 16 mixed validation/mining plus native/standard single-record
+  checkpoint controls are `5 passed`. The expanded affected SQLite selection
+  is `463 passed, 42 skipped, 11 subtests passed`; the expanded live
+  PostgreSQL DM/TM/WF selection is `22 passed, 178 deselected`. One stale
+  SQLite WF test still expected a body-invalid batch to store its valid suffix;
+  it was corrected to the established all-or-nothing strict-batch contract and
+  the affected selection then passed. The dirty-tree ordinary full suite is
+  `2795 passed, 131 skipped, 22 subtests passed` in 55.88s; fatal flake8,
+  `git diff --check`, lock, test gate, and strict MkDocs are green. The
+  disposable PostgreSQL container was removed and its exact-name inventory is
+  empty. No push, PR, merge, tag, or release has occurred.
+- Next safe action: commit this fourth repair, run the exact-SHA focused/full,
+  PostgreSQL, docs, and package gates, then perform only a bounded delta review
+  of the new immutable SHA. Do not broaden this into another whole-repository
+  review.

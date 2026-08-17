@@ -578,7 +578,6 @@ class RealtimeUpdater:
 
         grouped: dict[str, list[Dict]] = {}
         errors = 0
-        header_errors = 0
         batch_collected_at = self._current_collected_at() if timeseries else None
         validated_records: list[Dict] = []
         ordered_mutation_required = False
@@ -594,14 +593,12 @@ class RealtimeUpdater:
             if alias_error is not None:
                 logger.warning(f"Skipping record with conflicting header aliases: {alias_error}")
                 errors += 1
-                header_errors += 1
                 continue
             try:
                 data_kubun = resolve_record_data_kubun(record)
             except ValueError as exc:
                 logger.warning(f"Skipping record with conflicting DataKubun aliases: {exc}")
                 errors += 1
-                header_errors += 1
                 continue
             strict_table = self.RECORD_TYPE_TABLE.get(record_type)
             if (
@@ -618,9 +615,15 @@ class RealtimeUpdater:
             validated_records.append(record)
 
         # A malformed provider operation invalidates the batch. Saving only
-        # the remaining rows would silently change provider order. No database
-        # mutation has happened at this point.
-        if header_errors:
+        # the remaining rows would silently change provider order. Strict
+        # schema validation can issue catalog SELECTs that start a lazy
+        # psycopg transaction; close only a transaction created by this call.
+        if errors:
+            if not caller_transaction_pending:
+                rollback_failed_import(
+                    self.database,
+                    context="realtime validation-only batch rejection",
+                )
             return {
                 "operation": "batch_insert",
                 "success": False,
@@ -630,18 +633,15 @@ class RealtimeUpdater:
             }
 
         if mining_present:
-            if errors:
-                return {
-                    "operation": "batch_insert",
-                    "success": False,
-                    "inserted": 0,
-                    "errors": max(errors, len(records)),
-                    "tables": [],
-                }
             mining_operations, mining_error = self._partition_mining_batch(
                 validated_records
             )
             if mining_error is not None or mining_operations is None:
+                if not caller_transaction_pending:
+                    rollback_failed_import(
+                        self.database,
+                        context="realtime mining batch validation rejection",
+                    )
                 return {
                     "operation": "batch_insert",
                     "success": False,

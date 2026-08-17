@@ -322,6 +322,9 @@ rollbackし、行単位fallbackによる部分成功や、rollbackされた操�
 callerは、validation-only拒否かDB rollback済みかにかかわらず、その取込単位を必ず中断してください。
 psycopgではSELECTだけでもtransactionが開始されるため、独立した取込単位へ移るcallerは明示的に
 commitまたはrollbackして境界を閉じてください。transaction状態を判定できない場合は書込前に失敗します。
+batch開始時にcaller側transactionが無かった場合、schema/catalog検証のSELECTが暗黙に開始した
+transactionはvalidation-only拒否時にもrollbackして閉じます。開始時からcaller側transactionが
+存在した場合は、validation-only拒否だけではそのtransactionをcommit/rollbackしません。
 時系列取得CLIは保存先table作成を先にcommitしてbatchごとの境界を分離し、1batchでも拒否された場合は
 `[OK]`を出さず非0終了します。
 `WIN5`は読み取り側の名前解決互換用のaliasであり、新規import先には使いません。
