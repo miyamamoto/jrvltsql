@@ -267,8 +267,9 @@ def test_hr_storage_rejects_an_integer_fixed_width_identifier_before_mutation(
 
 
 def test_hr_same_length_2004_boundary_keeps_old_bytes_opaque() -> None:
-    old_raw = build_hr_record(year="2004", month_day="0813")
-    old = HRParser().parse(old_raw)
+    old_raw = bytearray(build_hr_record(year="2004", month_day="0813"))
+    old_raw[603:605] = b"\x81\x20"
+    old = HRParser().parse(bytes(old_raw))
     current = parsed_hr(year="2004", month_day="0814")
     assert old is not None
     assert old["LegacyReserved604_717Hex"] == old_raw[603:717].hex()
@@ -288,8 +289,9 @@ def test_hr_same_length_2004_boundary_keeps_old_bytes_opaque() -> None:
 
 
 def test_hr_status_nine_keeps_unspecified_body_opaque() -> None:
-    raw = build_hr_record(data_kubun="9")
-    parsed = HRParser().parse(raw)
+    raw = bytearray(build_hr_record(data_kubun="9"))
+    raw[102:104] = b"\x81\x20"
+    parsed = HRParser().parse(bytes(raw))
     assert parsed is not None
     assert parsed["OpaqueStatus9Body28_717Hex"] == raw[27:717].hex()
     assert len(parsed["OpaqueStatus9Body28_717Hex"]) == 1380
@@ -333,13 +335,17 @@ def test_hr_storage_preserves_both_sides_of_the_same_length_2004_boundary(
     table_name = "HARAI" if standard else "NL_HR"
     schema = JRAVAN_SCHEMAS[table_name] if standard else SCHEMAS[table_name]
     database = SQLiteDatabase({"path": str(tmp_path / f"boundary-{standard}.db")})
+    old_raw = bytearray(build_hr_record(year="2004", month_day="0813"))
+    old_raw[603:605] = b"\x81\x20"
+    old_record = HRParser().parse(bytes(old_raw))
+    assert old_record is not None
     with database:
         database.execute(schema)
         database.commit()
         result = DataImporter(database, use_jravan_schema=standard).import_records(
             iter(
                 [
-                    parsed_hr(year="2004", month_day="0813"),
+                    old_record,
                     parsed_hr(year="2004", month_day="0814"),
                 ]
             )
@@ -358,7 +364,7 @@ def test_hr_storage_preserves_both_sides_of_the_same_length_2004_boundary(
             )
             current_pay = 15800
         assert rows[0]["MonthDay"] == 813
-        assert len(rows[0]["LegacyBody"]) == 228
+        assert rows[0]["LegacyBody"] == old_raw[603:717].hex()
         assert rows[0]["SanrentanPay"] is None
         assert rows[1] == {
             "MonthDay": 814,
@@ -442,7 +448,10 @@ def test_hr_storage_preserves_payouts_provider_order_and_exact_erase(
             }
         assert row == expected
 
-        cancellation_record = parsed_hr(data_kubun="9")
+        cancellation_raw = bytearray(build_hr_record(data_kubun="9"))
+        cancellation_raw[102:104] = b"\x81\x20"
+        cancellation_record = HRParser().parse(bytes(cancellation_raw))
+        assert cancellation_record is not None
         cancellation_record["FukuPay2"] = "not-interpreted"
         cancellation_record["PayFukusyoPay2"] = "conflicting-opaque-body"
         cancelled = import_records(
@@ -469,9 +478,12 @@ def test_hr_storage_preserves_payouts_provider_order_and_exact_erase(
         assert cancelled_row["DataKubun"] == "9"
         assert cancelled_row["FukuPay2"] is None
         assert cancelled_row["SanrentanPay"] is None
-        assert len(cancelled_row["OpaqueBody"]) == 1380
+        assert cancelled_row["OpaqueBody"] == cancellation_raw[27:717].hex()
 
-        erase_record = parsed_hr(data_kubun="0")
+        erase_raw = bytearray(build_hr_record(data_kubun="0"))
+        erase_raw[102:104] = b"\x81\x20"
+        erase_record = HRParser().parse(bytes(erase_raw))
+        assert erase_record is not None
         erase_record["FukuPay2"] = "not-interpreted"
         erase_record["PayFukusyoPay2"] = "conflicting-opaque-body"
         erase_record["LegacyReserved604_717Hex"] = "not-interpreted"
@@ -487,6 +499,21 @@ def test_hr_storage_preserves_payouts_provider_order_and_exact_erase(
         assert database.fetch_all(f"SELECT RaceNum FROM {table_name} ORDER BY RaceNum") == [
             {"RaceNum": 12}
         ]
+
+
+@pytest.mark.parametrize(
+    "record_kwargs,offset",
+    (
+        ({}, 603),
+        ({"year": "2004", "month_day": "0813"}, 102),
+    ),
+)
+def test_hr_parser_rejects_malformed_cp932_outside_opaque_ranges(
+    record_kwargs: dict[str, str], offset: int
+) -> None:
+    raw = bytearray(build_hr_record(**record_kwargs))
+    raw[offset : offset + 2] = b"\x81\x20"
+    assert HRParser().parse(bytes(raw)) is None
 
 
 def test_hr_wrong_primary_key_is_rejected_before_mutation(tmp_path) -> None:
@@ -643,10 +670,14 @@ def test_hr_postgresql_provider_order_readback_and_statistics(
     table_name = "HARAI" if standard else "NL_HR"
     postgresql_db.execute(JRAVAN_SCHEMAS[table_name] if standard else SCHEMAS[table_name])
     postgresql_db.commit()
+    cancellation_raw = bytearray(build_hr_record(data_kubun="9"))
+    cancellation_raw[102:104] = b"\x81\x20"
+    cancellation_record = HRParser().parse(bytes(cancellation_raw))
+    assert cancellation_record is not None
     records = [
         parsed_hr(data_kubun="1"),
         parsed_hr(data_kubun="2"),
-        parsed_hr(data_kubun="9"),
+        cancellation_record,
         parsed_hr(data_kubun="1", race_num="12"),
     ]
     records[-1].update(
@@ -683,7 +714,7 @@ def test_hr_postgresql_provider_order_readback_and_statistics(
     assert cancelled["DataKubun"] == "9"
     assert cancelled["FukuPay2"] is None
     assert cancelled["SanrentanPay"] is None
-    assert len(cancelled["OpaqueBody"]) == 1380
+    assert cancelled["OpaqueBody"] == cancellation_raw[27:717].hex()
     assert postgresql_db.fetch_one(
         'SELECT HenkanUma6 AS "HenkanUma6", HenkanWaku6 AS "HenkanWaku6", '
         'HenkanDoWaku6 AS "HenkanDoWaku6" '

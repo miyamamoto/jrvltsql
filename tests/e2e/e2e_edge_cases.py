@@ -370,17 +370,29 @@ def test_null_zero_values(conn: sqlite3.Connection):
     # E-5: HR status 1/2 (払戻確定/成績) の単勝払戻を確認する。
     # HRにはstatus 7が存在しないため、7を条件にすると常に空集合で緑になる。
     c.execute("""
-        SELECT COUNT(*) FROM NL_HR
-        WHERE DataKubun IN ('1', '2')
+        WITH eligible AS (
+            SELECT TanPay FROM NL_HR
+            WHERE DataKubun IN ('1', '2')
+                AND FuseirituFlag1 = 0
+                AND TokubaraiFlag1 = 0
+                AND TanUmaban IS NOT NULL
+                AND TRIM(CAST(TanUmaban AS TEXT)) NOT IN ('', '0', '00')
+        )
+        SELECT
+            COUNT(*),
+            COALESCE(SUM(
+                CASE
+                    WHEN TanPay IS NULL
+                        OR TRIM(CAST(TanPay AS TEXT)) = ''
+                        OR CAST(TanPay AS INTEGER) <= 0
+                    THEN 1 ELSE 0
+                END
+            ), 0)
+        FROM eligible
     """)
-    eligible_pay = c.fetchone()[0]
-    c.execute("""
-        SELECT COUNT(*) FROM NL_HR
-        WHERE DataKubun IN ('1', '2') AND TanPay = 0
-    """)
-    zero_pay = c.fetchone()[0]
-    record("E-5 確定レースの単勝払戻>0", eligible_pay > 0 and zero_pay == 0,
-           f"対象: {eligible_pay} 件 / TanPay=0: {zero_pay} 件")
+    eligible_pay, bad_pay = c.fetchone()
+    record("E-5 確定レースの単勝払戻>0", eligible_pay > 0 and bad_pay == 0,
+           f"通常発売対象: {eligible_pay} 件 / TanPay不正: {bad_pay} 件")
 
     # E-6: DataKubun の分布確認（想定外の値がないこと）
     c.execute("SELECT DataKubun, COUNT(*) FROM NL_RA GROUP BY DataKubun ORDER BY DataKubun")

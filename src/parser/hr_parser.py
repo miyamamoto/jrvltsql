@@ -302,7 +302,11 @@ class HRParser:
             フィールド名をキーとした辞書、エラー時はNone
         """
         try:
-            validate_fixed_record(data, self.RECORD_TYPE, self.RECORD_LENGTH)
+            raw_data = data
+            envelope_data = bytearray(raw_data)
+            if len(envelope_data) == self.RECORD_LENGTH:
+                envelope_data[27:717] = b" " * 690
+            validate_fixed_record(bytes(envelope_data), self.RECORD_TYPE, self.RECORD_LENGTH)
 
             # フィールド抽出
             result = {}
@@ -343,6 +347,15 @@ class HRParser:
             # 9. レース番号 (位置:26, 長さ:2)
             result["RaceNum"] = self.decode_field(data[pos : pos + 2])
             pos += 2
+
+            race_date = self.validate_key_fields(result)
+            decode_data = bytearray(raw_data)
+            if result["DataKubun"] in {"0", "9"}:
+                decode_data[27:717] = b" " * 690
+            elif race_date < self.SANRENTAN_AVAILABLE_FROM:
+                decode_data[603:717] = b" " * 114
+            data = bytes(decode_data)
+            validate_fixed_record(data, self.RECORD_TYPE, self.RECORD_LENGTH)
 
             # 10. 登録頭数 (位置:28, 長さ:2)
             result["TorokuTosu"] = self.decode_field(data[pos : pos + 2])
@@ -444,13 +457,11 @@ class HRParser:
             # 三連単払戻 (6件配列: 組合せ6 + 払戻9 + 人気4 = 19バイト × 6)
             pos = _extract_array("SanrentanKumi", "SanrentanPay", "SanrentanNinki", 6, 6, 9, 4, pos)
 
-            race_date = date(
-                int(result["Year"]),
-                int(result["MonthDay"][:2]),
-                int(result["MonthDay"][2:]),
-            )
-            if result["DataKubun"] == "9":
-                result[self.STATUS9_OPAQUE_FIELD] = data[27:717].hex()
+            if result["DataKubun"] == "0":
+                result[self.STATUS9_OPAQUE_FIELD] = ""
+                result[self.LEGACY_RESERVED_FIELD] = ""
+            elif result["DataKubun"] == "9":
+                result[self.STATUS9_OPAQUE_FIELD] = raw_data[27:717].hex()
                 preserved = {
                     "RecordSpec",
                     "DataKubun",
@@ -464,7 +475,7 @@ class HRParser:
                 result[self.LEGACY_RESERVED_FIELD] = ""
             elif race_date < self.SANRENTAN_AVAILABLE_FROM:
                 result[self.STATUS9_OPAQUE_FIELD] = ""
-                result[self.LEGACY_RESERVED_FIELD] = data[603:717].hex()
+                result[self.LEGACY_RESERVED_FIELD] = raw_data[603:717].hex()
                 for index in range(1, 7):
                     suffix = "" if index == 1 else str(index)
                     for prefix in ("SanrentanKumi", "SanrentanPay", "SanrentanNinki"):

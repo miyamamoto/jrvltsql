@@ -310,3 +310,42 @@
   ran the same affected selection with PostgreSQL integration enabled and
   passed `79` tests, including native and standard durable readback of those
   flags. The exact-name container was then stopped and removed.
+
+## Ready-state review findings
+
+- Marking exact candidate `10f168f89391c19dc367c714413afca401fa959c`
+  ready triggered one GitHub Codex thread and two CodeRabbit correctness
+  threads. The PR was returned to draft before any further edit.
+- The GitHub Codex finding was accepted as a project-policy/data-retention
+  defect, not as a new official-format claim. Whole-record strict CP932 and
+  field decoding ran before the status-9 and pre-2004 opaque branches, so
+  bytes explicitly promised as lossless hex could discard the record first.
+  The same root affected status-0 raw deletes, whose body is declared
+  uninterpreted.
+- Red-first evidence on unchanged `10f168f...`: status 9 with invalid CP932 at
+  offset 102 and a 2004-08-13 record with the same class at offset 603 both
+  returned `None`; all 12 SQLite storage/entrypoint cases rejected a status-0
+  raw body before exact erase. Together with the revised E-5 contract, the
+  compact selection returned `18 failed, 6 passed`.
+- CodeRabbit correctly identified that E-5 must not treat every status-1/2 row
+  as a normal positive single-win payout. Official rows 229, 238, 260, and 261
+  do not establish zero yen as valid for non-established or special-refund
+  pools, so the suggested simple exclusion was narrowed further: one shared
+  SQL scope now requires both flags zero and an actual winning horse number;
+  within that same scope, NULL, blank, zero, and negative payouts are failures.
+  Flagged-only/no-sale-only scope therefore remains unmeasured and fails rather
+  than producing an empty-scope green result.
+- The repair keeps the generic fixed-record validator strict. HR constructs a
+  validation view that masks only the already-selected opaque byte ranges,
+  parses header/key from original strict bytes, and generates hex exclusively
+  from the untouched raw record. Current interpreted payouts, legacy prefix,
+  record ID, status, MakeDate, six-part key, and CRLF remain fail-closed.
+- The immediate repaired selection passed `24` tests; the full affected SQLite
+  selection passed `64` and skipped `25`. A fresh disposable PostgreSQL 16
+  instance passed all `88` affected tests, including native/standard durable
+  readback of an opaque status-9 body, and was removed. CodeRabbit's second
+  thread was also adopted by making the E-5 harness assert its imported script
+  symbols and exactly one E-5 result, so a script-contract break cannot surface
+  as an opaque lookup failure. These results precede the repair commit; exact
+  candidate review and GitHub thread resolution remain required before
+  ready/merge.
