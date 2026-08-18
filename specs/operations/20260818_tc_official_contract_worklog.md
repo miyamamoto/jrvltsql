@@ -193,7 +193,7 @@
   and diff check also pass. The repair PostgreSQL container and red/green logs
   were removed.
 
-## Next safe command and STOP conditions
+## Final next safe command and STOP conditions
 
 - Commit the consolidated repair and freeze a clean full SHA. Ask the same
   reviewers only for bounded closure of their recorded findings, then rerun the
