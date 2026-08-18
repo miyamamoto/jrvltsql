@@ -63,16 +63,21 @@ jrvltsql は JRA / 中央競馬専用です。NAR / 地方競馬はこのリポ�
 | `RACE` | - | レース、出走馬、払戻、確定オッズ、票数、WIN5、除外情報 | `RA`, `SE`, `HR`, `H1`, `H6`, `O1`〜`O6`, `WF`, `JG` | `NL_RA`, `NL_SE`, `NL_HR`, `NL_H1`, `NL_H6`, `NL_O1`〜`NL_O6`, `NL_WF`, `NL_JG` | はい | はい | はい | 中核データです。`NL_O*` は確定オッズで、投資判断時点のオッズではありません。 |
 | `DIFN` | `DIFF` | 蓄積系マスタ差分 | `UM`, `KS`, `CH`, `BR`, `BN`, `RC` | `NL_UM`, `NL_KS`, `NL_KS_SEISEKI`, `NL_CH`, `NL_CH_SEISEKI`, `NL_BR`, `NL_BN`, `NL_RC` | はい | いいえ | はい | 旧名 `DIFF` は受け付けません（[旧仕様 dataspec 名](record_contracts.md#dataspec-diff-blod-snap-hose-tcov-rcov) 参照）。 |
 | `BLDN` | `BLOD` | 血統情報 | `HN`, `SK`, `BT` | `NL_HN`, `NL_SK`, `NL_BT` | はい | いいえ | はい | 旧名 `BLOD` は受け付けません（同上）。 |
-| `MING` | - | データマイニング予想 | `DM`, `TM` | `NL_DM`, `NL_TM` | はい | いいえ | はい | full quickstart に含めています。 |
+| `MING` | - | データマイニング予想 | `DM`, `TM` | `NL_DM`, `NL_TM` | はい | いいえ | はい | standard / full quickstart に含めています。 |
 | `SLOP` | - | 坂路調教関連 | `HC` | `NL_HC`（native）、`HANRO`（標準名モード） | はい | いいえ | はい | 現行`DataKubun=1`は60バイトの全項目を保存します。`DataKubun=0`は本文を保存せず、公式4項目キーでexact eraseします。standard / full quickstart に含めています。 |
 | `WOOD` | - | ウッドチップ調教関連 | `WC` | `NL_WC`（native）、`WOOD`（標準名モード） | はい | いいえ | はい | 現行105バイトを全項目保存します。公式キーはトレセン区分・調教年月日・調教時刻・血統登録番号の4項目で、`0` は同じキーの削除です。standard / full quickstart に含めています。 |
 | `YSCH` | - | 開催スケジュール | `YS` | `NL_YS` | はい | いいえ | はい | 開催カレンダー保守に使います。 |
 | `HOSN` | `HOSE` | 競走馬市場取引価格 | `HS` | `NL_HS` | はい | いいえ | はい | 旧名 `HOSE` は受け付けません（同上）。 |
 | `HOYU` | - | 馬名の意味由来 | `HY` | `NL_HY` | はい | いいえ | はい | standard / full quickstart に含めています。 |
-| `COMM` | - | 各種解説・コース情報 | `CS` | `NL_CS`（native）、`COURSE`（標準名モード） | はい | いいえ | はい | 現行6,829バイトと6,800バイトのコース説明を完全保存します。full quickstart に含めています。 |
+| `COMM` | - | 各種解説・コース情報 | `CS` | `NL_CS`（native）、`COURSE`（標準名モード） | はい | いいえ | はい | 現行6,829バイトと6,800バイトのコース説明を完全保存します。standard / full quickstart に含めています。 |
 | `SNPN` | `SNAP` | 出走時点情報 | `CK` | `NL_CK`、`NL_CK_CHAKU`、`NL_CK_RUIKEI` | はい | はい | はい | 現行6,870バイトをnative名モードで完全格納します。既定 quickstart では使っていません。旧名 `SNAP` は受け付けません（同上）。 |
 | `TCVN` | `TCOV` | 特別登録馬情報補填 | 複数のマスタ・レース系レコード | レコード種別に応じた既存 `NL_*` テーブル | いいえ | はい | いいえ | 今週データ更新で使います。旧名 `TCOV` は受け付けません（同上）。 |
 | `RCVN` | `RCOV` | レース情報補填 | 複数のマスタ・レース系レコード | レコード種別に応じた既存 `NL_*` テーブル | いいえ | はい | いいえ | 今週データ更新で使います。旧名 `RCOV` は受け付けません（同上）。 |
+
+`quickstart` の `standard` モードと `full` モードは、取得するデータ種別の一覧が
+同一です（`scripts/quickstart.py` の `STANDARD_SPECS` と `FULL_SPECS`）。
+確定オッズ（`O1`〜`O6`）は `RACE` に含まれるため、`full` でも追加のデータ種別は
+増えません。
 
 `O1`〜`O6` は `RACE` や速報系ストリームに含まれるレコード種別IDであり、
 単独の `JVOpen` データ種別IDではありません。確定オッズは `RACE` を取得して
@@ -95,7 +100,7 @@ jrvltsql は JRA / 中央競馬専用です。NAR / 地方競馬はこのリポ�
 | `0B15` | 出走馬名表以降の速報レース情報 | `RA`, `SE`, `HR` | `RT_RA`, `RT_SE`, `RT_HR` | `YYYYMMDD` | 対応済み |
 | `0B16` | 速報開催情報指定 | `WE`, `AV`, `JC`, `TC`, `CC` | `RT_WE`, `RT_AV`, `RT_JC`, `RT_TC`, `RT_CC` | `JVWatchEvent` が返すイベントキー | パーサー・保存対応。日付指定の日次同期には含めない |
 | `0B17` | 速報対戦型データマイニング予想 | `TM` | `RT_TM` | `YYYYMMDD` | 対応済み |
-| `0B51` | 速報重勝式 WIN5 | `WF` | `RT_WF` | `YYYYMMDD` または WIN5 開催キー | 公式7,215-byte形式（対象5レース・有効票数5件・払戻243件）に対応。速報系のデータ区分は0/1/2/3/9で、蓄積系のみの7は受け付けません |
+| `0B51` | 速報重勝式 WIN5 | `WF` | `RT_WF` | `YYYYMMDD` | 公式7,215-byte形式（対象5レース・有効票数5件・払戻243件）に対応。速報系のデータ区分は0/1/2/3/9で、蓄積系のみの7は受け付けません |
 
 この表に関わる共通規則は [レコード別の公式契約と移行手順](record_contracts.md)
 にあります。
