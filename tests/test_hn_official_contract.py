@@ -14,6 +14,7 @@ from src.database.schema_jravan import JRAVAN_SCHEMAS
 from src.database.sqlite_handler import SQLiteDatabase
 from src.importer.importer import (
     DataImporter,
+    validate_hn_record,
     validate_import_record_header,
     verify_hn_storage_schema,
 )
@@ -66,7 +67,7 @@ def test_hn_status_zero_raw_body_is_opaque_but_live_body_remains_strict() -> Non
     erase[40:42] = b"\x81\x20"
     parsed = HNParser().parse(bytes(erase))
     assert parsed is not None
-    assert parsed["HansyokuNum"] == "1234567890"
+    assert parsed["HansyokuNum"] == "1234567891"
 
     live = bytearray(erase)
     live[2:3] = b"1"
@@ -78,6 +79,7 @@ def test_hn_status_zero_raw_body_is_opaque_but_live_body_remains_strict() -> Non
     (
         pytest.param({"HansyokuNum": "12345A7890"}, id="non-digit-key"),
         pytest.param({"Bamei": None}, id="missing-required-body"),
+        pytest.param({"Bamei": "　"}, id="whitespace-only-required-body"),
         pytest.param({"FHansyokuNum": "12345A7890"}, id="invalid-parent-key"),
         pytest.param(
             {"MochiKubun": "1", "HansyokuMochiKubun": "2"},
@@ -90,6 +92,26 @@ def test_hn_caller_values_are_rejected_before_coercion(change: dict) -> None:
     record.update(change)
     with pytest.raises(SchemaMigrationError):
         validate_import_record_header(record)
+
+
+def test_hn_standard_only_aliases_are_rejected_for_native_storage_before_dml(tmp_path) -> None:
+    alias_only = hn_record()
+    for native_name, standard_name in (
+        ("MochiKubun", "HansyokuMochiKubun"),
+        ("FHansyokuNum", "HansyokuFNum"),
+        ("MHansyokuNum", "HansyokuMNum"),
+    ):
+        alias_only[standard_name] = alias_only.pop(native_name)
+
+    assert validate_hn_record(dict(alias_only), "HANSYOKU") is True
+
+    database = SQLiteDatabase({"path": str(tmp_path / "alias-only-native.db")})
+    with database:
+        database.execute(SCHEMAS["NL_HN"])
+        database.commit()
+        with pytest.raises(SchemaMigrationError):
+            DataImporter(database).import_records(iter([alias_only]))
+        assert database.fetch_one("SELECT COUNT(*) AS count FROM NL_HN") == {"count": 0}
 
 
 def test_hn_status_zero_validates_only_header_and_exact_key() -> None:

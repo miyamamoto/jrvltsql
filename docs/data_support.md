@@ -281,6 +281,9 @@ key、必須header/key/body、公式field capacityを使い、status 1/2をprovi
 同じ行へ反映します。`DataKubun=0`はこのkeyだけを使う物理exact eraseです。
 削除指示の非key本文をdecodeしない扱いはeraseを失わせないためのproject policyで、
 provider仕様が任意binary本文を規定するという意味ではありません。
+公式に空欄になり得る`BameiKana`・`BameiEng`・`SanchiName`は、両tableとも
+`NULL`ではなく空文字で保持します（他のtableの「空欄→`NULL`」規則の例外）。
+欠落した項目や`None`は検証で拒否され、`NULL`として保存されません。
 
 既存のnullable、keyless、wrong-key、wrong-type、容量不足、generated/identity列、
 追加列または追加UNIQUE/FK/CHECKを持つ`NL_HN`/`HANSYOKU`は自動修復せず、

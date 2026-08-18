@@ -162,14 +162,141 @@
   will be removed before the candidate commit. No provider acquisition or real
   database was changed in this iteration.
 
+## Handoff to Claude Code and terminal closure (2026-08-18)
+
+- Codex stopped at its usage cap after committing candidate
+  `03b67208954114069a7312c0675879e98664f53e` (worktree clean, 2 commits ahead
+  of `origin/master` `8408bcf7e3580b72f25c027a3a4e0a138343447b`; no drift at
+  handoff). Continued by Claude Code, `claude --model fable`
+  (`claude-fable-5`), session id `0d3dab84-62e8-4fea-92b2-4fa762267d12`.
+  Fable was chosen because the remaining work repairs a validator/gate
+  (fail-open risk) and aggregates a batched review, which AGENTS.md lists as
+  Fable-eligible.
+- Lightweight gates repeated at `03b6720…` before review: `uv lock --check`
+  pass, `scripts/validate_test_gate.py` `TEST GATE PASS`, fatal flake8
+  (`E9,F63,F7,F82`) `0`, `mkdocs build --strict` pass (site built to `/tmp`
+  and removed).
+- Disposable review artifacts removed: containers
+  `jltsql-cc-critical-pg16-7dff` (with its anonymous volume) and
+  `jltsql-cc-review-pg16-7dff`; the worktree's iteration-generated
+  `.coverage`, `htmlcov/`, `.pytest-tmp/`, `.pytest_cache/`, `.ruff_cache/`,
+  `logs/`, `jltsql.egg-info/`, `__pycache__/`. `.venv` was kept only while
+  tests were still needed and is removed after the PR is opened. No `kps_*` /
+  `jrdb-*` container, volume, or scheduler was touched.
+- Official domain cross-check before review: the JV-Data 4.9.0.1 workbook text
+  (`１８．繁殖馬マスタ`, 251 bytes) gives 初期値 `0` for 予備(22/8), 予備(40/1,
+  "0"を設定), 血統登録番号, 生年, 性別/品種/毛色コード, 輸入年, and both parent
+  numbers, `sp`/`Ｓ` for 馬名/馬名半角ｶﾅ/馬名欧字/産地名, and 繁殖馬持込区分
+  `0/1/2/3/9`. The committed domains match; no official disagreement, so no
+  STOP.
+
+### Single batched independent review of `03b67208954114069a7312c0675879e98664f53e`
+
+Three parallel read-only reviewers (official parser/domain; DB/schema/
+transaction; release/test/docs). Result: **0 blocking**, 4 should-fix, nits.
+
+Accepted and repaired in one batch:
+
+1. Parser (should-fix): `_require_cp932_text` treated only `""` as blank, so a
+   caller-built live row with whitespace-only `Bamei` passed
+   `validate_import_record_header` and then failed at INSERT (`NOT NULL`,
+   `records_failed=1`) instead of being rejected before coercion. Fixed with
+   `not value.strip()`.
+2. Importer (should-fix): `validate_hn_record` resolved standard aliases
+   (`HansyokuMochiKubun`/`HansyokuFNum`/`HansyokuMNum`) for every target, but
+   the native `NL_HN` write path never translates them back, so an alias-only
+   row passed validation and failed at DML (`NOT NULL constraint failed:
+   NL_HN.MochiKubun`; `ImporterError` under caller-owned transactions). Fixed by
+   resolving aliases only when the target is unknown or `HANSYOKU` (the
+   existing WE/`TENKO_BABA` precedent), so `NL_HN` now rejects before DML with
+   `SchemaMigrationError`.
+3. Layout test (should-fix): the narrowed distinctness sentinel excluded four
+   fields although the only collision was `DataKubun == MochiKubun == "1"`; a
+   MochiKubun read from byte 3 would have passed. `MochiKubun` sentinel is now
+   the official `9`, `HansyokuNum` sentinel `1234567891` (no trailing `0`
+   adjacent to the zero-filled reserved span), and the original
+   `test_every_field_uses_a_distinct_decoded_sentinel` is restored.
+4. Docs (should-fix): the blank-optional-text-as-empty-string storage rule was
+   documented only in this worklog; one sentence added to `docs/data_support.md`,
+   `CHANGELOG.md`, and `RELEASE_NOTES.md`.
+5. Nits: restored the four blank lines the diff had removed (E302/E305 in
+   `importer.py`, `importer_optimized.py`, `schema_metadata.py`,
+   `record_factory.py`); `expected=(251,)` message typo in
+   `HNParser._validate_envelope`.
+
+Recorded as non-blocking / not repaired (reason):
+
+- Unreachable length/CRLF checks remain in `HNParser.parse()` after
+  `_validate_envelope`; harmless, left to keep the diff minimal.
+- `SexCD`/`HinsyuCD`/`KeiroCD` are digit-domain only (code tables 2201-2203 can
+  grow); only `MochiKubun` is table-enforced. The earlier "code domains" wording
+  above should be read that way.
+- A present-but-empty standard alias key next to a populated native value
+  (`{MochiKubun:"1", HansyokuMochiKubun:""}`) still reaches DML for `HANSYOKU`
+  and fails loudly; same pre-existing pattern as HR, out of this scope.
+- `_HN_LOSSLESS_TEXT_WIDTHS["NL_HN"]["RecordDelimiter"]` is dead (column always
+  NULL); `HANSYOKU.MakeDate DATE` SQLite affinity is pre-existing; every HN
+  record is validated twice (header + table) like HC/HS.
+- The batch erase test observes only the final `1 -> 2 -> 0` count; the
+  DB reviewer probed the intermediate status-2 revision directly (both
+  importers, both tables hold one row `DataKubun='2'`), and interleaved keys /
+  double erase / erase-of-missing-key behave and count as for siblings.
+- `-m 'not postgresql'` in the commands above is a no-op (no such marker is
+  registered); the PostgreSQL cases skip via the fixture unless
+  `JLTSQL_RUN_POSTGRESQL_INTEGRATION=1`, so CI without PostgreSQL skips them
+  cleanly (verified: collected and skipped, not errored).
+- Red-first reconciliation measured by the review: the committed module
+  replayed against base `8408bcf…` fails to import
+  `verify_hn_storage_schema`; with an import shim it is **34 failed, 1 passed,
+  11 skipped**, i.e. the 24+1 above plus the six schema-defect params, the two
+  blank-text cases, the raw-body-opaque case, and the Dual case that were added
+  later. Sibling test edits (`test_rc/tk/ys_official_contract`, `test_parsers`,
+  `test_current_record_validation`, `test_hn_parser_layout`) were each
+  necessary: their base versions fail 37 cases against the new HN domain.
+
+### Repair batch red-first and green evidence
+
+- Reds against the unrepaired candidate `03b6720…`
+  (`.venv/bin/python -m pytest -q --no-cov tests/test_hn_official_contract.py`
+  selected cases): `test_hn_caller_values_are_rejected_before_coercion
+  [whitespace-only-required-body]` and
+  `test_hn_standard_only_aliases_are_rejected_for_native_storage_before_dml`
+  both `Failed: DID NOT RAISE SchemaMigrationError` (**2 failed**); the second
+  also logged the underlying `NOT NULL constraint failed: NL_HN.MochiKubun`.
+  Paired positives (`validate_hn_record(alias_only, "HANSYOKU") is True`,
+  status-0 header-only) stayed green.
+- After the repair batch, affected SQLite selection
+  (`tests/test_hn_official_contract.py tests/test_hn_parser_layout.py
+  tests/test_parsers.py tests/test_current_record_validation.py
+  tests/test_rc_official_contract.py tests/test_tk_official_contract.py
+  tests/test_ys_official_contract.py tests/test_data_kubun_entry_contract.py
+  tests/test_migration.py`) => **629 passed, 17 skipped**.
+- One fresh disposable PostgreSQL 16 container (`postgres:16-alpine`, tmpfs
+  data dir, `127.0.0.1` only, removed immediately after; no volume left):
+  `tests/test_hn_official_contract.py` with the opt-in enabled => **48
+  passed** (all 11 PostgreSQL/mixed-Dual cases included);
+  `tests/test_hn_parser_layout.py tests/test_migration.py
+  tests/test_current_record_validation.py -k 'HN or hn or migration'` => **65
+  passed**. The repair touched only backend-agnostic validation; schema
+  verifier and erase paths are unchanged from the `03b6720…` evidence above.
+- Workflow-equivalent repository suite on the repaired tree
+  (`pytest tests --ignore=tests/integration --ignore=tests/e2e -m 'not slow'`,
+  Python 3.12 venv) => **3491 passed, 399 skipped, 14 deselected, 20 subtests
+  passed** (two more passes than before = the two new regression cases).
+- Gates on the repaired tree: `uv lock --check` pass; `validate_test_gate.py`
+  `TEST GATE PASS`; fatal flake8 `0`; blank-line lint on the touched files `0`;
+  ruff on the touched files unchanged (16 pre-existing, 0 new);
+  `mkdocs build --strict` pass; `git diff --check` clean.
+- Final candidate full SHA is the commit that carries this worklog delta and
+  the repair batch; it is recorded in the PR body and PR comment, not
+  self-referenced here.
+
 ## Next safe command and STOP conditions
 
-- Next: repeat the lightweight final gates, remove the exact disposable
-  PostgreSQL/container and documentation temp output, freeze a clean candidate
-  full SHA, and request the single batched independent critical review before
-  PR merge. The workflow-equivalent full suite itself is already green at the
-  code state described above and need not be repeated unless the review repair
-  changes production behavior.
+- Next: open the PR against `master` from
+  `agent/hn-official-contract-20260818`, record the exact head full SHA in the
+  PR body, wait for the required `lint`/`test` checks and the single Copilot
+  review, answer every thread with evidence, and leave merge to Devin.
 - STOP on official workbook/SDK disagreement, repository drift, ambiguity about
   legacy 245-byte provenance, a schema migration that would mutate before
   rejection, or any need to access/change real provider state.

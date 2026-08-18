@@ -204,6 +204,7 @@ class OptimizedDataImporter:
             "BT": "NL_BT",
             "DM": "NL_DM",
         }
+
         logger.info(
             "OptimizedDataImporter initialized",
             batch_size=batch_size,

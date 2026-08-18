@@ -73,6 +73,7 @@ def _schema_backed_metadata(
         "indexes": indexes,
     }
 
+
 # 主要テーブルのメタデータ定義
 TABLE_METADATA: Dict[str, TableMetadata] = {
     "NL_RA": {

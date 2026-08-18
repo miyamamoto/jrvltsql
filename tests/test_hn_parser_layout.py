@@ -32,7 +32,7 @@ FIELDS = [
     ("RecordSpec", 1, 2, b"HN"),
     ("DataKubun", 3, 1, b"1"),
     ("MakeDate", 4, 8, b"20260815"),
-    ("HansyokuNum", 12, 10, b"1234567890"),
+    ("HansyokuNum", 12, 10, b"1234567891"),
     ("reserved", 22, 8, b"00000000"),
     ("KettoNum", 30, 10, b"2019900002"),
     ("DelKubun", 40, 1, b"0"),
@@ -43,7 +43,7 @@ FIELDS = [
     ("SexCD", 201, 1, b"3"),
     ("HinsyuCD", 202, 1, b"4"),
     ("KeiroCD", 203, 2, b"05"),
-    ("MochiKubun", 205, 1, b"1"),
+    ("MochiKubun", 205, 1, b"9"),
     ("ImportYear", 206, 4, b"2025"),
     ("SanchiName", 210, 20, _pad("テスト産地", 20, zenkaku=True)),
     ("FHansyokuNum", 230, 10, b"1111111111"),
@@ -80,13 +80,8 @@ class TestHNParserCurrentLayout:
         assert HNParser.RECORD_LENGTH == 251
         assert self.record[249:251] == b"\r\n"
 
-    def test_non_reserved_fields_use_distinct_decoded_sentinels(self):
-        values = [
-            value
-            for name, value in EXPECTED.items()
-            if name not in {"reserved", "DelKubun", "MochiKubun", "RecordDelimiter"}
-        ]
-        assert len(set(values)) == len(values)
+    def test_every_field_uses_a_distinct_decoded_sentinel(self):
+        assert len(set(EXPECTED.values())) == len(EXPECTED)
 
     @pytest.mark.parametrize("field_name", sorted(EXPECTED))
     def test_every_field_is_read_from_its_current_spec_position(self, field_name):
@@ -103,7 +98,7 @@ class TestHNParserExactLayoutEnforcement:
         self.record = build_record()
 
     def test_exact_current_record_is_accepted(self):
-        assert self.parser.parse(self.record)["HansyokuNum"] == "1234567890"
+        assert self.parser.parse(self.record)["HansyokuNum"] == "1234567891"
 
     @pytest.mark.parametrize(
         "mutate",
@@ -209,7 +204,7 @@ def test_current_record_round_trips_through_supported_storage(
     assert stats["records_imported"] == 1
     assert stats["records_failed"] == 0
     assert stats["batches_processed"] == 1
-    assert row["HansyokuNum"] == "1234567890"
+    assert row["HansyokuNum"] == "1234567891"
     assert row["BameiEng"] == "Distinct Breeding Horse Sentinel"
     assert row[father_column] == "1111111111"
     assert row[mother_column] == "2222222222"

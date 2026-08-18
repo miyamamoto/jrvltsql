@@ -66,7 +66,7 @@ class HNParser:
         *,
         allow_blank: bool = True,
     ) -> None:
-        if not isinstance(value, str) or (not allow_blank and value == ""):
+        if not isinstance(value, str) or (not allow_blank and not value.strip()):
             raise ValueError(f"HN {field_name} must be provider text")
         try:
             encoded = value.encode("cp932", errors="strict")
@@ -121,7 +121,7 @@ class HNParser:
     def _validate_envelope(cls, data: bytes) -> tuple[str, str]:
         if len(data) != cls.RECORD_LENGTH:
             raise ValueError(
-                f"HN record length mismatch: expected={(cls.RECORD_LENGTH,)}, actual={len(data)}"
+                f"HN record length mismatch: expected={cls.RECORD_LENGTH}, actual={len(data)}"
             )
         if data[:2] != b"HN":
             raise ValueError(f"Record type mismatch: expected HN, got {data[:2]!r}")

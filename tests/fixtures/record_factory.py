@@ -65,6 +65,7 @@ def make_ra_record(
     data[1270:1272] = b'\r\n'
     return bytes(data)
 
+
 def make_se_record(
     data_kubun="1", make_date="20260101",
     year="2026", month_day="0101", jyo_cd="05",

@@ -42,6 +42,8 @@
 - `HN`を公式現行251バイト配置と10桁`HansyokuNum` identityへ結び付け、native
   `NL_HN`と標準名`HANSYOKU`でprovider順のstatus 1/2更新、status 0 exact erase、
   caller validation、SQLite/PostgreSQLのstrict schema preflightを一致させた。
+  公式に空欄になり得る`BameiKana`/`BameiEng`/`SanchiName`は`NULL`ではなく
+  空文字で保持する。
   旧245バイト配置とnullable/keyless/wrong-type/extended tableは自動移行せず、
   backup・rebuild・`BLDN` reimportを要求する。HNは蓄積系masterだけであり、
   `RT_HN`を追加しない

@@ -50,6 +50,7 @@ def rollback_failed_import(database: BaseDatabase, *, context: str) -> None:
             error=str(rollback_error),
         )
 
+
 def inspect_pending_transaction_or_invalidate(database: BaseDatabase, *, context: str) -> bool:
     """Read transaction ownership or invalidate a session whose state is unknown."""
     try:
@@ -2005,6 +2006,10 @@ def validate_hn_record(record: dict, table_name: str | None = None) -> bool:
         normalized = dict(record)
         if data_kubun != "0":
             aliases = _STANDARD_FIELD_ALIASES["HANSYOKU"]
+            # Native NL_HN storage never translates standard names back, so a
+            # standard-only value may satisfy validation only when the target
+            # is unknown or the standard HANSYOKU table.
+            resolve_aliases = table_name in (None, "HANSYOKU")
             conflicts: list[str] = []
             for native_name, standard_name in aliases.items():
                 native_value = record.get(native_name)
@@ -2012,7 +2017,11 @@ def validate_hn_record(record: dict, table_name: str | None = None) -> bool:
                 if native_value not in (None, "") and standard_value not in (None, ""):
                     if str(native_value) != str(standard_value):
                         conflicts.append(f"{native_name}/{standard_name}")
-                elif native_value in (None, "") and standard_value not in (None, ""):
+                elif (
+                    resolve_aliases
+                    and native_value in (None, "")
+                    and standard_value not in (None, "")
+                ):
                     normalized[native_name] = standard_value
             if conflicts:
                 raise ValueError(f"conflicting HN alias values: {conflicts}")

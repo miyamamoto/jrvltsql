@@ -55,6 +55,8 @@ Public API replacements:
   and standard `HANSYOKU` apply provider-ordered status 1/2 revisions and a
   physical exact-key status-0 erase, and reject nullable, keyless, wrong-type,
   generated, extended, or additionally constrained schemas before mutation.
+  Officially blankable `BameiKana`, `BameiEng`, and `SanchiName` are stored as
+  empty strings rather than `NULL`.
   Operators must back up, rebuild, and reimport retained `BLDN` data; the
   obsolete 245-byte layout is not migrated, and HN remains accumulated-only
   without an `RT_HN` table
