@@ -1911,6 +1911,17 @@ for _hr_table in ("NL_HR", "RT_HR", "HARAI"):
                 "公式予備領域PayReserved1の3反復を4/9/3バイトの文字列として保持"
             )
 
+for _hs_table in ("NL_HS", "SALE"):
+    TABLE_METADATA[_hs_table]["purpose"] = (
+        "公式現行200バイトHSを血統登録番号・主催者市場コード・開催開始日の"
+        "3項目キーで保持。旧196バイト世代は保存しない"
+    )
+    for _column in TABLE_METADATA[_hs_table]["columns"]:
+        if _column["name"] == "CurrentLayoutVersion":
+            _column["description"] = (
+                "現行200バイトparser又は同等caller validation通過を示すstorage marker"
+            )
+
 for _jc_table in ("NL_JC", "RT_JC"):
     for _column in TABLE_METADATA[_jc_table]["columns"]:
         if _column["name"] in {"AtoFutan", "MaeFutan"}:

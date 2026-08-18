@@ -230,6 +230,25 @@ jrvltsql は現在、以下 38 種類の JRA レコード種別に対してパ�
 `TS_O1` / `TS_O2`、開催週速報オッズは `TS_SOKUHO_O1`〜`TS_SOKUHO_O6`
 に保存します。
 
+`HS`（競走馬市場取引価格）は現行JV-Data 4.9.0.1 / SDK 5.0.0の
+200バイト配置だけを受け付け、旧196バイト配置は常に拒否します。公式の保存identityは
+`KettoNum`, `SaleCode`, `FromDate`の3項目です。native `NL_HS`と標準名`SALE`は
+同じordered primary key、必須header/key、公式field capacityを使います。
+`DataKubun=0`はこのkeyだけを使うexact eraseです。非key本文をdecodeしない扱いは
+exact eraseを失わせないためのproject policyであり、provider仕様が任意binary本文を
+規定しているという意味ではありません。
+
+現行parserまたは同等のcaller validationを通った行には
+`CurrentLayoutVersion=200`を保存します。markerのない既存非空`NL_HS`/`SALE`は、
+父母繁殖登録番号の値長などから世代を推測して自動移行しません。backup後にtableを
+rebuildし、現行200バイトsourceからreimportしてください。現行10バイトの
+`HansyokuFNum`/`HansyokuMNum`欄には8桁値＋space paddingも正当に存在するため、
+strip後の8文字は旧世代判定の根拠になりません。HSは蓄積系のみで、`RT_HS`は作成せず、
+realtime入口へ渡されたHSはDBとlocal realtime cacheの両方を変更せず拒否します。
+`auto_commit=False`の同一呼出しで後続HSが検証失敗した場合は、先行する未確定行と
+その統計をrollbackします。`auto_commit=True`では既に確定したprovider operationを
+残すincremental semanticsであり、失敗した後続recordを成功件数へ加えません。
+
 `HR`（払戻）はJV-Data 4.8.0.2 / 4.9.0.1とSDK 5.0.0の719バイト配置へ
 結び付けています。公式キーは`Year`, `MonthDay`, `JyoCD`, `Kaiji`, `Nichiji`,
 `RaceNum`の6項目、現行データ区分は`0`, `1`, `2`, `9`です。`9`は中止状態として

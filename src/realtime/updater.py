@@ -184,7 +184,8 @@ class RealtimeUpdater:
     # Note: The following record types are NOT provided in real-time:
     # - TK (特別登録馬) - Accumulated data only
     # - UM, KS, CH, BR, BN, HN, SK (Master data) - Updated via DIFN
-    # - CK, HC, HS, HY (Code/Status data) - Updated via SNPN
+    # - CK (snapshot data) - Updated via SNPN
+    # - HC, HS, HY - Accumulated via SLOP, HOSN, and HOYU respectively
     # - YS, BT, CS (Change data) - Updated via YSCH, SLOP, etc.
     # - JG, WC - Not in the supported realtime stream
 
@@ -330,12 +331,25 @@ class RealtimeUpdater:
                         source_spec=source_spec,
                     )
 
+            # Accumulated-only records (including HS) have no realtime storage
+            # owner. Reject them before a local cache write could look like a
+            # successfully acquired realtime record.
+            spec = (
+                parsed_data[0].get("RecordSpec")
+                if isinstance(parsed_data, list) and parsed_data
+                else parsed_data.get("RecordSpec")
+                if isinstance(parsed_data, dict)
+                else None
+            )
+            if spec not in self.RECORD_TYPE_TABLE:
+                logger.warning(f"Unknown realtime record type: {spec}")
+                return None
+
             # Write to RT cache if enabled
             if self.cache_manager and buff:
                 from datetime import date
                 today = date.today().strftime("%Y%m%d")
                 # Use RecordSpec to determine spec_code bucket
-                spec = (parsed_data[0].get("RecordSpec") if isinstance(parsed_data, list) else parsed_data.get("RecordSpec")) if parsed_data else None
                 if spec:
                     self.cache_manager.write_rt_record(spec, today, buff)
 

@@ -537,7 +537,27 @@ _AV_LOSSLESS_TEXT_WIDTHS = {
 }
 _HR_STORAGE_TABLES = frozenset({"NL_HR", "RT_HR", "HARAI"})
 _HR_KEY_COLUMNS = ("Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum")
-_PROVIDER_OPERATION_COUNT_STORAGE_TABLES = _AV_STORAGE_TABLES | _HR_STORAGE_TABLES
+_HS_STORAGE_TABLES = frozenset({"NL_HS", "SALE"})
+_HS_KEY_COLUMNS = ("KettoNum", "SaleCode", "FromDate")
+_HS_LOSSLESS_TEXT_WIDTHS = {
+    table_name: {
+        "RecordSpec": 2,
+        "DataKubun": 1,
+        "MakeDate": 8,
+        "KettoNum": 10,
+        "HansyokuFNum": 10,
+        "HansyokuMNum": 10,
+        "SaleCode": 6,
+        "SaleHostName": 40,
+        "SaleName": 80,
+        "FromDate": 8,
+        "ToDate": 8,
+    }
+    for table_name in _HS_STORAGE_TABLES
+}
+_PROVIDER_OPERATION_COUNT_STORAGE_TABLES = (
+    _AV_STORAGE_TABLES | _HR_STORAGE_TABLES | _HS_STORAGE_TABLES
+)
 _JC_STORAGE_TABLES = frozenset({"NL_JC", "RT_JC", "KISYU_CHANGE"})
 _JC_KEY_COLUMNS = (
     "Year",
@@ -594,6 +614,7 @@ _STRICT_NONADDITIVE_STANDARD_TABLES = frozenset(
         "KEITO",
         "JOGAIBA",
         "HARAI",
+        "SALE",
         "KISYU_CHANGE",
         "TORIKESI_JYOGAI",
         "TENKO_BABA",
@@ -1290,6 +1311,187 @@ def validate_hr_record(record: dict, table_name: str | None = None) -> bool:
         HRParser.validate_current_fields(normalized, data_kubun=data_kubun)
     except ValueError as error:
         raise SchemaMigrationError(str(error)) from error
+    return True
+
+
+def _verify_hs_current_layout_rows(
+    database: BaseDatabase,
+    table_name: str,
+    schema_sql: str,
+) -> None:
+    """Reject nonempty unmarked/incomplete stores before additive mutation."""
+
+    from src.database.migration import (
+        _extract_column_definitions,
+        _get_existing_columns,
+        _migration_targets,
+    )
+    from src.parser.hs_parser import HSParser
+
+    targets = _migration_targets(database)
+    if targets != (database,):
+        for target in targets:
+            _verify_hs_current_layout_rows(target, table_name, schema_sql)
+        return
+
+    definitions = _extract_column_definitions(schema_sql)
+    if definitions is None:
+        raise SchemaMigrationError(f"Could not parse HS schema for {table_name}")
+    existing = {column.lower() for column in _get_existing_columns(database, table_name)}
+    missing = sorted(column for column in definitions if column.lower() not in existing)
+    row_count = int(
+        database.fetch_one(f"SELECT COUNT(*) AS count FROM {table_name}")["count"]
+    )
+    if row_count and missing:
+        raise SchemaMigrationError(
+            f"HS storage {table_name} has existing rows without the complete current "
+            f"200-byte layout marker/columns {missing}; backup, rebuild, and reimport"
+        )
+    marker = "currentlayoutversion"
+    if marker not in existing:
+        return
+    invalid = int(
+        database.fetch_one(
+            f"SELECT COUNT(*) AS count FROM {table_name} "
+            "WHERE CurrentLayoutVersion IS NULL OR CurrentLayoutVersion <> ?",
+            (HSParser.CURRENT_LAYOUT_VERSION,),
+        )["count"]
+    )
+    if invalid:
+        raise SchemaMigrationError(
+            f"HS storage {table_name} contains {invalid} row(s) without trusted current "
+            "200-byte provenance; backup, rebuild, and reimport"
+        )
+
+
+def _verify_hs_layout_marker_constraint(
+    database: BaseDatabase,
+    table_name: str,
+    *,
+    allow_missing: bool = False,
+) -> None:
+    """Require the database to reject forged HS layout generations."""
+
+    from src.database.migration import _migration_targets
+
+    targets = _migration_targets(database)
+    if targets != (database,):
+        for target in targets:
+            _verify_hs_layout_marker_constraint(
+                target,
+                table_name,
+                allow_missing=allow_missing,
+            )
+        return
+
+    from src.database.migration import _get_existing_columns
+
+    existing = {column.lower() for column in _get_existing_columns(database, table_name)}
+    if "currentlayoutversion" not in existing and allow_missing:
+        return
+
+    db_type = database.get_db_type()
+    if db_type == "sqlite":
+        row = database.fetch_one(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?",
+            (table_name,),
+        )
+        definition = str((row or {}).get("sql") or "")
+        normalized = re.sub(r'[\s"`\[\]]+', "", definition.lower())
+        marker = re.search(
+            r"currentlayoutversion(?:smallint|integer|bigint)notnull"
+            r"check\(currentlayoutversion=200\)",
+            normalized,
+        )
+        if marker is None:
+            raise SchemaMigrationError(
+                f"HS storage {table_name} must enforce CurrentLayoutVersion = 200"
+            )
+        return
+    if db_type == "postgresql":
+        rows = database.fetch_all(
+            "SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint "
+            "WHERE conrelid = to_regclass(?) AND contype = 'c'",
+            (table_name.lower(),),
+        )
+        normalized = {
+            re.sub(r'[\s"()]+', "", str(row.get("definition") or "").lower())
+            for row in rows
+        }
+        accepted = {
+            "checkcurrentlayoutversion=200",
+            "checkcurrentlayoutversion=200::smallint",
+            "checkcurrentlayoutversion=200::integer",
+        }
+        if normalized.isdisjoint(accepted):
+            raise SchemaMigrationError(
+                f"HS storage {table_name} must enforce CurrentLayoutVersion = 200"
+            )
+        return
+    raise SchemaMigrationError(
+        f"HS layout marker cannot be verified for database type {db_type!r}"
+    )
+
+
+def verify_hs_storage_schema(
+    database: BaseDatabase,
+    table_name: str,
+    *,
+    allow_missing_columns: bool = False,
+) -> bool:
+    """Fail closed unless HS storage preserves the current identity and layout."""
+
+    if table_name not in _HS_STORAGE_TABLES:
+        return False
+    from src.database.migration import verify_table_schema
+    from src.database.schema import SCHEMAS
+    from src.database.schema_jravan import JRAVAN_SCHEMAS
+
+    schema_sql = SCHEMAS.get(table_name) or JRAVAN_SCHEMAS.get(table_name)
+    if schema_sql is None:
+        raise SchemaMigrationError(f"HS storage schema is undefined: {table_name}")
+    _verify_hs_current_layout_rows(database, table_name, schema_sql)
+    verify_table_schema(
+        database,
+        table_name,
+        schema_sql,
+        allow_missing_columns=allow_missing_columns,
+    )
+    _verify_strict_storage_column_contract(
+        database,
+        table_name,
+        schema_sql,
+        allow_missing_columns=allow_missing_columns,
+        storage_label="HS",
+        lossless_text_widths=_HS_LOSSLESS_TEXT_WIDTHS[table_name],
+    )
+    _verify_hs_layout_marker_constraint(
+        database,
+        table_name,
+        allow_missing=allow_missing_columns,
+    )
+    _verify_replacement_key_constraints(database, table_name, "HS storage")
+    return True
+
+
+def validate_hs_record(record: dict, table_name: str | None = None) -> bool:
+    """Validate a caller-owned HS row and attach trusted current-layout provenance."""
+
+    if table_name is not None and table_name not in _HS_STORAGE_TABLES:
+        return False
+    if _record_type_from_record(record) != "HS":
+        if table_name is None:
+            return False
+        raise SchemaMigrationError(f"{table_name} received a non-HS record")
+
+    from src.parser.hs_parser import HSParser
+
+    try:
+        data_kubun = resolve_record_data_kubun(record)
+        HSParser.validate_current_fields(record, data_kubun=data_kubun)
+    except ValueError as error:
+        raise SchemaMigrationError(str(error)) from error
+    record["CurrentLayoutVersion"] = HSParser.CURRENT_LAYOUT_VERSION
     return True
 
 
@@ -2407,6 +2609,8 @@ def preflight_standard_schema_migrations(
             verify_av_storage_schema(database, standard_name)
         if standard_name == "HARAI":
             verify_hr_storage_schema(database, standard_name)
+        if standard_name == "SALE":
+            verify_hs_storage_schema(database, standard_name)
         if standard_name == "KISYU_CHANGE":
             verify_jc_storage_schema(database, standard_name)
         if standard_name in {"UMA", "COURSE"}:
@@ -2910,6 +3114,7 @@ _OFFICIAL_ERASE_KEY_COLUMNS = {
     "AV": _AV_KEY_COLUMNS,
     "JC": _JC_KEY_COLUMNS,
     "HR": _MINING_RACE_KEY_COLUMNS,
+    "HS": _HS_KEY_COLUMNS,
     # One physical H1/H6/O1-O6 record expands into multiple child rows.
     "H1": _MINING_RACE_KEY_COLUMNS,
     "H6": _MINING_RACE_KEY_COLUMNS,
@@ -2933,6 +3138,7 @@ _OFFICIAL_ERASE_STORAGE_TABLES = {
     "AV": set(_AV_STORAGE_TABLES),
     "JC": set(_JC_STORAGE_TABLES),
     "HR": {"NL_HR", "RT_HR", "HARAI"},
+    "HS": set(_HS_STORAGE_TABLES),
     "H1": {"NL_H1", "RT_H1", "HYO_TANPUKU"},
     "H6": {"NL_H6", "RT_H6", "HYO_SANRENTAN"},
     "O1": {"NL_O1", "RT_O1", "ODDS_TANPUKUWAKU_HEAD"},
@@ -3032,6 +3238,8 @@ def validate_import_record_header(record: dict) -> tuple[str, str]:
             validate_av_record(record)
         if record_type == "HR":
             validate_hr_record(record)
+        if record_type == "HS":
+            validate_hs_record(record)
         if record_type == "JC":
             validate_jc_record(record)
         return record_type, data_kubun
@@ -3944,11 +4152,17 @@ def _delete_official_record(database: BaseDatabase, record: dict, table_name: st
     key_columns = tuple(
         aliases.get(column, column) for column in _OFFICIAL_ERASE_KEY_COLUMNS[record_type]
     )
-    record = translate_standard_field_names(record, table_name)
-    converted = convert_record_types(record, table_name)
+    translated = translate_standard_field_names(record, table_name)
+    # A provider delete command is defined by its identity only. Restrict type
+    # coercion to those key fields so an intentionally opaque/non-decodable
+    # body cannot block an exact erase or trigger backend-specific behavior.
+    key_record = {column: translated.get(column) for column in key_columns}
+    converted = convert_record_types(key_record, table_name)
     # Some legacy standard schemas omit type metadata for an otherwise valid
     # race key. Preserve the raw key only for those columns.
-    key_values = {column: converted.get(column, record.get(column)) for column in key_columns}
+    key_values = {
+        column: converted.get(column, key_record.get(column)) for column in key_columns
+    }
     missing = [column for column, value in key_values.items() if value in (None, "")]
     if missing:
         raise ValueError(f"{record_type} record erase has incomplete key: {missing}")
@@ -5569,6 +5783,7 @@ class DataImporter:
         self._verified_we_tables: set[str] = set()
         self._verified_av_tables: set[str] = set()
         self._verified_hr_tables: set[str] = set()
+        self._verified_hs_tables: set[str] = set()
         self._verified_jc_tables: set[str] = set()
         self._verified_cs_tables: set[str] = set()
         self._verified_jg_tables: set[str] = set()
@@ -5821,6 +6036,7 @@ class DataImporter:
                     validate_we_record(first_record, first_table_name)
                     validate_av_record(first_record, first_table_name)
                     validate_hr_record(first_record, first_table_name)
+                    validate_hs_record(first_record, first_table_name)
                     validate_jc_record(first_record, first_table_name)
                 records = chain((first_record,), records)
         except Exception:
@@ -5902,6 +6118,10 @@ class DataImporter:
                     if verify_hr_storage_schema(self.database, table_name):
                         self._verified_hr_tables.add(table_name)
                 validate_hr_record(record, table_name)
+                if table_name not in self._verified_hs_tables:
+                    if verify_hs_storage_schema(self.database, table_name):
+                        self._verified_hs_tables.add(table_name)
+                validate_hs_record(record, table_name)
                 if table_name not in self._verified_jc_tables:
                     if verify_jc_storage_schema(self.database, table_name):
                         self._verified_jc_tables.add(table_name)
@@ -6550,6 +6770,7 @@ class DataImporter:
                 validate_we_record(record, table_name)
                 validate_av_record(record, table_name)
                 validate_hr_record(record, table_name)
+                validate_hs_record(record, table_name)
                 validate_jc_record(record, table_name)
         except SchemaMigrationError:
             if not auto_commit:
@@ -6627,6 +6848,10 @@ class DataImporter:
                 if verify_hr_storage_schema(self.database, table_name):
                     self._verified_hr_tables.add(table_name)
             validate_hr_record(record, table_name)
+            if table_name not in self._verified_hs_tables:
+                if verify_hs_storage_schema(self.database, table_name):
+                    self._verified_hs_tables.add(table_name)
+            validate_hs_record(record, table_name)
             if table_name not in self._verified_jc_tables:
                 if verify_jc_storage_schema(self.database, table_name):
                     self._verified_jc_tables.add(table_name)

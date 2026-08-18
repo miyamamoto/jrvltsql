@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "record_type": "HS",
+  "current_data_spec": "HOSN",
+  "previous_data_spec": "HOSE",
+  "format_sources": [
+    {
+      "artifact": "JV-Data4802.xlsx",
+      "sha256": "6a567f10b601115eca350571f36d27d9d28bd2d3835ea72b5bc057711155d4a7",
+      "sheet": "フォーマット",
+      "rows": "1170-1186",
+      "record_length": 196
+    },
+    {
+      "artifact": "JV-Data4901.xlsx",
+      "sha256": "23bafd375f704acbdd696b5032ac1619f17d47e882587d6e7954b610527a8234",
+      "sheet": "フォーマット",
+      "rows": "1170-1186",
+      "record_length": 200
+    }
+  ],
+  "current_fields": [
+    ["RecordSpec", 1, 2],
+    ["DataKubun", 3, 1],
+    ["MakeDate", 4, 8],
+    ["KettoNum", 12, 10],
+    ["HansyokuFNum", 22, 10],
+    ["HansyokuMNum", 32, 10],
+    ["BirthYear", 42, 4],
+    ["SaleCode", 46, 6],
+    ["SaleHostName", 52, 40],
+    ["SaleName", 92, 80],
+    ["FromDate", 172, 8],
+    ["ToDate", 180, 8],
+    ["Barei", 188, 1],
+    ["Price", 189, 10],
+    ["RecordDelimiter", 199, 2]
+  ],
+  "previous_fields": [
+    ["RecordSpec", 1, 2],
+    ["DataKubun", 3, 1],
+    ["MakeDate", 4, 8],
+    ["KettoNum", 12, 10],
+    ["HansyokuFNum", 22, 8],
+    ["HansyokuMNum", 30, 8],
+    ["BirthYear", 38, 4],
+    ["SaleCode", 42, 6],
+    ["SaleHostName", 48, 40],
+    ["SaleName", 88, 80],
+    ["FromDate", 168, 8],
+    ["ToDate", 176, 8],
+    ["Barei", 184, 1],
+    ["Price", 185, 10],
+    ["RecordDelimiter", 195, 2]
+  ],
+  "primary_key": ["KettoNum", "SaleCode", "FromDate"],
+  "current_data_kubun": ["0", "1"],
+  "physical_change": {
+    "effective_date": "2023-08-08",
+    "version": "4.9.0",
+    "source_sheet": "変更履歴",
+    "source_row": 43,
+    "description": "HansyokuFNum and HansyokuMNum widened from 8 to 10 bytes"
+  },
+  "current_setup_policy": {
+    "accept_lengths": [200],
+    "reject_lengths": [196],
+    "old_dates_are_returned_in_current_size": true,
+    "mixed_old_and_current_stores_supported": false,
+    "sources": [
+      "https://developer.jra-van.jp/t/topic/215",
+      "https://developer.jra-van.jp/t/topic/221"
+    ]
+  }
+}

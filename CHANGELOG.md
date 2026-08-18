@@ -39,6 +39,11 @@
 
 ### Fixed
 
+- `HS`を現行HOSNの公式200バイト配置と3項目キーへ結び付け、native `NL_HS`と
+  標準名`SALE`でprovider順の更新・exact delete・operation統計を一致させた。
+  旧196バイトHOSEは引き続き拒否し、世代不明の既存非空tableは値長から推測せず
+  backup・rebuild・現行sourceからのreimportを要求する。live本文はcoercion前に検証し、
+  status 0の非key本文だけはexact eraseを妨げないopaque project policyとした
 - `HR`を公式719バイト・6項目キーへ結び付け、3件の予備領域を数値化せず文字列で
   保持する全repeatを
   native/速報/JRA-VAN標準名`HARAI`へ保存。`HARAI`の払戻NULL化・重複行、

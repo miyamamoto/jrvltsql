@@ -70,3 +70,140 @@ Inspect src/parser/hs_parser.py, native/standard HS schemas and mappings, the
 pinned official layout/history fixtures, and tests/test_jvdata490_layouts.py;
 then extract the full official HS oracle before editing production code.
 ```
+
+## Aggregated pre-implementation review (2026-08-18)
+
+- Review target: exact committed production base
+  `e1fcb810b69c133a3668fe38b8480e31db5e8b27`; the review-start worklog commit
+  is `73d05053d99883db54e765a6a3a228e868a62d04` and contains no production or
+  test change.
+- Three independent review passes agreed on the actionable boundary:
+  - current SDK 5.0.0 `HS` is exactly 200 bytes and the historical 196-byte
+    layout must remain rejected by the current-only parser;
+  - the parser and caller-owned dictionaries need one shared current-field
+    validator, while `DataKubun=0` non-key bytes are opaque by project policy;
+  - native `NL_HS` and standard `SALE` need the exact ordered
+    `(KettoNum, SaleCode, FromDate)` identity, required nullability and exact
+    capacities, with a dedicated cross-backend preflight before any mutation;
+  - status-0 must erase in provider order, statistics must count provider
+    operations, and unsupported realtime `HS` must not write the local cache;
+  - a nonempty existing HS table without current-layout provenance is unsafe
+    and requires a rebuild/reimport instruction rather than an additive
+    mutation. Stored `HansyokuFNum`/`HansyokuMNum` value length is explicitly
+    not generation evidence: the current ten-byte fields can legitimately hold
+    an eight-digit registration value followed by provider space padding.
+- Official fact and project policy are kept distinct: current length, field
+  spans and the three-part identity are fixture-backed official contracts;
+  accepting arbitrary non-CP932 bytes in non-key status-0 body ranges is the
+  repository's exact-erase/opaque-body policy, not a claim about the provider
+  specification.
+- Generation detection must use the physical raw length/data-spec provenance or
+  a current-parser marker attached only after current 200-byte validation.
+  A value-length scan is forbidden because it would reject official current
+  parent-registration values after the parser strips their padding.
+- Claude Code `--model fable` was selected because the change combines a
+  validator, provider ordering and cross-backend migration gates. The local
+  Claude runtime cannot authenticate in this environment, so no Claude session
+  was started and there is no resumable session id. Per the recorded fallback,
+  Codex will implement the aggregated batch and the immutable candidate will
+  still require independent critical review before release.
+- Red-first rule: add one compact `tests/test_hs_official_contract.py`, run the
+  defect-bound cases against unchanged production, and record the actual
+  failures before editing `src/`.
+
+## Red-first evidence
+
+- Production remained byte-identical to
+  `e1fcb810b69c133a3668fe38b8480e31db5e8b27` when the new compact module was
+  first run with the repository `.venv` (Python 3.13.5):
+  `13 failed, 1 passed`. The failures independently bind missing parser field
+  spans, five caller-validation defects, executable schema identity/nullability
+  drift, and native/standard exact-erase failure through DataImporter,
+  OptimizedDataImporter and single-record import.
+- The first opaque-body control used byte `0xff`, which Python's CP932 codec
+  accepts and therefore was not a valid negative. It was corrected before any
+  production edit to an incomplete `0x81` lead byte followed by ASCII space;
+  the corrected case is rerun separately below.
+
+## Codex implementation and verification (2026-08-18)
+
+- Implemented the aggregated repair without starting a Claude session because
+  the selected Fable runtime could not authenticate. Production now accepts
+  only the official current 200-byte physical layout, derives all 15 logical
+  field spans directly, validates the shared caller/raw contract before any
+  mutation, and treats status-0 non-key bytes as opaque under the documented
+  project exact-erase policy. The obsolete 196-byte layout remains rejected.
+- Native `NL_HS` and standard `SALE` now share the exact ordered
+  `(KettoNum, SaleCode, FromDate)` identity, required widths/nullability and a
+  trusted `CurrentLayoutVersion = 200` marker. Preflight recursively checks
+  SQLite/PostgreSQL/Dual stores for incompatible types, short capacities,
+  nullable required columns, extra replacement keys, unusable PostgreSQL
+  primary keys and unmarked nonempty old stores before schema or DML mutation.
+  No parent-registration value-length heuristic was introduced.
+- Provider-operation accounting and ordered exact erase are wired through
+  DataImporter, OptimizedDataImporter and single-record import. Unsupported
+  realtime HS is rejected before cache mutation. Executable metadata, public
+  data-support documentation and release notes describe the current-only and
+  operator rebuild boundaries; physical `Field15` is named
+  `RecordDelimiter`.
+- Actual red-first evidence against unchanged production is recorded above.
+  The finished compact contract module was then exercised against SQLite and
+  a dedicated fresh PostgreSQL 16 container:
+  `77 passed in 5.71s`. This covers native/standard, both batch importers and
+  single-record import, caller-owned/importer-owned transactions, ordered
+  status 1 then 2 then 0 operations, statistics, malformed later records,
+  strict schema failures, Dual preflight and unsupported realtime cache
+  behavior.
+- Adjacent existing regressions remained green:
+  `tests/test_current_record_validation.py tests/test_all_schemas.py
+  tests/test_realtime.py` => `201 passed, 9 subtests passed in 4.91s`; metadata
+  and mapping tests => `28 passed, 7 skipped in 3.36s` (the skips are the
+  optional PostgreSQL metadata group, not substitutes for the dedicated live
+  PostgreSQL contract run above).
+- Static checks on the new parser and compact contract module are green:
+  Ruff, Black check, and `git diff --check`. No commit, push, PR or GitHub write
+  was performed. The next step is an independent critical review of the
+  resulting dirty implementation candidate before any release action.
+
+## Main-agent refinement and pre-candidate gate (2026-08-18)
+
+- Tightened both executable schemas so every interpreted numeric/current-body
+  field is `NOT NULL`, while the two provider name fields remain nullable.
+  Removed acceptance of Python `date` objects at the shared caller boundary:
+  HS date fields remain exact eight-character provider/canonical strings.
+- Added an independently tracked compact `hs_contract_4901.json` fixture and
+  bound it to the SDK 5.0.0 manifest, the two official physical generations,
+  all 15 current logical spans, the three-part identity and the current setup
+  policy. The storage readback matrix now asserts every interpreted field, and
+  the provider-order matrix uses two rows differing only in `FromDate` to bind
+  the third key component.
+- Added an exact database `CurrentLayoutVersion = 200` CHECK verifier for
+  SQLite/PostgreSQL/Dual. A missing or tautologically absent marker constraint
+  is rejected; the only additive exception remains an empty native table that
+  lacks the marker column and can receive the exact schema definition safely.
+- A final self-audit found that the shared exact-delete function validated HS
+  status 0 correctly but still coerced every non-key body value before DELETE.
+  A caller body object whose `__str__` raises demonstrated the missing opacity
+  on the pre-fix candidate: the focused test failed with
+  `RuntimeError: opaque HS body was inspected` and the target row remained.
+  The function now projects the already-validated official identity before
+  type coercion. The same regression then passed and the target row was erased.
+- Final pre-candidate tests after that repair:
+  - SQLite HS contract: `60 passed, 28 skipped` (all skips are the explicitly
+    opt-in PostgreSQL parameter group).
+  - Fresh disposable PostgreSQL 16 HS contract: `88 passed`; this includes both
+    schemas, both batch importers, single-record import, both transaction modes,
+    exact erase/order/statistics, rollback, unusable PK and marker constraints.
+  - Adjacent schema/parser/realtime/metadata/oracle/migration selection:
+    `411 passed, 7 skipped, 9 subtests passed`.
+  - Adjacent official-contract selection affected by the shared delete-key
+    projection: `577 passed, 124 skipped`; skips are optional PostgreSQL groups
+    that were not used as the HS live-PostgreSQL evidence above.
+- Workflow-equivalent fatal checks are green: `TEST GATE PASS`, fatal Flake8
+  reports `0`, `uv lock --check` succeeds, strict MkDocs succeeds, Black/Ruff
+  on the changed parser/contract test succeed, and `git diff --check` succeeds.
+- The dedicated PostgreSQL container `jrvltsql-hs-main-review` was removed and
+  an exact-name `docker ps -a` check returned no match. The worktree remains
+  intentionally dirty only with this aggregated implementation batch. Next:
+  commit/push one immutable candidate, then obtain two independent critical
+  reviews of that exact full SHA before opening or merging a PR.

@@ -61,6 +61,14 @@ Public API replacements:
   HR header/key bytes and all interpreted body ranges remain strict CP932;
   only the declared status-0/status-9 body and pre-2004-08-14 legacy tail are
   preserved byte-for-byte without text decoding
+- HS horse-sale storage now accepts only the current official 200-byte layout,
+  keeps the exact `(KettoNum, SaleCode, FromDate)` identity in native `NL_HS`
+  and standard `SALE`, and applies status 0 as an ordered exact-key erase.
+  Existing nonempty stores without the trusted current-layout marker require
+  backup, rebuild, and reimport; eight-digit parent-registration values are
+  valid in the current ten-byte fields and are not used as generation evidence.
+  HS is accumulated-only, so unsupported realtime input changes neither a DB
+  table nor the local realtime cache
 - imports and realtime updates preserve provider order and use fail-closed
   transaction recovery so returned statistics agree with durable rows across
   SQLite and PostgreSQL

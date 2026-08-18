@@ -1291,20 +1291,22 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
     """,
     "SALE": """
         CREATE TABLE IF NOT EXISTS SALE (
-            RecordSpec                     CHAR(2)             ,  -- レコード種別ID
-            DataKubun                      CHAR(1)             ,  -- データ区分
-            MakeDate                       DATE                ,  -- YYYYMMDD形式の日付
-            KettoNum                       VARCHAR(10)         ,  -- 文字列(10)
-            HansyokuFNum                   VARCHAR(255)        ,  -- テキスト
-            HansyokuMNum                   VARCHAR(255)        ,  -- テキスト
-            BirthYear                      VARCHAR(255)        ,  -- テキスト
-            SaleCode                       VARCHAR(255)        ,  -- テキスト
+            RecordSpec                     CHAR(2) NOT NULL    ,  -- レコード種別ID
+            DataKubun                      CHAR(1) NOT NULL    ,  -- データ区分
+            MakeDate                       CHAR(8) NOT NULL    ,  -- YYYYMMDD又は00000000
+            CurrentLayoutVersion           SMALLINT NOT NULL CHECK (CurrentLayoutVersion = 200),
+            KettoNum                       VARCHAR(10) NOT NULL,  -- 文字列(10)
+            HansyokuFNum                   VARCHAR(10) NOT NULL,  -- 繁殖登録番号(8又は10桁)
+            HansyokuMNum                   VARCHAR(10) NOT NULL,  -- 繁殖登録番号(8又は10桁)
+            BirthYear                      SMALLINT NOT NULL   ,  -- 生年
+            SaleCode                       VARCHAR(6) NOT NULL ,  -- 主催者・市場コード
             SaleHostName                   VARCHAR(40)         ,  -- 文字列(40)
             SaleName                       VARCHAR(80)         ,  -- 文字列(80)
-            FromDate                       VARCHAR(255)        ,  -- テキスト
-            ToDate                         VARCHAR(255)        ,  -- テキスト
-            Barei                          SMALLINT            ,  -- 馬齢
-            Price                          VARCHAR(10)           -- 文字列(10)
+            FromDate                       CHAR(8) NOT NULL    ,  -- 開催期間開始日又は00000000
+            ToDate                         CHAR(8) NOT NULL    ,  -- 開催期間終了日又は00000000
+            Barei                          SMALLINT NOT NULL   ,  -- 馬齢
+            Price                          BIGINT NOT NULL     ,  -- 取引価格
+            PRIMARY KEY (KettoNum, SaleCode, FromDate)
         )
     """,
     "SANKU": """

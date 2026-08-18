@@ -700,21 +700,22 @@ SCHEMAS = {
     """,
     "NL_HS": """
         CREATE TABLE IF NOT EXISTS NL_HS (
-            RecordSpec TEXT,
-            DataKubun TEXT,
-            MakeDate TEXT,
-            KettoNum TEXT,
-            HansyokuFNum TEXT,
-            HansyokuMNum TEXT,
-            BirthYear INTEGER,
-            SaleCode TEXT,
-            SaleHostName TEXT,
-            SaleName TEXT,
-            FromDate TEXT,
-            ToDate TEXT,
-            Barei INTEGER,
-            Price BIGINT,
-            Field15 TEXT,
+            RecordSpec CHAR(2) NOT NULL,
+            DataKubun CHAR(1) NOT NULL,
+            MakeDate CHAR(8) NOT NULL,
+            CurrentLayoutVersion SMALLINT NOT NULL CHECK (CurrentLayoutVersion = 200),
+            KettoNum VARCHAR(10) NOT NULL,
+            HansyokuFNum VARCHAR(10) NOT NULL,
+            HansyokuMNum VARCHAR(10) NOT NULL,
+            BirthYear SMALLINT NOT NULL,
+            SaleCode VARCHAR(6) NOT NULL,
+            SaleHostName VARCHAR(40),
+            SaleName VARCHAR(80),
+            FromDate CHAR(8) NOT NULL,
+            ToDate CHAR(8) NOT NULL,
+            Barei SMALLINT NOT NULL,
+            Price BIGINT NOT NULL,
+            RecordDelimiter CHAR(2),
             PRIMARY KEY (KettoNum, SaleCode, FromDate)
         )
     """,
@@ -2757,6 +2758,7 @@ STRICT_SE_STORAGE_TABLES = frozenset({"NL_SE", "RT_SE"})
 STRICT_WE_STORAGE_TABLES = frozenset({"NL_WE", "RT_WE"})
 STRICT_AV_STORAGE_TABLES = frozenset({"NL_AV", "RT_AV"})
 STRICT_HR_STORAGE_TABLES = frozenset({"NL_HR", "RT_HR"})
+STRICT_HS_STORAGE_TABLES = frozenset({"NL_HS"})
 STRICT_JC_STORAGE_TABLES = frozenset({"NL_JC", "RT_JC"})
 
 
@@ -2767,6 +2769,7 @@ def _preflight_existing_strict_storage(db: BaseDatabase) -> None:
     from src.importer.importer import (
         verify_av_storage_schema,
         verify_hr_storage_schema,
+        verify_hs_storage_schema,
         verify_jc_storage_schema,
         verify_se_storage_schema,
         verify_we_storage_schema,
@@ -2797,6 +2800,13 @@ def _preflight_existing_strict_storage(db: BaseDatabase) -> None:
                     target,
                     table_name,
                     allow_missing_columns=False,
+                )
+        for table_name in STRICT_HS_STORAGE_TABLES:
+            if target.table_exists_strict(table_name):
+                verify_hs_storage_schema(
+                    target,
+                    table_name,
+                    allow_missing_columns=True,
                 )
         for table_name in STRICT_JC_STORAGE_TABLES:
             if target.table_exists_strict(table_name):
@@ -2884,6 +2894,10 @@ class SchemaManager:
                 from src.importer.importer import verify_hr_storage_schema
 
                 verify_hr_storage_schema(self.db, table_name)
+            if table_name in STRICT_HS_STORAGE_TABLES:
+                from src.importer.importer import verify_hs_storage_schema
+
+                verify_hs_storage_schema(self.db, table_name)
             if table_name in STRICT_JC_STORAGE_TABLES:
                 from src.importer.importer import verify_jc_storage_schema
 
@@ -2942,6 +2956,10 @@ class SchemaManager:
                     from src.importer.importer import verify_hr_storage_schema
 
                     verify_hr_storage_schema(self.db, table_name)
+                if table_name in STRICT_HS_STORAGE_TABLES:
+                    from src.importer.importer import verify_hs_storage_schema
+
+                    verify_hs_storage_schema(self.db, table_name)
                 if table_name in STRICT_JC_STORAGE_TABLES:
                     from src.importer.importer import verify_jc_storage_schema
 
@@ -3303,6 +3321,10 @@ def create_all_tables(db: BaseDatabase) -> None:
                 from src.importer.importer import verify_hr_storage_schema
 
                 verify_hr_storage_schema(db, table_name)
+            if table_name in STRICT_HS_STORAGE_TABLES:
+                from src.importer.importer import verify_hs_storage_schema
+
+                verify_hs_storage_schema(db, table_name)
             if table_name in STRICT_JC_STORAGE_TABLES:
                 from src.importer.importer import verify_jc_storage_schema
 
