@@ -65,7 +65,6 @@ def make_ra_record(
     data[1270:1272] = b'\r\n'
     return bytes(data)
 
-
 def make_se_record(
     data_kubun="1", make_date="20260101",
     year="2026", month_day="0101", jyo_cd="05",
@@ -89,6 +88,36 @@ def make_se_record(
     data[30:40] = _pad(kettonum, 10)
     data[40:76] = _pad(bamei, 36)
     data[553:555] = b'\r\n'
+    return bytes(data)
+
+
+def make_hn_record(
+    data_kubun="1",
+    make_date="20260101",
+    hansyoku_num="1234567890",
+    bamei="テスト繁殖馬",
+    **kwargs,
+) -> bytes:
+    """Create one official current-layout 251-byte HN record."""
+
+    data = bytearray(b" " * 251)
+    data[0:2] = _pad("HN", 2)
+    data[2:3] = _pad(data_kubun, 1)
+    data[3:11] = _pad(make_date, 8)
+    data[11:21] = _pad(hansyoku_num, 10)
+    data[21:29] = _pad("00000000", 8)
+    data[29:39] = _pad(kwargs.get("ketto_num", "2020000001"), 10)
+    data[39:40] = _pad("0", 1)
+    data[40:76] = _pad(bamei, 36)
+    data[196:200] = _pad(kwargs.get("birth_year", "2020"), 4)
+    data[200:201] = _pad(kwargs.get("sex_cd", "1"), 1)
+    data[201:202] = _pad(kwargs.get("hinsyu_cd", "1"), 1)
+    data[202:204] = _pad(kwargs.get("keiro_cd", "03"), 2)
+    data[204:205] = _pad(kwargs.get("mochi_kubun", "1"), 1)
+    data[205:209] = _pad(kwargs.get("import_year", "2020"), 4)
+    data[229:239] = _pad(kwargs.get("father_num", "0000000000"), 10)
+    data[239:249] = _pad(kwargs.get("mother_num", "0000000000"), 10)
+    data[249:251] = b"\r\n"
     return bytes(data)
 
 

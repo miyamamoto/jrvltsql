@@ -73,7 +73,6 @@ def _schema_backed_metadata(
         "indexes": indexes,
     }
 
-
 # 主要テーブルのメタデータ定義
 TABLE_METADATA: Dict[str, TableMetadata] = {
     "NL_RA": {
@@ -1847,6 +1846,15 @@ def _bind_all_metadata_to_executable_schemas() -> None:
 
 _ensure_all_executable_metadata()
 _bind_all_metadata_to_executable_schemas()
+
+for _hn_table in ("NL_HN", "HANSYOKU"):
+    TABLE_METADATA[_hn_table]["purpose"] = (
+        "公式現行251バイトHNを10桁繁殖登録番号の単一キーで保持。"
+        "status 0は同じキーの物理削除として扱う"
+    )
+    for _column in TABLE_METADATA[_hn_table]["columns"]:
+        if _column["name"] == "HansyokuNum":
+            _column["description"] = "公式10桁の繁殖登録番号（HN identity）"
 
 for _hr_table in ("NL_HR", "RT_HR", "HARAI"):
     TABLE_METADATA[_hr_table]["purpose"] = (

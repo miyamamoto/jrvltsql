@@ -19,7 +19,9 @@ from src.database.sqlite_handler import SQLiteDatabase
 from src.database.table_mappings import JLTSQL_TO_JRAVAN
 from src.importer.importer import DataImporter, ImporterError
 from src.importer.importer_optimized import OptimizedDataImporter
+from src.parser.hn_parser import HNParser
 from src.parser.tk_parser import TKParser
+from tests.fixtures.record_factory import make_hn_record
 
 TK_OFFICIAL_LENGTH = 21657
 TK_RACE_KEY = ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum"]
@@ -502,13 +504,8 @@ def test_obsolete_standard_tk_tables_do_not_block_an_unrelated_standard_import(
     importer_class,
 ) -> None:
     database = SQLiteDatabase({"path": str(tmp_path / "unrelated.db")})
-    unrelated = {
-        "RecordSpec": "HN",
-        "DataKubun": "1",
-        "MakeDate": "20260816",
-        "HansyokuNum": "1234567890",
-        "Bamei": "UNRELATED",
-    }
+    unrelated = HNParser().parse(make_hn_record(bamei="UNRELATED"))
+    assert unrelated is not None
 
     with database:
         database.execute(_keyless_schema(JRAVAN_SCHEMAS["TOKU_RACE"]))

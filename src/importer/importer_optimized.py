@@ -68,6 +68,7 @@ from src.importer.importer import (
     validate_av_record,
     validate_cc_record,
     validate_hc_record,
+    validate_hn_record,
     validate_hr_record,
     validate_hs_record,
     validate_import_record_header,
@@ -85,6 +86,7 @@ from src.importer.importer import (
     verify_ck_coupled_tables,
     verify_cs_storage_schema,
     verify_hc_storage_schema,
+    verify_hn_storage_schema,
     verify_hr_storage_schema,
     verify_hs_storage_schema,
     verify_hy_storage_schema,
@@ -143,6 +145,7 @@ class OptimizedDataImporter:
         self._verified_hr_tables: set[str] = set()
         self._verified_hs_tables: set[str] = set()
         self._verified_hc_tables: set[str] = set()
+        self._verified_hn_tables: set[str] = set()
         self._verified_tc_tables: set[str] = set()
         self._verified_cc_tables: set[str] = set()
         self._verified_jc_tables: set[str] = set()
@@ -201,7 +204,6 @@ class OptimizedDataImporter:
             "BT": "NL_BT",
             "DM": "NL_DM",
         }
-
         logger.info(
             "OptimizedDataImporter initialized",
             batch_size=batch_size,
@@ -363,6 +365,7 @@ class OptimizedDataImporter:
                     validate_hr_record(first_record, first_table_name)
                     validate_hs_record(first_record, first_table_name)
                     validate_hc_record(first_record, first_table_name)
+                    validate_hn_record(first_record, first_table_name)
                     validate_jc_record(first_record, first_table_name)
                 records = chain((first_record,), records)
         except Exception:
@@ -460,6 +463,10 @@ class OptimizedDataImporter:
                     if verify_hc_storage_schema(self.database, table_name):
                         self._verified_hc_tables.add(table_name)
                 validate_hc_record(record, table_name)
+                if table_name not in self._verified_hn_tables:
+                    if verify_hn_storage_schema(self.database, table_name):
+                        self._verified_hn_tables.add(table_name)
+                validate_hn_record(record, table_name)
                 if table_name not in self._verified_tc_tables:
                     if verify_tc_storage_schema(self.database, table_name):
                         self._verified_tc_tables.add(table_name)

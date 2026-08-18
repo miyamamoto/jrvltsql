@@ -50,6 +50,14 @@ Public API replacements:
 - native and standard schemas now verify primary keys, types, capacities,
   child-table constraints, and cancellation/delete behavior before mutation;
   several record families gained complete child storage or corrected keys
+- HN breeding-horse master storage now accepts only the current official
+  251-byte record and exact ten-digit `HansyokuNum` identity. Native `NL_HN`
+  and standard `HANSYOKU` apply provider-ordered status 1/2 revisions and a
+  physical exact-key status-0 erase, and reject nullable, keyless, wrong-type,
+  generated, extended, or additionally constrained schemas before mutation.
+  Operators must back up, rebuild, and reimport retained `BLDN` data; the
+  obsolete 245-byte layout is not migrated, and HN remains accumulated-only
+  without an `RT_HN` table
 - HC hill-training storage now binds the current official 60-byte layout and
   four-part identity in both `NL_HC` and standard `HANRO`, preserves every
   tenths-of-a-second timing field as seconds, applies provider-order update and

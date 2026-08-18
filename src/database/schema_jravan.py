@@ -250,25 +250,25 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
     """,
     "HANSYOKU": """
         CREATE TABLE IF NOT EXISTS HANSYOKU (
-            RecordSpec                     CHAR(2)             ,  -- レコード種別ID
-            DataKubun                      CHAR(1)             ,  -- データ区分
-            MakeDate                       DATE                ,  -- YYYYMMDD形式の日付
-            HansyokuNum                    VARCHAR(10)         ,  -- 繁殖登録番号
-            reserved                       VARCHAR(8)          ,  -- 予備
-            KettoNum                       VARCHAR(10)         ,  -- 血統登録番号
-            DelKubun                       VARCHAR(1)          ,  -- 現在は予備として使用
-            Bamei                          VARCHAR(36)         ,  -- 馬名
-            BameiKana                      VARCHAR(40)         ,  -- 馬名半角カナ
-            BameiEng                       VARCHAR(80)         ,  -- 馬名欧字
-            BirthYear                      SMALLINT            ,  -- 生年
-            SexCD                          VARCHAR(1)          ,  -- 性別コード
-            HinsyuCD                       VARCHAR(1)          ,  -- 品種コード
-            KeiroCD                        VARCHAR(2)          ,  -- 毛色コード
-            HansyokuMochiKubun             VARCHAR(1)          ,  -- 繁殖馬持込区分
-            ImportYear                     SMALLINT            ,  -- 輸入年
-            SanchiName                     VARCHAR(20)         ,  -- 産地名
-            HansyokuFNum                   VARCHAR(10)         ,  -- 父馬繁殖登録番号
-            HansyokuMNum                   VARCHAR(10)         ,  -- 母馬繁殖登録番号
+            RecordSpec                     CHAR(2) NOT NULL    ,  -- レコード種別ID
+            DataKubun                      CHAR(1) NOT NULL    ,  -- データ区分
+            MakeDate                       DATE NOT NULL       ,  -- YYYYMMDD形式の日付
+            HansyokuNum                    VARCHAR(10) NOT NULL,  -- 繁殖登録番号
+            reserved                       VARCHAR(8) NOT NULL ,  -- 予備
+            KettoNum                       VARCHAR(10) NOT NULL,  -- 血統登録番号
+            DelKubun                       VARCHAR(1) NOT NULL ,  -- 現在は予備として使用
+            Bamei                          VARCHAR(36) NOT NULL,  -- 馬名
+            BameiKana                      VARCHAR(40) NOT NULL,  -- 馬名半角カナ
+            BameiEng                       VARCHAR(80) NOT NULL,  -- 馬名欧字
+            BirthYear                      SMALLINT NOT NULL   ,  -- 生年
+            SexCD                          VARCHAR(1) NOT NULL ,  -- 性別コード
+            HinsyuCD                       VARCHAR(1) NOT NULL ,  -- 品種コード
+            KeiroCD                        VARCHAR(2) NOT NULL ,  -- 毛色コード
+            HansyokuMochiKubun             VARCHAR(1) NOT NULL ,  -- 繁殖馬持込区分
+            ImportYear                     SMALLINT NOT NULL   ,  -- 輸入年
+            SanchiName                     VARCHAR(20) NOT NULL,  -- 産地名
+            HansyokuFNum                   VARCHAR(10) NOT NULL,  -- 父馬繁殖登録番号
+            HansyokuMNum                   VARCHAR(10) NOT NULL,  -- 母馬繁殖登録番号
             PRIMARY KEY (HansyokuNum)
         )
     """,

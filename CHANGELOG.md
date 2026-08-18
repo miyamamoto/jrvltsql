@@ -39,6 +39,12 @@
 
 ### Fixed
 
+- `HN`を公式現行251バイト配置と10桁`HansyokuNum` identityへ結び付け、native
+  `NL_HN`と標準名`HANSYOKU`でprovider順のstatus 1/2更新、status 0 exact erase、
+  caller validation、SQLite/PostgreSQLのstrict schema preflightを一致させた。
+  旧245バイト配置とnullable/keyless/wrong-type/extended tableは自動移行せず、
+  backup・rebuild・`BLDN` reimportを要求する。HNは蓄積系masterだけであり、
+  `RT_HN`を追加しない
 - `CC`を公式50バイト配置と6項目race keyへ結び付け、発表`MMDDhhmm`、変更前後の
   4桁距離・track code、事由区分をlosslessに検証・保存する。native `NL_CC`、
   速報`RT_CC`、標準名`COURSE_CHANGE`でprovider順の改訂を1行へ反映し、current

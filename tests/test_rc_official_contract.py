@@ -16,7 +16,9 @@ from src.database.schema_types import (
 from src.database.sqlite_handler import SQLiteDatabase
 from src.importer.importer import DataImporter
 from src.importer.importer_optimized import OptimizedDataImporter
+from src.parser.hn_parser import HNParser
 from src.parser.rc_parser import RCParser
+from tests.fixtures.record_factory import make_hn_record
 
 RC_OFFICIAL_LENGTH = 501
 RC_KEY = [
@@ -458,13 +460,8 @@ def test_obsolete_standard_rc_table_does_not_block_unrelated_standard_import(
     importer_class,
 ) -> None:
     database = SQLiteDatabase({"path": str(tmp_path / "unrelated-standard.db")})
-    unrelated = {
-        "RecordSpec": "HN",
-        "DataKubun": "1",
-        "MakeDate": "20260816",
-        "HansyokuNum": "1234567890",
-        "Bamei": "UNRELATED",
-    }
+    unrelated = HNParser().parse(make_hn_record(bamei="UNRELATED"))
+    assert unrelated is not None
 
     with database:
         database.execute(_obsolete_rc_schema("RECORD"))

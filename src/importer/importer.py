@@ -50,7 +50,6 @@ def rollback_failed_import(database: BaseDatabase, *, context: str) -> None:
             error=str(rollback_error),
         )
 
-
 def inspect_pending_transaction_or_invalidate(database: BaseDatabase, *, context: str) -> bool:
     """Read transaction ownership or invalidate a session whose state is unknown."""
     try:
@@ -598,6 +597,49 @@ _HC_LOSSLESS_TEXT_WIDTHS = {
         "KettoNum": 10,
     },
 }
+_HN_STORAGE_TABLES = frozenset({"NL_HN", "HANSYOKU"})
+_HN_KEY_COLUMNS = ("HansyokuNum",)
+_HN_BLANK_TEXT_FIELDS = frozenset({"BameiKana", "BameiEng", "SanchiName"})
+_HN_LOSSLESS_TEXT_WIDTHS = {
+    "NL_HN": {
+        "RecordSpec": 2,
+        "DataKubun": 1,
+        "MakeDate": 8,
+        "HansyokuNum": 10,
+        "reserved": 8,
+        "KettoNum": 10,
+        "DelKubun": 1,
+        "Bamei": 36,
+        "BameiKana": 40,
+        "BameiEng": 80,
+        "SexCD": 1,
+        "HinsyuCD": 1,
+        "KeiroCD": 2,
+        "MochiKubun": 1,
+        "SanchiName": 20,
+        "FHansyokuNum": 10,
+        "MHansyokuNum": 10,
+        "RecordDelimiter": 2,
+    },
+    "HANSYOKU": {
+        "RecordSpec": 2,
+        "DataKubun": 1,
+        "HansyokuNum": 10,
+        "reserved": 8,
+        "KettoNum": 10,
+        "DelKubun": 1,
+        "Bamei": 36,
+        "BameiKana": 40,
+        "BameiEng": 80,
+        "SexCD": 1,
+        "HinsyuCD": 1,
+        "KeiroCD": 2,
+        "HansyokuMochiKubun": 1,
+        "SanchiName": 20,
+        "HansyokuFNum": 10,
+        "HansyokuMNum": 10,
+    },
+}
 _TC_STORAGE_TABLES = frozenset({"NL_TC", "RT_TC", "HASSOU_JIKOKU_CHANGE"})
 _TC_KEY_COLUMNS = ("Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum")
 _TC_LOSSLESS_TEXT_WIDTHS = {
@@ -651,6 +693,7 @@ _PROVIDER_OPERATION_COUNT_STORAGE_TABLES = (
     | _HR_STORAGE_TABLES
     | _HS_STORAGE_TABLES
     | _HC_STORAGE_TABLES
+    | _HN_STORAGE_TABLES
     | _TC_STORAGE_TABLES
     | _CC_STORAGE_TABLES
 )
@@ -712,6 +755,7 @@ _STRICT_NONADDITIVE_STANDARD_TABLES = frozenset(
         "HARAI",
         "SALE",
         "HANRO",
+        "HANSYOKU",
         "HASSOU_JIKOKU_CHANGE",
         "COURSE_CHANGE",
         "KISYU_CHANGE",
@@ -1861,6 +1905,118 @@ def validate_hc_record(record: dict, table_name: str | None = None) -> bool:
     try:
         data_kubun = resolve_record_data_kubun(record)
         HCParser.validate_current_fields(record, data_kubun=data_kubun)
+    except ValueError as error:
+        raise SchemaMigrationError(str(error)) from error
+    return True
+
+
+def _verify_hn_no_unapproved_constraints(
+    database: BaseDatabase,
+    table_name: str,
+) -> None:
+    """Reject constraints beyond HN's one official immediate primary key."""
+
+    from src.database.migration import _migration_targets
+
+    targets = _migration_targets(database)
+    if targets != (database,):
+        for target in targets:
+            _verify_hn_no_unapproved_constraints(target, table_name)
+        return
+
+    db_type = database.get_db_type()
+    if db_type == "sqlite":
+        if database.fetch_all(f'PRAGMA foreign_key_list("{table_name}")'):
+            raise SchemaMigrationError(
+                f"HN storage {table_name} has unsupported FOREIGN KEY constraints"
+            )
+        row = database.fetch_one(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?",
+            (table_name,),
+        )
+        definition = _sqlite_schema_code(str((row or {}).get("sql") or ""))
+        if re.search(r"\bCHECK\s*\(", definition, flags=re.IGNORECASE):
+            raise SchemaMigrationError(f"HN storage {table_name} has unsupported CHECK constraints")
+        return
+    if db_type == "postgresql":
+        unexpected = database.fetch_all(
+            "SELECT conname AS constraint_name, contype AS constraint_type "
+            "FROM pg_constraint WHERE conrelid = to_regclass(?) "
+            "AND contype NOT IN ('p', 'n') ORDER BY conname",
+            (table_name.lower(),),
+        )
+        if unexpected:
+            raise SchemaMigrationError(
+                f"HN storage {table_name} has unsupported additional constraints: {unexpected}"
+            )
+        return
+    raise SchemaMigrationError(f"HN constraints cannot be verified for database type {db_type!r}")
+
+
+def verify_hn_storage_schema(database: BaseDatabase, table_name: str) -> bool:
+    """Fail closed unless HN storage preserves every field and official key."""
+
+    if table_name not in _HN_STORAGE_TABLES:
+        return False
+    transaction_snapshot = _snapshot_validation_transactions(database)
+    from src.database.migration import verify_table_schema
+    from src.database.schema import SCHEMAS
+    from src.database.schema_jravan import JRAVAN_SCHEMAS
+
+    try:
+        schema_sql = SCHEMAS.get(table_name) or JRAVAN_SCHEMAS.get(table_name)
+        if schema_sql is None:
+            raise SchemaMigrationError(f"HN storage schema is undefined: {table_name}")
+        verify_table_schema(database, table_name, schema_sql)
+        _verify_strict_storage_column_contract(
+            database,
+            table_name,
+            schema_sql,
+            allow_missing_columns=False,
+            storage_label="HN",
+            lossless_text_widths=_HN_LOSSLESS_TEXT_WIDTHS[table_name],
+            allow_extra_columns=False,
+        )
+        _verify_hn_no_unapproved_constraints(database, table_name)
+        _verify_replacement_key_constraints(database, table_name, "HN storage")
+        return True
+    except Exception:
+        _rollback_call_created_validation_transactions(
+            transaction_snapshot,
+            context="failed HN schema validation",
+        )
+        raise
+
+
+def validate_hn_record(record: dict, table_name: str | None = None) -> bool:
+    """Validate one caller-built HN row and its standard aliases."""
+
+    if table_name is not None and table_name not in _HN_STORAGE_TABLES:
+        return False
+    if _record_type_from_record(record) != "HN":
+        if table_name is None:
+            return False
+        raise SchemaMigrationError(f"{table_name} received a non-HN record")
+
+    from src.parser.hn_parser import HNParser
+
+    try:
+        data_kubun = resolve_record_data_kubun(record)
+        normalized = dict(record)
+        if data_kubun != "0":
+            aliases = _STANDARD_FIELD_ALIASES["HANSYOKU"]
+            conflicts: list[str] = []
+            for native_name, standard_name in aliases.items():
+                native_value = record.get(native_name)
+                standard_value = record.get(standard_name)
+                if native_value not in (None, "") and standard_value not in (None, ""):
+                    if str(native_value) != str(standard_value):
+                        conflicts.append(f"{native_name}/{standard_name}")
+                elif native_value in (None, "") and standard_value not in (None, ""):
+                    normalized[native_name] = standard_value
+            if conflicts:
+                raise ValueError(f"conflicting HN alias values: {conflicts}")
+        HNParser.validate_current_fields(normalized, data_kubun=data_kubun)
     except ValueError as error:
         raise SchemaMigrationError(str(error)) from error
     return True
@@ -3249,6 +3405,8 @@ def _preflight_standard_schema_migrations(
             verify_hs_storage_schema(database, standard_name)
         if standard_name == "HANRO":
             verify_hc_storage_schema(database, standard_name)
+        if standard_name == "HANSYOKU":
+            verify_hn_storage_schema(database, standard_name)
         if standard_name == "HASSOU_JIKOKU_CHANGE":
             verify_tc_storage_schema(database, standard_name)
         if standard_name == "COURSE_CHANGE":
@@ -3779,6 +3937,7 @@ _OFFICIAL_ERASE_KEY_COLUMNS = {
     "HR": _MINING_RACE_KEY_COLUMNS,
     "HS": _HS_KEY_COLUMNS,
     "HC": _HC_KEY_COLUMNS,
+    "HN": _HN_KEY_COLUMNS,
     # One physical H1/H6/O1-O6 record expands into multiple child rows.
     "H1": _MINING_RACE_KEY_COLUMNS,
     "H6": _MINING_RACE_KEY_COLUMNS,
@@ -3804,6 +3963,7 @@ _OFFICIAL_ERASE_STORAGE_TABLES = {
     "HR": {"NL_HR", "RT_HR", "HARAI"},
     "HS": set(_HS_STORAGE_TABLES),
     "HC": set(_HC_STORAGE_TABLES),
+    "HN": set(_HN_STORAGE_TABLES),
     "H1": {"NL_H1", "RT_H1", "HYO_TANPUKU"},
     "H6": {"NL_H6", "RT_H6", "HYO_SANRENTAN"},
     "O1": {"NL_O1", "RT_O1", "ODDS_TANPUKUWAKU_HEAD"},
@@ -3907,6 +4067,8 @@ def validate_import_record_header(record: dict) -> tuple[str, str]:
             validate_hs_record(record)
         if record_type == "HC":
             validate_hc_record(record)
+        if record_type == "HN":
+            validate_hn_record(record)
         if record_type == "TC":
             validate_tc_record(record)
         if record_type == "CC":
@@ -6330,6 +6492,18 @@ def convert_record_types(record: dict, table_name: str) -> dict:
             converted[field_name] = ""
             continue
 
+        if (
+            table_name in _HN_STORAGE_TABLES
+            and field_name in _HN_BLANK_TEXT_FIELDS
+            and isinstance(value, str)
+            and not value.strip()
+        ):
+            # These official HN text spans may be blank. The v2 HN schema
+            # distinguishes that provider value from an absent/unvalidated
+            # field, so keep the empty string rather than coercing it to NULL.
+            converted[field_name] = ""
+            continue
+
         if value is None or (isinstance(value, str) and not value.strip()):
             converted[field_name] = None
             continue
@@ -6456,6 +6630,7 @@ class DataImporter:
         self._verified_hr_tables: set[str] = set()
         self._verified_hs_tables: set[str] = set()
         self._verified_hc_tables: set[str] = set()
+        self._verified_hn_tables: set[str] = set()
         self._verified_tc_tables: set[str] = set()
         self._verified_cc_tables: set[str] = set()
         self._verified_jc_tables: set[str] = set()
@@ -6724,6 +6899,7 @@ class DataImporter:
                     validate_hr_record(first_record, first_table_name)
                     validate_hs_record(first_record, first_table_name)
                     validate_hc_record(first_record, first_table_name)
+                    validate_hn_record(first_record, first_table_name)
                     validate_jc_record(first_record, first_table_name)
                 records = chain((first_record,), records)
         except Exception:
@@ -6813,6 +6989,10 @@ class DataImporter:
                     if verify_hc_storage_schema(self.database, table_name):
                         self._verified_hc_tables.add(table_name)
                 validate_hc_record(record, table_name)
+                if table_name not in self._verified_hn_tables:
+                    if verify_hn_storage_schema(self.database, table_name):
+                        self._verified_hn_tables.add(table_name)
+                validate_hn_record(record, table_name)
                 if table_name not in self._verified_tc_tables:
                     if verify_tc_storage_schema(self.database, table_name):
                         self._verified_tc_tables.add(table_name)
@@ -7471,6 +7651,7 @@ class DataImporter:
                 validate_hr_record(record, table_name)
                 validate_hs_record(record, table_name)
                 validate_hc_record(record, table_name)
+                validate_hn_record(record, table_name)
                 validate_jc_record(record, table_name)
         except SchemaMigrationError:
             if not auto_commit:
@@ -7556,6 +7737,10 @@ class DataImporter:
                 if verify_hc_storage_schema(self.database, table_name):
                     self._verified_hc_tables.add(table_name)
             validate_hc_record(record, table_name)
+            if table_name not in self._verified_hn_tables:
+                if verify_hn_storage_schema(self.database, table_name):
+                    self._verified_hn_tables.add(table_name)
+            validate_hn_record(record, table_name)
             if table_name not in self._verified_tc_tables:
                 if verify_tc_storage_schema(self.database, table_name):
                     self._verified_tc_tables.add(table_name)

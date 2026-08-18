@@ -15,7 +15,12 @@
 import pytest
 
 from src.parser.factory import ALL_RECORD_TYPES, ParserFactory
-from tests.fixtures.record_factory import make_hr_record, make_ra_record, make_se_record
+from tests.fixtures.record_factory import (
+    make_hn_record,
+    make_hr_record,
+    make_ra_record,
+    make_se_record,
+)
 
 EXPANDED_RECORD_TYPES = {
     "DM", "H1", "H6", "O1", "O2", "O3", "O4", "O5", "O6", "TM", "WH"
@@ -114,6 +119,8 @@ class TestIndividualParsers:
                     nichiji="08",
                     race_num="11",
                 )
+            if record_type == "HN":
+                data = make_hn_record(make_date="20240601")
             if record_type == "HS":
                 # HS requires all three official key fields and a complete
                 # current 200-byte body; a blank envelope is not positive.

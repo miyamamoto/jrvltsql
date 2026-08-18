@@ -274,6 +274,20 @@ jrvltsql は現在、以下 38 種類の JRA レコード種別に対してパ�
 `TS_O1` / `TS_O2`、開催週速報オッズは `TS_SOKUHO_O1`〜`TS_SOKUHO_O6`
 に保存します。
 
+`HN`（繁殖馬マスタ）は現行JV-Data 4.9.0.1 / SDK 5.0.0の251バイト配置だけを
+受け付け、旧245バイト配置は拒否します。公式identityは10桁の
+`HansyokuNum`です。native `NL_HN`と標準名`HANSYOKU`は同じordered primary
+key、必須header/key/body、公式field capacityを使い、status 1/2をprovider順に
+同じ行へ反映します。`DataKubun=0`はこのkeyだけを使う物理exact eraseです。
+削除指示の非key本文をdecodeしない扱いはeraseを失わせないためのproject policyで、
+provider仕様が任意binary本文を規定するという意味ではありません。
+
+既存のnullable、keyless、wrong-key、wrong-type、容量不足、generated/identity列、
+追加列または追加UNIQUE/FK/CHECKを持つ`NL_HN`/`HANSYOKU`は自動修復せず、
+mutation前に停止します。DBをbackupして両tableをcurrent schemaでrebuildし、
+保持中の`BLDN` sourceからreimportしてください。HNは蓄積系masterだけであり、
+`RT_HN`は作成しません。
+
 `HC`（坂路調教）は現行JV-Data 4.9.0.1 / SDK 5.0.0の60バイト配置だけを
 受け付けます。identityは`TresenKubun`, `ChokyoDate`, `ChokyoTime`,
 `KettoNum`の4項目です。native `NL_HC`と標準名`HANRO`は同じordered primary
