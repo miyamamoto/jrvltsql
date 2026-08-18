@@ -68,10 +68,44 @@
   all parser/caller/schema boundaries and code domains still require an
   independent official audit.
 
+## Official oracle and red-first evidence
+
+- Pinned JV-Data 4.8.0.2 and 4.9.0.1 `フォーマット` rows 1531–1553 and
+  SDK 5 `JV_CC_INFO` agree on a 50-byte layout with 16 spans including CRLF,
+  current status `1`, and ordered key
+  `(Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)`.
+- The current track-code domain is `00`, `10`–`29`, and `51`–`59`; the reason
+  domain is initial `0` plus `1`–`4`. Distances retain exactly four ASCII
+  digits including `0000`; `HappyoTime` accepts `00000000` or a real
+  `MMDDhhmm` value.
+- CC was added on 2004-05-25 in Ver.1.1.6. No later physical-layout change was
+  found. `0B14` is the date-snapshot source and `0B16` is event-oriented.
+- Before production edits, added
+  `tests/fixtures/official_layout/cc_contract_4901.json` and one grouped
+  `tests/test_cc_official_contract.py` covering the physical oracle, strict
+  negatives/initial sentinels, native/standard identity, schema negatives,
+  both batch importers, single import, realtime, snapshot replacement, and
+  header aliases.
+- Red command on unchanged production HEAD
+  `da1da38e46ffcda90254108a737820a9b8867015`:
+  `python -m pytest -q -o addopts='' tests/test_cc_official_contract.py`.
+  Result: `51 failed, 7 passed`. Failures include the missing delimiter span,
+  15 malformed raw cases being accepted, nullable/keyless or unsafe schemas,
+  standard revision duplication, caller/single/realtime invalid-body
+  acceptance, and schema-manager fail-open. Passing controls include official
+  initial sentinels, current header aliases, native provider replacement, and
+  the existing CC date-snapshot behavior.
+- Three independent read-only reviewers audited the committed pre-production
+  HEAD. Two completed before the intentional red files appeared and one was
+  told those files were primary-owned. Their non-duplicated findings match the
+  red contract: strict parser/caller/realtime validation, exact three-table
+  storage/preflight, and a CC-specific durable 0B14 assertion are required.
+
 ## Next safe command and STOP conditions
 
-- Next: invoke the recorded Fable session, independently extract the official
-  CC oracle, then write the smallest red-first contract before production edits.
+- Next: commit this red-first contract, implement the bounded CC parser/schema/
+  importer/realtime repair once, then run focused SQLite and fresh PostgreSQL/
+  Dual validation before freezing one review candidate.
 - STOP on non-worklog drift, a material disagreement among pinned official
   sources, backend divergence that is not explained and tested, or any need
   for destructive/provider action beyond the authorized local test scope.
