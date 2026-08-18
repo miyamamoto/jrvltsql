@@ -90,11 +90,11 @@ still need bounded closure work.
 
 | Family | Earlier merge | Already closed | Remaining P1 boundary |
 |---|---|---|---|
-| H1/H6 | #190, `3a2c892649b8e9ec85113a7b0122e7e4d637443b` | official layout and standard owner/child atomic snapshot storage/erase | native and realtime complete-snapshot replacement for statuses 2/4/5/9; exact key/body/value validation; strict native/realtime preflight; coupled Dual evidence; H6 additionally needs an owner/header representation for a valid zero-combination snapshot |
+| H1/H6 | #190, `3a2c892649b8e9ec85113a7b0122e7e4d637443b` | official layout and standard owner/child atomic snapshot storage/erase | native and realtime complete-snapshot replacement for statuses 2/4/5/9; exact key/body/value validation; strict native/realtime and standard owner/child preflight; coupled Dual evidence; H6 additionally needs an owner/header representation for a valid zero-combination snapshot |
 | HN | #172, `6dc55078dba33a7f4582d67e816276c25be2700e` | official 251-byte layout, full native/standard mapping and basic roundtrip | status-0 physical erase/order/stats; exact key/body caller validation; strict native/standard preflight; PostgreSQL/Dual evidence |
 | SK | #175, `ff62d65c07b1026e7ea7606b1d6329dbd9768199` | official 208-byte layout, full pedigree mapping and basic roundtrip | status-0 physical erase/order/stats; 10-digit key/body caller validation; strict native/standard preflight; PostgreSQL/Dual evidence |
 | UM | #204, `17335604e0f951ae1cc39ebb447c6fb1b7b683be` | official 1609-byte layout, lossless native body, 227-column standard expansion, key and partial UMA constraint checks | status-0 physical erase/order/stats; full body validation; strict native and complete standard schema contract; Dual evidence |
-| O1-O6 | #189, `dde898c3394c24c9b781024d959c770ee7add58e` | physical lengths/repeat expansion and standard header/child atomic snapshot storage/erase | retain valid zero-vote combinations and distinguish official sentinels/history; strict key/body and SourceSpec/family validation; native/realtime lossless snapshot/header preservation; strict native/RT/TS preflight |
+| O1-O6 | #189, `dde898c3394c24c9b781024d959c770ee7add58e` | physical lengths/repeat expansion and standard header/child atomic snapshot storage/erase | retain valid zero-odds/official initial-odds entries and distinguish official sentinels/history; strict key/body and SourceSpec/family validation; native/realtime lossless snapshot/header preservation; strict native/RT/TS and standard owner/child preflight |
 
 Concrete reproductions used for the classification:
 
@@ -107,12 +107,13 @@ Concrete reproductions used for the classification:
   Header-plus-key caller dictionaries also reported successful imports with the
   required body absent. These accumulated masters intentionally have no RT
   tables; realtime is N/A rather than a missing implementation.
-- O1-O6: zero-vote combinations are discarded and native conversion collapses
-  distinct hyphen/asterisk sentinels to NULL. The standard split path is
-  atomic, but native/RT child-only upsert can retain omitted combinations and
-  cannot preserve a header-only O2 record's flags/totals/status. Source-spec
-  and record-family combinations are not yet bound fail-closed, and O*
-  native/RT/TS schemas lack dedicated preflight.
+- O1-O6: valid all-zero odds/official initial-odds entries are discarded (the
+  O1 case is limited to bracket-quinella odds rows), and native conversion
+  collapses distinct hyphen/asterisk sentinels to NULL. The standard split path
+  is atomic, but native/RT child-only upsert can retain omitted combinations
+  and cannot preserve a header-only O2 record's flags/totals/status.
+  Source-spec and record-family combinations are not yet bound fail-closed,
+  and O* native/RT/TS plus standard owner/child schemas lack strict preflight.
 
 Existing focused tests remained green (`273 passed, 25 skipped` for the initial
 11-type selection and `336 passed, 5 skipped` for the HN/SK/UM audit), showing
@@ -128,20 +129,21 @@ A read-only partition check loaded
 fixture's exact 38-type universe. Result:
 `38-type partition PASS: complete_baseline=27, remaining=11, total=38`.
 
-## Planned closure order
+## Planned serial closure order
 
-The minimal dependency order is:
+The planned serial execution order is:
 
 1. HN official contract.
 2. SK official contract.
 3. UM official contract.
-4. H1 official snapshot, validation, and strict schema contract.
-5. H6 official snapshot, owner/header, validation, and strict schema contract.
-6. O1-O6 official truth/parser/provider contract: repeated rows, zero-vote and
+4. H1 official snapshot, validation, and strict native/realtime/standard schema contract.
+5. H6 official snapshot, owner/header, validation, and strict native/realtime/standard schema contract.
+6. O1-O6 official truth/parser/provider contract: repeated rows, zero-odds and
    sentinel/history semantics, strict caller validation, and SourceSpec binding.
 7. O1-O6 lossless state/storage contract: native NL/RT/TS owner/header model,
    atomic snapshot replacement, raw sentinel preservation, erase/order, strict
-   schema preflight, and SQLite/PostgreSQL/Dual proof.
+   native/RT/TS and standard owner/child schema preflight, and
+   SQLite/PostgreSQL/Dual proof.
 
 HN, SK, and UM use the same erase/preflight architecture but remain separate
 iterations because their official keys, body domains, standard tables, and
@@ -154,9 +156,12 @@ migration do not form one oversized PR.
 
 After all seven PRs merge, the release iteration will rerun the exact full gate,
 build wheel/sdist from the frozen SHA, run isolated installed-wheel smoke, and
-publish the `2.0.0.dev0` prerelease. The tracked Devin handoff will then assign
-real development-environment install, fresh JV-Link acquisition/storage checks,
-and the formal `2.0.0` decision; Codex stops after that handoff.
+publish `2.0.0.dev0` explicitly as a non-production development-test
+prerelease. The release notes must say that it is not a production compatibility
+or acquisition-readiness claim and remains gated on fresh real-provider
+validation. The tracked Devin handoff will then assign real
+development-environment install, fresh JV-Link acquisition/storage checks, and
+the formal `2.0.0` decision; Codex stops after that handoff.
 
 ## Next safe command and STOP conditions
 
