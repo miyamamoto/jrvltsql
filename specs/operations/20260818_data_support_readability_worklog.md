@@ -166,27 +166,30 @@
 
 - (filled in below)
 
-## Handoff note (Devin, 2026-08-18 22:5x JST)
+## Handoff note (Devin, 2026-08-18 22:55 JST)
 
 - The implementer session stopped at 22:31 JST on the Claude Code session
   limit (resets 03:00 JST) **after** the restructure commit
-   and its gates, but **before the
+  `f558ec6409db7edb1f34ed03da2c00f21f640b38` and its gates, but **before the
   single batched independent review was recorded**. The 「Independent review
   and repair batch」 section above is therefore still empty; treat this PR as
   not yet independently reviewed.
-- Devin re-ran the docs gates on that commit read-only:
-   pass,  =>
-  ,  pass,  clean
-  (fatal flake8 reported only vendored  files, which CI excludes).
+- Devin re-ran the docs gates on that commit: `mkdocs build --strict` pass,
+  `python scripts/validate_test_gate.py` => `TEST GATE PASS`,
+  `uv lock --check` pass, `git diff --check` clean. Fatal flake8
+  (`E9,F63,F7,F82`) reported only vendored `.venv` files, which CI excludes.
 - Devin also ran an independent token-level fact check between
-   and the new pair
-  ( + ): every identifier,
-  table name, spec ID, byte count, DataKubun value and numeric literal in the
-  old page is still present in the new pages. The only old tokens absent are
-  the English words  and , which were unified into the
+  `origin/master:docs/data_support.md` and the new pair
+  (`docs/data_support.md` plus `docs/record_contracts.md`): every identifier,
+  table name, spec ID, byte count, DataKubun value and numeric literal present
+  in the old page is still present in the new pages. The only old tokens absent
+  are the English words `backup` and `reimport`, which were unified into the
   Japanese wording. The only new tokens are anchor slugs, the two file names,
-  , and list numbering, i.e. no new factual token.
-- Next: run the batched independent review at/after 03:00 JST, record it
+  and list numbering, i.e. no new factual token was introduced. This is a
+  necessary condition, not a sufficient one: it cannot detect a changed claim
+  that reuses the same tokens, which is why the batched independent review is
+  still required.
+- Next: run the batched independent review at or after 03:00 JST, record it
   here, then merge.
 
 ## Next safe command and STOP conditions
