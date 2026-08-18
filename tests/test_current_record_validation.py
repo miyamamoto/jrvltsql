@@ -43,6 +43,7 @@ PREVIOUS_OFFICIAL_LENGTHS = tuple(
 # space-filled envelope is not valid.
 DOMAIN_PAYLOAD_REQUIRED = {
     "AV",
+    "CC",
     "CK",
     "CS",
     "DM",

@@ -134,6 +134,16 @@
 - The adjacent affected aggregate (`CC`, announcement-time, realtime,
   migration, schema/index, importer and prior `TC` contract) passed
   `295 passed, 56 skipped, 9 subtests passed` under Python 3.13.5.
+- The first workflow-equivalent broad run on exact committed candidate
+  `686f6018f8f83f7e102fb55d1fb2f539514e9a43` finished `3448 passed,
+  386 skipped, 14 deselected, 20 subtests passed` with four CC failures.
+  All four were the same pre-existing false-positive fixture class: generic
+  parser tests supplied an all-blank CC key/body and expected it to be valid.
+  The strict parser was not weakened. `CC` was added to the generic envelope's
+  domain-payload-required set and the shared parser sample now supplies one
+  complete official-valid CC row. The exact affected selection then passed
+  `152 passed`; the candidate-wide suite must be rerun after this test-only
+  repair.
 - `scripts/validate_test_gate.py` reported `TEST GATE PASS`; workflow-fatal
   flake8 (`E9,F63,F7,F82`) reported zero; `uv lock --check`, compileall,
   strict MkDocs, import-order lint for newly touched imports, and
