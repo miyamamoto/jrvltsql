@@ -46,6 +46,18 @@
   Codex implementation plus independent critical reviews rather than silently
   weakening the gate.
 
+### Claude execution result
+
+- Claude Code `2.1.233` was invoked after the start-worklog commit with
+  `--model fable` and session id
+  `839154eb-0967-4b4d-87e4-785f2dfdce64`. It exited before reading or editing
+  the repository because the OAuth session was expired and could not be
+  refreshed. The CLI also emitted non-fatal warnings about obsolete `Write`
+  permission-rule spellings in the parent settings. No Claude implementation
+  or review evidence exists for this iteration. Codex will implement the
+  bounded contract with independent official-oracle and critical review as the
+  recorded fallback.
+
 ## Known preliminary risks (not yet official findings)
 
 - `CCParser` declares `RECORD_LENGTH=50` while its docstring says 48 bytes and
