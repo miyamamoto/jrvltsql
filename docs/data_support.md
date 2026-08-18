@@ -53,7 +53,7 @@ jrvltsql は JRA / 中央競馬専用です。NAR / 地方競馬はこのリポ�
 | `DIFN` | `DIFF` | 蓄積系マスタ差分 | `UM`, `KS`, `CH`, `BR`, `BN`, `RC` | `NL_UM`, `NL_KS`, `NL_KS_SEISEKI`, `NL_CH`, `NL_CH_SEISEKI`, `NL_BR`, `NL_BN`, `NL_RC` | はい | いいえ | はい | 旧名 `DIFF` は受け付けません（下記参照）。 |
 | `BLDN` | `BLOD` | 血統情報 | `HN`, `SK`, `BT` | `NL_HN`, `NL_SK`, `NL_BT` | はい | いいえ | はい | 旧名 `BLOD` は受け付けません（下記参照）。 |
 | `MING` | - | データマイニング予想 | `DM`, `TM` | `NL_DM`, `NL_TM` | はい | いいえ | はい | full quickstart に含めています。 |
-| `SLOP` | - | 坂路調教関連 | `HC` | `NL_HC`（native）、`HANRO`（標準名モード） | はい | いいえ | はい | 現行60バイトを全項目保存します。公式4項目キーの同一recordを更新し、`0`はexact deleteです。standard / full quickstart に含めています。 |
+| `SLOP` | - | 坂路調教関連 | `HC` | `NL_HC`（native）、`HANRO`（標準名モード） | はい | いいえ | はい | 現行`DataKubun=1`は60バイトの全項目を保存します。`DataKubun=0`は本文を保存せず、公式4項目キーでexact deleteします。standard / full quickstart に含めています。 |
 | `WOOD` | - | ウッドチップ調教関連 | `WC` | `NL_WC`（native）、`WOOD`（標準名モード） | はい | いいえ | はい | 現行105バイトを全項目保存します。公式キーはトレセン区分・調教年月日・調教時刻・血統登録番号の4項目で、`0` は同じキーの削除です。standard / full quickstart に含めています。 |
 | `YSCH` | - | 開催スケジュール | `YS` | `NL_YS` | はい | いいえ | はい | 開催カレンダー保守に使います。 |
 | `HOSN` | `HOSE` | 競走馬市場取引価格 | `HS` | `NL_HS` | はい | いいえ | はい | 旧名 `HOSE` は受け付けません（下記参照）。 |

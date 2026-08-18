@@ -40,8 +40,9 @@
 ### Fixed
 
 - `HC`を公式現行60バイト配置と4項目キーへ結び付け、native `NL_HC`と標準名
-  `HANRO`で0.1秒単位の全time field、provider順の更新、status 0 exact delete、
-  caller validation、SQLite/PostgreSQLのstrict schema preflightを一致させた。
+  `HANRO`で7つの走破・lap time fieldを0.1秒単位で保持し、provider順の更新、
+  status 0 exact delete、caller validation、SQLite/PostgreSQLのstrict schema
+  preflightを一致させた。
   旧nullable/keyless/wrong-key tableや未承認の追加列・constraintは自動移行せず
   backup・rebuild・`SLOP` reimportを要求し、HCは蓄積系のみであることを明記した
 - `HS`を現行HOSNの公式200バイト配置と3項目キーへ結び付け、native `NL_HS`と

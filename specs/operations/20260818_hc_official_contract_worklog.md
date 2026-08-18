@@ -255,3 +255,22 @@
   parser/schema/metadata selection is `568 passed, 9 skipped`; fatal flake8,
   test gate, lock check and diff check remain green. The disposable container
   was removed.
+
+## PR review (2026-08-18)
+
+- PR #213 was opened from exact head
+  `58f4ae126a4cd47d9fbab8120a15a2be14a2c69b` after both bounded closure
+  reviews returned GREEN with P0/P1/P2 zero. GitHub Copilot review was requested
+  once, but reported that the requester's quota was exhausted; no Copilot code
+  review was available. The independent Codex reviews remain the critical
+  review evidence.
+- CodeRabbit completed against that head with two actionable documentation-
+  precision comments and no implementation blocker. Both were accepted in one
+  documentation-only batch: `ChokyoTime` is no longer implied to use 0.1-second
+  units, and the SLOP summary now distinguishes stored `DataKubun=1` rows from
+  key-only `DataKubun=0` exact-delete commands. No new external review was
+  requested for this wording-only correction.
+- The documentation-only correction passed
+  `tests/test_public_setup_contract.py tests/test_quickstart_cli.py` (`60 passed`)
+  and `mkdocs build --strict`. No production source or test contract changed,
+  so the previously recorded exact-head implementation suites were not replayed.
