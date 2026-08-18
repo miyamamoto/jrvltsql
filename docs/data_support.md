@@ -239,11 +239,15 @@ exact eraseを失わせないためのproject policyであり、provider仕様�
 規定しているという意味ではありません。
 
 現行parserまたは同等のcaller validationを通った行には
-`CurrentLayoutVersion=200`を保存します。markerのない既存非空`NL_HS`/`SALE`は、
+`CurrentLayoutVersion=200`を保存します。v2以前の`NL_HS`/`SALE`は、空tableも含めて
 父母繁殖登録番号の値長などから世代を推測して自動移行しません。backup後にtableを
-rebuildし、現行200バイトsourceからreimportしてください。現行10バイトの
+rebuildし、現行200バイトsourceからreimportしてください。唯一の加算移行対象は、
+現行schemaと既存列が完全に互換で、行が空であり、native `NL_HS`の
+`CurrentLayoutVersion`/`RecordDelimiter`だけが欠ける場合です。現行10バイトの
 `HansyokuFNum`/`HansyokuMNum`欄には8桁値＋space paddingも正当に存在するため、
-strip後の8文字は旧世代判定の根拠になりません。HSは蓄積系のみで、`RT_HS`は作成せず、
+strip後の8文字は旧世代判定の根拠になりません。過去recordの`Barei`は公式setupで
+2001年以降の算出方法へ統一済みであり、`MakeDate`から再解釈しません。一方、
+`SaleName`はproviderが保持する当時表記をそのまま保存します。HSは蓄積系のみで、`RT_HS`は作成せず、
 realtime入口へ渡されたHSはDBとlocal realtime cacheの両方を変更せず拒否します。
 `auto_commit=False`の同一呼出しで後続HSが検証失敗した場合は、先行する未確定行と
 その統計をrollbackします。`auto_commit=True`では既に確定したprovider operationを

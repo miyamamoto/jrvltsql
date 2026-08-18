@@ -207,3 +207,90 @@ then extract the full official HS oracle before editing production code.
   intentionally dirty only with this aggregated implementation batch. Next:
   commit/push one immutable candidate, then obtain two independent critical
   reviews of that exact full SHA before opening or merging a PR.
+
+## First immutable candidate and aggregated review (2026-08-18)
+
+- Committed and pushed the first immutable candidate
+  `56b72cf03967933f1a7f32e5dd8c9960f55674c6` on
+  `agent/hs-official-contract-20260818`. No PR or release was created before
+  review.
+- Three independent Codex reviews were collected once against that full SHA,
+  because Claude Code remained unavailable:
+  - the release/package surface was GREEN after a fresh PEP 517 wheel/sdist
+    build, archive content gate, isolated wheel init/SQLite bootstrap, version
+    and no-64-bit-claim checks;
+  - the official-oracle review required a true 196-byte fixture, explicit
+    historical `Barei`/`SaleName` semantics, and correction of the migration
+    claim because actual pre-v2 empty `NL_HS`/`SALE` layouts are also unsafe;
+  - the storage review found that an additional harmful CHECK constraint was
+    accepted and that PostgreSQL catalog reads left an implicit transaction
+    open after an importer-owned schema rejection. It also requested direct
+    PostgreSQL coverage of the already enforced wrong-type/nullability/width/
+    replacement-key boundaries.
+- The first candidate full suite exposed a separate false-positive fixture:
+  `3265 passed, 301 skipped, 14 deselected, 20 subtests passed, 3 failed`.
+  All three failures were `tests/test_parsers.py` treating a blank HS envelope
+  as an official positive. The production parser correctly rejected it.
+
+## Aggregated repair and red-first evidence (2026-08-18)
+
+- Chosen migration policy: every actual pre-v2 HS schema requires explicit
+  backup/rebuild/reimport even when empty. The only additive exception is an
+  empty native `NL_HS` whose existing columns are otherwise exactly current
+  compatible and which lacks only `CurrentLayoutVersion`/`RecordDelimiter`.
+  The docs, changelog and release notes now state the same boundary.
+- Added a literal old 4.8.0.2 196-byte builder with its own field spans/CRLF,
+  and pinned the official historical semantics: old records are already
+  returned with the post-2001 age calculation, while sale names retain their
+  historical notation. The all-parser positive now populates a complete valid
+  current HS record rather than weakening the parser.
+- Before production repair, the minimal new negative cases were actually red:
+  - SQLite extra CHECK: `2 failed, 2 passed` (the paired extra-UNIQUE controls
+    remained rejected);
+  - fresh PostgreSQL extra CHECK: `2 failed, 2 passed`;
+  - fresh PostgreSQL idle ownership across DataImporter, OptimizedDataImporter,
+    single-record and Dual: `7 failed, 1 passed`; the paired caller-owned
+    transaction remained pending as required.
+- The marker verifier now requires exactly the trusted
+  `CurrentLayoutVersion = 200` CHECK rather than merely finding it among other
+  constraints. Schema validation snapshots every physical target before
+  catalog reads and rolls back only transactions opened by the failed call.
+  Standard-mode preflight has the same outer snapshot because legacy alias and
+  generic schema catalog reads occur before the inner HS verifier. Existing
+  caller transactions are not rolled back; recovery failures remain
+  fail-closed through `TransactionRecoveryError`.
+- The initial PostgreSQL regression assertion was itself ordered incorrectly:
+  it queried `COUNT(*)` before checking pending state, and that diagnostic
+  SELECT opened a new lazy transaction. Moving the ownership assertion before
+  the diagnostic query made the test observe the production boundary rather
+  than its own read. The corrected 21-case PostgreSQL schema/ownership selection
+  passed.
+
+## Repair verification before final commit (2026-08-18)
+
+- HS compact contract:
+  - SQLite: `65 passed, 46 skipped` (all skips are opt-in PostgreSQL cases);
+  - fresh PostgreSQL 16: `111 passed`.
+- Adjacent parser/schema/realtime/metadata/migration selection:
+  `611 passed, 53 skipped`.
+- Every tracked `test_*_official_contract.py` module:
+  `1118 passed, 253 skipped`.
+- Full local suite with Python 3.13.5:
+  `3287 passed, 325 skipped in 74.35s`; no failure or deselection.
+- Workflow-equivalent gates:
+  - `uv lock --check`: pass;
+  - `scripts/validate_test_gate.py`: `TEST GATE PASS`;
+  - fatal Flake8 (`--isolated --select=E9,F63,F7,F82`): `0`;
+  - strict MkDocs: pass.
+  A deliberately broader non-fatal Flake8 invocation reports the repository's
+  existing advisory style debt; it is not the CI fatal gate and no unrelated
+  style rewrite was included.
+- Fresh worktree PEP 517 build produced
+  `jltsql-2.0.0.dev0-py3-none-any.whl` and the matching sdist. The content gate
+  passed both artifacts and the isolated wheel init/SQLite smoke passed.
+  `specs/` remains tracked in the repository and excluded from both artifacts.
+- This section describes the aggregated dirty repair on top of
+  `56b72cf03967933f1a7f32e5dd8c9960f55674c6`; it is not yet final candidate
+  evidence. Next safe action: remove the dedicated PostgreSQL and temporary
+  build outputs, commit/push the worklog-inclusive repair, verify the new full
+  SHA and clean tree, then request the final bounded independent review once.

@@ -51,6 +51,43 @@ HS_LAYOUT = (
     ("Price", 188, 10),
     ("RecordDelimiter", 198, 2),
 )
+HS_PREVIOUS_LAYOUT = (
+    ("RecordSpec", 0, 2),
+    ("DataKubun", 2, 1),
+    ("MakeDate", 3, 8),
+    ("KettoNum", 11, 10),
+    ("HansyokuFNum", 21, 8),
+    ("HansyokuMNum", 29, 8),
+    ("BirthYear", 37, 4),
+    ("SaleCode", 41, 6),
+    ("SaleHostName", 47, 40),
+    ("SaleName", 87, 80),
+    ("FromDate", 167, 8),
+    ("ToDate", 175, 8),
+    ("Barei", 183, 1),
+    ("Price", 184, 10),
+    ("RecordDelimiter", 194, 2),
+)
+
+PRE_2_0_NATIVE_HS_SCHEMA = """
+CREATE TABLE NL_HS (
+    RecordSpec TEXT, DataKubun TEXT, MakeDate TEXT, KettoNum TEXT,
+    HansyokuFNum TEXT, HansyokuMNum TEXT, BirthYear INTEGER,
+    SaleCode TEXT, SaleHostName TEXT, SaleName TEXT, FromDate TEXT,
+    ToDate TEXT, Barei INTEGER, Price BIGINT, Field15 TEXT,
+    PRIMARY KEY (KettoNum, SaleCode, FromDate)
+)
+"""
+PRE_2_0_STANDARD_HS_SCHEMA = """
+CREATE TABLE SALE (
+    RecordSpec CHAR(2), DataKubun CHAR(1), MakeDate DATE,
+    KettoNum VARCHAR(10), HansyokuFNum VARCHAR(255),
+    HansyokuMNum VARCHAR(255), BirthYear VARCHAR(255),
+    SaleCode VARCHAR(255), SaleHostName VARCHAR(40), SaleName VARCHAR(80),
+    FromDate VARCHAR(255), ToDate VARCHAR(255), Barei SMALLINT,
+    Price VARCHAR(10)
+)
+"""
 
 
 def _put(raw: bytearray, start: int, width: int, value: str) -> None:
@@ -94,6 +131,34 @@ def build_hs_record(
     ):
         _put(raw, start, width, value)
     raw[-2:] = b"\r\n"
+    return bytes(raw)
+
+
+def build_previous_hs_record() -> bytes:
+    """Build one real 4.8.0.2 HOSE-layout record, including its own CRLF."""
+
+    values = {
+        "RecordSpec": "HS",
+        "DataKubun": "1",
+        "MakeDate": "20230807",
+        "KettoNum": "2022100105",
+        "HansyokuFNum": "12345678",
+        "HansyokuMNum": "87654321",
+        "BirthYear": "2022",
+        "SaleCode": "011001",
+        "SaleHostName": "主催者",
+        "SaleName": "旧市場名",
+        "FromDate": "20230807",
+        "ToDate": "20230807",
+        "Barei": "1",
+        "Price": "0000000100",
+    }
+    raw = bytearray(b" " * 196)
+    for field_name, start, width in HS_PREVIOUS_LAYOUT:
+        if field_name == "RecordDelimiter":
+            raw[start : start + width] = b"\r\n"
+        else:
+            _put(raw, start, width, values[field_name])
     return bytes(raw)
 
 
@@ -166,6 +231,10 @@ def test_hs_sdk500_layout_and_current_only_boundary() -> None:
         tuple((name, start - 1, width) for name, start, width in HS_CONTRACT["current_fields"])
         == HS_LAYOUT
     )
+    assert (
+        tuple((name, start - 1, width) for name, start, width in HS_CONTRACT["previous_fields"])
+        == HS_PREVIOUS_LAYOUT
+    )
     assert HS_CONTRACT["current_setup_policy"]["accept_lengths"] == [200]
     assert HS_CONTRACT["current_setup_policy"]["reject_lengths"] == [196]
     assert HS_CONTRACT["current_setup_policy"]["old_dates_are_returned_in_current_size"] is True
@@ -204,7 +273,25 @@ def test_hs_sdk500_layout_and_current_only_boundary() -> None:
     )
     assert parsed_hs()["RecordDelimiter"] == ""
     assert HSParser().parse(build_hs_record(make_date="20200101")) is not None
-    assert HSParser().parse(build_hs_record()[:-4]) is None
+    previous = build_previous_hs_record()
+    assert len(previous) == 196
+    assert previous[-2:] == b"\r\n"
+    assert HSParser().parse(previous) is None
+
+
+def test_hs_historical_barei_is_preserved_without_make_date_reinterpretation() -> None:
+    semantics = HS_CONTRACT["historical_semantics"]
+    assert semantics["barei_is_unified_to_post_2001_method"] is True
+    assert semantics["sale_name_keeps_historical_notation"] is True
+    parsed = parsed_hs(
+        make_date="19991231",
+        sale_name="当時市場名",
+        from_date="19991231",
+        to_date="20000101",
+        barei="3",
+    )
+    assert parsed["Barei"] == "3"
+    assert parsed["SaleName"] == "当時市場名"
 
 
 def test_hs_status_zero_non_key_bytes_are_opaque_project_policy() -> None:
@@ -321,6 +408,7 @@ def test_hs_executable_schemas_publish_the_exact_identity() -> None:
         "nullable-body",
         "short-text",
         "extra-unique",
+        "extra-check",
         "missing-marker-check",
     ),
 )
@@ -347,6 +435,12 @@ def test_hs_schema_verifier_rejects_unsafe_storage(
         schema = schema.replace(
             "PRIMARY KEY (KettoNum, SaleCode, FromDate)",
             "UNIQUE (SaleCode), PRIMARY KEY (KettoNum, SaleCode, FromDate)",
+            1,
+        )
+    elif defect == "extra-check":
+        schema = schema.replace(
+            "PRIMARY KEY (KettoNum, SaleCode, FromDate)",
+            "CHECK (Price <= 100), PRIMARY KEY (KettoNum, SaleCode, FromDate)",
             1,
         )
     else:
@@ -403,7 +497,9 @@ def test_hs_nonempty_unmarked_store_requires_rebuild_before_any_migration(
         assert database.fetch_one("SELECT COUNT(*) AS count FROM NL_HS") == {"count": 1}
 
 
-def test_hs_empty_unmarked_native_store_is_safely_marked(tmp_path: Path) -> None:
+def test_hs_empty_current_compatible_native_store_missing_only_marker_is_safely_marked(
+    tmp_path: Path,
+) -> None:
     old_schema = SCHEMAS["NL_HS"].replace(
         "            CurrentLayoutVersion SMALLINT NOT NULL CHECK (CurrentLayoutVersion = 200),\n",
         "",
@@ -417,6 +513,26 @@ def test_hs_empty_unmarked_native_store_is_safely_marked(tmp_path: Path) -> None
         columns = {row["name"] for row in database.fetch_all('PRAGMA table_info("NL_HS")')}
         assert "CurrentLayoutVersion" in columns
         assert "RecordDelimiter" in columns
+
+
+@pytest.mark.parametrize(
+    ("table_name", "legacy_schema"),
+    (("NL_HS", PRE_2_0_NATIVE_HS_SCHEMA), ("SALE", PRE_2_0_STANDARD_HS_SCHEMA)),
+)
+def test_hs_actual_pre_2_0_empty_storage_requires_explicit_rebuild(
+    tmp_path: Path,
+    table_name: str,
+    legacy_schema: str,
+) -> None:
+    database = SQLiteDatabase({"path": str(tmp_path / f"legacy-{table_name}.db")})
+    with database:
+        database.execute(legacy_schema)
+        database.commit()
+        before = database.fetch_all(f'PRAGMA table_info("{table_name}")')
+        with pytest.raises(SchemaMigrationError):
+            verify_hs_storage_schema(database, table_name, allow_missing_columns=True)
+        assert database.fetch_all(f'PRAGMA table_info("{table_name}")') == before
+        assert database.fetch_one(f"SELECT COUNT(*) AS count FROM {table_name}") == {"count": 0}
 
 
 @pytest.mark.parametrize("entrypoint", ("data", "optimized", "single"))
@@ -663,14 +779,48 @@ def test_hs_postgresql_failure_rollback_and_incremental_commit_statistics(
 
 
 @pytest.mark.parametrize("table_name", ("NL_HS", "SALE"))
-@pytest.mark.parametrize("defect", ("deferrable-pk", "missing-marker-check"))
+@pytest.mark.parametrize(
+    "defect",
+    (
+        "wrong-type",
+        "nullable-body",
+        "short-text",
+        "extra-unique",
+        "extra-check",
+        "deferrable-pk",
+        "missing-marker-check",
+    ),
+)
 def test_hs_postgresql_schema_verifier_rejects_unusable_or_untrusted_storage(
     postgresql_db,
     table_name: str,
     defect: str,
 ) -> None:
     schema = JRAVAN_SCHEMAS[table_name] if table_name == "SALE" else SCHEMAS[table_name]
-    if defect == "deferrable-pk":
+    if defect == "wrong-type":
+        schema = schema.replace("BIGINT", "TEXT", 1)
+    elif defect == "nullable-body":
+        schema = re.sub(
+            r"(HansyokuFNum\s+VARCHAR\(10\)) NOT NULL",
+            r"\1",
+            schema,
+            count=1,
+        )
+    elif defect == "short-text":
+        schema = schema.replace("VARCHAR(80)", "VARCHAR(79)", 1)
+    elif defect == "extra-unique":
+        schema = schema.replace(
+            "PRIMARY KEY (KettoNum, SaleCode, FromDate)",
+            "UNIQUE (SaleCode), PRIMARY KEY (KettoNum, SaleCode, FromDate)",
+            1,
+        )
+    elif defect == "extra-check":
+        schema = schema.replace(
+            "PRIMARY KEY (KettoNum, SaleCode, FromDate)",
+            "CHECK (Price <= 100), PRIMARY KEY (KettoNum, SaleCode, FromDate)",
+            1,
+        )
+    elif defect == "deferrable-pk":
         schema = schema.replace(
             "PRIMARY KEY (KettoNum, SaleCode, FromDate)",
             "PRIMARY KEY (KettoNum, SaleCode, FromDate) DEFERRABLE INITIALLY DEFERRED",
@@ -682,3 +832,87 @@ def test_hs_postgresql_schema_verifier_rejects_unusable_or_untrusted_storage(
     postgresql_db.commit()
     with pytest.raises(SchemaMigrationError):
         verify_hs_storage_schema(postgresql_db, table_name)
+
+
+@pytest.mark.parametrize("standard", (False, True), ids=("native", "standard"))
+@pytest.mark.parametrize("entrypoint", ("data", "optimized", "single"))
+def test_hs_postgresql_idle_schema_rejection_closes_implicit_transaction(
+    postgresql_db,
+    standard: bool,
+    entrypoint: str,
+) -> None:
+    table_name = "SALE" if standard else "NL_HS"
+    schema = JRAVAN_SCHEMAS[table_name] if standard else SCHEMAS[table_name]
+    unsafe = schema.replace(
+        "PRIMARY KEY (KettoNum, SaleCode, FromDate)",
+        "UNIQUE (SaleCode), PRIMARY KEY (KettoNum, SaleCode, FromDate)",
+        1,
+    )
+    postgresql_db.execute(unsafe)
+    postgresql_db.commit()
+    importer = (
+        OptimizedDataImporter(postgresql_db, use_jravan_schema=standard)
+        if entrypoint == "optimized"
+        else DataImporter(postgresql_db, use_jravan_schema=standard)
+    )
+    assert postgresql_db.has_pending_transaction() is False
+    with pytest.raises(SchemaMigrationError):
+        if entrypoint == "single":
+            importer.import_single_record(parsed_hs(), auto_commit=True)
+        else:
+            importer.import_records(iter([parsed_hs()]), auto_commit=True)
+    # Check ownership before the diagnostic SELECT below starts a new lazy
+    # PostgreSQL read transaction.
+    assert postgresql_db.has_pending_transaction() is False
+    assert postgresql_db.fetch_one(f"SELECT COUNT(*) AS count FROM {table_name}") == {"count": 0}
+    assert importer.get_statistics()["records_imported"] == 0
+    postgresql_db.rollback()
+
+
+def test_hs_postgresql_schema_rejection_preserves_existing_caller_transaction(
+    postgresql_db,
+) -> None:
+    unsafe = SCHEMAS["NL_HS"].replace(
+        "PRIMARY KEY (KettoNum, SaleCode, FromDate)",
+        "UNIQUE (SaleCode), PRIMARY KEY (KettoNum, SaleCode, FromDate)",
+        1,
+    )
+    postgresql_db.execute(unsafe)
+    postgresql_db.execute("CREATE TEMP TABLE hs_caller_marker (value INTEGER)")
+    postgresql_db.commit()
+    postgresql_db.execute("INSERT INTO hs_caller_marker (value) VALUES (?)", (1,))
+    assert postgresql_db.has_pending_transaction() is True
+    with pytest.raises(SchemaMigrationError):
+        verify_hs_storage_schema(postgresql_db, "NL_HS")
+    assert postgresql_db.has_pending_transaction() is True
+    assert postgresql_db.fetch_one("SELECT COUNT(*) AS count FROM hs_caller_marker") == {"count": 1}
+    postgresql_db.rollback()
+
+
+def test_hs_dual_postgresql_schema_rejection_closes_only_call_created_transactions(
+    postgresql_db,
+    tmp_path: Path,
+) -> None:
+    unsafe = SCHEMAS["NL_HS"].replace(
+        "PRIMARY KEY (KettoNum, SaleCode, FromDate)",
+        "UNIQUE (SaleCode), PRIMARY KEY (KettoNum, SaleCode, FromDate)",
+        1,
+    )
+    primary = SQLiteDatabase({"path": str(tmp_path / "dual-pg-primary.db")})
+    with primary:
+        primary.execute(SCHEMAS["NL_HS"])
+        primary.commit()
+        postgresql_db.execute(unsafe)
+        postgresql_db.commit()
+        with pytest.raises(SchemaMigrationError):
+            DataImporter(DualDatabase(primary, postgresql_db)).import_records(
+                iter([parsed_hs()]), auto_commit=True
+            )
+        # Check ownership before the diagnostic SELECT below starts a new lazy
+        # PostgreSQL read transaction.
+        assert primary.has_pending_transaction() is False
+        assert postgresql_db.has_pending_transaction() is False
+        assert primary.fetch_one("SELECT COUNT(*) AS count FROM NL_HS") == {"count": 0}
+        assert postgresql_db.fetch_one("SELECT COUNT(*) AS count FROM NL_HS") == {"count": 0}
+        assert primary.has_pending_transaction() is False
+        postgresql_db.rollback()

@@ -114,6 +114,20 @@ class TestIndividualParsers:
                     nichiji="08",
                     race_num="11",
                 )
+            if record_type == "HS":
+                # HS requires all three official key fields and a complete
+                # current 200-byte body; a blank envelope is not positive.
+                mutable = bytearray(data)
+                mutable[11:21] = b"2022100105"
+                mutable[21:31] = b"12345678  "
+                mutable[31:41] = b"0000000000"
+                mutable[41:45] = b"2022"
+                mutable[45:51] = b"011001"
+                mutable[171:179] = b"20240601"
+                mutable[179:187] = b"20240602"
+                mutable[187:188] = b"2"
+                mutable[188:198] = b"0000000100"
+                data = bytes(mutable)
             if record_type == "AV":
                 mutable = bytearray(data)
                 mutable[11:15] = b"2024"

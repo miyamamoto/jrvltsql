@@ -1110,7 +1110,8 @@ def _verify_av_key_not_null_constraints(database: BaseDatabase, table_name: str)
             (table_name,),
         )
         not_null = {
-            str(row.get("column_name") or "").lower(): bool(row.get("not_null")) for row in rows
+            str(row.get("column_name") or "").lower(): bool(row.get("not_null"))
+            for row in rows
         }
     else:
         raise SchemaMigrationError(
@@ -1231,8 +1232,7 @@ def _verify_hr_key_not_null_constraints(database: BaseDatabase, table_name: str)
             (table_name,),
         )
         not_null = {
-            str(row.get("column_name") or "").lower(): bool(row.get("not_null"))
-            for row in rows
+            str(row.get("column_name") or "").lower(): bool(row.get("not_null")) for row in rows
         }
     else:
         raise SchemaMigrationError(
@@ -1403,9 +1403,11 @@ def _verify_hs_layout_marker_constraint(
             r"check\(currentlayoutversion=200\)",
             normalized,
         )
-        if marker is None:
+        check_count = len(re.findall(r"\bcheck\s*\(", definition, flags=re.IGNORECASE))
+        if marker is None or check_count != 1:
             raise SchemaMigrationError(
-                f"HS storage {table_name} must enforce CurrentLayoutVersion = 200"
+                f"HS storage {table_name} must enforce exactly the trusted "
+                "CurrentLayoutVersion = 200 CHECK"
             )
         return
     if db_type == "postgresql":
@@ -1423,14 +1425,61 @@ def _verify_hs_layout_marker_constraint(
             "checkcurrentlayoutversion=200::smallint",
             "checkcurrentlayoutversion=200::integer",
         }
-        if normalized.isdisjoint(accepted):
+        if len(rows) != 1 or normalized.isdisjoint(accepted):
             raise SchemaMigrationError(
-                f"HS storage {table_name} must enforce CurrentLayoutVersion = 200"
+                f"HS storage {table_name} must enforce exactly the trusted "
+                "CurrentLayoutVersion = 200 CHECK"
             )
         return
     raise SchemaMigrationError(
         f"HS layout marker cannot be verified for database type {db_type!r}"
     )
+
+
+def _snapshot_validation_transactions(
+    database: BaseDatabase,
+) -> tuple[tuple[BaseDatabase, bool], ...]:
+    """Capture physical caller ownership before catalog reads can start a tx."""
+
+    from src.database.migration import _migration_targets
+
+    return tuple(
+        (
+            target,
+            inspect_pending_transaction_or_invalidate(
+                target,
+                context="HS schema validation entry",
+            ),
+        )
+        for target in _migration_targets(database)
+    )
+
+
+def _rollback_call_created_validation_transactions(
+    snapshot: tuple[tuple[BaseDatabase, bool], ...],
+    *,
+    context: str,
+) -> None:
+    """Close only transactions opened by a failed read-only verification."""
+
+    recovery_error: TransactionRecoveryError | None = None
+    for target, caller_pending in snapshot:
+        if caller_pending:
+            continue
+        try:
+            if inspect_pending_transaction_or_invalidate(
+                target,
+                context=context,
+            ):
+                rollback_failed_import(
+                    target,
+                    context=context,
+                )
+        except TransactionRecoveryError as error:
+            # Try every backend before reporting an unrecoverable Dual target.
+            recovery_error = recovery_error or error
+    if recovery_error is not None:
+        raise recovery_error
 
 
 def verify_hs_storage_schema(
@@ -1443,35 +1492,43 @@ def verify_hs_storage_schema(
 
     if table_name not in _HS_STORAGE_TABLES:
         return False
+    transaction_snapshot = _snapshot_validation_transactions(database)
     from src.database.migration import verify_table_schema
     from src.database.schema import SCHEMAS
     from src.database.schema_jravan import JRAVAN_SCHEMAS
 
-    schema_sql = SCHEMAS.get(table_name) or JRAVAN_SCHEMAS.get(table_name)
-    if schema_sql is None:
-        raise SchemaMigrationError(f"HS storage schema is undefined: {table_name}")
-    _verify_hs_current_layout_rows(database, table_name, schema_sql)
-    verify_table_schema(
-        database,
-        table_name,
-        schema_sql,
-        allow_missing_columns=allow_missing_columns,
-    )
-    _verify_strict_storage_column_contract(
-        database,
-        table_name,
-        schema_sql,
-        allow_missing_columns=allow_missing_columns,
-        storage_label="HS",
-        lossless_text_widths=_HS_LOSSLESS_TEXT_WIDTHS[table_name],
-    )
-    _verify_hs_layout_marker_constraint(
-        database,
-        table_name,
-        allow_missing=allow_missing_columns,
-    )
-    _verify_replacement_key_constraints(database, table_name, "HS storage")
-    return True
+    try:
+        schema_sql = SCHEMAS.get(table_name) or JRAVAN_SCHEMAS.get(table_name)
+        if schema_sql is None:
+            raise SchemaMigrationError(f"HS storage schema is undefined: {table_name}")
+        _verify_hs_current_layout_rows(database, table_name, schema_sql)
+        verify_table_schema(
+            database,
+            table_name,
+            schema_sql,
+            allow_missing_columns=allow_missing_columns,
+        )
+        _verify_strict_storage_column_contract(
+            database,
+            table_name,
+            schema_sql,
+            allow_missing_columns=allow_missing_columns,
+            storage_label="HS",
+            lossless_text_widths=_HS_LOSSLESS_TEXT_WIDTHS[table_name],
+        )
+        _verify_hs_layout_marker_constraint(
+            database,
+            table_name,
+            allow_missing=allow_missing_columns,
+        )
+        _verify_replacement_key_constraints(database, table_name, "HS storage")
+        return True
+    except Exception:
+        _rollback_call_created_validation_transactions(
+            transaction_snapshot,
+            context="failed HS schema validation",
+        )
+        raise
 
 
 def validate_hs_record(record: dict, table_name: str | None = None) -> bool:
@@ -2569,7 +2626,7 @@ def insert_wf_standard_batch(
         raise
 
 
-def preflight_standard_schema_migrations(
+def _preflight_standard_schema_migrations(
     database: BaseDatabase,
     native_table_names: set[str],
 ) -> None:
@@ -2646,6 +2703,23 @@ def preflight_standard_schema_migrations(
                 "back up and rebuild both tables (parent first) with the current "
                 f"schema, then reimport RACE data: {error}"
             ) from error
+
+
+def preflight_standard_schema_migrations(
+    database: BaseDatabase,
+    native_table_names: set[str],
+) -> None:
+    """Run standard preflight without leaking validation-created transactions."""
+
+    transaction_snapshot = _snapshot_validation_transactions(database)
+    try:
+        _preflight_standard_schema_migrations(database, native_table_names)
+    except Exception:
+        _rollback_call_created_validation_transactions(
+            transaction_snapshot,
+            context="failed standard-schema preflight",
+        )
+        raise
 
 
 def verify_hy_storage_schema(database: BaseDatabase, table_name: str) -> bool:

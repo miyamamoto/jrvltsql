@@ -41,8 +41,10 @@
 
 - `HS`を現行HOSNの公式200バイト配置と3項目キーへ結び付け、native `NL_HS`と
   標準名`SALE`でprovider順の更新・exact delete・operation統計を一致させた。
-  旧196バイトHOSEは引き続き拒否し、世代不明の既存非空tableは値長から推測せず
-  backup・rebuild・現行sourceからのreimportを要求する。live本文はcoercion前に検証し、
+  旧196バイトHOSEは引き続き拒否し、v2以前の既存tableは空でも値長から推測せず
+  backup・rebuild・現行sourceからのreimportを要求する（現行互換の空`NL_HS`で
+  marker/delimiterだけが欠ける場合を除く）。過去の馬齢は公式setup済み値を再解釈せず、
+  市場名は当時表記を保持する。live本文はcoercion前に検証し、
   status 0の非key本文だけはexact eraseを妨げないopaque project policyとした
 - `HR`を公式719バイト・6項目キーへ結び付け、3件の予備領域を数値化せず文字列で
   保持する全repeatを

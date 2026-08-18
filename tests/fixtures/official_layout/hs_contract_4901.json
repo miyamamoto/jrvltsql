@@ -62,6 +62,14 @@
     "source_row": 43,
     "description": "HansyokuFNum and HansyokuMNum widened from 8 to 10 bytes"
   },
+  "historical_semantics": {
+    "barei_is_unified_to_post_2001_method": true,
+    "sale_name_keeps_historical_notation": true,
+    "sources": [
+      "JV-Data4802.xlsx:特記事項:224",
+      "JV-Data4901.xlsx:特記事項:204"
+    ]
+  },
   "current_setup_policy": {
     "accept_lengths": [200],
     "reject_lengths": [196],

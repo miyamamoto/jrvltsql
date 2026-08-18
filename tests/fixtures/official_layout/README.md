@@ -29,7 +29,9 @@ JV-Data. They do not contain provider records or a copy of the SDK source.
 - `hs_contract_4901.json` records both official HS physical generations, the
   current three-part key and status domain, and the official current-setup
   policy that returns old dates in the 200-byte HOSN layout without mixing the
-  196-byte HOSE store.
+  196-byte HOSE store. It also pins the official historical-value policy: age
+  is already unified to the post-2001 method, while sale names retain their
+  historical notation.
 
 The manifest is intentionally independent of jrvltsql parser and schema code.
 When the official source changes, regenerate it from a separately obtained SDK
