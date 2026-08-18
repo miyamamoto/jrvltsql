@@ -24,6 +24,7 @@ from src.database.sqlite_handler import SQLiteDatabase
 from src.importer.importer import DataImporter
 from src.importer.importer_optimized import OptimizedDataImporter
 from src.parser.hc_parser import HCParser
+from src.realtime.updater import RealtimeUpdater
 
 FIELDS = (
     ("RecordSpec", 1, 2, b"HC"),
@@ -98,6 +99,59 @@ def parsed_record(**kwargs) -> dict:
     return parsed
 
 
+def provider_order_records() -> list[dict]:
+    """Keep one survivor for every one-column difference from the delete key."""
+
+    return [
+        parsed_record(),
+        parsed_record(tresen_kubun="1"),
+        parsed_record(chokyo_date="20260816"),
+        parsed_record(chokyo_time="0631"),
+        parsed_record(ketto_num="2020100002"),
+        parsed_record(field_overrides={"HaronTime4": "0510"}),
+        parsed_record(
+            data_kubun="0",
+            field_overrides={"HaronTime4": "BAD!", "LapTime1": "A1B"},
+        ),
+    ]
+
+
+EXPECTED_SURVIVORS = [
+    {
+        "TresenKubun": "0",
+        "ChokyoDate": "20260816",
+        "ChokyoTime": "0630",
+        "KettoNum": "2020100001",
+        "HaronTime4": 48.0,
+        "LapTime1": 12.0,
+    },
+    {
+        "TresenKubun": "0",
+        "ChokyoDate": "20260817",
+        "ChokyoTime": "0630",
+        "KettoNum": "2020100002",
+        "HaronTime4": 48.0,
+        "LapTime1": 12.0,
+    },
+    {
+        "TresenKubun": "0",
+        "ChokyoDate": "20260817",
+        "ChokyoTime": "0631",
+        "KettoNum": "2020100001",
+        "HaronTime4": 48.0,
+        "LapTime1": 12.0,
+    },
+    {
+        "TresenKubun": "1",
+        "ChokyoDate": "20260817",
+        "ChokyoTime": "0630",
+        "KettoNum": "2020100001",
+        "HaronTime4": 48.0,
+        "LapTime1": 12.0,
+    },
+]
+
+
 @pytest.fixture
 def postgresql_db():
     if os.getenv("JLTSQL_RUN_POSTGRESQL_INTEGRATION") != "1":
@@ -151,6 +205,32 @@ def test_hc_reviewed_oracle_binds_both_workbooks_sdk_and_every_parser_span() -> 
     assert contract["fields"] == [list(item) for item in fixture_spans]
     assert contract["primary_key"] == OFFICIAL_KEY
     assert contract["current_data_kubun"] == ["0", "1"]
+    assert contract["measurement_fields"] == {
+        name: {
+            "width": width,
+            "scale_seconds": 0.1,
+            "failure_value": "0" * width,
+        }
+        for name, width in TIME_FIELDS
+    }
+    assert contract["history"] == {
+        "physical_layout_changed": False,
+        "data_available_from": "2003",
+        "miho_measurement": {
+            "through_2004_11_29": "600m",
+            "from_2004_11_30": "800m",
+        },
+        "sources": [
+            "JV-Data4901.xlsx:特記事項:195-198",
+            "JV-Data4901.xlsx:変更履歴:170,174,344",
+        ],
+    }
+    assert contract["delivery"] == {
+        "frequency": "daily_irregular",
+        "unit": "complete_training_center_day",
+        "retention": "1 year",
+        "source": "JV-Data4901.xlsx:データ提供タイミング・提供単位:26",
+    }
     assert all(
         position + width == next_position
         for (_, position, width), (_, next_position, _) in pairwise(fixture_spans)
@@ -192,6 +272,7 @@ def test_hc_reviewed_oracle_binds_both_workbooks_sdk_and_every_parser_span() -> 
         ({"chokyo_time": "1160"}, "ChokyoTime"),
         ({"ketto_num": "20201A0001"}, "KettoNum"),
         ({"field_overrides": {"HaronTime4": "ABCD"}}, "HaronTime4"),
+        ({"field_overrides": {"HaronTime4": ""}}, "HaronTime4-blank"),
         ({"field_overrides": {"LapTime1": "1A0"}}, "LapTime1"),
     ],
 )
@@ -261,30 +342,16 @@ def test_hc_provider_order_update_exact_delete_and_durable_units(
         database.execute(schema)
         database.commit()
         importer = importer_class(database, use_jravan_schema=standard)
-        records = [
-            parsed_record(),
-            parsed_record(tresen_kubun="1", ketto_num="2020100002"),
-            parsed_record(field_overrides={"HaronTime4": "0510"}),
-            parsed_record(
-                data_kubun="0",
-                field_overrides={"HaronTime4": "BAD!", "LapTime1": "A1B"},
-            ),
-        ]
-        stats = importer.import_records(iter(records), auto_commit=auto_commit)
+        stats = importer.import_records(iter(provider_order_records()), auto_commit=auto_commit)
         assert {
             key: stats[key] for key in ("records_imported", "records_failed", "batches_processed")
-        } == {"records_imported": 4, "records_failed": 0, "batches_processed": 2}
+        } == {"records_imported": 7, "records_failed": 0, "batches_processed": 2}
         rows = database.fetch_all(
-            f"SELECT TresenKubun, KettoNum, HaronTime4, LapTime1 FROM {table_name}"
+            "SELECT TresenKubun, ChokyoDate, ChokyoTime, KettoNum, "
+            f"HaronTime4, LapTime1 FROM {table_name} "
+            "ORDER BY TresenKubun, ChokyoDate, ChokyoTime, KettoNum"
         )
-        assert rows == [
-            {
-                "TresenKubun": "1",
-                "KettoNum": "2020100002",
-                "HaronTime4": 48.0,
-                "LapTime1": 12.0,
-            }
-        ]
+        assert rows == EXPECTED_SURVIVORS
         if not auto_commit:
             database.commit()
 
@@ -321,7 +388,7 @@ def test_hc_caller_validation_precedes_coercion_and_mutation(
 
 def test_hc_dual_verifies_both_targets_before_mutation(tmp_path) -> None:
     safe_schema = SCHEMAS["NL_HC"]
-    unsafe_schema = _defective_schema("NL_HC", "extra-unique")
+    unsafe_schema = _defective_schema("NL_HC", "extra-required-column")
     for unsafe_target in ("primary", "secondary"):
         primary = SQLiteDatabase({"path": str(tmp_path / f"{unsafe_target}-primary.db")})
         secondary = SQLiteDatabase({"path": str(tmp_path / f"{unsafe_target}-secondary.db")})
@@ -349,6 +416,16 @@ def _defective_schema(table_name: str, defect: str) -> str:
     if defect == "extra-check":
         body, close = schema.rsplit(")", 1)
         return f"{body}, CHECK (HaronTime4 <= 10)\n        ){close}"
+    if defect == "extra-foreign-key":
+        body, close = schema.rsplit(")", 1)
+        return (
+            f"{body}, FOREIGN KEY (TresenKubun, ChokyoDate, ChokyoTime, KettoNum) "
+            f"REFERENCES {table_name} "
+            "(TresenKubun, ChokyoDate, ChokyoTime, KettoNum) ON DELETE CASCADE\n"
+            f"        ){close}"
+        )
+    if defect == "extra-required-column":
+        return schema.replace(key, f"ExternalRequired TEXT NOT NULL, {key}")
     if defect == "wrong-type":
         if table_name == "NL_HC":
             return schema.replace("ChokyoDate TEXT", "ChokyoDate INTEGER")
@@ -367,7 +444,15 @@ def _defective_schema(table_name: str, defect: str) -> str:
 @pytest.mark.parametrize("table_name,standard", [("NL_HC", False), ("HANRO", True)])
 @pytest.mark.parametrize(
     "defect",
-    ["wrong-key", "extra-unique", "extra-check", "wrong-type", "nullable-key"],
+    [
+        "wrong-key",
+        "extra-unique",
+        "extra-check",
+        "extra-foreign-key",
+        "extra-required-column",
+        "wrong-type",
+        "nullable-key",
+    ],
 )
 def test_hc_schema_defects_fail_before_any_row_mutation(
     tmp_path, table_name: str, standard: bool, defect: str
@@ -414,6 +499,23 @@ def test_hc_single_record_uses_the_same_validator_and_exact_delete(
         assert database.fetch_one(f"SELECT COUNT(*) AS count FROM {table_name}") == {"count": 0}
 
 
+def test_hc_accumulated_only_raw_does_not_write_realtime_cache_or_table(tmp_path) -> None:
+    class CacheProbe:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def write_rt_record(self, *_args) -> None:
+            self.calls += 1
+
+    cache = CacheProbe()
+    database = SQLiteDatabase({"path": str(tmp_path / "realtime-hc.db")})
+    with database:
+        updater = RealtimeUpdater(database, cache_manager=cache)
+        assert updater.process_record(build_record()) is None
+        assert cache.calls == 0
+        assert not database.table_exists("RT_HC")
+
+
 def test_hc_postgresql_provider_order_and_wrong_key_gate(postgresql_db) -> None:
     for table_name, standard in (("NL_HC", False), ("HANRO", True)):
         schema = JRAVAN_SCHEMAS[table_name] if standard else SCHEMAS[table_name]
@@ -422,30 +524,21 @@ def test_hc_postgresql_provider_order_and_wrong_key_gate(postgresql_db) -> None:
         for importer_class in (DataImporter, OptimizedDataImporter):
             for auto_commit in (True, False):
                 stats = importer_class(postgresql_db, use_jravan_schema=standard).import_records(
-                    iter(
-                        [
-                            parsed_record(),
-                            parsed_record(tresen_kubun="1", ketto_num="2020100002"),
-                            parsed_record(field_overrides={"HaronTime4": "0510"}),
-                            parsed_record(data_kubun="0"),
-                        ]
-                    ),
+                    iter(provider_order_records()),
                     auto_commit=auto_commit,
                 )
-                assert stats["records_imported"] == 4
-                assert postgresql_db.fetch_all(
-                    'SELECT TresenKubun AS "TresenKubun", '
-                    'KettoNum AS "KettoNum", HaronTime4 AS "HaronTime4", '
-                    'LapTime1 AS "LapTime1" '
-                    f"FROM {table_name}"
-                ) == [
-                    {
-                        "TresenKubun": "1",
-                        "KettoNum": "2020100002",
-                        "HaronTime4": 48.0,
-                        "LapTime1": 12.0,
-                    }
-                ]
+                assert stats["records_imported"] == 7
+                assert (
+                    postgresql_db.fetch_all(
+                        'SELECT TresenKubun AS "TresenKubun", '
+                        'ChokyoDate AS "ChokyoDate", ChokyoTime AS "ChokyoTime", '
+                        'KettoNum AS "KettoNum", HaronTime4 AS "HaronTime4", '
+                        'LapTime1 AS "LapTime1" '
+                        f"FROM {table_name} "
+                        "ORDER BY TresenKubun, ChokyoDate, ChokyoTime, KettoNum"
+                    )
+                    == EXPECTED_SURVIVORS
+                )
                 postgresql_db.execute(f"DELETE FROM {table_name}")
                 postgresql_db.commit()
         postgresql_db.execute(f"DROP TABLE {table_name}")
@@ -454,7 +547,14 @@ def test_hc_postgresql_provider_order_and_wrong_key_gate(postgresql_db) -> None:
         # PostgreSQL marks primary-key attributes NOT NULL in its catalog even
         # when the DDL omits the redundant spelling; SQLite requires the
         # explicit nullable-key negative exercised above.
-        for defect in ("wrong-key", "extra-unique", "extra-check", "wrong-type"):
+        for defect in (
+            "wrong-key",
+            "extra-unique",
+            "extra-check",
+            "extra-foreign-key",
+            "extra-required-column",
+            "wrong-type",
+        ):
             postgresql_db.execute(_defective_schema(table_name, defect))
             postgresql_db.commit()
             before_schema = postgresql_db.fetch_all(
@@ -484,3 +584,36 @@ def test_hc_postgresql_provider_order_and_wrong_key_gate(postgresql_db) -> None:
             postgresql_db.rollback()
             postgresql_db.execute(f"DROP TABLE {table_name}")
             postgresql_db.commit()
+
+
+def test_hc_postgresql_dual_rejects_extra_required_column_on_either_target(
+    postgresql_db, tmp_path
+) -> None:
+    for table_name, standard in (("NL_HC", False), ("HANRO", True)):
+        safe_schema = JRAVAN_SCHEMAS[table_name] if standard else SCHEMAS[table_name]
+        unsafe_schema = _defective_schema(table_name, "extra-required-column")
+        for unsafe_target in ("primary", "secondary"):
+            sqlite = SQLiteDatabase({"path": str(tmp_path / f"{table_name}-{unsafe_target}.db")})
+            with sqlite:
+                sqlite.execute(unsafe_schema if unsafe_target == "primary" else safe_schema)
+                postgresql_db.execute(
+                    unsafe_schema if unsafe_target == "secondary" else safe_schema
+                )
+                sqlite.commit()
+                postgresql_db.commit()
+
+                with pytest.raises(SchemaMigrationError):
+                    DataImporter(
+                        DualDatabase(sqlite, postgresql_db),
+                        use_jravan_schema=standard,
+                    ).import_records(iter([parsed_record()]))
+
+                assert sqlite.fetch_one(f"SELECT COUNT(*) AS count FROM {table_name}") == {
+                    "count": 0
+                }
+                assert postgresql_db.fetch_one(f"SELECT COUNT(*) AS count FROM {table_name}") == {
+                    "count": 0
+                }
+                postgresql_db.rollback()
+                postgresql_db.execute(f"DROP TABLE {table_name}")
+                postgresql_db.commit()

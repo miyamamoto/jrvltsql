@@ -240,7 +240,8 @@ key、必須header/key/body、公式field capacityを使用し、7つの走破�
 `DataKubun=0`は4項目keyだけを使うexact eraseです。非key本文をdecodeしないのは
 削除指示を失わせないためのproject policyであり、provider仕様が任意binary本文を
 規定するという意味ではありません。既存のnullable、keyless、wrong-key、wrong-type、
-追加UNIQUE/FK/CHECKを持つ`NL_HC`/`HANRO`は自動修復せず、mutation前に停止します。
+追加列または追加UNIQUE/FK/CHECKを持つ`NL_HC`/`HANRO`は自動修復せず、
+mutation前に停止します。
 backup後にcurrent schemaでrebuildし、`SLOP`を再importしてください。HCは蓄積系のみで
 `RT_HC`は作成しません。美浦の測定距離は2004-11-30に600mから800mへ変わりましたが、
 物理record長と4項目identityは変わりません。

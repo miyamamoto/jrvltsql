@@ -848,6 +848,7 @@ def _verify_strict_storage_column_contract(
     storage_label: str = "SE",
     lossless_text_widths: dict[str, int] | None = None,
     allow_stricter_not_null: frozenset[str] = frozenset(),
+    allow_extra_columns: bool = True,
 ) -> None:
     """Verify every present strict-storage column's type and nullability."""
 
@@ -868,6 +869,7 @@ def _verify_strict_storage_column_contract(
                 storage_label=storage_label,
                 lossless_text_widths=lossless_text_widths,
                 allow_stricter_not_null=allow_stricter_not_null,
+                allow_extra_columns=allow_extra_columns,
             )
         return
 
@@ -899,6 +901,11 @@ def _verify_strict_storage_column_contract(
         for row in rows
     }
     mismatches: list[str] = []
+    if not allow_extra_columns:
+        expected_columns = {column.lower() for column in definitions}
+        extra_columns = sorted(set(actual) - expected_columns)
+        if extra_columns:
+            mismatches.append(f"unapproved extra columns={extra_columns}")
     for column_name, definition in definitions.items():
         column = column_name.lower()
         if column not in actual:
@@ -1736,6 +1743,7 @@ def verify_hc_storage_schema(database: BaseDatabase, table_name: str) -> bool:
             allow_missing_columns=False,
             storage_label="HC",
             lossless_text_widths=_HC_LOSSLESS_TEXT_WIDTHS[table_name],
+            allow_extra_columns=False,
         )
         _verify_hc_no_unapproved_constraints(database, table_name)
         _verify_replacement_key_constraints(database, table_name, "HC storage")

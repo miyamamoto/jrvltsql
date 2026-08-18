@@ -180,11 +180,58 @@
 - The disposable PostgreSQL container was removed after the run. No provider,
   production, GitHub, NAR, MCP or release state was changed.
 
+## Frozen-candidate reviews and aggregated repair (2026-08-18)
+
+- The first frozen candidate was
+  `ffb75074d61d7ef9424ba210088442795f394504`, based on unchanged
+  `ed39ac78aa371e7ce4e18a87d8a25c50a07fe78a`. Three independent read-only
+  Codex reviews completed against that exact clean SHA: official-source oracle,
+  SQLite/PostgreSQL 16/18/Dual data-integrity, and test/package/release surface.
+- All three reviewers agreed on one production P1. An otherwise current
+  `NL_HC` or `HANRO` with an unapproved `ExternalRequired TEXT NOT NULL` column
+  passed schema preflight and failed only at DML. Actual Dual SQLite/PostgreSQL
+  could then preserve the row on only one backend. The first repair test was
+  run before production changes and failed as required: the native and standard
+  schema cases each reported `Failed: DID NOT RAISE SchemaMigrationError`; the
+  Dual case likewise returned normal failed-import statistics instead of the
+  preflight exception.
+- The release/test review also proved three false-green classes with temporary
+  mutants while leaving the candidate untouched:
+  - removing `KettoNum` from the erase predicate still left the original HC
+    suite green because the sole survivor differed in two key columns;
+  - allowing blank live timing spans still left the adjacent suites green;
+  - adding HC to realtime routing still left the HC suite green despite the
+    accumulated-only contract.
+- The aggregated repair therefore uses one HC-only exact physical-column
+  contract, extends the existing schema-negative matrix with required-column
+  and FK cases, gives exact erase one survivor per individual key component,
+  adds the blank timing and realtime/cache negatives, and binds the reviewed
+  history/delivery/sentinel fixture content directly in the existing oracle
+  test. This is one repair batch, not a per-finding review loop.
+
 ## Next safe action
 
-1. Run the one justified broad local suite because central importer/schema
-   dispatch changed, then strict documentation and distribution build gates.
-2. Commit/push one clean candidate SHA and freeze it.
-3. Run the three independent read-only Codex reviews in parallel against that
-   exact SHA, aggregate all concrete findings once, and only then decide the
-   repair/PR boundary.
+1. Run the repaired compact contract on SQLite and fresh PostgreSQL, including
+   cross-engine Dual unsafe-primary/unsafe-secondary cases.
+2. Run only affected adjacent importer/schema/parser tests plus static,
+   documentation and distribution gates justified by this repair.
+3. Freeze and push one replacement full SHA, request bounded carry-forward
+   reviews of the repair, then create the PR only if all gates are green.
+
+## Aggregated repair verification
+
+- Repaired SQLite HC/reconstructed contract: `119 passed, 2 skipped`.
+- Fresh disposable PostgreSQL 16 HC contract: `43 passed`. This includes
+  native/standard operation order, the four one-column-different erase
+  survivors, required-column and FK negatives, and SQLite/PostgreSQL Dual with
+  the unsafe table on each side. The container was removed afterward.
+- Affected HC/parser/current-layout/reconstructed/schema/metadata selection:
+  `566 passed, 9 skipped`.
+- Black check, fatal flake8 selection, compileall, `uv lock --check` and the
+  fail-closed test-gate validator all passed; `git diff --check` remains part of
+  the final clean gate.
+- Remaining steps are an exact committed-tree distribution build/smoke and the
+  bounded carry-forward reviews. No broad suite is repeated because the common
+  verifier's new option defaults to the old permissive behavior and only HC
+  opts into exact columns; the first candidate already passed the one-time full
+  workflow-equivalent suite.
