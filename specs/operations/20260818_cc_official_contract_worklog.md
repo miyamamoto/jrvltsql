@@ -237,15 +237,42 @@
   steps already completed by `8b9761a...`; the current next step is publication
   and PR gating, not another evidence commit or broad review cycle.
 
+## GitHub publication gate
+
+- Branch `agent/cc-official-contract-20260818` was pushed and PR #215 was
+  opened at `https://github.com/miyamamoto/jrvltsql/pull/215` against exact base
+  `6e9a9f500f2353d7b423e5f1e12b07c30275f8d1`. The reviewed code/test head was
+  `22c89b704cd316e4c8aa0393d16bb3035a779255`; the worktree was clean.
+- The one GitHub-native Copilot review was requested after the PR became ready.
+  Copilot returned only its quota-limit notice and supplied no code finding.
+  It was not re-requested.
+- GitHub Actions on `22c89b7...` completed successfully for `test`, `lint`, and
+  `windows-batch-syntax`; `performance-test` was intentionally skipped by its
+  workflow condition. CodeRabbit completed successfully.
+- CodeRabbit opened three threads. All were answered with direct evidence and
+  resolved without code churn:
+  - the absolute disposable worktree path is intentionally retained because
+    repository policy requires the exact worktree in tracked handoff evidence;
+  - `6caa56b9...` is explicitly the broad/Python-3.12/package-gated production
+    artifact, while later commits are recorded as worklog/oracle-test-only, so
+    broad suites were not repeated contrary to the review-loop policy;
+  - CC status is already rejected centrally by `validate_fixed_record` /
+    `status_domain.validate_data_kubun` for raw rows and explicitly by
+    `validate_cc_record` for caller dictionaries. Raw and caller statuses 0/9
+    were independently rejected, so a duplicate CC-local domain was not added.
+- Thread-aware GraphQL readback reported three total review threads and zero
+  unresolved. The final worklog-only provenance commit will receive its normal
+  GitHub checks; exact final-head check and merge evidence belong in PR metadata
+  to avoid a self-referential worklog commit loop.
+
 ## Next safe command and STOP conditions
 
-- Next: from the current clean committed HEAD, push one branch, open one PR,
-  request the single native Copilot review,
-  address actionable comments in one batch, require unresolved thread count
-  zero, and merge only after the applicable checks and exact-head evidence are
-  green. The compact CC test is green after both temporary mutants were
-  removed. Do not rerun the already-green broad suite for this two-assertion
-  oracle-only delta unless the exact change expands.
+- Next: commit and push this worklog-only GitHub evidence update, confirm the
+  resulting exact PR head, required checks, unresolved thread count zero, and
+  clean worktree, then squash-merge PR #215. After cleanup, start a fresh
+  latest-master inventory iteration that maps all 38 official formats to their
+  merged PRs/tests and identifies the concrete remaining formats before any
+  further implementation.
 - STOP on non-worklog drift, a material disagreement among pinned official
   sources, backend divergence that is not explained and tested, or any need
   for destructive/provider action beyond the authorized local test scope.
