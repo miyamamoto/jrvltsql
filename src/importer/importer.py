@@ -1420,8 +1420,7 @@ def _verify_hs_layout_marker_constraint(
     from src.database.migration import _get_existing_columns
 
     existing = {column.lower() for column in _get_existing_columns(database, table_name)}
-    if "currentlayoutversion" not in existing and allow_missing:
-        return
+    marker_missing = "currentlayoutversion" not in existing
 
     db_type = database.get_db_type()
     if db_type == "sqlite":
@@ -1437,6 +1436,13 @@ def _verify_hs_layout_marker_constraint(
             normalized,
         )
         check_count = len(re.findall(r"\bcheck\s*\(", definition, flags=re.IGNORECASE))
+        if marker_missing and allow_missing:
+            if check_count:
+                raise SchemaMigrationError(
+                    f"HS storage {table_name} must not contain CHECK constraints "
+                    "before trusted CurrentLayoutVersion migration"
+                )
+            return
         if marker is None or check_count != 1:
             raise SchemaMigrationError(
                 f"HS storage {table_name} must enforce exactly the trusted "
@@ -1449,6 +1455,13 @@ def _verify_hs_layout_marker_constraint(
             "WHERE conrelid = to_regclass(?) AND contype = 'c'",
             (table_name.lower(),),
         )
+        if marker_missing and allow_missing:
+            if rows:
+                raise SchemaMigrationError(
+                    f"HS storage {table_name} must not contain CHECK constraints "
+                    "before trusted CurrentLayoutVersion migration"
+                )
+            return
         normalized = {
             re.sub(r'[\s"()]+', "", str(row.get("definition") or "").lower())
             for row in rows

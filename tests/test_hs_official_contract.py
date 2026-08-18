@@ -90,6 +90,34 @@ CREATE TABLE SALE (
 """
 
 
+def hs_schema_missing_marker_with_extra_check() -> str:
+    schema = SCHEMAS["NL_HS"].replace(
+        "            CurrentLayoutVersion SMALLINT NOT NULL "
+        "CHECK (CurrentLayoutVersion = 200),\n",
+        "",
+    )
+    return schema.replace(
+        "PRIMARY KEY (KettoNum, SaleCode, FromDate)",
+        "CHECK (Price <= 100), PRIMARY KEY (KettoNum, SaleCode, FromDate)",
+        1,
+    )
+
+
+def hs_table_columns(database) -> set[str]:
+    if database.get_db_type() == "sqlite":
+        return {
+            str(row["name"])
+            for row in database.fetch_all('PRAGMA table_info("NL_HS")')
+        }
+    return {
+        str(row["column_name"])
+        for row in database.fetch_all(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_schema = current_schema() AND table_name = 'nl_hs'"
+        )
+    }
+
+
 def _put(raw: bytearray, start: int, width: int, value: str) -> None:
     encoded = value.encode("cp932", errors="strict")
     assert len(encoded) <= width
@@ -566,6 +594,19 @@ def test_hs_empty_native_store_missing_body_column_requires_rebuild(
         assert database.fetch_all('PRAGMA table_info("NL_HS")') == before
 
 
+def test_hs_empty_native_missing_marker_with_extra_check_rejects_before_migration(
+    tmp_path: Path,
+) -> None:
+    database = SQLiteDatabase({"path": str(tmp_path / "marker-extra-check.db")})
+    with database:
+        database.execute(hs_schema_missing_marker_with_extra_check())
+        database.commit()
+        before = hs_table_columns(database)
+        assert "CurrentLayoutVersion" not in before
+        assert SchemaManager(database).create_table("NL_HS") is False
+        assert hs_table_columns(database) == before
+
+
 @pytest.mark.parametrize(
     ("table_name", "legacy_schema"),
     (("NL_HS", PRE_2_0_NATIVE_HS_SCHEMA), ("SALE", PRE_2_0_STANDARD_HS_SCHEMA)),
@@ -1040,3 +1081,46 @@ def test_hs_dual_empty_standard_import_does_not_start_backend_transactions(
         assert stats["records_imported"] == 0
         assert primary.has_pending_transaction() is False
         assert postgresql_db.has_pending_transaction() is False
+
+
+def test_hs_postgresql_missing_marker_with_extra_check_rejects_before_migration(
+    postgresql_db,
+) -> None:
+    postgresql_db.execute(hs_schema_missing_marker_with_extra_check())
+    postgresql_db.commit()
+    before = hs_table_columns(postgresql_db)
+    assert "currentlayoutversion" not in before
+    assert SchemaManager(postgresql_db).create_table("NL_HS") is False
+    assert hs_table_columns(postgresql_db) == before
+
+
+@pytest.mark.parametrize("postgresql_primary", (False, True), ids=("sqlite-primary", "pg-primary"))
+def test_hs_dual_missing_marker_with_extra_check_rejects_before_either_migration(
+    postgresql_db,
+    tmp_path: Path,
+    postgresql_primary: bool,
+) -> None:
+    sqlite = SQLiteDatabase({"path": str(tmp_path / f"dual-marker-{postgresql_primary}.db")})
+    with sqlite:
+        sqlite.execute(
+            SCHEMAS["NL_HS"]
+            if postgresql_primary
+            else hs_schema_missing_marker_with_extra_check()
+        )
+        sqlite.commit()
+        postgresql_db.execute(
+            hs_schema_missing_marker_with_extra_check()
+            if postgresql_primary
+            else SCHEMAS["NL_HS"]
+        )
+        postgresql_db.commit()
+        before_sqlite = hs_table_columns(sqlite)
+        before_postgresql = hs_table_columns(postgresql_db)
+        database = (
+            DualDatabase(postgresql_db, sqlite)
+            if postgresql_primary
+            else DualDatabase(sqlite, postgresql_db)
+        )
+        assert SchemaManager(database).create_table("NL_HS") is False
+        assert hs_table_columns(sqlite) == before_sqlite
+        assert hs_table_columns(postgresql_db) == before_postgresql

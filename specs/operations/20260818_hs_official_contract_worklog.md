@@ -339,3 +339,34 @@ then extract the full official HS oracle before editing production code.
   `git diff --check`. The dedicated PostgreSQL container remains present only
   until the final package gate and immutable commit are complete; it must be
   removed before the final clean-SHA review.
+
+## Final bounded review follow-up (2026-08-18)
+
+- Candidate `28a4ce4deab7c9d02eaf6802792387348c7d5777` received GREEN
+  carry-forward reviews for the PostgreSQL ownership repair and the exact
+  git-archive package/release surface. The storage reviewer independently found
+  one remaining combination gap: an empty native table missing the permitted
+  layout-marker column could also carry an unrelated CHECK constraint. The
+  marker verifier returned before its CHECK census, so additive migration
+  durably added `CurrentLayoutVersion` and rejected only afterward.
+- One compact regression now covers SQLite, PostgreSQL and both Dual target
+  orientations. Against unchanged `28a4ce4deab7c9d02eaf6802792387348c7d5777`
+  it was actually red: SQLite-only selection `1 failed, 3 skipped`; fresh
+  PostgreSQL 16 selection `4 failed`. Each failure showed the marker column in
+  the post-call column set despite a false migration result.
+- The marker verifier now inventories CHECK constraints before the permitted
+  missing-marker return. A marker-free additive candidate must contain zero
+  CHECK constraints; a marked current store must continue to contain exactly
+  the one trusted `CurrentLayoutVersion = 200` CHECK. The new four-case
+  SQLite/PostgreSQL/Dual selection passes after this bounded repair.
+- Final verification after that repair:
+  - complete HS contract with fresh PostgreSQL 16: `133 passed`;
+  - full locked Python 3.12 suite:
+    `3296 passed, 338 skipped, 20 subtests passed in 104.58s`;
+  - `uv lock --check`, `TEST GATE PASS`, fatal Flake8 `0`, strict MkDocs and
+    `git diff --check`: all pass.
+- Next safe action: commit and push this one bounded follow-up, remove the
+  dedicated PostgreSQL container, verify exact SHA/clean, and ask only the
+  finding reviewer to confirm this combination closure. Package and
+  transaction reviews remain valid because this follow-up changes only the HS
+  marker CHECK census, its focused tests and this worklog.
