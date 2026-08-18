@@ -154,12 +154,72 @@
   provider, production, GitHub, release-lock, KPS data, or model state was
   changed.
 
+## Frozen-candidate reviews and one repair batch
+
+- The first frozen review candidate was
+  `7dffe3b1c6fea6099e0c57715f0f1f86a229f3d1`, with base
+  `6e9a9f500f2353d7b423e5f1e12b07c30275f8d1` and a clean worktree.
+  Three independent read-only reviews were aggregated before any repair:
+  - the database reviewer found that caller-built integer distances were
+    accepted but stored to standard `COURSE_CHANGE` as `"0"`/`"12"` rather
+    than the lossless official four-character `"0000"`/`"0012"` form;
+  - the same reviewer found that failed public `SchemaManager.create_table`
+    and `create_all_tables` CC preflights could leave a PostgreSQL catalog-read
+    transaction pending because ownership was sampled after the first read;
+  - the official-oracle reviewer demonstrated that forged workbook/SDK source
+    fields, code domains, history fields, and `JV_CC_INFO` spans were not
+    truth-bound by the initial oracle test, and also identified the wrong
+    Unicode separator in the recorded timing-sheet locator;
+  - the release reviewer found no code or package blocker, but correctly
+    rejected the stale worklog as incomplete release provenance. Its parser
+    offset, code-domain, schema fail-open, provider-count, stale-snapshot, and
+    routing mutants all made the corresponding tests fail.
+- Red-first follow-up was committed as
+  `a5a47249edde6afbacb643e47c4c0052be07d273`. On the unrepaired production
+  candidate, the grouped review regressions produced five failures: one exact
+  official-locator/oracle failure, two importer distance-normalization
+  failures, and two PostgreSQL SchemaManager transaction-closure failures.
+  Provider-valid controls remained green.
+- One consolidated repair was committed as
+  `6caa56b9d39bbb5c6cb27b634f82fc5000ecb2f3`:
+  - standard CC translation formats accepted integer distances to exactly four
+    digits after shared validation;
+  - strict SchemaManager preflight snapshots ownership before every catalog
+    read and closes only a transaction created by the failing call;
+  - the compact oracle now binds both workbook sources and hashes, SDK source
+    and hash, every `JV_CC_INFO` field span, exact track/reason domains,
+    history/provider facts, and the real U+FF65 worksheet separator.
+  All five previously red review regressions passed after this repair.
+
+## Final local evidence before publication
+
+- Compact CC contract on SQLite: `66 passed, 15 skipped`.
+- Compact CC contract against the fresh disposable PostgreSQL 16 instance:
+  `81 passed`.
+- Workflow-equivalent suite on exact
+  `6caa56b9d39bbb5c6cb27b634f82fc5000ecb2f3`: `3454 passed, 388 skipped,
+  14 deselected, 20 subtests passed`.
+- Python 3.12 affected suite on the same production/test tree: `715 passed,
+  58 skipped, 9 subtests passed`.
+- Workflow-fatal flake8 (`E9,F63,F7,F82`) returned `0`; the repository test
+  gate reported `TEST GATE PASS`; `uv lock --check`, strict MkDocs, and
+  `git diff --check` passed.
+- A git-archive-derived wheel and sdist for `2.0.0.dev0` built successfully.
+  The official distribution-content gate passed for both artifacts, and the
+  isolated wheel initialization smoke passed. No `specs/` worklog is included
+  in the distributable artifacts.
+- No provider, production, GitHub, release-lock, KPS data, or model state was
+  changed by these local validations. The PostgreSQL instance is disposable
+  and will be removed after the final carry-forward review.
+
 ## Next safe command and STOP conditions
 
-- Next: commit the completed implementation/docs/worklog batch, run the
-  workflow-equivalent suite and package gates on its exact full SHA, then
-  freeze one clean candidate for the already-planned independent bounded
-  reviews. Aggregate concrete findings before any repair commit.
+- Next: commit this final evidence update, freeze the resulting clean full SHA,
+  run one bounded carry-forward review of the consolidated repair/provenance,
+  then push one branch, open one PR, request the single native Copilot review,
+  address actionable comments in one batch, require unresolved thread count
+  zero, and merge only after the applicable checks and exact-head evidence are
+  green.
 - STOP on non-worklog drift, a material disagreement among pinned official
   sources, backend divergence that is not explained and tested, or any need
   for destructive/provider action beyond the authorized local test scope.
