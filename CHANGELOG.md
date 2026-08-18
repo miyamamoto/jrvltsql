@@ -39,6 +39,12 @@
 
 ### Fixed
 
+- native `NL_UM` の保存経路にも標準名 `UMA` と同じ置換キー検証を追加し、公式主キー
+  以外の `UNIQUE`/exclusion 制約、PostgreSQL の `ON CONFLICT` に使えない遅延
+  主キー、`KettoNum` 以外の主キーや keyless、テーブル欠落を持つ既存 `NL_UM` を、
+  行の置換前に `SchemaMigrationError` で拒否する（`docs/record_contracts.md` の
+  UM 契約どおり。兄弟レコードと同じ検証器を同じ位置で呼ぶだけで、parser の挙動と
+  標準名 `UMA` の既存 preflight は変えない）
 - `HN`を公式現行251バイト配置と10桁`HansyokuNum` identityへ結び付け、native
   `NL_HN`と標準名`HANSYOKU`でprovider順のstatus 1/2更新、status 0 exact erase、
   caller validation、SQLite/PostgreSQLのstrict schema preflightを一致させた。

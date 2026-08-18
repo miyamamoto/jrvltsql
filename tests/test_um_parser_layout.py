@@ -16,10 +16,15 @@ import pytest
 
 from src.database.dual_handler import DualDatabase
 from src.database.migration import SchemaMigrationError
+from src.database.schema import SCHEMAS
 from src.database.schema_jravan import JRAVAN_SCHEMAS
 from src.database.schema_types import get_table_column_types, get_table_primary_key_columns
 from src.database.sqlite_handler import SQLiteDatabase
-from src.importer.importer import DataImporter, translate_standard_field_names
+from src.importer.importer import (
+    DataImporter,
+    translate_standard_field_names,
+    verify_um_storage_schema,
+)
 from src.importer.importer_optimized import OptimizedDataImporter
 from src.parser.um_parser import UMParser
 
@@ -362,17 +367,21 @@ UNSAFE_UNIQUE_STANDARD_UMA_SCHEMA = JRAVAN_SCHEMAS["UMA"].replace(
 )
 
 
-def _import_standard_um_records(database, entrypoint, records, auto_commit):
+def _import_um_records(database, entrypoint, records, auto_commit, *, standard):
     if entrypoint == "data-batch":
-        return DataImporter(database, use_jravan_schema=True).import_records(
+        return DataImporter(database, use_jravan_schema=standard).import_records(
             iter(records), auto_commit=auto_commit
         )
     if entrypoint == "optimized-batch":
-        return OptimizedDataImporter(database, use_jravan_schema=True).import_records(
+        return OptimizedDataImporter(database, use_jravan_schema=standard).import_records(
             iter(records), auto_commit=auto_commit
         )
-    importer = DataImporter(database, use_jravan_schema=True)
+    importer = DataImporter(database, use_jravan_schema=standard)
     return [importer.import_single_record(record, auto_commit=auto_commit) for record in records]
+
+
+def _import_standard_um_records(database, entrypoint, records, auto_commit):
+    return _import_um_records(database, entrypoint, records, auto_commit, standard=True)
 
 
 @pytest.mark.parametrize("entrypoint", ("data-batch", "optimized-batch", "single"))
@@ -386,7 +395,7 @@ def test_um_standard_extra_unique_is_rejected_before_mutation(tmp_path, entrypoi
             "SELECT name, sql FROM sqlite_master "
             "WHERE type IN ('table', 'index') ORDER BY type, name"
         )
-        with pytest.raises(SchemaMigrationError, match="UNIQUE"):
+        with pytest.raises(SchemaMigrationError, match=r"Standard UMA storage UMA .*UNIQUE"):
             _import_standard_um_records(
                 primary,
                 entrypoint,
@@ -430,7 +439,7 @@ def test_um_standard_dual_rejects_extra_unique_on_either_backend(
         primary.commit()
         secondary.commit()
         dual = DualDatabase(primary, secondary)
-        with pytest.raises(SchemaMigrationError, match="UNIQUE"):
+        with pytest.raises(SchemaMigrationError, match=r"Standard UMA storage UMA .*UNIQUE"):
             DataImporter(dual, use_jravan_schema=True).import_records(iter([parsed_record()]))
         assert primary.fetch_one("SELECT COUNT(*) AS count FROM UMA")["count"] == 0
         assert secondary.fetch_one("SELECT COUNT(*) AS count FROM UMA")["count"] == 0
@@ -466,6 +475,199 @@ def test_um_standard_malformed_compact_body_is_rejected_before_mutation(tmp_path
         with pytest.raises(SchemaMigrationError, match="SogoChaku"):
             DataImporter(database, use_jravan_schema=True).import_records(iter([record]))
         assert database.fetch_one("SELECT COUNT(*) AS count FROM UMA")["count"] == 0
+
+
+# native NL_UM: 標準名 UMA と同じ置換キー契約（公式主キー以外の UNIQUE /
+# ON CONFLICT に使えない主キーは DML 前に拒否）を、native 経路にも要求する。
+UNSAFE_UNIQUE_NATIVE_UM_SCHEMA = SCHEMAS["NL_UM"].replace(
+    "PRIMARY KEY (KettoNum)",
+    "PRIMARY KEY (KettoNum), UNIQUE (DelDate)",
+)
+
+
+def _defective_native_um_schema(defect):
+    schema = SCHEMAS["NL_UM"]
+    if defect == "wrong-key":
+        return schema.replace("PRIMARY KEY (KettoNum)", "PRIMARY KEY (DelDate)")
+    if defect == "keyless":
+        keyless = schema.replace(",\n            PRIMARY KEY (KettoNum)", "")
+        assert "PRIMARY KEY" not in keyless
+        return keyless
+    raise AssertionError(defect)
+
+
+def _import_native_um_records(database, entrypoint, records, auto_commit):
+    return _import_um_records(database, entrypoint, records, auto_commit, standard=False)
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_um_native_storage_keeps_distinct_keys_and_updates_exact_key(tmp_path, importer_class):
+    database = SQLiteDatabase({"path": str(tmp_path / f"native-{importer_class.__name__}.db")})
+    with database:
+        database.execute(SCHEMAS["NL_UM"])
+        database.commit()
+        importer = importer_class(database)
+        created = importer.import_records(
+            iter(
+                [
+                    parsed_record(ketto_num="2019900001", bamei="第一登録馬"),
+                    parsed_record(ketto_num="2019900002", bamei="第二登録馬"),
+                ]
+            )
+        )
+        updated = importer.import_records(
+            iter([parsed_record(ketto_num="2019900001", bamei="第一更新馬")])
+        )
+        rows = database.fetch_all(
+            "SELECT KettoNum, Bamei, DelDate, SogoChaku, KyakusituKeiko, TorokuRaceSu "
+            "FROM NL_UM ORDER BY KettoNum"
+        )
+
+    assert created["records_imported"] == 2
+    assert created["records_failed"] == 0
+    assert updated["records_imported"] == 1
+    assert updated["records_failed"] == 0
+    assert rows == [
+        {
+            "KettoNum": "2019900001",
+            "Bamei": "第一更新馬",
+            "DelDate": "00000000",
+            "SogoChaku": "001002003004005006",
+            "KyakusituKeiko": "001002003004",
+            "TorokuRaceSu": "042",
+        },
+        {
+            "KettoNum": "2019900002",
+            "Bamei": "第二登録馬",
+            "DelDate": "00000000",
+            "SogoChaku": "001002003004005006",
+            "KyakusituKeiko": "001002003004",
+            "TorokuRaceSu": "042",
+        },
+    ]
+
+
+@pytest.mark.parametrize("entrypoint", ("data-batch", "optimized-batch", "single"))
+@pytest.mark.parametrize("auto_commit", (True, False), ids=("owned", "caller-owned"))
+def test_um_native_extra_unique_is_rejected_before_mutation(tmp_path, entrypoint, auto_commit):
+    database = SQLiteDatabase({"path": str(tmp_path / f"native-unique-{entrypoint}.db")})
+    with database:
+        database.execute(UNSAFE_UNIQUE_NATIVE_UM_SCHEMA)
+        database.commit()
+        before = database.fetch_all(
+            "SELECT name, sql FROM sqlite_master "
+            "WHERE type IN ('table', 'index') ORDER BY type, name"
+        )
+        with pytest.raises(SchemaMigrationError, match=r"UM storage NL_UM .*UNIQUE"):
+            _import_native_um_records(
+                database,
+                entrypoint,
+                [
+                    parsed_record(ketto_num="2019900001"),
+                    parsed_record(ketto_num="2019900002"),
+                ],
+                auto_commit,
+            )
+        assert (
+            database.fetch_all(
+                "SELECT name, sql FROM sqlite_master "
+                "WHERE type IN ('table', 'index') ORDER BY type, name"
+            )
+            == before
+        )
+        assert database.fetch_one("SELECT COUNT(*) AS count FROM NL_UM")["count"] == 0
+
+
+@pytest.mark.parametrize("unsafe_target", ("primary", "secondary"))
+def test_um_native_dual_rejects_extra_unique_on_either_backend(tmp_path, unsafe_target):
+    primary = SQLiteDatabase({"path": str(tmp_path / f"native-{unsafe_target}-primary.db")})
+    secondary = SQLiteDatabase({"path": str(tmp_path / f"native-{unsafe_target}-secondary.db")})
+    with primary, secondary:
+        primary.execute(
+            UNSAFE_UNIQUE_NATIVE_UM_SCHEMA if unsafe_target == "primary" else SCHEMAS["NL_UM"]
+        )
+        secondary.execute(
+            UNSAFE_UNIQUE_NATIVE_UM_SCHEMA if unsafe_target == "secondary" else SCHEMAS["NL_UM"]
+        )
+        primary.commit()
+        secondary.commit()
+        dual = DualDatabase(primary, secondary)
+        importer = DataImporter(dual)
+        with pytest.raises(SchemaMigrationError, match=r"UM storage NL_UM .*UNIQUE"):
+            importer.import_records(iter([parsed_record()]))
+        assert importer.get_statistics()["records_imported"] == 0
+        assert dual.secondary_in_sync is True
+        assert primary.fetch_one("SELECT COUNT(*) AS count FROM NL_UM")["count"] == 0
+        assert secondary.fetch_one("SELECT COUNT(*) AS count FROM NL_UM")["count"] == 0
+
+
+@pytest.mark.parametrize("entrypoint", ("data-batch", "optimized-batch", "single"))
+def test_um_native_missing_table_is_rejected_before_mutation(tmp_path, entrypoint):
+    database = SQLiteDatabase({"path": str(tmp_path / f"native-missing-{entrypoint}.db")})
+    with database:
+        with pytest.raises(SchemaMigrationError, match="Required table does not exist: NL_UM"):
+            _import_native_um_records(database, entrypoint, [parsed_record()], True)
+        assert (
+            database.fetch_one("SELECT COUNT(*) AS count FROM sqlite_master WHERE name = 'NL_UM'")[
+                "count"
+            ]
+            == 0
+        )
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_um_native_missing_table_is_not_cached_as_verified(tmp_path, importer_class):
+    database = SQLiteDatabase(
+        {"path": str(tmp_path / f"native-cache-{importer_class.__name__}.db")}
+    )
+    with database:
+        importer = importer_class(database)
+        with pytest.raises(SchemaMigrationError, match="Required table does not exist: NL_UM"):
+            importer.import_records(iter([parsed_record()]))
+        assert importer.get_statistics()["records_imported"] == 0
+        # The table appears later in the same importer's lifetime with an
+        # unsafe UNIQUE: the earlier failure must not have been cached as a pass.
+        database.execute(UNSAFE_UNIQUE_NATIVE_UM_SCHEMA)
+        database.commit()
+        with pytest.raises(SchemaMigrationError, match=r"UM storage NL_UM .*UNIQUE"):
+            importer.import_records(iter([parsed_record()]))
+        assert importer.get_statistics()["records_imported"] == 0
+        assert database.fetch_one("SELECT COUNT(*) AS count FROM NL_UM")["count"] == 0
+
+
+@pytest.mark.parametrize("entrypoint", ("data-batch", "optimized-batch", "single"))
+@pytest.mark.parametrize("defect", ("wrong-key", "keyless"))
+def test_um_native_wrong_or_missing_key_is_rejected_before_mutation(tmp_path, entrypoint, defect):
+    database = SQLiteDatabase({"path": str(tmp_path / f"native-{defect}-{entrypoint}.db")})
+    with database:
+        database.execute(_defective_native_um_schema(defect))
+        database.execute(
+            "INSERT INTO NL_UM (RecordSpec, DataKubun, MakeDate, KettoNum, DelDate, Bamei) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            ("UM", "1", "20000101", "2019900009", "00000000", "legacy-row"),
+        )
+        database.commit()
+        before_columns = database.fetch_all('PRAGMA table_xinfo("NL_UM")')
+        before_rows = database.fetch_all("SELECT * FROM NL_UM")
+        with pytest.raises(SchemaMigrationError, match="primary key"):
+            _import_native_um_records(
+                database,
+                entrypoint,
+                [parsed_record(ketto_num="2019900001"), parsed_record(ketto_num="2019900002")],
+                True,
+            )
+        assert database.fetch_all('PRAGMA table_xinfo("NL_UM")') == before_columns
+        assert database.fetch_all("SELECT * FROM NL_UM") == before_rows
+
+
+def test_um_storage_verifier_covers_only_native_um_storage():
+    database = SQLiteDatabase({"path": ":memory:"})
+    with database:
+        assert verify_um_storage_schema(database, "NL_RA") is False
+        assert verify_um_storage_schema(database, "UMA_RACE") is False
+        # Standard UMA is verified by the standard-schema preflight before the
+        # record loop; the per-record verifier is intentionally native-only.
+        assert verify_um_storage_schema(database, "UMA") is False
 
 
 @pytest.fixture
@@ -506,12 +708,12 @@ def postgresql_db():
     (
         pytest.param(
             "PRIMARY KEY (KettoNum), UNIQUE (DelDate)",
-            "UNIQUE",
+            r"Standard UMA storage UMA .*UNIQUE",
             id="extra-unique",
         ),
         pytest.param(
             "PRIMARY KEY (KettoNum) DEFERRABLE INITIALLY DEFERRED",
-            "primary key",
+            r"Standard UMA storage primary key for UMA",
             id="deferrable-primary-key",
         ),
     ),
@@ -541,6 +743,128 @@ def test_um_postgresql_constraint_drift_is_rejected_before_mutation(
         == before
     )
     assert postgresql_db.fetch_one('SELECT COUNT(*) AS "count" FROM uma')["count"] == 0
+
+
+@pytest.mark.parametrize(
+    ("replacement", "message"),
+    (
+        pytest.param(
+            "PRIMARY KEY (KettoNum), UNIQUE (DelDate)",
+            r"UM storage NL_UM .*UNIQUE",
+            id="extra-unique",
+        ),
+        pytest.param(
+            "PRIMARY KEY (KettoNum) DEFERRABLE INITIALLY DEFERRED",
+            r"UM storage primary key for NL_UM",
+            id="deferrable-primary-key",
+        ),
+        pytest.param(
+            "PRIMARY KEY (DelDate)",
+            r"primary key existing=\['deldate'\], expected=\['KettoNum'\]",
+            id="wrong-primary-key",
+        ),
+    ),
+)
+@pytest.mark.parametrize("entrypoint", ("data-batch", "optimized-batch", "single"))
+@pytest.mark.parametrize("auto_commit", (True, False), ids=("owned", "caller-owned"))
+def test_um_native_postgresql_constraint_drift_is_rejected_before_mutation(
+    postgresql_db, entrypoint, auto_commit, replacement, message
+):
+    postgresql_db.execute(SCHEMAS["NL_UM"].replace("PRIMARY KEY (KettoNum)", replacement))
+    postgresql_db.commit()
+    catalog_sql = (
+        "SELECT contype AS type, condeferrable AS deferrable, "
+        "condeferred AS deferred, pg_get_constraintdef(oid) AS definition "
+        "FROM pg_constraint WHERE conrelid = to_regclass(?) ORDER BY contype, conname"
+    )
+    before = postgresql_db.fetch_all(catalog_sql, ("nl_um",))
+    # Close the catalog-read transaction this test opened so the assertion
+    # below observes only what the importer left behind.
+    postgresql_db.rollback()
+    with pytest.raises(SchemaMigrationError, match=message):
+        _import_native_um_records(postgresql_db, entrypoint, [parsed_record()], auto_commit)
+    assert postgresql_db.has_pending_transaction() is False
+    assert postgresql_db.fetch_all(catalog_sql, ("nl_um",)) == before
+    assert postgresql_db.fetch_one('SELECT COUNT(*) AS "count" FROM nl_um')["count"] == 0
+
+
+@pytest.mark.parametrize("entrypoint", ("data-batch", "optimized-batch", "single"))
+def test_um_native_postgresql_missing_table_is_rejected_before_mutation(postgresql_db, entrypoint):
+    with pytest.raises(SchemaMigrationError, match="Required table does not exist: NL_UM"):
+        _import_native_um_records(postgresql_db, entrypoint, [parsed_record()], True)
+    assert postgresql_db.has_pending_transaction() is False
+    assert postgresql_db.fetch_one("SELECT to_regclass('nl_um') AS oid")["oid"] is None
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_um_native_postgresql_key_roundtrip(postgresql_db, importer_class):
+    postgresql_db.execute(SCHEMAS["NL_UM"])
+    postgresql_db.commit()
+    importer = importer_class(postgresql_db)
+
+    created = importer.import_records(
+        iter(
+            [
+                parsed_record(ketto_num="2019900001", bamei="第一登録馬"),
+                parsed_record(ketto_num="2019900002", bamei="第二登録馬"),
+            ]
+        )
+    )
+    updated = importer.import_records(
+        iter([parsed_record(ketto_num="2019900001", bamei="第一更新馬")])
+    )
+    rows = postgresql_db.fetch_all(
+        'SELECT kettonum AS "KettoNum", bamei AS "Bamei", deldate AS "DelDate", '
+        'sogochaku AS "SogoChaku", torokuracesu AS "TorokuRaceSu" '
+        "FROM nl_um ORDER BY kettonum"
+    )
+
+    assert created["records_imported"] == 2
+    assert created["records_failed"] == 0
+    assert updated["records_imported"] == 1
+    assert updated["records_failed"] == 0
+    assert rows == [
+        {
+            "KettoNum": "2019900001",
+            "Bamei": "第一更新馬",
+            "DelDate": "00000000",
+            "SogoChaku": "001002003004005006",
+            "TorokuRaceSu": "042",
+        },
+        {
+            "KettoNum": "2019900002",
+            "Bamei": "第二登録馬",
+            "DelDate": "00000000",
+            "SogoChaku": "001002003004005006",
+            "TorokuRaceSu": "042",
+        },
+    ]
+
+
+@pytest.mark.parametrize("unsafe_on_postgresql", (False, True), ids=("sqlite", "postgresql"))
+def test_um_native_mixed_dual_rejects_unsafe_target_before_either_mutates(
+    tmp_path, postgresql_db, unsafe_on_postgresql
+):
+    sqlite = SQLiteDatabase({"path": str(tmp_path / "native-mixed-dual.db")})
+    with sqlite:
+        sqlite.execute(SCHEMAS["NL_UM"] if unsafe_on_postgresql else UNSAFE_UNIQUE_NATIVE_UM_SCHEMA)
+        postgresql_db.execute(
+            UNSAFE_UNIQUE_NATIVE_UM_SCHEMA if unsafe_on_postgresql else SCHEMAS["NL_UM"]
+        )
+        sqlite.commit()
+        postgresql_db.commit()
+        dual = (
+            DualDatabase(sqlite, postgresql_db)
+            if unsafe_on_postgresql
+            else DualDatabase(postgresql_db, sqlite)
+        )
+        importer = DataImporter(dual)
+        with pytest.raises(SchemaMigrationError, match="UNIQUE"):
+            importer.import_records(iter([parsed_record()]))
+        assert importer.get_statistics()["records_imported"] == 0
+        assert dual.secondary_in_sync is True
+        assert sqlite.fetch_one("SELECT COUNT(*) AS count FROM NL_UM")["count"] == 0
+        assert postgresql_db.fetch_one('SELECT COUNT(*) AS "count" FROM nl_um')["count"] == 0
 
 
 @pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))

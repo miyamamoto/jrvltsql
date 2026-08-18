@@ -726,6 +726,7 @@ _JC_LOSSLESS_TEXT_WIDTHS = {
     for table_name in _JC_STORAGE_TABLES
 }
 _CS_STORAGE_TABLES = frozenset({"NL_CS", "COURSE"})
+_UM_STORAGE_TABLES = frozenset({"NL_UM"})
 _JG_STORAGE_TABLES = frozenset({"NL_JG", "JOGAIBA"})
 _JG_KEY_COLUMNS = (
     "Year",
@@ -2584,6 +2585,41 @@ def verify_cs_storage_schema(database: BaseDatabase, table_name: str) -> bool:
     _verify_cs_kyori_storage_type(database, table_name)
     _verify_replacement_key_constraints(database, table_name, "CS storage")
     return True
+
+
+def verify_um_storage_schema(database: BaseDatabase, table_name: str) -> bool:
+    """Fail closed unless native UM storage keeps a replacement-safe key.
+
+    Native ``NL_UM`` replaces rows through the official single-column
+    ``KettoNum`` primary key. A missing table, a primary key other than
+    ``KettoNum``, an additional UNIQUE/exclusion constraint, or a PostgreSQL
+    primary key that ``ON CONFLICT`` cannot use would let one replacement
+    erase or duplicate a different registration, so all are rejected before
+    any DML. Standard ``UMA`` receives the same replacement-key check from
+    ``_preflight_standard_schema_migrations`` before the record loop and is
+    intentionally not re-verified here.
+    """
+
+    if table_name not in _UM_STORAGE_TABLES:
+        return False
+    transaction_snapshot = _snapshot_validation_transactions(database)
+    from src.database.migration import verify_table_schema
+    from src.database.schema import SCHEMAS
+    from src.database.schema_jravan import JRAVAN_SCHEMAS
+
+    try:
+        schema_sql = SCHEMAS.get(table_name) or JRAVAN_SCHEMAS.get(table_name)
+        if schema_sql is None:
+            raise SchemaMigrationError(f"UM storage schema is undefined: {table_name}")
+        verify_table_schema(database, table_name, schema_sql)
+        _verify_replacement_key_constraints(database, table_name, "UM storage")
+        return True
+    except Exception:
+        _rollback_call_created_validation_transactions(
+            transaction_snapshot,
+            context="failed UM schema validation",
+        )
+        raise
 
 
 def verify_jg_storage_schema(database: BaseDatabase, table_name: str) -> bool:
@@ -6644,6 +6680,7 @@ class DataImporter:
         self._verified_cc_tables: set[str] = set()
         self._verified_jc_tables: set[str] = set()
         self._verified_cs_tables: set[str] = set()
+        self._verified_um_tables: set[str] = set()
         self._verified_jg_tables: set[str] = set()
         self._verified_wc_tables: set[str] = set()
         self._verified_wf_tables: set[str] = set()
@@ -7017,6 +7054,9 @@ class DataImporter:
                 if table_name not in self._verified_cs_tables:
                     if verify_cs_storage_schema(self.database, table_name):
                         self._verified_cs_tables.add(table_name)
+                if table_name not in self._verified_um_tables:
+                    if verify_um_storage_schema(self.database, table_name):
+                        self._verified_um_tables.add(table_name)
                 if table_name not in self._verified_jg_tables:
                     if verify_jg_storage_schema(self.database, table_name):
                         self._verified_jg_tables.add(table_name)
@@ -7765,6 +7805,9 @@ class DataImporter:
             if table_name not in self._verified_cs_tables:
                 if verify_cs_storage_schema(self.database, table_name):
                     self._verified_cs_tables.add(table_name)
+            if table_name not in self._verified_um_tables:
+                if verify_um_storage_schema(self.database, table_name):
+                    self._verified_um_tables.add(table_name)
             if table_name not in self._verified_jg_tables:
                 if verify_jg_storage_schema(self.database, table_name):
                     self._verified_jg_tables.add(table_name)

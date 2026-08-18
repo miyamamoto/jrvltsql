@@ -98,6 +98,7 @@ from src.importer.importer import (
     verify_se_storage_schema,
     verify_tc_storage_schema,
     verify_tk_coupled_tables,
+    verify_um_storage_schema,
     verify_wc_storage_schema,
     verify_we_storage_schema,
     verify_wf_storage_schema,
@@ -150,6 +151,7 @@ class OptimizedDataImporter:
         self._verified_cc_tables: set[str] = set()
         self._verified_jc_tables: set[str] = set()
         self._verified_cs_tables: set[str] = set()
+        self._verified_um_tables: set[str] = set()
         self._verified_jg_tables: set[str] = set()
         self._verified_wc_tables: set[str] = set()
         self._verified_wf_tables: set[str] = set()
@@ -483,6 +485,9 @@ class OptimizedDataImporter:
                 if table_name not in self._verified_cs_tables:
                     if verify_cs_storage_schema(self.database, table_name):
                         self._verified_cs_tables.add(table_name)
+                if table_name not in self._verified_um_tables:
+                    if verify_um_storage_schema(self.database, table_name):
+                        self._verified_um_tables.add(table_name)
                 if table_name not in self._verified_jg_tables:
                     if verify_jg_storage_schema(self.database, table_name):
                         self._verified_jg_tables.add(table_name)
