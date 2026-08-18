@@ -45,6 +45,17 @@
   the failure will be recorded and Codex will implement with independent Codex
   reviews rather than silently changing the gate.
 
+### Claude execution result
+
+- Claude Code `2.1.233` was invoked with `--model fable` and session id
+  `eabbe5e2-34f9-4fe1-b4f9-a85d3976f230` after the start-worklog commit. It
+  exited before reading or editing the repository because the OAuth session was
+  expired and could not be refreshed. The CLI also printed non-fatal warnings
+  about obsolete `Write(...)` permission-rule spellings in the parent Claude
+  settings. No Claude implementation or review evidence exists for this
+  iteration. Codex will implement the bounded contract and require independent
+  official-oracle and critical Codex review as the recorded fallback.
+
 ## Known preliminary risks (not yet official findings)
 
 - Current `TCParser` has no TC-specific key/body validator.
