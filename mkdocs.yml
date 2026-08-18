@@ -25,6 +25,7 @@ nav:
   - 時系列オッズ: timeseries_odds.md
   - PostgreSQL: postgresql.md
   - 対応データ種別一覧: data_support.md
+  - レコード別の公式契約と移行手順: record_contracts.md
   - CLI: CLI.md
   - スクリプト一覧: scripts.md
   - アーキテクチャ: architecture.md

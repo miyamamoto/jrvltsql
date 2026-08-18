@@ -117,6 +117,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File install_tasks.ps1 -DbType po
 | --- | --- |
 | [はじめに](docs/getting_started.md) | 目的別の実行順序 |
 | [対応データ種別一覧](docs/data_support.md) | JVOpen / JVRTOpen spec と保存先 |
+| [レコード別の公式契約と移行手順](docs/record_contracts.md) | レコード種別ごとの公式レイアウト・主キー・`DataKubun`・既存 DB の移行手順 |
 | [時系列オッズ](docs/timeseries_odds.md) | `0B41/0B42` と `0B30` 系の違い |
 | [PostgreSQL](docs/postgresql.md) | PostgreSQL 保存と日次同期 |
 | [CLI](docs/CLI.md) | CLI リファレンス |
