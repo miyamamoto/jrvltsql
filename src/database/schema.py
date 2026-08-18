@@ -2768,6 +2768,25 @@ STRICT_JC_STORAGE_TABLES = frozenset({"NL_JC", "RT_JC"})
 def _preflight_existing_strict_storage(db: BaseDatabase) -> None:
     """Reject unsafe strict identities before unrelated additive migration."""
 
+    from src.importer.importer import (
+        _rollback_call_created_validation_transactions,
+        _snapshot_validation_transactions,
+    )
+
+    transaction_snapshot = _snapshot_validation_transactions(db)
+    try:
+        _verify_existing_strict_storage_targets(db)
+    except Exception:
+        _rollback_call_created_validation_transactions(
+            transaction_snapshot,
+            context="failed strict-storage preflight",
+        )
+        raise
+
+
+def _verify_existing_strict_storage_targets(db: BaseDatabase) -> None:
+    """Verify every physical strict-storage target without owning recovery."""
+
     from src.database.migration import _migration_targets
     from src.importer.importer import (
         verify_av_storage_schema,

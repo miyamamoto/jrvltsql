@@ -436,6 +436,13 @@ def translate_standard_field_names(record: dict, table_name: str) -> dict:
     """Translate legacy native parser names for a standard-name table."""
     if table_name == "UMA":
         record = _expand_standard_uma_fields(record)
+    if table_name == "COURSE_CHANGE":
+        translated_cc = dict(record)
+        for field_name in ("AtoKyori", "MaeKyori"):
+            value = translated_cc.get(field_name)
+            if isinstance(value, int) and not isinstance(value, bool):
+                translated_cc[field_name] = f"{value:04d}"
+        record = translated_cc
     aliases = _STANDARD_FIELD_ALIASES.get(table_name)
     if not aliases:
         return record

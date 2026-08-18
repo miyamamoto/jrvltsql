@@ -119,10 +119,7 @@ def test_cc_oracle_binds_both_workbooks_sdk_and_every_parser_span() -> None:
     }
     assert CONTRACT["current_provider_specs"] == ["0B14", "0B16"]
     assert CONTRACT["snapshot_provider_spec"] == "0B14"
-    assert (
-        CONTRACT["snapshot_policy_source"]
-        == "JV-Data4901.xlsx:データ提供タイミング･提供単位:60"
-    )
+    assert CONTRACT["snapshot_policy_source"] == "JV-Data4901.xlsx:データ提供タイミング･提供単位:60"
     assert CONTRACT["cancellation_note_source"] == "JV-Data4901.xlsx:特記事項:265"
 
     parser_spans = [(field.name, field.start + 1, field.length) for field in CCParser()._fields]
@@ -142,7 +139,13 @@ def test_cc_oracle_binds_both_workbooks_sdk_and_every_parser_span() -> None:
             {"name": "id", "kind": "nested", "start": 12, "width": 16, "struct": "RACE_ID"},
             {"name": "HappyoTime", "kind": "nested", "start": 28, "width": 8, "struct": "MDHM"},
             {"name": "CCInfoAfter", "kind": "nested", "start": 36, "width": 6, "struct": "CC_INFO"},
-            {"name": "CCInfoBefore", "kind": "nested", "start": 42, "width": 6, "struct": "CC_INFO"},
+            {
+                "name": "CCInfoBefore",
+                "kind": "nested",
+                "start": 42,
+                "width": 6,
+                "struct": "CC_INFO",
+            },
             {"name": "JiyuCd", "kind": "scalar", "start": 48, "width": 1, "decoder": "text"},
             {"name": "crlf", "kind": "scalar", "start": 49, "width": 2, "decoder": "text"},
         ],

@@ -64,6 +64,6 @@
   },
   "current_provider_specs": ["0B14", "0B16"],
   "snapshot_provider_spec": "0B14",
-  "snapshot_policy_source": "JV-Data4901.xlsx:データ提供タイミング・提供単位:60",
+  "snapshot_policy_source": "JV-Data4901.xlsx:データ提供タイミング･提供単位:60",
   "cancellation_note_source": "JV-Data4901.xlsx:特記事項:265"
 }
