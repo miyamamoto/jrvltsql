@@ -409,6 +409,8 @@ def test_hs_executable_schemas_publish_the_exact_identity() -> None:
         "short-text",
         "extra-unique",
         "extra-check",
+        "extra-foreign-key",
+        "extra-required-column",
         "missing-marker-check",
     ),
 )
@@ -443,10 +445,26 @@ def test_hs_schema_verifier_rejects_unsafe_storage(
             "CHECK (Price <= 100), PRIMARY KEY (KettoNum, SaleCode, FromDate)",
             1,
         )
+    elif defect == "extra-foreign-key":
+        schema = schema.replace(
+            "PRIMARY KEY (KettoNum, SaleCode, FromDate)",
+            "FOREIGN KEY (SaleCode) REFERENCES HS_PARENT(SaleCode) "
+            "ON DELETE CASCADE, PRIMARY KEY (KettoNum, SaleCode, FromDate)",
+            1,
+        )
+    elif defect == "extra-required-column":
+        schema = schema.replace(
+            "PRIMARY KEY (KettoNum, SaleCode, FromDate)",
+            "ExternalRequired TEXT NOT NULL, "
+            "PRIMARY KEY (KettoNum, SaleCode, FromDate)",
+            1,
+        )
     else:
         schema = schema.replace(" CHECK (CurrentLayoutVersion = 200)", "", 1)
     database = SQLiteDatabase({"path": str(tmp_path / f"{table_name}-{defect}.db")})
     with database:
+        if defect == "extra-foreign-key":
+            database.execute("CREATE TABLE HS_PARENT (SaleCode VARCHAR(6) PRIMARY KEY)")
         database.execute(schema)
         database.commit()
         with pytest.raises(SchemaMigrationError):
@@ -497,13 +515,27 @@ def test_hs_nonempty_unmarked_store_requires_rebuild_before_any_migration(
         assert database.fetch_one("SELECT COUNT(*) AS count FROM NL_HS") == {"count": 1}
 
 
-def test_hs_empty_current_compatible_native_store_missing_only_marker_is_safely_marked(
+@pytest.mark.parametrize(
+    "missing_columns",
+    (
+        ("CurrentLayoutVersion",),
+        ("RecordDelimiter",),
+        ("CurrentLayoutVersion", "RecordDelimiter"),
+    ),
+)
+def test_hs_empty_current_compatible_native_store_missing_only_allowed_columns(
     tmp_path: Path,
+    missing_columns: tuple[str, ...],
 ) -> None:
-    old_schema = SCHEMAS["NL_HS"].replace(
-        "            CurrentLayoutVersion SMALLINT NOT NULL CHECK (CurrentLayoutVersion = 200),\n",
-        "",
-    )
+    old_schema = SCHEMAS["NL_HS"]
+    if "CurrentLayoutVersion" in missing_columns:
+        old_schema = old_schema.replace(
+            "            CurrentLayoutVersion SMALLINT NOT NULL "
+            "CHECK (CurrentLayoutVersion = 200),\n",
+            "",
+        )
+    if "RecordDelimiter" in missing_columns:
+        old_schema = old_schema.replace("            RecordDelimiter CHAR(2),\n", "")
     database = SQLiteDatabase({"path": str(tmp_path / "empty-unmarked.db")})
     with database:
         database.execute(old_schema)
@@ -513,6 +545,25 @@ def test_hs_empty_current_compatible_native_store_missing_only_marker_is_safely_
         columns = {row["name"] for row in database.fetch_all('PRAGMA table_info("NL_HS")')}
         assert "CurrentLayoutVersion" in columns
         assert "RecordDelimiter" in columns
+
+
+@pytest.mark.parametrize("missing_column", ("HansyokuFNum", "SaleName"))
+def test_hs_empty_native_store_missing_body_column_requires_rebuild(
+    tmp_path: Path,
+    missing_column: str,
+) -> None:
+    schema = "\n".join(
+        line
+        for line in SCHEMAS["NL_HS"].splitlines()
+        if not re.match(rf"\s*{missing_column}\s+", line)
+    )
+    database = SQLiteDatabase({"path": str(tmp_path / f"missing-{missing_column}.db")})
+    with database:
+        database.execute(schema)
+        database.commit()
+        before = database.fetch_all('PRAGMA table_info("NL_HS")')
+        assert SchemaManager(database).create_table("NL_HS") is False
+        assert database.fetch_all('PRAGMA table_info("NL_HS")') == before
 
 
 @pytest.mark.parametrize(
@@ -787,6 +838,8 @@ def test_hs_postgresql_failure_rollback_and_incremental_commit_statistics(
         "short-text",
         "extra-unique",
         "extra-check",
+        "extra-foreign-key",
+        "extra-required-column",
         "deferrable-pk",
         "missing-marker-check",
     ),
@@ -820,6 +873,20 @@ def test_hs_postgresql_schema_verifier_rejects_unusable_or_untrusted_storage(
             "CHECK (Price <= 100), PRIMARY KEY (KettoNum, SaleCode, FromDate)",
             1,
         )
+    elif defect == "extra-foreign-key":
+        schema = schema.replace(
+            "PRIMARY KEY (KettoNum, SaleCode, FromDate)",
+            "FOREIGN KEY (SaleCode) REFERENCES HS_PARENT(SaleCode) "
+            "ON DELETE CASCADE, PRIMARY KEY (KettoNum, SaleCode, FromDate)",
+            1,
+        )
+    elif defect == "extra-required-column":
+        schema = schema.replace(
+            "PRIMARY KEY (KettoNum, SaleCode, FromDate)",
+            "ExternalRequired TEXT NOT NULL, "
+            "PRIMARY KEY (KettoNum, SaleCode, FromDate)",
+            1,
+        )
     elif defect == "deferrable-pk":
         schema = schema.replace(
             "PRIMARY KEY (KettoNum, SaleCode, FromDate)",
@@ -828,6 +895,8 @@ def test_hs_postgresql_schema_verifier_rejects_unusable_or_untrusted_storage(
         )
     else:
         schema = schema.replace(" CHECK (CurrentLayoutVersion = 200)", "", 1)
+    if defect == "extra-foreign-key":
+        postgresql_db.execute("CREATE TABLE HS_PARENT (SaleCode VARCHAR(6) PRIMARY KEY)")
     postgresql_db.execute(schema)
     postgresql_db.commit()
     with pytest.raises(SchemaMigrationError):
@@ -916,3 +985,58 @@ def test_hs_dual_postgresql_schema_rejection_closes_only_call_created_transactio
         assert postgresql_db.fetch_one("SELECT COUNT(*) AS count FROM NL_HS") == {"count": 0}
         assert primary.has_pending_transaction() is False
         postgresql_db.rollback()
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+@pytest.mark.parametrize("auto_commit", (True, False), ids=("owned", "caller-mode"))
+def test_hs_postgresql_empty_standard_import_respects_transaction_mode(
+    postgresql_db,
+    importer_class,
+    auto_commit: bool,
+) -> None:
+    postgresql_db.execute(JRAVAN_SCHEMAS["SALE"])
+    postgresql_db.commit()
+    importer = importer_class(postgresql_db, use_jravan_schema=True)
+    stats = importer.import_records(iter(()), auto_commit=auto_commit)
+    assert stats["records_imported"] == 0
+    assert stats["records_failed"] == 0
+    assert stats["batches_processed"] == 0
+    assert postgresql_db.has_pending_transaction() is (not auto_commit)
+    if not auto_commit:
+        postgresql_db.rollback()
+
+
+def test_hs_postgresql_empty_standard_import_preserves_existing_caller_transaction(
+    postgresql_db,
+) -> None:
+    postgresql_db.execute(JRAVAN_SCHEMAS["SALE"])
+    postgresql_db.execute("CREATE TEMP TABLE hs_empty_marker (value INTEGER)")
+    postgresql_db.commit()
+    postgresql_db.execute("INSERT INTO hs_empty_marker (value) VALUES (?)", (1,))
+    assert postgresql_db.has_pending_transaction() is True
+    stats = DataImporter(postgresql_db, use_jravan_schema=True).import_records(iter(()))
+    assert stats["records_imported"] == 0
+    assert postgresql_db.has_pending_transaction() is True
+    assert postgresql_db.fetch_one("SELECT COUNT(*) AS count FROM hs_empty_marker") == {
+        "count": 1
+    }
+    postgresql_db.rollback()
+
+
+def test_hs_dual_empty_standard_import_does_not_start_backend_transactions(
+    postgresql_db,
+    tmp_path: Path,
+) -> None:
+    primary = SQLiteDatabase({"path": str(tmp_path / "dual-empty.db")})
+    with primary:
+        primary.execute(JRAVAN_SCHEMAS["SALE"])
+        primary.commit()
+        postgresql_db.execute(JRAVAN_SCHEMAS["SALE"])
+        postgresql_db.commit()
+        stats = DataImporter(
+            DualDatabase(primary, postgresql_db),
+            use_jravan_schema=True,
+        ).import_records(iter(()))
+        assert stats["records_imported"] == 0
+        assert primary.has_pending_transaction() is False
+        assert postgresql_db.has_pending_transaction() is False

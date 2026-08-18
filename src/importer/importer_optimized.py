@@ -37,6 +37,8 @@ from src.importer.importer import (
     _is_standard_odds_record_erase,
     _is_standard_vote_record_erase,
     _mining_native_snapshot_rows,
+    _rollback_call_created_validation_transactions,
+    _snapshot_validation_transactions,
     _standard_odds_physical_fingerprint,
     _standard_vote_physical_fingerprint,
     apply_rc_batch,
@@ -240,7 +242,19 @@ class OptimizedDataImporter:
             from src.importer.importer import ImporterError
 
             raise ImporterError("JRA-VAN schema import requires a connected database")
-        self._migrate_existing_jravan_tables(commit=auto_commit)
+        transaction_snapshot = _snapshot_validation_transactions(self.database)
+        try:
+            self._migrate_existing_jravan_tables(commit=auto_commit)
+        except Exception:
+            _rollback_call_created_validation_transactions(
+                transaction_snapshot,
+                context="failed standard-schema preparation",
+            )
+            raise
+        _rollback_call_created_validation_transactions(
+            transaction_snapshot,
+            context="completed standard-schema preparation",
+        )
         if auto_commit:
             self._jravan_tables_ready = True
 

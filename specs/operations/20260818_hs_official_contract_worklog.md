@@ -294,3 +294,48 @@ then extract the full official HS oracle before editing production code.
   evidence. Next safe action: remove the dedicated PostgreSQL and temporary
   build outputs, commit/push the worklog-inclusive repair, verify the new full
   SHA and clean tree, then request the final bounded independent review once.
+
+## Final-candidate review repair (2026-08-18)
+
+- Committed and pushed the aggregated review candidate
+  `ed4cbb0356e54457d140e9163cea40b79f2ddb86`. Three independent read-only
+  reviews were collected once against that exact clean SHA. The package/release
+  surface was GREEN, while the two storage reviewers found three actionable
+  fail-closed gaps which were aggregated before another production edit:
+  1. an otherwise exact HS table could carry an unapproved foreign key or an
+     additional required column and pass preflight;
+  2. an empty native store could receive arbitrary missing body columns even
+     though the documented additive exception is limited to
+     `CurrentLayoutVersion`/`RecordDelimiter`;
+  3. a successful standard-schema preflight followed by an empty owned import
+     could leave PostgreSQL's implicit catalog-read transaction open.
+- Minimal negative extensions were run against unchanged
+  `ed4cbb0356e54457d140e9163cea40b79f2ddb86` before the repair:
+  - SQLite constraint/column selection: `6 failed, 14 passed`;
+  - fresh PostgreSQL 16 constraint/empty-import selection:
+    `9 failed, 15 passed`.
+  The paired positives preserved the only permitted empty-native missing-column
+  combinations and an existing caller-owned PostgreSQL transaction.
+- The repair now requires the exact HS column set, allowing only the documented
+  two-column empty-native exception, rejects every non-PK/non-marker constraint
+  (including foreign keys) before DML, and snapshots the complete standard-
+  schema preparation boundary. Transactions created only by catalog validation
+  are closed after success or failure; pre-existing caller transactions and the
+  explicit `auto_commit=False` transaction remain owned by the caller.
+- The first green attempt exposed two test-contract errors rather than new
+  production defects. `SchemaManager.create_table()` reports unsafe migration
+  as `False` instead of propagating `SchemaMigrationError`, and an empty
+  `auto_commit=False` import deliberately starts the caller-mode transaction.
+  The assertions were corrected without weakening the fail-closed checks.
+- Post-repair verification in the repository's locked Python 3.12 environment:
+  - new SQLite repair selection: `23 passed`;
+  - new fresh PostgreSQL 16 repair selection: `24 passed`;
+  - complete HS contract, SQLite/default mode: `73 passed, 56 skipped`;
+  - complete HS contract with fresh PostgreSQL 16 enabled: `129 passed`;
+  - migration plus every official-contract module completed without failure;
+  - full suite: `3295 passed, 335 skipped, 20 subtests passed in 103.23s`.
+- Workflow-equivalent fatal gates after this repair are green:
+  `uv lock --check`, `TEST GATE PASS`, fatal Flake8 `0`, strict MkDocs, and
+  `git diff --check`. The dedicated PostgreSQL container remains present only
+  until the final package gate and immutable commit are complete; it must be
+  removed before the final clean-SHA review.

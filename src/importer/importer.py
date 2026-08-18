@@ -1318,8 +1318,10 @@ def _verify_hs_current_layout_rows(
     database: BaseDatabase,
     table_name: str,
     schema_sql: str,
+    *,
+    allow_missing_columns: bool,
 ) -> None:
-    """Reject nonempty unmarked/incomplete stores before additive mutation."""
+    """Require the exact current column set before any HS migration."""
 
     from src.database.migration import (
         _extract_column_definitions,
@@ -1331,14 +1333,45 @@ def _verify_hs_current_layout_rows(
     targets = _migration_targets(database)
     if targets != (database,):
         for target in targets:
-            _verify_hs_current_layout_rows(target, table_name, schema_sql)
+            _verify_hs_current_layout_rows(
+                target,
+                table_name,
+                schema_sql,
+                allow_missing_columns=allow_missing_columns,
+            )
         return
 
     definitions = _extract_column_definitions(schema_sql)
     if definitions is None:
         raise SchemaMigrationError(f"Could not parse HS schema for {table_name}")
-    existing = {column.lower() for column in _get_existing_columns(database, table_name)}
+    if database.get_db_type() == "sqlite":
+        existing = {
+            str(row.get("name") or "").lower()
+            for row in database.fetch_all(f'PRAGMA table_xinfo("{table_name}")')
+        }
+    else:
+        existing = {column.lower() for column in _get_existing_columns(database, table_name)}
+    expected = {column.lower() for column in definitions}
     missing = sorted(column for column in definitions if column.lower() not in existing)
+    extra = sorted(existing - expected)
+    if extra:
+        raise SchemaMigrationError(
+            f"HS storage {table_name} has unapproved extra columns {extra}; "
+            "backup, rebuild, and reimport"
+        )
+    allowed_missing = (
+        {"currentlayoutversion", "recorddelimiter"}
+        if allow_missing_columns and table_name == "NL_HS"
+        else set()
+    )
+    unapproved_missing = sorted(
+        column for column in missing if column.lower() not in allowed_missing
+    )
+    if unapproved_missing:
+        raise SchemaMigrationError(
+            f"HS storage {table_name} is missing required current columns "
+            f"{unapproved_missing}; backup, rebuild, and reimport"
+        )
     row_count = int(
         database.fetch_one(f"SELECT COUNT(*) AS count FROM {table_name}")["count"]
     )
@@ -1436,6 +1469,46 @@ def _verify_hs_layout_marker_constraint(
     )
 
 
+def _verify_hs_no_unapproved_constraints(
+    database: BaseDatabase,
+    table_name: str,
+) -> None:
+    """Reject constraints beyond the official PK and layout-marker CHECK."""
+
+    from src.database.migration import _migration_targets
+
+    targets = _migration_targets(database)
+    if targets != (database,):
+        for target in targets:
+            _verify_hs_no_unapproved_constraints(target, table_name)
+        return
+
+    db_type = database.get_db_type()
+    if db_type == "sqlite":
+        foreign_keys = database.fetch_all(f'PRAGMA foreign_key_list("{table_name}")')
+        if foreign_keys:
+            raise SchemaMigrationError(
+                f"HS storage {table_name} has unsupported FOREIGN KEY constraints"
+            )
+        return
+    if db_type == "postgresql":
+        unexpected = database.fetch_all(
+            "SELECT conname AS constraint_name, contype AS constraint_type "
+            "FROM pg_constraint WHERE conrelid = to_regclass(?) "
+            "AND contype NOT IN ('p', 'c') ORDER BY conname",
+            (table_name.lower(),),
+        )
+        if unexpected:
+            raise SchemaMigrationError(
+                f"HS storage {table_name} has unsupported additional constraints: "
+                f"{unexpected}"
+            )
+        return
+    raise SchemaMigrationError(
+        f"HS constraints cannot be verified for database type {db_type!r}"
+    )
+
+
 def _snapshot_validation_transactions(
     database: BaseDatabase,
 ) -> tuple[tuple[BaseDatabase, bool], ...]:
@@ -1501,7 +1574,12 @@ def verify_hs_storage_schema(
         schema_sql = SCHEMAS.get(table_name) or JRAVAN_SCHEMAS.get(table_name)
         if schema_sql is None:
             raise SchemaMigrationError(f"HS storage schema is undefined: {table_name}")
-        _verify_hs_current_layout_rows(database, table_name, schema_sql)
+        _verify_hs_current_layout_rows(
+            database,
+            table_name,
+            schema_sql,
+            allow_missing_columns=allow_missing_columns,
+        )
         verify_table_schema(
             database,
             table_name,
@@ -1521,6 +1599,7 @@ def verify_hs_storage_schema(
             table_name,
             allow_missing=allow_missing_columns,
         )
+        _verify_hs_no_unapproved_constraints(database, table_name)
         _verify_replacement_key_constraints(database, table_name, "HS storage")
         return True
     except Exception:
@@ -2720,6 +2799,10 @@ def preflight_standard_schema_migrations(
             context="failed standard-schema preflight",
         )
         raise
+    _rollback_call_created_validation_transactions(
+        transaction_snapshot,
+        context="completed standard-schema preflight",
+    )
 
 
 def verify_hy_storage_schema(database: BaseDatabase, table_name: str) -> bool:
@@ -5988,7 +6071,19 @@ class DataImporter:
             return
         if not self.database.is_connected():
             raise ImporterError("JRA-VAN schema import requires a connected database")
-        self._migrate_existing_jravan_tables(commit=auto_commit)
+        transaction_snapshot = _snapshot_validation_transactions(self.database)
+        try:
+            self._migrate_existing_jravan_tables(commit=auto_commit)
+        except Exception:
+            _rollback_call_created_validation_transactions(
+                transaction_snapshot,
+                context="failed standard-schema preparation",
+            )
+            raise
+        _rollback_call_created_validation_transactions(
+            transaction_snapshot,
+            context="completed standard-schema preparation",
+        )
         if auto_commit:
             self._jravan_tables_ready = True
 
