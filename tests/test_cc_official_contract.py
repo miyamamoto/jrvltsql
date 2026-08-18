@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 
 from src.database.migration import SchemaMigrationError
+from src.database.dual_handler import DualDatabase
 from src.database.schema import SCHEMAS
 from src.database.schema import SchemaManager
 from src.database.schema_jravan import JRAVAN_SCHEMAS
@@ -185,7 +188,17 @@ def _defective_schema(table_name: str, defect: str) -> str:
             "HappyoTime                     VARCHAR(7) NOT NULL",
         ),
     }
-    if table_name != "NL_CC" and defect in standard_replacements:
+    if defect == "generated-official-column":
+        if table_name == "NL_CC":
+            old = "AtoTruckCD TEXT NOT NULL"
+            new = "AtoTruckCD TEXT GENERATED ALWAYS AS ('00') STORED NOT NULL"
+        else:
+            old = "AtoTruckCD                     VARCHAR(2) NOT NULL"
+            new = (
+                "AtoTruckCD                     VARCHAR(2) "
+                "GENERATED ALWAYS AS ('00') STORED NOT NULL"
+            )
+    elif table_name != "NL_CC" and defect in standard_replacements:
         old, new = standard_replacements[defect]
     elif defect in replacements:
         old, new = replacements[defect]
@@ -199,6 +212,9 @@ def _defective_schema(table_name: str, defect: str) -> str:
                 f"({', '.join(OFFICIAL_KEY)}) ON DELETE CASCADE"
             ),
             "extra-required-column": "ExternalRequired TEXT NOT NULL",
+            "extra-generated-required-column": (
+                "ExternalRequired TEXT GENERATED ALWAYS AS (NULL) VIRTUAL NOT NULL"
+            ),
         }
         return f"{body}, {additions[defect]}\n        ){close}"
     mutated = schema.replace(old, new)
@@ -218,6 +234,8 @@ def _defective_schema(table_name: str, defect: str) -> str:
         "extra-check",
         "extra-foreign-key",
         "extra-required-column",
+        "extra-generated-required-column",
+        "generated-official-column",
     ],
 )
 def test_cc_schema_defects_fail_before_any_row_or_schema_mutation(
@@ -249,6 +267,33 @@ def test_cc_schema_manager_does_not_mutate_an_unsafe_existing_table(tmp_path) ->
         before = database.fetch_all('PRAGMA table_xinfo("NL_CC")')
         assert SchemaManager(database).create_table("NL_CC") is False
         assert database.fetch_all('PRAGMA table_xinfo("NL_CC")') == before
+
+
+@pytest.mark.parametrize("unsafe_target", ("primary", "secondary"))
+def test_cc_dual_rejects_an_unsafe_target_before_either_database_changes(
+    tmp_path, unsafe_target: str
+) -> None:
+    primary = SQLiteDatabase({"path": str(tmp_path / "dual-primary.db")})
+    secondary = SQLiteDatabase({"path": str(tmp_path / "dual-secondary.db")})
+    with primary, secondary:
+        primary.execute(
+            _defective_schema("NL_CC", "extra-required-column")
+            if unsafe_target == "primary"
+            else SCHEMAS["NL_CC"]
+        )
+        secondary.execute(
+            _defective_schema("NL_CC", "extra-required-column")
+            if unsafe_target == "secondary"
+            else SCHEMAS["NL_CC"]
+        )
+        primary.commit()
+        secondary.commit()
+        with pytest.raises(SchemaMigrationError):
+            DataImporter(DualDatabase(primary, secondary)).import_records(
+                iter([parsed_cc()]), auto_commit=True
+            )
+        assert primary.fetch_one("SELECT COUNT(*) AS n FROM NL_CC") == {"n": 0}
+        assert secondary.fetch_one("SELECT COUNT(*) AS n FROM NL_CC") == {"n": 0}
 
 
 @pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
@@ -361,3 +406,62 @@ def test_cc_header_validator_rejects_missing_blank_and_conflicting_aliases() -> 
     ):
         with pytest.raises(SchemaMigrationError):
             validate_import_record_header(row)
+
+
+@pytest.fixture
+def postgresql_db():
+    if os.getenv("JLTSQL_RUN_POSTGRESQL_INTEGRATION") != "1":
+        pytest.skip("Set JLTSQL_RUN_POSTGRESQL_INTEGRATION=1 to run PostgreSQL tests")
+
+    from scripts.setup_pg_test_db import postgresql_test_config
+    from src.database.postgresql_handler import PostgreSQLDatabase
+
+    database = PostgreSQLDatabase(postgresql_test_config())
+    schema_name = f"jlt_cc_{uuid4().hex[:12]}"
+    database.connect()
+    try:
+        database.execute(f"CREATE SCHEMA {schema_name}")
+        database.execute(f"SET search_path TO {schema_name}")
+        database.commit()
+        yield database
+    finally:
+        try:
+            database.rollback()
+        except Exception:
+            pass
+        database.execute(f"DROP SCHEMA IF EXISTS {schema_name} CASCADE")
+        database.commit()
+        database.disconnect()
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_cc_postgresql_counts_both_same_key_provider_operations(
+    postgresql_db, importer_class
+) -> None:
+    postgresql_db.execute(SCHEMAS["NL_CC"])
+    postgresql_db.commit()
+    result = importer_class(postgresql_db).import_records(
+        iter([parsed_cc(), parsed_cc(HappyoTime="08181205")]), auto_commit=True
+    )
+    assert result["records_imported"] == 2
+    assert result["records_failed"] == 0
+    assert postgresql_db.fetch_one('SELECT COUNT(*) AS "n" FROM NL_CC') == {"n": 1}
+
+
+@pytest.mark.parametrize(
+    "defect", ("extra-unique", "generated-official-column", "deferrable-primary-key")
+)
+def test_cc_postgresql_schema_defects_fail_before_mutation(postgresql_db, defect: str) -> None:
+    if defect == "deferrable-primary-key":
+        schema = SCHEMAS["NL_CC"].replace(
+            "PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)",
+            "PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum) "
+            "DEFERRABLE INITIALLY DEFERRED",
+        )
+    else:
+        schema = _defective_schema("NL_CC", defect)
+    postgresql_db.execute(schema)
+    postgresql_db.commit()
+    with pytest.raises(SchemaMigrationError):
+        DataImporter(postgresql_db).import_records(iter([parsed_cc()]))
+    assert postgresql_db.fetch_one('SELECT COUNT(*) AS "n" FROM NL_CC') == {"n": 0}

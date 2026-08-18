@@ -95,6 +95,13 @@
   acceptance, and schema-manager fail-open. Passing controls include official
   initial sentinels, current header aliases, native provider replacement, and
   the existing CC date-snapshot behavior.
+- Before production edits, the grouped schema contract was extended with
+  generated/required-column and Dual-orientation negatives plus opt-in
+  PostgreSQL deferrable/generated/UNIQUE and provider-operation-count cases.
+  The unchanged production result became `57 failed, 7 passed, 5 skipped`;
+  both Dual unsafe orientations failed to stop before mutation. PostgreSQL
+  cases were intentionally skipped in this local red run and are to be run
+  against a fresh PostgreSQL instance after implementation.
 - Three independent read-only reviewers audited the committed pre-production
   HEAD. Two completed before the intentional red files appeared and one was
   told those files were primary-owned. Their non-duplicated findings match the
