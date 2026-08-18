@@ -73,6 +73,7 @@ from src.importer.importer import (
     validate_jc_record,
     validate_jg_record,
     validate_se_record,
+    validate_tc_record,
     validate_wc_record,
     validate_we_record,
     validate_wf_record,
@@ -91,6 +92,7 @@ from src.importer.importer import (
     verify_mining_native_schema,
     verify_rc_storage_schema,
     verify_se_storage_schema,
+    verify_tc_storage_schema,
     verify_tk_coupled_tables,
     verify_wc_storage_schema,
     verify_we_storage_schema,
@@ -139,6 +141,7 @@ class OptimizedDataImporter:
         self._verified_hr_tables: set[str] = set()
         self._verified_hs_tables: set[str] = set()
         self._verified_hc_tables: set[str] = set()
+        self._verified_tc_tables: set[str] = set()
         self._verified_jc_tables: set[str] = set()
         self._verified_cs_tables: set[str] = set()
         self._verified_jg_tables: set[str] = set()
@@ -454,6 +457,10 @@ class OptimizedDataImporter:
                     if verify_hc_storage_schema(self.database, table_name):
                         self._verified_hc_tables.add(table_name)
                 validate_hc_record(record, table_name)
+                if table_name not in self._verified_tc_tables:
+                    if verify_tc_storage_schema(self.database, table_name):
+                        self._verified_tc_tables.add(table_name)
+                validate_tc_record(record, table_name)
                 if table_name not in self._verified_jc_tables:
                     if verify_jc_storage_schema(self.database, table_name):
                         self._verified_jc_tables.add(table_name)

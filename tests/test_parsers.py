@@ -256,6 +256,20 @@ class TestIndividualParsers:
                 mutable[25:33] = b"06010930"
                 mutable[33:40] = b"1111000"
                 data = bytes(mutable)
+            if record_type == "TC":
+                # TC requires its complete six-part race key plus valid
+                # announcement and before/after start times.
+                mutable = bytearray(data)
+                mutable[11:15] = b"2024"
+                mutable[15:19] = b"0601"
+                mutable[19:21] = b"05"
+                mutable[21:23] = b"03"
+                mutable[23:25] = b"08"
+                mutable[25:27] = b"11"
+                mutable[27:35] = b"06010930"
+                mutable[35:39] = b"1015"
+                mutable[39:43] = b"1005"
+                data = bytes(mutable)
             if record_type == "TK":
                 mutable = bytearray(data)
                 mutable[11:15] = b"2024"

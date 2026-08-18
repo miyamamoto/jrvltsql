@@ -1696,7 +1696,10 @@ class TestRealtimeUpdater(unittest.TestCase):
         self.mock_db.insert_many.assert_not_called()
         self.mock_db.execute.assert_not_called()
 
-    def test_matching_legacy_aliases_are_canonicalized_before_batch_routing(self):
+    @patch("src.realtime.updater.verify_tc_storage_schema", return_value=True)
+    def test_matching_legacy_aliases_are_canonicalized_before_batch_routing(
+        self, _verify_tc
+    ):
         updater = RealtimeUpdater(self.mock_db)
         record = {
             "headRecordSpec": "TC",
@@ -1705,9 +1708,14 @@ class TestRealtimeUpdater(unittest.TestCase):
             "Year": "2026",
             "MonthDay": "0817",
             "JyoCD": "05",
-            "Kaiji": "3",
-            "Nichiji": "8",
+            "Kaiji": "03",
+            "Nichiji": "08",
             "RaceNum": "11",
+            "HappyoTime": "08171200",
+            "AtoJi": "12",
+            "AtoFun": "10",
+            "MaeJi": "12",
+            "MaeFun": "00",
         }
 
         result = updater.process_parsed_records_batch([record])

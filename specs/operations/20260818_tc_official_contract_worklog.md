@@ -75,3 +75,97 @@
   destructive/provider operation would be required without new authority.
 - No credentials, provider identifiers, or connection strings belong in this
   worklog.
+
+## Official oracle and red-first evidence (2026-08-18)
+
+- Pinned sources were re-read from the locally archived artifacts. SHA-256:
+  `JV-Data4802.xlsx` =
+  `6a567f10b601115eca350571f36d27d9d28bd2d3835ea72b5bc057711155d4a7`,
+  `JV-Data4901.xlsx` =
+  `23bafd375f704acbdd696b5032ac1619f17d47e882587d6e7954b610527a8234`,
+  SDK 5.0.0 `JVData_Struct.cs` =
+  `605057bb211eb6a94056a54496f3dd30f864ac2ad140fcfc8840ac8a6ed9e4fe`.
+- Both workbook format sheets rows 1509-1528 and SDK `JV_TC_INFO` agree:
+  record length 45 bytes; current status is only `1`; the ordered official key
+  is `(Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)`; announcement time is
+  MDHM at bytes 28-35; changed and prior HHMM values occupy bytes 36-39 and
+  40-43; CRLF is bytes 44-45. TC was added 2004-05-25 in Ver.1.1.6. Current
+  provider contexts are 0B14/0B16, with 0B14 a complete date snapshot.
+- Two independent read-only Codex triages of exact master `282e03a...` both
+  ranked TC first. Each reproduced malformed HHMM/MDHM or JyoCD values being
+  stored and duplicate standard rows because `HASSOU_JIKOKU_CHANGE` was
+  keyless; both recommended keeping CC as the next separate iteration.
+- Added compact `tests/test_tc_official_contract.py` plus
+  `tc_contract_4901.json` without production edits. After correcting one test
+  harness import and one SQLite DDL placement error, the exact base run was:
+  `33 failed, 5 passed`. Representative red evidence: parser span lacked
+  `RecordDelimiter`; malformed dates/codes/times did not raise; standard
+  revision left two rows; schema/nullability/constraint defects were accepted;
+  batch/single/realtime caller validation did not fail closed. The valid
+  current-status and zero-initialized time controls remained green.
+- Exact red command:
+  `python -m pytest -q -o addopts='' --basetemp /tmp/jrvltsql-tc-red2 tests/test_tc_official_contract.py`.
+
+## Implementation and backend evidence (2026-08-18)
+
+- Implemented a strict TC parser that binds all 15 physical spans, validates
+  fixed-width source text before legacy numeric conversion, accepts only the
+  official status `1`, requires real dates/official JyoCD/HHMM values, and
+  preserves the official all-zero initial time representations.
+- Changed `NL_TC`, `RT_TC`, and `HASSOU_JIKOKU_CHANGE` to the same six-part
+  ordered primary key and complete NOT NULL storage contract. Added exact
+  type/capacity/nullability/column/constraint preflight to both importers,
+  single-record import, realtime dictionaries, standard preflight, and public
+  native schema creation. The standard legacy `COMMENT` table is rejected
+  rather than guessed as the TC owner.
+- Kept the provider distinction explicit: TC has no status-0 record deletion.
+  Completed `0B14` responses continue to replace all five date-snapshot tables
+  atomically; `0B16` remains event-scoped.
+- The compact SQLite contract reached `57 passed, 35 PostgreSQL skipped` after
+  expanding both importer classes, auto-commit modes, single/realtime, exact
+  schema negatives, and a public SchemaManager preflight pair. Existing
+  snapshot/HappyoTime/realtime alias fixtures that had built incomplete TC rows
+  were updated to valid complete current records; production strictness was not
+  relaxed.
+- A dedicated disposable PostgreSQL 16 instance was started only for this
+  iteration. Native/standard, DataImporter/OptimizedDataImporter/single,
+  auto-commit true/false, same-key provider revisions, realtime rejection,
+  unsafe constraint/type/key schemas, and SQLite/PostgreSQL Dual orientation
+  reached `92 passed`. PostgreSQL reported both accepted provider operations
+  while retaining exactly the revised row, matching SQLite semantics.
+- The non-E2E/non-integration full suite completed with `3394 passed, 369
+  skipped, 20 subtests passed`. Its first run exposed three shared parser tests
+  that still treated a blank TC body as a positive fixture; those tests were
+  corrected to carry the official six-key identity and valid announcement and
+  before/after times, after which the full suite passed without relaxing the
+  production validator.
+- The affected parser/importer/migration/realtime selection completed with
+  `271 passed, 37 skipped, 9 subtests passed`; the shared all-parser module
+  separately completed with `292 passed` after the TC fixture correction.
+- Fatal Python lint (`E9,F63,F7,F82`), the repository test-gate validator,
+  `uv lock --check`, `git diff --check`, and Black checks for the new TC parser
+  and official-contract module all passed. The older shared parser test module
+  is not globally Black-clean on the base, so it was deliberately not
+  mechanically reformatted beyond the TC fixture block.
+- The final disposable PostgreSQL container was removed after the green run;
+  no test database or container from this iteration remains active.
+- A fresh `git archive` source tree produced the real
+  `jltsql-2.0.0.dev0` wheel and sdist. The distribution-content gate passed
+  both artifacts, and the extracted-wheel smoke completed `init`, configuration
+  display/version, and SQLite table creation using only modules from the wheel.
+  Temporary build/install directories were removed after verification.
+- Public support/migration documentation, the release draft/changelog,
+  executable metadata, and the official-fixture catalog now describe the TC
+  contract and rebuild/reimport boundary. No release or production adoption is
+  claimed by this candidate.
+
+## Next safe command and STOP conditions
+
+- Freeze one clean full SHA after committing this evidence and run the actual
+  git-archive wheel/sdist content and installed-wheel smoke gates against that
+  immutable candidate. Send that
+  exact SHA once to both independent Codex reviewers, aggregate findings, and
+  apply at most one consolidated repair batch before PR gates.
+- STOP on any non-worklog external drift, backend divergence, unresolved
+  correctness/data-integrity finding, or recovery state that cannot be proven
+  safe without additional authority.

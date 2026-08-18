@@ -32,6 +32,13 @@ Public API replacements:
   malformed CP932 in interpreted fields and unsupported historical/synthetic
   lengths, and preserve explicitly supported old/new semantic boundaries
   instead of guessing them
+- TC start-time changes now use the official 45-byte layout and exact six-part
+  race identity in `NL_TC`, `RT_TC`, and `HASSOU_JIKOKU_CHANGE`. Announcement
+  and before/after times remain lossless fixed-width text; current status 1 is
+  the only accepted TC status. Unsafe legacy/keyless/nullable/extended tables
+  require backup, rebuild, and reimport. TC does not invent a status-0 delete:
+  stale realtime changes are removed only by a successfully completed 0B14
+  full-date snapshot replacement
 - native and standard schemas now verify primary keys, types, capacities,
   child-table constraints, and cancellation/delete behavior before mutation;
   several record families gained complete child storage or corrected keys

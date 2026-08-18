@@ -1,0 +1,62 @@
+{
+  "record_type": "TC",
+  "record_length": 45,
+  "format_sources": [
+    {
+      "artifact": "JV-Data4802.xlsx",
+      "sha256": "6a567f10b601115eca350571f36d27d9d28bd2d3835ea72b5bc057711155d4a7",
+      "sheet": "フォーマット",
+      "rows": "1509-1528"
+    },
+    {
+      "artifact": "JV-Data4901.xlsx",
+      "sha256": "23bafd375f704acbdd696b5032ac1619f17d47e882587d6e7954b610527a8234",
+      "sheet": "フォーマット",
+      "rows": "1509-1528"
+    }
+  ],
+  "sdk_source": {
+    "artifact": "JRA-VAN Data Lab. SDK Ver5.0.0/JVData_Struct.cs",
+    "sha256": "605057bb211eb6a94056a54496f3dd30f864ac2ad140fcfc8840ac8a6ed9e4fe",
+    "struct": "JV_TC_INFO"
+  },
+  "fields": [
+    ["RecordSpec", 1, 2],
+    ["DataKubun", 3, 1],
+    ["MakeDate", 4, 8],
+    ["Year", 12, 4],
+    ["MonthDay", 16, 4],
+    ["JyoCD", 20, 2],
+    ["Kaiji", 22, 2],
+    ["Nichiji", 24, 2],
+    ["RaceNum", 26, 2],
+    ["HappyoTime", 28, 8],
+    ["AtoJi", 36, 2],
+    ["AtoFun", 38, 2],
+    ["MaeJi", 40, 2],
+    ["MaeFun", 42, 2],
+    ["RecordDelimiter", 44, 2]
+  ],
+  "primary_key": [
+    "Year",
+    "MonthDay",
+    "JyoCD",
+    "Kaiji",
+    "Nichiji",
+    "RaceNum"
+  ],
+  "current_data_kubun": ["1"],
+  "history": {
+    "added": "2004-05-25",
+    "version": "1.1.6",
+    "physical_layout_changed": false,
+    "sources": [
+      "JV-Data4901.xlsx:変更履歴:216,220",
+      "JV-Data4802.xlsx:変更履歴:173,177"
+    ]
+  },
+  "current_provider_specs": ["0B14", "0B16"],
+  "snapshot_provider_spec": "0B14",
+  "snapshot_policy_source": "JV-Data4901.xlsx:データ提供タイミング・提供単位:60",
+  "cancellation_note_source": "JV-Data4901.xlsx:特記事項:264"
+}

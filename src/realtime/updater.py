@@ -20,12 +20,14 @@ from src.importer.importer import (
     validate_hr_record,
     validate_jc_record,
     validate_se_record,
+    validate_tc_record,
     validate_we_record,
     validate_wf_record,
     verify_av_storage_schema,
     verify_hr_storage_schema,
     verify_jc_storage_schema,
     verify_se_storage_schema,
+    verify_tc_storage_schema,
     verify_we_storage_schema,
     verify_wf_storage_schema,
 )
@@ -204,6 +206,7 @@ class RealtimeUpdater:
         self._verified_we_tables: set[str] = set()
         self._verified_av_tables: set[str] = set()
         self._verified_hr_tables: set[str] = set()
+        self._verified_tc_tables: set[str] = set()
         self._verified_jc_tables: set[str] = set()
         self._verified_wf_tables: set[str] = set()
 
@@ -212,7 +215,7 @@ class RealtimeUpdater:
     # Realtime tables whose caller-built rows are revalidated against the
     # official contract before any coercion or mutation.
     STRICT_RECORD_TABLES = frozenset(
-        {"RT_SE", "RT_WE", "RT_AV", "RT_HR", "RT_JC", "RT_WF"}
+        {"RT_SE", "RT_WE", "RT_AV", "RT_HR", "RT_TC", "RT_JC", "RT_WF"}
     )
 
     def _canonicalize_strict_record_aliases(
@@ -275,6 +278,11 @@ class RealtimeUpdater:
                     if verify_hr_storage_schema(self.database, table_name):
                         self._verified_hr_tables.add(table_name)
                 validate_hr_record(record, table_name)
+            elif table_name == "RT_TC":
+                if table_name not in self._verified_tc_tables:
+                    if verify_tc_storage_schema(self.database, table_name):
+                        self._verified_tc_tables.add(table_name)
+                validate_tc_record(record, table_name)
             elif table_name == "RT_JC":
                 if table_name not in self._verified_jc_tables:
                     if verify_jc_storage_schema(self.database, table_name):

@@ -36,6 +36,10 @@ JV-Data. They do not contain provider records or a copy of the SDK source.
   four-part identity, status domain, tenths-of-a-second timing fields, and the
   same-layout Miho measurement-distance history independently transcribed from
   both pinned current workbooks.
+- `tc_contract_4901.json` records the current 45-byte start-time-change layout,
+  six-part race identity, status-1-only domain, announcement/change time spans,
+  provider contexts, and unchanged history independently transcribed from both
+  pinned current workbooks.
 
 The manifest is intentionally independent of jrvltsql parser and schema code.
 When the official source changes, regenerate it from a separately obtained SDK

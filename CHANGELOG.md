@@ -39,6 +39,13 @@
 
 ### Fixed
 
+- `TC`を公式45バイト配置と6項目race keyへ結び付け、発表`MMDDhhmm`と変更前後
+  `HHmm`をlosslessに検証・保存する。native `NL_TC`、速報`RT_TC`、標準名
+  `HASSOU_JIKOKU_CHANGE`でprovider順の改訂を1行へ反映し、current status 1以外、
+  不正日付/競馬場/時刻、nullable・keyless・wrong-type・追加constraintをmutation前に
+  拒否する。TCにはstatus 0 deleteを作らず、`0B14`の正常完了後だけ日単位の完全
+  snapshot置換を行う。旧unsafe tableと旧標準名`COMMENT`はbackup・rebuild・
+  reimportを要求する
 - `HC`を公式現行60バイト配置と4項目キーへ結び付け、native `NL_HC`と標準名
   `HANRO`で7つの走破・lap time fieldを0.1秒単位で保持し、provider順の更新、
   status 0 exact delete、caller validation、SQLite/PostgreSQLのstrict schema

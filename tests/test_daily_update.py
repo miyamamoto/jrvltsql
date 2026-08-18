@@ -446,9 +446,13 @@ def test_sync_0b14_replaces_stale_date_snapshot(rt_database):
     updater = RealtimeUpdater(rt_database)
     rt_database.execute(
         "INSERT INTO RT_TC "
-        "(Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, HappyoTime) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?)",
-        ("2026", "0607", "05", "1", "1", "1", "1200"),
+        "(RecordSpec, DataKubun, MakeDate, Year, MonthDay, JyoCD, Kaiji, "
+        "Nichiji, RaceNum, HappyoTime, AtoJi, AtoFun, MaeJi, MaeFun) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            "TC", "1", "20260607", "2026", "0607", "05", "1", "1", "1",
+            "06071200", "12", "10", "12", "00",
+        ),
     )
     rt_database.commit()
 
@@ -483,9 +487,13 @@ def test_sync_0b14_keeps_snapshot_when_no_data_is_published(rt_database):
     updater = RealtimeUpdater(rt_database)
     rt_database.execute(
         "INSERT INTO RT_TC "
-        "(Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, HappyoTime) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?)",
-        ("2026", "0607", "05", "1", "1", "1", "1200"),
+        "(RecordSpec, DataKubun, MakeDate, Year, MonthDay, JyoCD, Kaiji, "
+        "Nichiji, RaceNum, HappyoTime, AtoJi, AtoFun, MaeJi, MaeFun) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            "TC", "1", "20260607", "2026", "0607", "05", "1", "1", "1",
+            "06071200", "12", "10", "12", "00",
+        ),
     )
     rt_database.commit()
 

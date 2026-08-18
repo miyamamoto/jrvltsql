@@ -895,23 +895,16 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
         indexes=["Year", "MonthDay", "JyoCD", "RaceNum"],
     ),
 
-    "NL_TC": {
-        "table_name": "NL_TC",
-        "record_type": "TC",
-        "description": "発走時刻変更情報",
-        "purpose": "レースの発走時刻変更情報を格納",
-        "columns": [
-            {"name": "レコード種別ID", "type": "TEXT", "description": "レコード種別識別子（'TC'）", "example": "TC", "nullable": False},
-            {"name": "開催年月日", "type": "TEXT", "description": "レース開催日", "example": "20240601", "nullable": False},
-            {"name": "競馬場コード", "type": "TEXT", "description": "競馬場コード", "example": "05", "nullable": False},
-            {"name": "レース番号", "type": "TEXT", "description": "レース番号", "example": "11", "nullable": False},
-            {"name": "変更後_発走時刻", "type": "TEXT", "description": "変更後の発走時刻（HHmm形式）", "example": "1530", "nullable": True},
-            {"name": "変更前_発走時刻", "type": "TEXT", "description": "変更前の発走時刻", "example": "1520", "nullable": True},
-            {"name": "発表月日時分", "type": "TEXT", "description": "変更発表日時", "example": "06011200", "nullable": True}
-        ],
-        "primary_key": ["開催年月日", "競馬場コード", "レース番号"],
-        "indexes": ["開催年月日"]
-    },
+    "NL_TC": _schema_backed_metadata(
+        "NL_TC",
+        record_type="TC",
+        description="発走時刻変更情報",
+        purpose=(
+            "開催6列の公式キーで発走時刻変更の改訂を1行に保持し、発表月日時分と"
+            "変更前後の時分を先頭ゼロ付きで格納"
+        ),
+        indexes=["Year", "MonthDay", "JyoCD", "RaceNum"],
+    ),
 
     "NL_WE": _schema_backed_metadata(
         "NL_WE",
@@ -1450,22 +1443,16 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
         "indexes": ["開催年月日", "血統登録番号", "確定着順"]
     },
 
-    "RT_TC": {
-        "table_name": "RT_TC",
-        "record_type": "TC",
-        "description": "発走時刻変更情報（速報）",
-        "purpose": "リアルタイムでの発走時刻変更情報を格納（NL_TCと同構造）",
-        "columns": [
-            {"name": "レコード種別ID", "type": "TEXT", "description": "レコード種別識別子（'TC'）", "example": "TC", "nullable": False},
-            {"name": "開催年月日", "type": "TEXT", "description": "レース開催日", "example": "20240601", "nullable": False},
-            {"name": "競馬場コード", "type": "TEXT", "description": "競馬場コード", "example": "05", "nullable": False},
-            {"name": "レース番号", "type": "TEXT", "description": "レース番号", "example": "11", "nullable": False},
-            {"name": "変更後_発走時刻", "type": "TEXT", "description": "変更後の発走時刻", "example": "1530", "nullable": True},
-            {"name": "変更前_発走時刻", "type": "TEXT", "description": "変更前の発走時刻", "example": "1520", "nullable": True}
-        ],
-        "primary_key": ["開催年月日", "競馬場コード", "レース番号"],
-        "indexes": ["開催年月日"]
-    },
+    "RT_TC": _schema_backed_metadata(
+        "RT_TC",
+        record_type="TC",
+        description="発走時刻変更情報（速報）",
+        purpose=(
+            "0B14/0B16の発走時刻変更を開催6列の公式キーで保持し、0B14の"
+            "正常完了時は日単位snapshotとして置換"
+        ),
+        indexes=["Year", "MonthDay", "JyoCD", "RaceNum"],
+    ),
 
     "RT_TM": {
         "table_name": "RT_TM",

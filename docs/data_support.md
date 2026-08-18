@@ -180,6 +180,28 @@ JRA-VAN標準名は `TENKO_BABA`, `TORIKESI_JYOGAI`, `KISYU_CHANGE`,
 標準名スキーマ（`VARCHAR(8)`）で再作成した後、JRA-VANの保持期間内のデータを
 再取得してください。既存値を時刻部分だけで移植しないでください。
 
+### TC（発走時刻変更）の現行契約
+
+`TC` は現行JV-Data 4.9.0.1 / SDK 5.0.0の45バイト配置だけを受け付けます。
+identityは `Year`, `MonthDay`, `JyoCD`, `Kaiji`, `Nichiji`, `RaceNum` の
+6項目です。native `NL_TC`、速報 `RT_TC`、JRA-VAN標準名
+`HASSOU_JIKOKU_CHANGE` は同じordered primary key、必須header/key/body、
+公式field capacityを使います。`HappyoTime` は `MMDDhhmm`、変更後・変更前の
+時刻は各 `HHmm` として先頭ゼロを保ったまま保存します。公式の初期値
+`00000000` / `0000` も欠損へ変換しません。
+
+現行の公式 `DataKubun` は `1` だけです。`0`をTC単体の削除指示として扱いません。
+`0B14` は指定日の完全な開催変更snapshotなので、正常終了を確認した同一transaction
+内で当該日の `RT_WE` / `RT_AV` / `RT_JC` / `RT_TC` / `RT_CC` を置換し、後続snapshot
+から消えた変更を除去します。`0B16` は指定イベントの更新であり、この日単位置換とは
+別です。
+
+既存のnullable、keyless、wrong-key、wrong-type、容量不足、追加列または追加
+UNIQUE/FK/CHECKを持つTC tableは自動修復せず、mutation前に停止します。DBを
+backupして該当TC tableをcurrent schemaでrebuildし、保持期間内の`0B14`/`0B16`
+または対応する蓄積sourceからreimportしてください。旧標準名`COMMENT`しかない構成を
+`HASSOU_JIKOKU_CHANGE`へ自動転用しません。
+
 ## JVRTOpen オッズ・票数
 
 | データ種別 | 内容 | 想定レコード種別 | 通常速報モードの保存先 | 時系列モードの保存先 | キー形式 | JRA-VAN 側の保持 | 運用コマンド |

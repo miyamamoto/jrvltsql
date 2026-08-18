@@ -69,6 +69,8 @@ def _record(record_type: str, length: int, announcement_start: int) -> bytes:
         record[158:159] = b"9"
     if record_type == "WE":
         record[33:40] = b"1111000"
+    if record_type == "TC":
+        record[35:43] = b"12101200"
     record[-2:] = b"\r\n"
     return bytes(record)
 
