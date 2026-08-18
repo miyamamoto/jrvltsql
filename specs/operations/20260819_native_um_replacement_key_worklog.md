@@ -371,6 +371,10 @@ change, no DDL change, no documentation weakened, `SchemaManager` untouched.
   scheduler, or provider state was touched. Iteration-generated
   `.pytest-tmp/`, `htmlcov/`, `.coverage` were removed if present. No
   credentials or connection strings are recorded here.
+- Reviewed final state: implementation commit
+  `b76323ce63094dacd58700533d46f795505077b5` (see `git log`; this line was
+  added in the follow-up commit that also carries it, so the exact head is
+  the tip of the branch below).
 - Next: Devin opens the PR from
   `fix/native-um-replacement-key-verify-20260819`; this iteration does not
   open or merge it, does not amend, and does not force-push.
