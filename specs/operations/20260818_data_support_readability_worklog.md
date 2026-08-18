@@ -102,8 +102,10 @@
   backup → rebuild → reimport flow every record section already states
   (stop conditions stay per record), and the one-line digests, each a
   strict subset of its record section.
-- One independent reviewer additionally performed a clause-by-clause old vs
-  new comparison (see below).
+- A clause-by-clause old vs new comparison by an independent reviewer is
+  still outstanding at the time of writing; see the handoff note below.
+  This line was corrected after review comment 3804634673 pointed out that
+  the original wording claimed a review that had not been recorded.
 
 ## 要確認事項 (doc kept as-is; documented for a later decision)
 
