@@ -887,7 +887,11 @@ def _verify_strict_storage_column_contract(
             (table_name.lower(),),
         )
     elif database.get_db_type() == "sqlite":
-        rows = database.fetch_all(f'PRAGMA table_info("{table_name}")')
+        # table_info omits generated/hidden columns, which can still make an
+        # otherwise valid insert fail. Exact-column consumers must see the
+        # complete physical census; permissive consumers retain their prior
+        # behavior because they ignore actual-minus-expected columns.
+        rows = database.fetch_all(f'PRAGMA table_xinfo("{table_name}")')
     else:
         raise SchemaMigrationError(
             f"{storage_label} column contract cannot be verified for database type "

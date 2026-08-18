@@ -235,3 +235,23 @@
   verifier's new option defaults to the old permissive behavior and only HC
   opts into exact columns; the first candidate already passed the one-time full
   workflow-equivalent suite.
+
+## First carry-forward finding and repair
+
+- The first replacement candidate
+  `70207a8fcce93fbadee04d58cc38fb3546334304` closed the ordinary extra-column
+  and three test-oracle findings, but two independent reviewers found one
+  same-root SQLite bypass before any PR was opened. `PRAGMA table_info` omits
+  generated/hidden columns, so a generated `ExternalRequired ... NOT NULL`
+  column remained invisible and failed only at DML.
+- The generated-column negative was added before changing production and
+  failed for both `NL_HC` and `HANRO` with the required
+  `Failed: DID NOT RAISE SchemaMigrationError` result. The bounded repair uses
+  `PRAGMA table_xinfo` for the strict column census and adds an actual
+  PostgreSQL-primary/SQLite-secondary Dual case. Default permissive consumers
+  still ignore actual-minus-expected columns, so their behavior is unchanged.
+- Post-repair SQLite HC/reconstructed result: `121 passed, 2 skipped`. Fresh
+  PostgreSQL 16 plus cross-engine Dual result: `45 passed`. The affected
+  parser/schema/metadata selection is `568 passed, 9 skipped`; fatal flake8,
+  test gate, lock check and diff check remain green. The disposable container
+  was removed.

@@ -426,6 +426,12 @@ def _defective_schema(table_name: str, defect: str) -> str:
         )
     if defect == "extra-required-column":
         return schema.replace(key, f"ExternalRequired TEXT NOT NULL, {key}")
+    if defect == "extra-generated-required-column":
+        return schema.replace(
+            key,
+            "ExternalRequired TEXT GENERATED ALWAYS AS (NULL) "
+            f"VIRTUAL NOT NULL, {key}",
+        )
     if defect == "wrong-type":
         if table_name == "NL_HC":
             return schema.replace("ChokyoDate TEXT", "ChokyoDate INTEGER")
@@ -450,6 +456,7 @@ def _defective_schema(table_name: str, defect: str) -> str:
         "extra-check",
         "extra-foreign-key",
         "extra-required-column",
+        "extra-generated-required-column",
         "wrong-type",
         "nullable-key",
     ],
@@ -617,3 +624,27 @@ def test_hc_postgresql_dual_rejects_extra_required_column_on_either_target(
                 postgresql_db.rollback()
                 postgresql_db.execute(f"DROP TABLE {table_name}")
                 postgresql_db.commit()
+
+        sqlite = SQLiteDatabase({"path": str(tmp_path / f"{table_name}-generated.db")})
+        with sqlite:
+            sqlite.execute(_defective_schema(table_name, "extra-generated-required-column"))
+            postgresql_db.execute(safe_schema)
+            sqlite.commit()
+            postgresql_db.commit()
+            dual = DualDatabase(postgresql_db, sqlite)
+            importer = DataImporter(dual, use_jravan_schema=standard)
+
+            with pytest.raises(SchemaMigrationError):
+                importer.import_records(iter([parsed_record()]))
+
+            assert importer.get_statistics()["records_imported"] == 0
+            assert dual.secondary_in_sync is True
+            assert sqlite.fetch_one(f"SELECT COUNT(*) AS count FROM {table_name}") == {
+                "count": 0
+            }
+            assert postgresql_db.fetch_one(f"SELECT COUNT(*) AS count FROM {table_name}") == {
+                "count": 0
+            }
+            postgresql_db.rollback()
+            postgresql_db.execute(f"DROP TABLE {table_name}")
+            postgresql_db.commit()
