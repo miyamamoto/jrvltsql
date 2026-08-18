@@ -13,10 +13,21 @@ jrvltsql は JRA / 中央競馬専用です。NAR / 地方競馬はこのリポ�
 | 層 | 内容 | 場所 |
 | --- | --- | --- |
 | 1. 要約 | 「先に結論」の表。できること・できないことと使うコマンド | このページの「先に結論」（すぐ下） |
-| 2. 参照表 | 取得系統、JVOpen 蓄積系データ、JVRTOpen 速報、オッズ・票数、レコード種別→テーブル、対象外 | このページの各表 |
-| 3. 契約詳細 | レコード種別ごとの公式レイアウト・主キー・`DataKubun`・既存 DB からの移行手順、および共通の検証・transaction 規約 | [レコード別の公式契約と移行手順](record_contracts.md) |
+| 2. 参照表 | 取得系統 / JVOpen 蓄積系データ / JVRTOpen 速報レース・開催情報 / JVRTOpen オッズ・票数 / パーサー・テーブル対応 / 対象外 | このページの各表 |
+| 3. 契約詳細 | レコード種別ごとの公式レイアウト・主キー・`DataKubun`・既存 DB からの移行手順、および共通の検証・transaction 規約 | 要点はこのページの「レコード別の契約・移行手順（要点）」、全文は [レコード別の公式契約と移行手順](record_contracts.md) |
 
-### 表の見方
+## 先に結論
+
+| 知りたいこと | 結論 | 使うコマンド / 保存先 |
+| --- | --- | --- |
+| 出馬表、成績、払戻を保存できるか | できます。 | `quickstart.bat` または `quickstart_timeseries.bat`。主に `NL_RA`, `NL_SE`, `NL_HR` に保存します。 |
+| 確定オッズを保存できるか | 全賭式でできます。 | `RACE` 取得で `NL_O1`〜`NL_O6` に保存します。ただし投資判断時点のオッズではありません。 |
+| 過去1年分の時系列オッズをまとめて取れるか | 単複枠・馬連だけできます。 | `0B41` / `0B42` を `TS_O1` / `TS_O2` に保存します。SQLite でも PostgreSQL でも保存できます。 |
+| 三連複・三連単の締切前オッズを長期評価できるか | 開催週から蓄積していればできます。 | `0B30` または `0B35` / `0B36` を `TS_SOKUHO_O5` / `TS_SOKUHO_O6` に保存します。JRA-VAN 側の保持は約1週間です。 |
+| `daily_sync.bat` は SQLite / PostgreSQL の両方で使えるか | 使えます。 | `daily_sync.bat --db sqlite` または `daily_sync.bat --db postgresql` で通常データ、公式時系列、開催週速報を更新します。通常データだけにする場合は `--no-timeseries --no-realtime` を指定します。 |
+| NAR / 地方競馬も取れるか | このリポジトリでは取れません。 | JRA 専用です。 |
+
+## 表の見方
 
 | 表記 | 意味 |
 | --- | --- |
@@ -32,17 +43,6 @@ jrvltsql は JRA / 中央競馬専用です。NAR / 地方競馬はこのリポ�
 - `src/database/table_mappings.py`
 - `src/database/schema.py`
 - `src/cli/main.py`
-
-## 先に結論
-
-| 知りたいこと | 結論 | 使うコマンド / 保存先 |
-| --- | --- | --- |
-| 出馬表、成績、払戻を保存できるか | できます。 | `quickstart.bat` または `quickstart_timeseries.bat`。主に `NL_RA`, `NL_SE`, `NL_HR` に保存します。 |
-| 確定オッズを保存できるか | 全賭式でできます。 | `RACE` 取得で `NL_O1`〜`NL_O6` に保存します。ただし投資判断時点のオッズではありません。 |
-| 過去1年分の時系列オッズをまとめて取れるか | 単複枠・馬連だけできます。 | `0B41` / `0B42` を `TS_O1` / `TS_O2` に保存します。SQLite でも PostgreSQL でも保存できます。 |
-| 三連複・三連単の締切前オッズを長期評価できるか | 開催週から蓄積していればできます。 | `0B30` または `0B35` / `0B36` を `TS_SOKUHO_O5` / `TS_SOKUHO_O6` に保存します。JRA-VAN 側の保持は約1週間です。 |
-| `daily_sync.bat` は SQLite / PostgreSQL の両方で使えるか | 使えます。 | `daily_sync.bat --db sqlite` または `daily_sync.bat --db postgresql` で通常データ、公式時系列、開催週速報を更新します。通常データだけにする場合は `--no-timeseries --no-realtime` を指定します。 |
-| NAR / 地方競馬も取れるか | このリポジトリでは取れません。 | JRA 専用です。 |
 
 ## 取得系統
 
@@ -64,7 +64,7 @@ jrvltsql は JRA / 中央競馬専用です。NAR / 地方競馬はこのリポ�
 | `DIFN` | `DIFF` | 蓄積系マスタ差分 | `UM`, `KS`, `CH`, `BR`, `BN`, `RC` | `NL_UM`, `NL_KS`, `NL_KS_SEISEKI`, `NL_CH`, `NL_CH_SEISEKI`, `NL_BR`, `NL_BN`, `NL_RC` | はい | いいえ | はい | 旧名 `DIFF` は受け付けません（[旧仕様 dataspec 名](record_contracts.md#dataspec-diff-blod-snap-hose-tcov-rcov) 参照）。 |
 | `BLDN` | `BLOD` | 血統情報 | `HN`, `SK`, `BT` | `NL_HN`, `NL_SK`, `NL_BT` | はい | いいえ | はい | 旧名 `BLOD` は受け付けません（同上）。 |
 | `MING` | - | データマイニング予想 | `DM`, `TM` | `NL_DM`, `NL_TM` | はい | いいえ | はい | full quickstart に含めています。 |
-| `SLOP` | - | 坂路調教関連 | `HC` | `NL_HC`（native）、`HANRO`（標準名モード） | はい | いいえ | はい | 現行`DataKubun=1`は60バイトの全項目を保存します。`DataKubun=0`は本文を保存せず、公式4項目キーでexact deleteします。standard / full quickstart に含めています。 |
+| `SLOP` | - | 坂路調教関連 | `HC` | `NL_HC`（native）、`HANRO`（標準名モード） | はい | いいえ | はい | 現行`DataKubun=1`は60バイトの全項目を保存します。`DataKubun=0`は本文を保存せず、公式4項目キーでexact eraseします。standard / full quickstart に含めています。 |
 | `WOOD` | - | ウッドチップ調教関連 | `WC` | `NL_WC`（native）、`WOOD`（標準名モード） | はい | いいえ | はい | 現行105バイトを全項目保存します。公式キーはトレセン区分・調教年月日・調教時刻・血統登録番号の4項目で、`0` は同じキーの削除です。standard / full quickstart に含めています。 |
 | `YSCH` | - | 開催スケジュール | `YS` | `NL_YS` | はい | いいえ | はい | 開催カレンダー保守に使います。 |
 | `HOSN` | `HOSE` | 競走馬市場取引価格 | `HS` | `NL_HS` | はい | いいえ | はい | 旧名 `HOSE` は受け付けません（同上）。 |
@@ -97,20 +97,21 @@ jrvltsql は JRA / 中央競馬専用です。NAR / 地方競馬はこのリポ�
 | `0B17` | 速報対戦型データマイニング予想 | `TM` | `RT_TM` | `YYYYMMDD` | 対応済み |
 | `0B51` | 速報重勝式 WIN5 | `WF` | `RT_WF` | `YYYYMMDD` または WIN5 開催キー | 公式7,215-byte形式（対象5レース・有効票数5件・払戻243件）に対応。速報系のデータ区分は0/1/2/3/9で、蓄積系のみの7は受け付けません |
 
-速報保存を含む各入口が行う公式 `DataKubun` の検証（全 38 形式の base domain
-表と速報での差分）、`0B14` の日単位 snapshot 置換と `0B16` の関係、
-`HappyoTime`（`MMDDhhmm`）の保存形式は、
-[レコード別の公式契約と移行手順](record_contracts.md) の共通規則
-（[公式 DataKubun の検証](record_contracts.md#datakubun)、
-[0B14 の日単位 snapshot 置換と 0B16](record_contracts.md#0b14-snapshot-0b16)、
-[HappyoTime の保存形式](record_contracts.md#happyotimemmddhhmm)）を
-参照してください。
+この表に関わる共通規則は [レコード別の公式契約と移行手順](record_contracts.md)
+にあります。
+
+- 速報保存を含む各入口が行う公式 `DataKubun` の検証（全 38 形式の base domain
+  表と速報での差分）: [公式 DataKubun の検証](record_contracts.md#datakubun)
+- `0B14` の日単位 snapshot 置換と `0B16` の関係:
+  [0B14 の日単位 snapshot 置換と 0B16](record_contracts.md#0b14-snapshot-0b16)
+- `HappyoTime`（`MMDDhhmm`）の保存形式:
+  [HappyoTime の保存形式](record_contracts.md#happyotimemmddhhmm)
 
 ## JVRTOpen オッズ・票数
 
 | データ種別 | 内容 | 想定レコード種別 | 通常速報モードの保存先 | 時系列モードの保存先 | キー形式 | JRA-VAN 側の保持 | 運用コマンド |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `0B20` | 速報票数 | `H1`, `H6` | `RT_H1`, `RT_H6` | 対象外 | `YYYYMMDDJJRR` | 約1週間 | パーサー・スキーマ対応。推奨 batch helper は未整備 |
+| `0B20` | 速報票数 | `H1`, `H6` | `RT_H1`, `RT_H6` | 対象外 | `YYYYMMDDJJRR` | 約1週間 | パーサー・スキーマのみ。推奨 batch helper は未整備 |
 | `0B30` | 全賭式の速報オッズ | `O1`〜`O6` | `RT_O1`〜`RT_O6` | `TS_SOKUHO_O1`〜`TS_SOKUHO_O6` | `YYYYMMDDJJRR` | 約1週間 | `jltsql realtime odds-sokuho-timeseries` |
 | `0B31` | 単勝・複勝・枠連の速報オッズ | `O1` | `RT_O1` | `TS_SOKUHO_O1` | `YYYYMMDDJJRR` | 約1週間 | `jltsql realtime timeseries --spec 0B31` |
 | `0B32` | 馬連の速報オッズ | `O2` | `RT_O2` | `TS_SOKUHO_O2` | `YYYYMMDDJJRR` | 約1週間 | `jltsql realtime timeseries --spec 0B32` |
@@ -169,13 +170,15 @@ jrvltsql は現在、以下 38 種類の JRA レコード種別に対してパ�
 | --- | --- | --- |
 | 公式 `DataKubun` の検証 | 全 38 形式の base domain 表。値が無い・空欄・1文字でない・別名が食い違う・表に無いレコードは table routing、cache 書き込み、DB 更新より前に拒否。未指定値を `1` で補わない | [公式 DataKubun の検証](record_contracts.md#datakubun) |
 | 通常インポートの transaction / rollback | streaming 処理。`auto_commit=True` は batch ごとに commit、`auto_commit=False` は呼び出し全体を all-or-nothing。transaction 状態を取得できない場合は接続を無効化して `TransactionRecoveryError` | [通常インポートの transaction / rollback 規約](record_contracts.md#transaction-rollback) |
-| 速報 grouped batch と時系列 CLI | caller 側 transaction を勝手に commit しない。DB 書込が 1 件でも失敗すれば grouped mutation 全体を rollback して `inserted=0`, `transaction_rolled_back=true` | [速報 grouped batch と時系列 CLI の transaction 境界](record_contracts.md#grouped-batch-cli-transaction) |
-| `HappyoTime`（`MMDDhhmm`） | 年を含まない 8 バイト文字列として保存し、`TIME` / `TIMESTAMP` に変換しない。旧 `TIMESTAMP` 列の標準名テーブルは起動時検証で停止 | [HappyoTime の保存形式](record_contracts.md#happyotimemmddhhmm) |
+| 速報 grouped batch と時系列 CLI | 成功時に caller 側 transaction を勝手に commit しない。DB 書込が 1 件でも失敗すれば grouped mutation 全体を rollback して `inserted=0`, `transaction_rolled_back=true` | [速報 grouped batch と時系列 CLI の transaction 境界](record_contracts.md#grouped-batch-cli-transaction) |
+| `HappyoTime`（`MMDDhhmm`） | 年を含まない 8 バイト文字列として保存し、`TIME` / `TIMESTAMP` に変換しない。旧版の速報開催情報標準名テーブル・`ODDS_*_HEAD` の `HappyoTime` が `TIMESTAMP` なら起動時検証で停止 | [HappyoTime の保存形式](record_contracts.md#happyotimemmddhhmm) |
 | `0B14` / `0B16` | `0B14` は指定日の完全 snapshot として、正常終了を確認した同一 transaction 内で `RT_WE`/`RT_AV`/`RT_JC`/`RT_TC`/`RT_CC` を置換。`0B16` はイベント指定更新で日単位置換とは別 | [0B14 の日単位 snapshot 置換と 0B16](record_contracts.md#0b14-snapshot-0b16) |
-| 既存 DB からの移行 | バックアップ → 対象テーブルだけ現行 schema で再作成 → 保持期間内の source から再取込 / 再取得。停止条件に当たる既存テーブルは自動修復せず停止 | [既存 DB からの移行の共通手順](record_contracts.md#db) |
+| 既存 DB からの移行 | バックアップ → 対象テーブルを現行 schema で再作成 → 各節の source から再取込 / 再取得。停止条件に当たる既存テーブルは自動修復せず停止 | [既存 DB からの移行の共通手順](record_contracts.md#db) |
 | 旧仕様 dataspec 名 | `DIFF` / `BLOD` / `SNAP` / `HOSE` / `TCOV` / `RCOV` は受け付けず、`fetch` / `cache build` / `cache rebuild` は現行種別名を示して停止 | [旧仕様 dataspec 名](record_contracts.md#dataspec-diff-blod-snap-hose-tcov-rcov) |
 
-レコード別:
+レコード別（グループ分けは詳細ページと同じ）:
+
+**[速報馬体重・開催情報系（WH / WE / AV / JC / TC / CC）](record_contracts.md#wh-we-av-jc-tc-cc)**
 
 | レコード種別 | 要点 | 詳細 |
 | --- | --- | --- |
@@ -183,21 +186,41 @@ jrvltsql は現在、以下 38 種類の JRA レコード種別に対してパ�
 | `WE` | 42 バイト。`HappyoTime`, `HenkoID` を含む 7 項目キーで複数発表を別行保持。現行 `1`、旧 `0` は 2003-07-11 より前の `MakeDate` だけ | [WE](record_contracts.md#we) |
 | `AV` | 78 バイト。7 項目キー（`HappyoTime` はキーでない）。現行 `1`=出走取消、`2`=競走除外。旧標準名 `AVOIDENCE` だけの構成は停止 | [AV](record_contracts.md#av) |
 | `JC` | 161 バイト。`HappyoTime` を含む 8 項目キー。負担重量は native / 速報の `REAL` 列で `550` を `55.0`kg へ正規化 | [JC](record_contracts.md#jc) |
-| `TC` | 45 バイト。6 項目キー。現行 `1` だけで、`0` を TC 単体の削除指示として扱わない。旧標準名 `COMMENT` は自動転用しない | [TC](record_contracts.md#tc) |
+| `TC` | 45 バイト。6 項目キー。現行 `1` だけで、`0` を TC 単体の削除指示として扱わない。旧標準名 `COMMENT` しかない構成を `HASSOU_JIKOKU_CHANGE` へ自動転用しない | [TC](record_contracts.md#tc) |
 | `CC` | 50 バイト。6 項目キーと必須 15 列。現行 `1` だけで、CC 単体の status 0 delete はない | [CC](record_contracts.md#cc) |
-| `HR` | 719 バイト。6 項目キー。`0` だけが物理削除、`9` は中止状態として保持。2004-08-14 より前の race は位置 604〜717 を hex 保持 | [HR](record_contracts.md#hr) |
+
+**[レース系（HR / SE / JG / WF）](record_contracts.md#hr-se-jg-wf)**
+
+| レコード種別 | 要点 | 詳細 |
+| --- | --- | --- |
+| `HR` | 719 バイト。6 項目キー。`0` だけが物理削除、`9` は中止状態として保持。2004-08-14 より前の通常 record は位置 604〜717 を hex 保持 | [HR](record_contracts.md#hr) |
 | `SE` | 現行 555 バイト（547 バイトは拒否）。8 項目キー。`0` は 8 項目一致の 1 頭だけ削除 | [SE](record_contracts.md#se) |
 | `JG` | 80 バイト。受付順番を含む 8 列キーで再投票行を共存。`DataKubun` は 0/1 のみ | [JG](record_contracts.md#jg) |
 | `WF` | 7,215 バイト。キーは開催年・開催月日。native は 1 行（`PayoutsJson`）、標準名は `JYUSYOSIKI_HEAD`＋子 `JYUSYOSIKI` 243 行。蓄積系 0/1/2/3/7/9、速報 0/1/2/3/9 | [WF](record_contracts.md#wf-win5) |
+
+**[マスタ系（HN / UM / BT / KS / CH / HS）](record_contracts.md#hn-um-bt-ks-ch-hs)**
+
+| レコード種別 | 要点 | 詳細 |
+| --- | --- | --- |
 | `HN` | 251 バイト（245 は拒否）。キー `HansyokuNum`。`0` は key だけの exact erase。`RT_HN` なし | [HN](record_contracts.md#hn) |
 | `UM` | 1609 バイト。キー `KettoNum`（10 桁）。旧標準名 `UMA`（`KettoNum` 列と主キーなし）は停止 | [UM](record_contracts.md#um) |
 | `BT` | 6,889 バイト（6,887 は拒否）。キー `HansyokuNum`。標準名 `KEITO`、旧名 `BLOOD` は読み取り互換のみ | [BT](record_contracts.md#bt) |
-| `KS` | 4173 バイト（772 は拒否）。`NL_KS`＋`NL_KS_SEISEKI` / `KISYU`＋`KISYU_SEISEKI` へ原子的に保存 | [KS](record_contracts.md#ks) |
-| `CH` | 3862 バイト（592 は拒否）。`NL_CH`＋`NL_CH_SEISEKI` / `CHOKYO`＋`CHOKYO_SEISEKI` へ原子的に保存 | [CH](record_contracts.md#ch) |
+| `KS` | 4173 バイト（旧 772 バイト復元データは受け付けない）。`NL_KS`＋`NL_KS_SEISEKI` / `KISYU`＋`KISYU_SEISEKI` へ原子的に保存 | [KS](record_contracts.md#ks) |
+| `CH` | 3862 バイト（旧 592 バイト復元データは受け付けない）。`NL_CH`＋`NL_CH_SEISEKI` / `CHOKYO`＋`CHOKYO_SEISEKI` へ原子的に保存 | [CH](record_contracts.md#ch) |
 | `HS` | 200 バイト（196 は拒否）。3 項目キー。`CurrentLayoutVersion=200`。`RT_HS` なし | [HS](record_contracts.md#hs) |
+
+**[調教・コース系（HC / WC / CS）](record_contracts.md#hc-wc-cs)**
+
+| レコード種別 | 要点 | 詳細 |
+| --- | --- | --- |
 | `HC` | 60 バイト。4 項目キー。`0` は key だけの exact erase。`RT_HC` なし | [HC](record_contracts.md#hc) |
 | `WC` | 105 バイト。4 項目キー（`Course` はキーでない）。標準名 `WOOD` | [WC](record_contracts.md#wc) |
 | `CS` | 6,829 バイト（`CourseEx` 6,800）。4 項目キー。6,829 バイト以外は拒否 | [CS](record_contracts.md#cs) |
+
+**[出走時点情報・マイニング系（CK / DM / TM）](record_contracts.md#ck-dm-tm)**
+
+| レコード種別 | 要点 | 詳細 |
+| --- | --- | --- |
 | `CK` | 6,870 バイト（6,864 は拒否）。親 `NL_CK`＋`NL_CK_CHAKU` 278 行＋`NL_CK_RUIKEI` 8 行。標準名モードは未実装で停止 | [CK](record_contracts.md#ck) |
 | `DM` | 303 バイト・18 頭配列。native は馬ごとの行、標準名 `MINING` は 1 レース 1 行 | [DM](record_contracts.md#dm) |
 | `TM` | 141 バイト・18 頭配列。native は馬ごとの行、標準名 `TAISENGATA_MINING` は 1 レース 1 行 | [TM](record_contracts.md#tm) |

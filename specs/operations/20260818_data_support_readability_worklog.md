@@ -102,10 +102,11 @@
   backup → rebuild → reimport flow every record section already states
   (stop conditions stay per record), and the one-line digests, each a
   strict subset of its record section.
-- A clause-by-clause old vs new comparison by an independent reviewer is
-  still outstanding at the time of writing; see the handoff note below.
-  This line was corrected after review comment 3804634673 pointed out that
-  the original wording claimed a review that had not been recorded.
+- A clause-by-clause old vs new comparison by an independent reviewer was
+  outstanding when this section was first written (see the handoff note
+  below; the earlier wording was corrected after review comment
+  3804634673). It has since been performed and is recorded in
+  「Independent review and repair batch」 below.
 
 ## 要確認事項 (doc kept as-is; documented for a later decision)
 
@@ -160,13 +161,111 @@
   `table_mappings.py:186-187`) exist but are not listed; not added because
   that would be a new fact.
 
-## Independent review and repair batch
+## Independent review and repair batch (Claude Code, 2026-08-19)
 
-- (filled in below after the single batched review)
+Continued in the same Claude Code session (`claude --model fable`,
+`claude-fable-5`, session id `b3c80966-f901-4d2e-8907-25c80ab2f654`) after
+the 03:00 JST limit reset. Reviewed head: `c33229dccd94b793f985700369ad2c17b9a9b8ed`
+(PR #218). Three read-only reviewers ran in parallel, one batch:
+
+- (a) fact-set diff — clause-by-clause old (`origin/master:docs/data_support.md`)
+  vs new (`docs/data_support.md`, `docs/record_contracts.md`), concentrating
+  on same-words-different-meaning, strength, and scope; plus a check of the
+  author's C001–C110 mapping. Result: **0 blocking, 0 omitted, 0 added
+  facts, 0 number/identifier changes**; the 9 external topic URLs match by
+  count. Findings: 2 should-fix (low), several nits — all "restore the old
+  wording" fixes.
+- (b) technical accuracy vs `src/` and `tests/` — checked the statements
+  moved into shared sections, every identifier in the digest tables, the
+  terminology note, and all anchors. Result: **0 blocking**; the shared
+  「速報 grouped batch と時系列 CLI の transaction 境界」 and 「0B14 の日単位
+  snapshot 置換と 0B16」 sections hold on the general realtime updater / CLI
+  paths (`src/realtime/updater.py:641-654, 694-720, 748-797, 820-849`,
+  `src/importer/importer.py:1689-1732`, `src/cli/main.py:1761-1790, 1871,
+  1884-1887`, `src/realtime/updater.py:129-152`,
+  `src/services/realtime_monitor.py:326-328`), not only for WF/TC. Findings:
+  1 should-fix (terminology note over-generalised 「速報」), nits.
+- (c) readability / structure / rendering — `mkdocs build --strict` pass,
+  all 40 fragments resolve in the built HTML, tables and nested lists render.
+  Findings: 6 should-fix (structure only), nits.
+
+Deduplicated repair batch (one commit, no fact added, dropped, or reworded
+in strength):
+
+1. Restored old wording where a digest or shared sentence had drifted:
+   - digest rows: 「成功時に caller 側 transaction を勝手に commit しない」;
+     HappyoTime row scoped to 旧版の速報開催情報標準名テーブル・`ODDS_*_HEAD`
+     の `HappyoTime` が `TIMESTAMP`; TC row 「`COMMENT` しかない構成を
+     `HASSOU_JIKOKU_CHANGE` へ自動転用しない」; HR row 「2004-08-14 より前の
+     通常 record」; KS/CH rows 「旧 772 / 592 バイト復元データは受け付けない」;
+   - shared migration flow: dropped the uniformly added 「保持期間内」 and
+     「対象テーブルだけ」 (old text says these only for some records), listed
+     「起動時」 among the stop timings, 「停止（拒否）」, 「再取込元（記載が
+     ある場合）」; digest row updated the same way;
+   - AV migration bullet restored the causal 「自動的な PK 変更は行わないため、
+     DB をバックアップし…」;
+   - removed the new terminology sentence 「蓄積系 = JVOpen / 速報 = JVRTOpen」
+     (over-general; the reviewer's proposed replacement would have added a
+     claim about 0B41/0B42 routing, so it was deleted instead of edited);
+   - 「レコード別の差分」→「レコード別の補足」; TC removed from the 0B14
+     補足 list (TC only links back).
+2. Structure / navigation (no text meaning changed): entry page order is now
+   読み方 → 先に結論 → 表の見方（凡例＋実装上の正本）→ 取得系統; the 3-layer
+   table names the actual sections and points to the digest; the sentence
+   under the JVRTOpen 速報 table became three link bullets; the digest is
+   split into the same five groups as the detail page with linked group
+   labels; detail-page sub-heading labels are bold; group heading renamed
+   「速報馬体重・開催情報系」; `MakeDate` boundaries are a 3-row table;
+   four long bullets split at sentence boundaries (HR, WF ×2, DM/TM); KS/CH
+   gained a `DataKubun` pointer to the shared base-domain table; DM/TM tail
+   lines point to DM/TM 共通 for DataKubun as well; HS transaction bullet
+   links back to the shared rule; HappyoTime migration bullet links to the
+   shared flow; CC links 日単位 snapshot 置換 to the shared section.
+3. Terminology: 「exact delete」→「exact erase」 (SLOP row; same page and HC
+   section already use erase); 0B20 row 「パーサー・スキーマのみ」 to match
+   the legend.
+4. `mkdocs.yml`: `validation: links: anchors: warn` so that `--strict` now
+   fails on a broken fragment (proved: a deliberately broken
+   `record_contracts.md#wh-broken` aborted the strict build with 1 warning;
+   restored). Reviewer (b) noted the previous pass was real but weak.
+
+Refuted or not applied (with reason):
+
+- CodeRabbit thread 3805258712 asked to add KS/CH key columns
+  (`KisyuCode`, `ChokyosiCode`), CK's seven key names, and native vs standard
+  DM/TM keys. Not applied: those facts are not in the old page and this PR
+  is a fact-preserving restructure; adding them needs its own evidence PR.
+  The DataKubun part is already covered by the shared table; pointers added.
+- (b) proposed wording for the terminology note added a routing claim →
+  sentence removed instead (see above).
+- (c) suggested merging the three near-identical 「project policy」 sentences
+  (HN/HS/HC) and compressing CC's 0B14 bullet → not merged (HN says 「物理」,
+  merging could strengthen HS/HC); CC kept, link added.
+- (c) suggested a gloss for 「mutation」 → not added (new definition).
+- (c) suggested nesting the nav and updating `RELEASE_NOTES.md` /
+  `CHANGELOG.md` pointers → not done (history files; entry page links to the
+  detail page). Mentioned in the PR body.
+- (a) noted `.tmp/claims_checklist.md` legend/line-range nits → fixed in the
+  local (git-ignored) checklist.
+
+Maintainer decisions received (Devin, 2026-08-18 23:50 JST) on 要確認事項,
+applied as "do not touch in this PR": item 4 confirmed correct by the
+official JV-Data change history (no edit needed); item 1 (quickstart
+standard/full) and item 2 (`0B51` key wording) are doc errors to be fixed in
+a separate PR; item 8 (UM replacement-key check missing on native `NL_UM`)
+is an implementation gap for a separate red-first iteration.
+
+Gates after the repair batch: `mkdocs build --strict` pass (with anchor
+validation, 0 warnings; 0 unresolved fragments by HTML-id check),
+`python scripts/validate_test_gate.py` → `TEST GATE PASS`, fatal flake8
+(`E9,F63,F7,F82`) → 0, `uv lock --check` pass, `git diff --check` clean,
+docs-adjacent tests 11 passed (Python 3.12).
 
 ## PR
 
-- (filled in below)
+- PR #218 `docs: split data_support into a reader entry page and per-record
+  contracts` (base `master`). Head after the repair batch is recorded in
+  the PR comment; merge is left to Devin.
 
 ## Handoff note (Devin, 2026-08-18 22:39 JST)
 
@@ -193,10 +292,15 @@
   still required.
 - Next: run the batched independent review at or after 03:00 JST, record it
   here, then merge.
+- Update (Claude Code, 2026-08-19): done — see 「Independent review and
+  repair batch」 above; the PR is now independently reviewed.
 
 ## Next safe command and STOP conditions
 
-- Next: address review threads on the PR with evidence; leave merge to Devin.
+- Next: keep PR #218 threads at zero unresolved with evidence; leave merge
+  to Devin. Separate follow-ups (not this PR): doc fixes for 要確認事項 1 and
+  2 (Devin), red-first fix for 要確認事項 8 (native `NL_UM` replacement-key
+  check).
 - STOP if a reviewer shows a fact was dropped/added/re-scoped and the fix
   would require choosing between doc and code wording that cannot be
   decided from the repository alone; in that case keep the old wording and
