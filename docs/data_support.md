@@ -203,6 +203,27 @@ backupして該当TC tableをcurrent schemaでrebuildし、保持期間内の`0B
 または対応する蓄積sourceからreimportしてください。旧標準名`COMMENT`しかない構成を
 `HASSOU_JIKOKU_CHANGE`へ自動転用しません。
 
+### CC（コース変更）の現行契約
+
+`CC` は現行JV-Data 4.9.0.1 / SDK 5.0.0の50バイト配置だけを受け付けます。
+identityは `Year`, `MonthDay`, `JyoCD`, `Kaiji`, `Nichiji`, `RaceNum` の
+6項目です。native `NL_CC`、速報 `RT_CC`、JRA-VAN標準名 `COURSE_CHANGE`
+は同じordered primary keyと必須15列を使います。`HappyoTime` は
+`MMDDhhmm`、変更前後の距離は4桁、track codeは公式コード表2009の
+`00`, `10`〜`29`, `51`〜`59`、事由区分は初期値`0`または`1`〜`4`です。
+`00000000`、距離`0000`、track `00`、事由`0`は欠損へ変換しません。
+
+現行の公式 `DataKubun` は `1` だけで、CC単体のstatus 0 deleteはありません。
+`0B14`の正常完了後だけ上記の日単位snapshot置換を行い、後続snapshotから
+消えたCCを削除します。`0B16`はイベント指定更新なので日単位置換を行いません。
+開催中止決定前に発表済みのCCは、公式仕様どおり中止後も提供対象です。
+
+既存のnullable、keyless、wrong-key、wrong-type、容量不足、generated/identity列、
+追加列または追加UNIQUE/FK/CHECKを持つCC tableは、失われたidentityや値を安全に
+復元できないため自動修復しません。DBをbackupし、該当3表をcurrent schemaで
+rebuildして、保持期間内の`0B14`/`0B16`または対応する蓄積sourceから
+reimportしてください。
+
 ## JVRTOpen オッズ・票数
 
 | データ種別 | 内容 | 想定レコード種別 | 通常速報モードの保存先 | 時系列モードの保存先 | キー形式 | JRA-VAN 側の保持 | 運用コマンド |

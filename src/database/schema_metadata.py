@@ -831,25 +831,16 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
         "indexes": ["開催年", "開催月日", "競馬場コード", "レース番号"]
     },
 
-    "NL_CC": {
-        "table_name": "NL_CC",
-        "record_type": "CC",
-        "description": "コース変更情報",
-        "purpose": "レースのコース（距離・トラック種別）変更情報を格納",
-        "columns": [
-            {"name": "レコード種別ID", "type": "TEXT", "description": "レコード種別識別子（'CC'）", "example": "CC", "nullable": False},
-            {"name": "開催年月日", "type": "TEXT", "description": "レース開催日", "example": "20240601", "nullable": False},
-            {"name": "競馬場コード", "type": "TEXT", "description": "競馬場コード", "example": "05", "nullable": False},
-            {"name": "レース番号", "type": "TEXT", "description": "レース番号", "example": "11", "nullable": False},
-            {"name": "変更後_距離", "type": "TEXT", "description": "変更後の距離（メートル）", "example": "2000", "nullable": True},
-            {"name": "変更後_トラックコード", "type": "TEXT", "description": "変更後のトラック（10-23=芝、24-29=ダート）", "example": "10", "nullable": True},
-            {"name": "変更前_距離", "type": "TEXT", "description": "変更前の距離", "example": "2400", "nullable": True},
-            {"name": "変更前_トラックコード", "type": "TEXT", "description": "変更前のトラック", "example": "10", "nullable": True},
-            {"name": "事由区分", "type": "TEXT", "description": "変更理由", "example": "1", "nullable": True}
-        ],
-        "primary_key": ["開催年月日", "競馬場コード", "レース番号"],
-        "indexes": ["開催年月日"]
-    },
+    "NL_CC": _schema_backed_metadata(
+        "NL_CC",
+        record_type="CC",
+        description="コース変更情報",
+        purpose=(
+            "開催6列の公式キーでコース変更の改訂を1行に保持し、発表時刻、"
+            "変更前後の距離・トラックコード、事由区分をlosslessに格納"
+        ),
+        indexes=["Year", "MonthDay", "JyoCD", "RaceNum"],
+    ),
 
     "NL_DM": {
         "table_name": "NL_DM",
@@ -1184,22 +1175,16 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
         "indexes": ["開催年", "開催月日", "競馬場コード", "レース番号"]
     },
 
-    "RT_CC": {
-        "table_name": "RT_CC",
-        "record_type": "CC",
-        "description": "コース変更情報（速報）",
-        "purpose": "リアルタイムでのコース変更情報を格納（NL_CCと同構造）",
-        "columns": [
-            {"name": "レコード種別ID", "type": "TEXT", "description": "レコード種別識別子（'CC'）", "example": "CC", "nullable": False},
-            {"name": "開催年月日", "type": "TEXT", "description": "レース開催日", "example": "20240601", "nullable": False},
-            {"name": "競馬場コード", "type": "TEXT", "description": "競馬場コード", "example": "05", "nullable": False},
-            {"name": "レース番号", "type": "TEXT", "description": "レース番号", "example": "11", "nullable": False},
-            {"name": "変更後_距離", "type": "TEXT", "description": "変更後の距離", "example": "2000", "nullable": True},
-            {"name": "変更後_トラックコード", "type": "TEXT", "description": "変更後のトラック", "example": "10", "nullable": True}
-        ],
-        "primary_key": ["開催年月日", "競馬場コード", "レース番号"],
-        "indexes": ["開催年月日"]
-    },
+    "RT_CC": _schema_backed_metadata(
+        "RT_CC",
+        record_type="CC",
+        description="コース変更情報（速報）",
+        purpose=(
+            "0B14/0B16のコース変更を開催6列の公式キーで保持し、0B14の"
+            "正常完了時は日単位snapshotとして置換"
+        ),
+        indexes=["Year", "MonthDay", "JyoCD", "RaceNum"],
+    ),
 
     "RT_DM": {
         "table_name": "RT_DM",

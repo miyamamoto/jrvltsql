@@ -177,21 +177,22 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
     """,
     "COURSE_CHANGE": """
         CREATE TABLE IF NOT EXISTS COURSE_CHANGE (
-            RecordSpec                     CHAR(2)             ,  -- レコード種別ID
-            DataKubun                      CHAR(1)             ,  -- データ区分
-            MakeDate                       DATE                ,  -- YYYYMMDD形式の日付
-            Year                           SMALLINT            ,  -- 年(4桁)
-            MonthDay                       SMALLINT            ,  -- 月日(MMDD)
-            JyoCD                          CHAR(2)             ,  -- 競馬場コード
-            Kaiji                          SMALLINT            ,  -- 開催回
-            Nichiji                        SMALLINT            ,  -- 開催日目
-            RaceNum                        SMALLINT            ,  -- レース番号
-            HappyoTime                     VARCHAR(8)          ,  -- 発表月日時分(MMDDhhmm)
-            AtoKyori                       VARCHAR(4)          ,  -- 文字列(4)
-            AtoTruckCD                     VARCHAR(2)          ,  -- 文字列(2)
-            MaeKyori                       VARCHAR(4)          ,  -- 文字列(4)
-            MaeTruckCD                     VARCHAR(2)          ,  -- 文字列(2)
-            JiyuCD                         VARCHAR(1)            -- 文字列(1)
+            RecordSpec                     CHAR(2) NOT NULL    ,  -- レコード種別ID
+            DataKubun                      CHAR(1) NOT NULL    ,  -- データ区分
+            MakeDate                       DATE NOT NULL       ,  -- YYYYMMDD形式の日付
+            Year                           SMALLINT NOT NULL   ,  -- 年(4桁)
+            MonthDay                       SMALLINT NOT NULL   ,  -- 月日(MMDD)
+            JyoCD                          CHAR(2) NOT NULL    ,  -- 競馬場コード
+            Kaiji                          SMALLINT NOT NULL   ,  -- 開催回
+            Nichiji                        SMALLINT NOT NULL   ,  -- 開催日目
+            RaceNum                        SMALLINT NOT NULL   ,  -- レース番号
+            HappyoTime                     VARCHAR(8) NOT NULL ,  -- 発表月日時分(MMDDhhmm)
+            AtoKyori                       VARCHAR(4) NOT NULL ,  -- 文字列(4)
+            AtoTruckCD                     VARCHAR(2) NOT NULL ,  -- 文字列(2)
+            MaeKyori                       VARCHAR(4) NOT NULL ,  -- 文字列(4)
+            MaeTruckCD                     VARCHAR(2) NOT NULL ,  -- 文字列(2)
+            JiyuCD                         VARCHAR(1) NOT NULL ,  -- 文字列(1)
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
         )
     """,
     "HANRO": """

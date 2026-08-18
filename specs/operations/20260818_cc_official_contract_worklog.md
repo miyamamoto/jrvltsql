@@ -108,11 +108,48 @@
   red contract: strict parser/caller/realtime validation, exact three-table
   storage/preflight, and a CC-specific durable 0B14 assertion are required.
 
+## Implementation and local validation
+
+- Implemented one bounded CC repair after the grouped red run:
+  - `CCParser` now binds all 16 official spans, including CRLF, and validates
+    the six-part identity, real dates and announcement time, exact distance
+    widths, official venue/track domains, and reason domain before returning a
+    parsed row;
+  - native `NL_CC`/`RT_CC` and standard `COURSE_CHANGE` now expose the same
+    complete required payload and exact ordered primary key;
+  - both batch importers, single-record import, realtime dict entry points,
+    SchemaManager, standard preflight, metadata, and provider-operation
+    counting share the CC validator and strict schema verifier;
+  - the verifier rejects missing/extra/generated/identity columns, wrong
+    affinities/capacities/nullability, wrong/deferrable PostgreSQL keys, and
+    unapproved UNIQUE/FK/CHECK constraints on every Dual migration target;
+  - public support, migration and release documents now state the current-only
+    status-1 contract and distinguish 0B14 snapshot replacement from 0B16
+    event updates.
+- Fresh SQLite compact contract after implementation: `64 passed, 5 skipped`.
+- Fresh disposable PostgreSQL 16 compact contract, including native/standard
+  same-key provider ordering, unsafe schema rejection, first-invalid realtime
+  transaction state, and mixed SQLite/PostgreSQL Dual orientations:
+  `77 passed`.
+- The adjacent affected aggregate (`CC`, announcement-time, realtime,
+  migration, schema/index, importer and prior `TC` contract) passed
+  `295 passed, 56 skipped, 9 subtests passed` under Python 3.13.5.
+- `scripts/validate_test_gate.py` reported `TEST GATE PASS`; workflow-fatal
+  flake8 (`E9,F63,F7,F82`) reported zero; `uv lock --check`, compileall,
+  strict MkDocs, import-order lint for newly touched imports, and
+  `git diff --check` passed. Generic project-wide Ruff debt was not formatted
+  or mixed into this scoped change.
+- The disposable PostgreSQL container remains intentionally running only until
+  the exact committed candidate and final bounded reviews are complete. No
+  provider, production, GitHub, release-lock, KPS data, or model state was
+  changed.
+
 ## Next safe command and STOP conditions
 
-- Next: commit this red-first contract, implement the bounded CC parser/schema/
-  importer/realtime repair once, then run focused SQLite and fresh PostgreSQL/
-  Dual validation before freezing one review candidate.
+- Next: commit the completed implementation/docs/worklog batch, run the
+  workflow-equivalent suite and package gates on its exact full SHA, then
+  freeze one clean candidate for the already-planned independent bounded
+  reviews. Aggregate concrete findings before any repair commit.
 - STOP on non-worklog drift, a material disagreement among pinned official
   sources, backend divergence that is not explained and tested, or any need
   for destructive/provider action beyond the authorized local test scope.

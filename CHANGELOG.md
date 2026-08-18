@@ -39,6 +39,13 @@
 
 ### Fixed
 
+- `CC`を公式50バイト配置と6項目race keyへ結び付け、発表`MMDDhhmm`、変更前後の
+  4桁距離・track code、事由区分をlosslessに検証・保存する。native `NL_CC`、
+  速報`RT_CC`、標準名`COURSE_CHANGE`でprovider順の改訂を1行へ反映し、current
+  status 1以外、不正日付/競馬場/track/reason、nullable・keyless・wrong-type・
+  追加constraintをmutation前に拒否する。status 0 deleteは作らず、`0B14`の
+  正常完了後だけ日単位の完全snapshot置換を行う。旧unsafe tableはbackup・
+  rebuild・reimportを要求する
 - `TC`を公式45バイト配置と6項目race keyへ結び付け、発表`MMDDhhmm`と変更前後
   `HHmm`をlosslessに検証・保存する。native `NL_TC`、速報`RT_TC`、標準名
   `HASSOU_JIKOKU_CHANGE`でprovider順の改訂を1行へ反映し、current status 1以外、

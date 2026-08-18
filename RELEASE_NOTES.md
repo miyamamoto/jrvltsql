@@ -39,6 +39,14 @@ Public API replacements:
   require backup, rebuild, and reimport. TC does not invent a status-0 delete:
   stale realtime changes are removed only by a successfully completed 0B14
   full-date snapshot replacement
+- CC course changes now use the official 50-byte layout and exact six-part
+  race identity in `NL_CC`, `RT_CC`, and `COURSE_CHANGE`. Announcement time,
+  four-digit before/after distances, official track codes, and reason codes
+  remain lossless, including documented zero-initial values. Existing
+  keyless, nullable, wrong-type, extended, or otherwise unsafe CC tables must
+  be backed up, rebuilt, and reimported. Current status 1 is the only accepted
+  status; stale realtime rows are removed only after a successful 0B14
+  full-date snapshot, while 0B16 remains event-oriented.
 - native and standard schemas now verify primary keys, types, capacities,
   child-table constraints, and cancellation/delete behavior before mutation;
   several record families gained complete child storage or corrected keys

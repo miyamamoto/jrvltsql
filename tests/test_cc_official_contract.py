@@ -10,15 +10,14 @@ from uuid import uuid4
 
 import pytest
 
-from src.database.migration import SchemaMigrationError
 from src.database.dual_handler import DualDatabase
-from src.database.schema import SCHEMAS
-from src.database.schema import SchemaManager
+from src.database.migration import SchemaMigrationError
+from src.database.schema import SCHEMAS, SchemaManager
 from src.database.schema_jravan import JRAVAN_SCHEMAS
 from src.database.schema_metadata import TABLE_METADATA
 from src.database.schema_types import (
-    get_table_column_types,
     get_table_column_nullability,
+    get_table_column_types,
     get_table_primary_key_columns,
 )
 from src.database.sqlite_handler import SQLiteDatabase
@@ -216,7 +215,10 @@ def _defective_schema(table_name: str, defect: str) -> str:
                 "ExternalRequired TEXT GENERATED ALWAYS AS (NULL) VIRTUAL NOT NULL"
             ),
         }
-        return f"{body}, {additions[defect]}\n        ){close}"
+        addition = additions[defect]
+        if defect in {"extra-required-column", "extra-generated-required-column"}:
+            return schema.replace(key, f"{addition}, {key}")
+        return f"{body}, {addition}\n        ){close}"
     mutated = schema.replace(old, new)
     assert mutated != schema
     return mutated
@@ -328,15 +330,24 @@ def test_cc_caller_validation_precedes_coercion_and_mutation(
 ) -> None:
     database = SQLiteDatabase({"path": str(tmp_path / f"invalid-{table_name}.db")})
     schema = JRAVAN_SCHEMAS[table_name] if standard else SCHEMAS[table_name]
-    invalid = parsed_cc()
-    invalid["JiyuCD"] = "9"
+    invalid_rows = []
+    for field_name, invalid_value in (
+        ("MakeDate", datetime(2026, 8, 18, 12, 34, 56)),
+        ("Year", 26),
+        ("AtoKyori", True),
+        ("AtoTruckCD", "ZZ"),
+        ("JiyuCD", "9"),
+    ):
+        invalid = parsed_cc()
+        invalid[field_name] = invalid_value
+        invalid_rows.append(invalid)
     with database:
         database.execute(schema)
         database.commit()
-        with pytest.raises(SchemaMigrationError):
-            importer_class(database, use_jravan_schema=standard).import_records(
-                iter([invalid]), auto_commit=auto_commit
-            )
+        importer = importer_class(database, use_jravan_schema=standard)
+        for invalid in invalid_rows:
+            with pytest.raises(SchemaMigrationError):
+                importer.import_records(iter([invalid]), auto_commit=auto_commit)
         assert database.fetch_one(f"SELECT COUNT(*) AS n FROM {table_name}") == {"n": 0}
 
 
@@ -435,33 +446,80 @@ def postgresql_db():
 
 
 @pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+@pytest.mark.parametrize("table_name,standard", [("NL_CC", False), ("COURSE_CHANGE", True)])
 def test_cc_postgresql_counts_both_same_key_provider_operations(
-    postgresql_db, importer_class
+    postgresql_db, importer_class, table_name: str, standard: bool
 ) -> None:
-    postgresql_db.execute(SCHEMAS["NL_CC"])
+    schema = JRAVAN_SCHEMAS[table_name] if standard else SCHEMAS[table_name]
+    postgresql_db.execute(schema)
     postgresql_db.commit()
-    result = importer_class(postgresql_db).import_records(
-        iter([parsed_cc(), parsed_cc(HappyoTime="08181205")]), auto_commit=True
+    result = importer_class(postgresql_db, use_jravan_schema=standard).import_records(
+        iter([parsed_cc(), parsed_cc(HappyoTime="08181205")]),
+        auto_commit=True,
     )
     assert result["records_imported"] == 2
     assert result["records_failed"] == 0
-    assert postgresql_db.fetch_one('SELECT COUNT(*) AS "n" FROM NL_CC') == {"n": 1}
+    assert postgresql_db.fetch_one(f'SELECT COUNT(*) AS "n" FROM {table_name}') == {"n": 1}
 
 
+@pytest.mark.parametrize("table_name,standard", [("NL_CC", False), ("COURSE_CHANGE", True)])
 @pytest.mark.parametrize(
     "defect", ("extra-unique", "generated-official-column", "deferrable-primary-key")
 )
-def test_cc_postgresql_schema_defects_fail_before_mutation(postgresql_db, defect: str) -> None:
+def test_cc_postgresql_schema_defects_fail_before_mutation(
+    postgresql_db, defect: str, table_name: str, standard: bool
+) -> None:
     if defect == "deferrable-primary-key":
-        schema = SCHEMAS["NL_CC"].replace(
+        source = JRAVAN_SCHEMAS[table_name] if standard else SCHEMAS[table_name]
+        schema = source.replace(
             "PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)",
             "PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum) "
             "DEFERRABLE INITIALLY DEFERRED",
         )
     else:
-        schema = _defective_schema("NL_CC", defect)
+        schema = _defective_schema(table_name, defect)
     postgresql_db.execute(schema)
     postgresql_db.commit()
     with pytest.raises(SchemaMigrationError):
-        DataImporter(postgresql_db).import_records(iter([parsed_cc()]))
-    assert postgresql_db.fetch_one('SELECT COUNT(*) AS "n" FROM NL_CC') == {"n": 0}
+        DataImporter(postgresql_db, use_jravan_schema=standard).import_records(iter([parsed_cc()]))
+    assert postgresql_db.fetch_one(f'SELECT COUNT(*) AS "n" FROM {table_name}') == {"n": 0}
+
+
+def test_cc_postgresql_realtime_rejects_before_catalog_transaction(postgresql_db) -> None:
+    postgresql_db.execute(SCHEMAS["RT_CC"])
+    postgresql_db.commit()
+    invalid = parsed_cc()
+    invalid["JiyuCD"] = "9"
+    result = RealtimeUpdater(postgresql_db).process_parsed_record(invalid)
+    assert result["success"] is False
+    assert postgresql_db.has_pending_transaction() is False
+    assert postgresql_db.fetch_one('SELECT COUNT(*) AS "n" FROM RT_CC') == {"n": 0}
+
+
+@pytest.mark.parametrize("unsafe_target", ("primary", "secondary"))
+def test_cc_postgresql_dual_rejects_unsafe_target_before_either_mutates(
+    postgresql_db, tmp_path, unsafe_target: str
+) -> None:
+    sqlite = SQLiteDatabase({"path": str(tmp_path / f"dual-{unsafe_target}.db")})
+    with sqlite:
+        sqlite.execute(
+            _defective_schema("NL_CC", "extra-check")
+            if unsafe_target == "primary"
+            else SCHEMAS["NL_CC"]
+        )
+        postgresql_db.execute(
+            _defective_schema("NL_CC", "generated-official-column")
+            if unsafe_target == "secondary"
+            else SCHEMAS["NL_CC"]
+        )
+        sqlite.commit()
+        postgresql_db.commit()
+        primary, secondary = (
+            (sqlite, postgresql_db) if unsafe_target == "primary" else (postgresql_db, sqlite)
+        )
+        with pytest.raises(SchemaMigrationError):
+            DataImporter(DualDatabase(primary, secondary)).import_records(
+                iter([parsed_cc()]), auto_commit=True
+            )
+        assert sqlite.fetch_one("SELECT COUNT(*) AS n FROM NL_CC") == {"n": 0}
+        assert postgresql_db.fetch_one('SELECT COUNT(*) AS "n" FROM NL_CC') == {"n": 0}

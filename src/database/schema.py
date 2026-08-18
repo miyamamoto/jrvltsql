@@ -213,21 +213,21 @@ SCHEMAS = {
 
     "NL_CC": """
         CREATE TABLE IF NOT EXISTS NL_CC (
-            RecordSpec TEXT,
-            DataKubun TEXT,
-            MakeDate TEXT,
-            Year INTEGER,
-            MonthDay INTEGER,
-            JyoCD TEXT,
-            Kaiji INTEGER,
-            Nichiji INTEGER,
-            RaceNum INTEGER,
-            HappyoTime TEXT,
-            AtoKyori INTEGER,
-            AtoTruckCD TEXT,
-            MaeKyori INTEGER,
-            MaeTruckCD TEXT,
-            JiyuCD TEXT,
+            RecordSpec TEXT NOT NULL,
+            DataKubun TEXT NOT NULL,
+            MakeDate TEXT NOT NULL,
+            Year INTEGER NOT NULL,
+            MonthDay INTEGER NOT NULL,
+            JyoCD TEXT NOT NULL,
+            Kaiji INTEGER NOT NULL,
+            Nichiji INTEGER NOT NULL,
+            RaceNum INTEGER NOT NULL,
+            HappyoTime TEXT NOT NULL,
+            AtoKyori INTEGER NOT NULL,
+            AtoTruckCD TEXT NOT NULL,
+            MaeKyori INTEGER NOT NULL,
+            MaeTruckCD TEXT NOT NULL,
+            JiyuCD TEXT NOT NULL,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
         )
     """,
@@ -1629,21 +1629,21 @@ SCHEMAS = {
     """,
     "RT_CC": """
         CREATE TABLE IF NOT EXISTS RT_CC (
-            RecordSpec TEXT,
-            DataKubun TEXT,
-            MakeDate TEXT,
-            Year INTEGER,
-            MonthDay INTEGER,
-            JyoCD TEXT,
-            Kaiji INTEGER,
-            Nichiji INTEGER,
-            RaceNum INTEGER,
-            HappyoTime TEXT,
-            AtoKyori INTEGER,
-            AtoTruckCD TEXT,
-            MaeKyori INTEGER,
-            MaeTruckCD TEXT,
-            JiyuCD TEXT,
+            RecordSpec TEXT NOT NULL,
+            DataKubun TEXT NOT NULL,
+            MakeDate TEXT NOT NULL,
+            Year INTEGER NOT NULL,
+            MonthDay INTEGER NOT NULL,
+            JyoCD TEXT NOT NULL,
+            Kaiji INTEGER NOT NULL,
+            Nichiji INTEGER NOT NULL,
+            RaceNum INTEGER NOT NULL,
+            HappyoTime TEXT NOT NULL,
+            AtoKyori INTEGER NOT NULL,
+            AtoTruckCD TEXT NOT NULL,
+            MaeKyori INTEGER NOT NULL,
+            MaeTruckCD TEXT NOT NULL,
+            JiyuCD TEXT NOT NULL,
             PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
         )
     """,
@@ -2761,6 +2761,7 @@ STRICT_HR_STORAGE_TABLES = frozenset({"NL_HR", "RT_HR"})
 STRICT_HS_STORAGE_TABLES = frozenset({"NL_HS"})
 STRICT_HC_STORAGE_TABLES = frozenset({"NL_HC"})
 STRICT_TC_STORAGE_TABLES = frozenset({"NL_TC", "RT_TC"})
+STRICT_CC_STORAGE_TABLES = frozenset({"NL_CC", "RT_CC"})
 STRICT_JC_STORAGE_TABLES = frozenset({"NL_JC", "RT_JC"})
 
 
@@ -2770,6 +2771,7 @@ def _preflight_existing_strict_storage(db: BaseDatabase) -> None:
     from src.database.migration import _migration_targets
     from src.importer.importer import (
         verify_av_storage_schema,
+        verify_cc_storage_schema,
         verify_hc_storage_schema,
         verify_hr_storage_schema,
         verify_hs_storage_schema,
@@ -2818,6 +2820,9 @@ def _preflight_existing_strict_storage(db: BaseDatabase) -> None:
         for table_name in STRICT_TC_STORAGE_TABLES:
             if target.table_exists_strict(table_name):
                 verify_tc_storage_schema(target, table_name)
+        for table_name in STRICT_CC_STORAGE_TABLES:
+            if target.table_exists_strict(table_name):
+                verify_cc_storage_schema(target, table_name)
         for table_name in STRICT_JC_STORAGE_TABLES:
             if target.table_exists_strict(table_name):
                 verify_jc_storage_schema(target, table_name)
@@ -2916,6 +2921,10 @@ class SchemaManager:
                 from src.importer.importer import verify_tc_storage_schema
 
                 verify_tc_storage_schema(self.db, table_name)
+            if table_name in STRICT_CC_STORAGE_TABLES:
+                from src.importer.importer import verify_cc_storage_schema
+
+                verify_cc_storage_schema(self.db, table_name)
             if table_name in STRICT_JC_STORAGE_TABLES:
                 from src.importer.importer import verify_jc_storage_schema
 
@@ -2986,6 +2995,10 @@ class SchemaManager:
                     from src.importer.importer import verify_tc_storage_schema
 
                     verify_tc_storage_schema(self.db, table_name)
+                if table_name in STRICT_CC_STORAGE_TABLES:
+                    from src.importer.importer import verify_cc_storage_schema
+
+                    verify_cc_storage_schema(self.db, table_name)
                 if table_name in STRICT_JC_STORAGE_TABLES:
                     from src.importer.importer import verify_jc_storage_schema
 
@@ -3359,6 +3372,10 @@ def create_all_tables(db: BaseDatabase) -> None:
                 from src.importer.importer import verify_tc_storage_schema
 
                 verify_tc_storage_schema(db, table_name)
+            if table_name in STRICT_CC_STORAGE_TABLES:
+                from src.importer.importer import verify_cc_storage_schema
+
+                verify_cc_storage_schema(db, table_name)
             if table_name in STRICT_JC_STORAGE_TABLES:
                 from src.importer.importer import verify_jc_storage_schema
 

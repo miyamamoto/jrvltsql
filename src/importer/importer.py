@@ -606,12 +606,46 @@ _TC_LOSSLESS_TEXT_WIDTHS = {
     }
     for table_name in _TC_STORAGE_TABLES
 }
+_CC_STORAGE_TABLES = frozenset({"NL_CC", "RT_CC", "COURSE_CHANGE"})
+_CC_KEY_COLUMNS = ("Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum")
+_CC_LOSSLESS_TEXT_WIDTHS = {
+    "NL_CC": {
+        "RecordSpec": 2,
+        "DataKubun": 1,
+        "JyoCD": 2,
+        "HappyoTime": 8,
+        "AtoTruckCD": 2,
+        "MaeTruckCD": 2,
+        "JiyuCD": 1,
+    },
+    "RT_CC": {
+        "RecordSpec": 2,
+        "DataKubun": 1,
+        "JyoCD": 2,
+        "HappyoTime": 8,
+        "AtoTruckCD": 2,
+        "MaeTruckCD": 2,
+        "JiyuCD": 1,
+    },
+    "COURSE_CHANGE": {
+        "RecordSpec": 2,
+        "DataKubun": 1,
+        "JyoCD": 2,
+        "HappyoTime": 8,
+        "AtoKyori": 4,
+        "AtoTruckCD": 2,
+        "MaeKyori": 4,
+        "MaeTruckCD": 2,
+        "JiyuCD": 1,
+    },
+}
 _PROVIDER_OPERATION_COUNT_STORAGE_TABLES = (
     _AV_STORAGE_TABLES
     | _HR_STORAGE_TABLES
     | _HS_STORAGE_TABLES
     | _HC_STORAGE_TABLES
     | _TC_STORAGE_TABLES
+    | _CC_STORAGE_TABLES
 )
 _JC_STORAGE_TABLES = frozenset({"NL_JC", "RT_JC", "KISYU_CHANGE"})
 _JC_KEY_COLUMNS = (
@@ -672,6 +706,7 @@ _STRICT_NONADDITIVE_STANDARD_TABLES = frozenset(
         "SALE",
         "HANRO",
         "HASSOU_JIKOKU_CHANGE",
+        "COURSE_CHANGE",
         "KISYU_CHANGE",
         "TORIKESI_JYOGAI",
         "TENKO_BABA",
@@ -1981,6 +2016,114 @@ def validate_tc_record(record: dict, table_name: str | None = None) -> bool:
     return True
 
 
+def _verify_cc_no_unapproved_constraints(
+    database: BaseDatabase,
+    table_name: str,
+) -> None:
+    """Reject constraints beyond CC's one official immediate primary key."""
+
+    from src.database.migration import _migration_targets
+
+    targets = _migration_targets(database)
+    if targets != (database,):
+        for target in targets:
+            _verify_cc_no_unapproved_constraints(target, table_name)
+        return
+
+    db_type = database.get_db_type()
+    if db_type == "sqlite":
+        if database.fetch_all(f'PRAGMA foreign_key_list("{table_name}")'):
+            raise SchemaMigrationError(
+                f"CC storage {table_name} has unsupported FOREIGN KEY constraints"
+            )
+        row = database.fetch_one(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?",
+            (table_name,),
+        )
+        definition = str((row or {}).get("sql") or "")
+        if re.search(
+            r"\bCHECK\s*\(",
+            _sqlite_schema_code(definition),
+            flags=re.IGNORECASE,
+        ):
+            raise SchemaMigrationError(
+                f"CC storage {table_name} has unsupported CHECK constraints"
+            )
+        return
+    if db_type == "postgresql":
+        unexpected = database.fetch_all(
+            "SELECT conname AS constraint_name, contype AS constraint_type "
+            "FROM pg_constraint WHERE conrelid = to_regclass(?) "
+            "AND contype NOT IN ('p', 'n') ORDER BY conname",
+            (table_name.lower(),),
+        )
+        if unexpected:
+            raise SchemaMigrationError(
+                f"CC storage {table_name} has unsupported additional constraints: "
+                f"{unexpected}"
+            )
+        return
+    raise SchemaMigrationError(
+        f"CC constraints cannot be verified for database type {db_type!r}"
+    )
+
+
+def verify_cc_storage_schema(database: BaseDatabase, table_name: str) -> bool:
+    """Fail closed unless CC storage preserves every field and official key."""
+
+    if table_name not in _CC_STORAGE_TABLES:
+        return False
+    transaction_snapshot = _snapshot_validation_transactions(database)
+    from src.database.migration import verify_table_schema
+    from src.database.schema import SCHEMAS
+    from src.database.schema_jravan import JRAVAN_SCHEMAS
+
+    try:
+        schema_sql = SCHEMAS.get(table_name) or JRAVAN_SCHEMAS.get(table_name)
+        if schema_sql is None:
+            raise SchemaMigrationError(f"CC storage schema is undefined: {table_name}")
+        verify_table_schema(database, table_name, schema_sql)
+        _verify_strict_storage_column_contract(
+            database,
+            table_name,
+            schema_sql,
+            allow_missing_columns=False,
+            storage_label="CC",
+            lossless_text_widths=_CC_LOSSLESS_TEXT_WIDTHS[table_name],
+            allow_extra_columns=False,
+        )
+        _verify_cc_no_unapproved_constraints(database, table_name)
+        _verify_replacement_key_constraints(database, table_name, "CC storage")
+        return True
+    except Exception:
+        _rollback_call_created_validation_transactions(
+            transaction_snapshot,
+            context="failed CC schema validation",
+        )
+        raise
+
+
+def validate_cc_record(record: dict, table_name: str | None = None) -> bool:
+    """Validate one caller-built CC row before coercion or mutation."""
+
+    if table_name is not None and table_name not in _CC_STORAGE_TABLES:
+        return False
+    if _record_type_from_record(record) != "CC":
+        if table_name is None:
+            return False
+        raise SchemaMigrationError(f"{table_name} received a non-CC record")
+
+    from src.parser.cc_parser import CCParser
+
+    try:
+        if resolve_record_data_kubun(record) != "1":
+            raise ValueError("CC DataKubun must be current official value 1")
+        CCParser.validate_current_fields(record)
+    except ValueError as error:
+        raise SchemaMigrationError(str(error)) from error
+    return True
+
+
 def _verify_jc_key_storage_types(database: BaseDatabase, table_name: str) -> None:
     """Reject affinities that can coerce or split one JC identity."""
 
@@ -3101,6 +3244,8 @@ def _preflight_standard_schema_migrations(
             verify_hc_storage_schema(database, standard_name)
         if standard_name == "HASSOU_JIKOKU_CHANGE":
             verify_tc_storage_schema(database, standard_name)
+        if standard_name == "COURSE_CHANGE":
+            verify_cc_storage_schema(database, standard_name)
         if standard_name == "KISYU_CHANGE":
             verify_jc_storage_schema(database, standard_name)
         if standard_name in {"UMA", "COURSE"}:
@@ -3757,6 +3902,8 @@ def validate_import_record_header(record: dict) -> tuple[str, str]:
             validate_hc_record(record)
         if record_type == "TC":
             validate_tc_record(record)
+        if record_type == "CC":
+            validate_cc_record(record)
         if record_type == "JC":
             validate_jc_record(record)
         return record_type, data_kubun
@@ -6303,6 +6450,7 @@ class DataImporter:
         self._verified_hs_tables: set[str] = set()
         self._verified_hc_tables: set[str] = set()
         self._verified_tc_tables: set[str] = set()
+        self._verified_cc_tables: set[str] = set()
         self._verified_jc_tables: set[str] = set()
         self._verified_cs_tables: set[str] = set()
         self._verified_jg_tables: set[str] = set()
@@ -6662,6 +6810,10 @@ class DataImporter:
                     if verify_tc_storage_schema(self.database, table_name):
                         self._verified_tc_tables.add(table_name)
                 validate_tc_record(record, table_name)
+                if table_name not in self._verified_cc_tables:
+                    if verify_cc_storage_schema(self.database, table_name):
+                        self._verified_cc_tables.add(table_name)
+                validate_cc_record(record, table_name)
                 if table_name not in self._verified_jc_tables:
                     if verify_jc_storage_schema(self.database, table_name):
                         self._verified_jc_tables.add(table_name)
@@ -7401,6 +7553,10 @@ class DataImporter:
                 if verify_tc_storage_schema(self.database, table_name):
                     self._verified_tc_tables.add(table_name)
             validate_tc_record(record, table_name)
+            if table_name not in self._verified_cc_tables:
+                if verify_cc_storage_schema(self.database, table_name):
+                    self._verified_cc_tables.add(table_name)
+            validate_cc_record(record, table_name)
             if table_name not in self._verified_jc_tables:
                 if verify_jc_storage_schema(self.database, table_name):
                     self._verified_jc_tables.add(table_name)
