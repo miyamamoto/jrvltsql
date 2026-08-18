@@ -212,14 +212,37 @@
   changed by these local validations. The PostgreSQL instance is disposable
   and will be removed after the final carry-forward review.
 
+## Final carry-forward review closure
+
+- Two bounded read-only reviewers audited exact clean candidate
+  `8b9761a63c73687c41d809a5467afd046cfcdb44` after the consolidated repair.
+  The database reviewer independently replayed the five red cases, both
+  importer distance paths on SQLite and fresh PostgreSQL, and the eight
+  safe/unsafe/caller-owned SchemaManager paths. It found no remaining database
+  P0/P1/P2.
+- The official reviewer reconfirmed both workbook hashes, SDK hash and all
+  spans, provider/history facts, and the corrected worksheet locator. It found
+  one test-gate gap: the compact oracle compared fixture domains to literals
+  but did not directly bind the runtime `CCParser` track/reason sets to those
+  fixture domains. The runtime sets themselves were already correct.
+- The existing oracle test was minimally extended with the two direct runtime
+  equality assertions. Before retaining that test change, a temporary mutant
+  added unsupported track `30` and reason `5` to the runtime sets; the oracle
+  failed exactly at the new binding with extra item `30`. The mutant was
+  removed and the provider-valid runtime remained unchanged. This is the
+  recorded red-first proof that the corrected oracle can reject domain drift.
+- Both reviewers also identified that the prior `Next` paragraph described
+  steps already completed by `8b9761a...`; the current next step is publication
+  and PR gating, not another evidence commit or broad review cycle.
+
 ## Next safe command and STOP conditions
 
-- Next: commit this final evidence update, freeze the resulting clean full SHA,
-  run one bounded carry-forward review of the consolidated repair/provenance,
-  then push one branch, open one PR, request the single native Copilot review,
+- Next: run the compact CC test on the final test/worklog-only delta, commit it,
+  push one branch, open one PR, request the single native Copilot review,
   address actionable comments in one batch, require unresolved thread count
   zero, and merge only after the applicable checks and exact-head evidence are
-  green.
+  green. Do not rerun the already-green broad suite for this two-assertion
+  oracle-only delta unless the exact change expands.
 - STOP on non-worklog drift, a material disagreement among pinned official
   sources, backend divergence that is not explained and tested, or any need
   for destructive/provider action beyond the authorized local test scope.

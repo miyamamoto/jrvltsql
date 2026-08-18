@@ -107,6 +107,8 @@ def test_cc_oracle_binds_both_workbooks_sdk_and_every_parser_span() -> None:
         *[str(value) for value in range(51, 60)],
     ]
     assert CONTRACT["reason_codes"] == ["0", "1", "2", "3", "4"]
+    assert CCParser.OFFICIAL_TRACK_CODES == frozenset(CONTRACT["track_codes"])
+    assert CCParser.REASON_CODES == frozenset(CONTRACT["reason_codes"])
     assert CURRENT_ACCUMULATED_DATA_KUBUN["CC"] == frozenset({"1"})
     assert CONTRACT["history"] == {
         "added": "2004-05-25",
