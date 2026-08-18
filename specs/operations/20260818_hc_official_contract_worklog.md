@@ -100,3 +100,91 @@
 - Per the user-approved fallback, Codex will implement only after red-first
   evidence, and at least two independent Codex reviewers will audit one frozen
   candidate SHA before PR/release action.
+
+## Red-first contract evidence
+
+- Added the compact reviewed fixture
+  `tests/fixtures/official_layout/hc_contract_4901.json` and one grouped
+  `tests/test_hc_official_contract.py` contract. It binds both pinned workbook
+  hashes, every physical byte span, SDK 5.0 manifest structure, current status
+  set, exact four-column identity, parser/caller validation, native/standard
+  storage, provider order, exact delete, schema fail-closed behavior and the
+  optional actual-PostgreSQL route.
+- On unchanged production base
+  `ed39ac78aa371e7ce4e18a87d8a25c50a07fe78a`, the paired provider-valid
+  layout/parser oracle passed while the gate failed as intended:
+  `31 failed, 1 passed, 1 skipped`. The failures independently cover invalid
+  dates/time/key/timing acceptance, status-0 whole-body decoding, keyless
+  standard storage, nullable/unsafe schemas, tombstone rather than exact
+  deletion, caller coercion before validation, and all batch/single entry
+  points. This is the required evidence that the new contract can say no;
+  production implementation had not been changed when it was recorded.
+
+## Next safe action
+
+1. Apply one aggregated HC repair to parser, both executable schemas, metadata,
+   both batch importers, single-record import, exact-delete routing and strict
+   schema preflight.
+2. Run the compact SQLite contract, adjacent parser/importer/schema suites and
+   a fresh disposable PostgreSQL contract on the resulting candidate.
+3. Freeze one full SHA, then collect independent official-oracle,
+   data-integrity and release/package reviews before any PR or merge action.
+
+## Aggregated implementation and local evidence
+
+- Implemented the repair as one batch rather than iterating per finding:
+  - `HCParser` now binds all official spans, validates real dates/HHMM,
+    training-center/key domains and every fixed numeric timing field. Status 0
+    decodes only its exact key and keeps the non-key body opaque by documented
+    project policy.
+  - `NL_HC` and standard `HANRO` now have complete required columns, exact
+    four-part primary keys and lossless numeric capacities. Metadata is derived
+    from the executable native schema.
+  - both batch importers and `DataImporter.import_single_record` share the HC
+    validator, strict schema verifier and exact-delete route. Standard `HANRO`
+    is non-additive; nullable/keyless/wrong-key/wrong-type and unapproved
+    UNIQUE/CHECK/FK constraints stop before mutation on every migration target.
+  - provider-operation statistics preserve same-key update/delete order on
+    SQLite and PostgreSQL; HC remains accumulated-only with no `RT_HC` claim.
+  - public support/release documents now state the official identity, units,
+    migration/reimport boundary and unverified realtime/non-applicable scope.
+- A later extension of the same strict-schema gate was independently replayed
+  on unchanged base `ed39ac78aa371e7ce4e18a87d8a25c50a07fe78a` before it
+  was accepted: both native/standard extra-CHECK cases failed because the base
+  reached DML instead of raising `SchemaMigrationError`, and the Dual unsafe-
+  primary case failed because the base accepted and wrote it. The candidate
+  rejects all three before mutation. This supplements the initial grouped
+  `31 failed` red evidence and proves the new constraint/target census can fail.
+- Current candidate validation so far:
+  - compact SQLite HC contract: `35 passed, 1 PostgreSQL opt-in skipped`;
+  - adjacent parser/status/importer/schema set: `404 passed, 1 skipped`;
+  - metadata/schema/index set: `96 passed, 8 skipped`;
+  - fresh PostgreSQL 16 compact contract with native/standard, both importers,
+    auto-commit true/false, provider-order readback and schema negatives:
+    `36 passed`;
+  - test-gate validator: `TEST GATE PASS`; fatal flake8 selection: `0`;
+    compileall and `uv lock --check`: pass.
+- The required one-time broad regression run initially exposed three generic
+  parser positives that still supplied a blank HC body. Those tests were based
+  on the old permissive parser rather than the official format, so their HC
+  sample was corrected to include the four-part identity and all seven fixed
+  timing spans. The targeted three cases then passed, and the complete local
+  workflow-equivalent suite finished `3314 passed, 333 skipped, 14 deselected,
+  20 subtests passed`.
+- Final post-format focused aggregate finished `602 passed, 8 skipped`; fatal
+  flake8 remained `0`, `TEST GATE PASS`, `uv lock --check` passed, and
+  `git diff --check` was clean.
+- A fresh PEP 517 wheel and sdist built as unreleased `2.0.0.dev0`; the actual
+  distribution content gate passed both artifacts and the installed-wheel init
+  smoke passed. The artifacts and local build metadata were removed afterward.
+- The disposable PostgreSQL container was removed after the run. No provider,
+  production, GitHub, NAR, MCP or release state was changed.
+
+## Next safe action
+
+1. Run the one justified broad local suite because central importer/schema
+   dispatch changed, then strict documentation and distribution build gates.
+2. Commit/push one clean candidate SHA and freeze it.
+3. Run the three independent read-only Codex reviews in parallel against that
+   exact SHA, aggregate all concrete findings once, and only then decide the
+   repair/PR boundary.

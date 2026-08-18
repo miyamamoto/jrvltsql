@@ -196,20 +196,21 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
     """,
     "HANRO": """
         CREATE TABLE IF NOT EXISTS HANRO (
-            RecordSpec                     CHAR(2)             ,  -- レコード種別ID
-            DataKubun                      CHAR(1)             ,  -- データ区分
-            MakeDate                       DATE                ,  -- YYYYMMDD形式の日付
-            TresenKubun                    VARCHAR(255)        ,  -- テキスト
-            ChokyoDate                     VARCHAR(255)        ,  -- テキスト
-            ChokyoTime                     VARCHAR(255)        ,  -- テキスト
-            KettoNum                       VARCHAR(255)        ,  -- テキスト
-            HaronTime4                     VARCHAR(255)        ,  -- テキスト
-            LapTime4                       VARCHAR(255)        ,  -- テキスト
-            HaronTime3                     VARCHAR(255)        ,  -- テキスト
-            LapTime3                       DECIMAL(4,1)        ,  -- ラップタイム3
-            HaronTime2                     VARCHAR(255)        ,  -- テキスト
-            LapTime2                       DECIMAL(4,1)        ,  -- ラップタイム2
-            LapTime1                       DECIMAL(4,1)          -- ラップタイム1(秒)
+            RecordSpec                     CHAR(2) NOT NULL    ,  -- レコード種別ID
+            DataKubun                      CHAR(1) NOT NULL    ,  -- 0:削除 1:初期値
+            MakeDate                       DATE NOT NULL       ,  -- データ作成年月日
+            TresenKubun                    CHAR(1) NOT NULL    ,  -- 0:美浦 1:栗東
+            ChokyoDate                     VARCHAR(8) NOT NULL ,  -- 調教年月日
+            ChokyoTime                     VARCHAR(4) NOT NULL ,  -- 調教時刻
+            KettoNum                       VARCHAR(10) NOT NULL,  -- 血統登録番号
+            HaronTime4                     DECIMAL(4,1) NOT NULL, -- 4F走破タイム
+            LapTime4                       DECIMAL(3,1) NOT NULL, -- 800M-600M
+            HaronTime3                     DECIMAL(4,1) NOT NULL, -- 3F走破タイム
+            LapTime3                       DECIMAL(3,1) NOT NULL, -- 600M-400M
+            HaronTime2                     DECIMAL(4,1) NOT NULL, -- 2F走破タイム
+            LapTime2                       DECIMAL(3,1) NOT NULL, -- 400M-200M
+            LapTime1                       DECIMAL(3,1) NOT NULL, -- 200M-0M
+            PRIMARY KEY (TresenKubun, ChokyoDate, ChokyoTime, KettoNum)
         )
     """,
     "WOOD": """

@@ -128,6 +128,22 @@ class TestIndividualParsers:
                 mutable[187:188] = b"2"
                 mutable[188:198] = b"0000000100"
                 data = bytes(mutable)
+            if record_type == "HC":
+                # HC requires its complete four-part identity and all seven
+                # fixed numeric time spans; a blank envelope is not valid.
+                mutable = bytearray(data)
+                mutable[11:12] = b"0"
+                mutable[12:20] = b"20240601"
+                mutable[20:24] = b"0630"
+                mutable[24:34] = b"2020000001"
+                mutable[34:38] = b"0480"
+                mutable[38:41] = b"120"
+                mutable[41:45] = b"0360"
+                mutable[45:48] = b"120"
+                mutable[48:52] = b"0240"
+                mutable[52:55] = b"120"
+                mutable[55:58] = b"120"
+                data = bytes(mutable)
             if record_type == "AV":
                 mutable = bytearray(data)
                 mutable[11:15] = b"2024"

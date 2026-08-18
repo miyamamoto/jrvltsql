@@ -41,7 +41,6 @@ PARSER_MAP = {
     "BR": (BRParser, BRParser.RECORD_LENGTH),
     "CH": (CHParser, CHParser.RECORD_LENGTH),
     "DM": (DMParser, DMParser.RECORD_LENGTH),
-    "HC": (HCParser, 60),
     "HN": (HNParser, 251),
     "HS": (HSParser, 200),
     "HY": (HYParser, 123),
@@ -55,6 +54,10 @@ PARSER_MAP = {
     "TM": (TMParser, TMParser.RECORD_LENGTH),
     "YS": (YSParser, YSParser.RECORD_LENGTH),
 }
+# HC records are also excluded from the generic all-row positive matrix. Two
+# reconstructed rows contain space-filled fixed numeric spans that are not
+# valid current provider HC. The dedicated class below retains the one complete
+# value reconstruction, while the official HC contract is authoritative.
 # The old O1-O6 fixture files were reconstructed from already-expanded SQL
 # rows, not preserved provider records. They cannot prove a physical parser
 # contract; complete current layouts are covered in test_time_series.py.

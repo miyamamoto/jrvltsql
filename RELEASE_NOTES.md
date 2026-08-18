@@ -35,6 +35,12 @@ Public API replacements:
 - native and standard schemas now verify primary keys, types, capacities,
   child-table constraints, and cancellation/delete behavior before mutation;
   several record families gained complete child storage or corrected keys
+- HC hill-training storage now binds the current official 60-byte layout and
+  four-part identity in both `NL_HC` and standard `HANRO`, preserves every
+  tenths-of-a-second timing field as seconds, applies provider-order update and
+  exact status-0 erase, and rejects legacy nullable/keyless/unsafe tables before
+  mutation. Operators must back up, rebuild, and reimport `SLOP`; HC remains an
+  accumulated-only format and does not imply realtime support
 - SE horse-per-race storage now uses the complete eight-part official identity
   ending in `KettoNum` across native, realtime, and `UMA_RACE`; legacy
   seven-key/keyless tables require backup, rebuild, and `RACE` reimport rather

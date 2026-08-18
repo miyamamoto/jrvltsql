@@ -1024,30 +1024,16 @@ TABLE_METADATA: Dict[str, TableMetadata] = {
         indexes=["JyoCD", "Kyori"],
     ),
 
-    "NL_HC": {
-        "table_name": "NL_HC",
-        "record_type": "HC",
-        "description": "調教タイム情報",
-        "purpose": "坂路調教時の走破タイムとラップタイムを格納",
-        "columns": [
-            {"name": "レコード種別ID", "type": "TEXT", "description": "レコード種別識別子（'HC'）", "example": "HC", "nullable": False},
-            {"name": "データ区分", "type": "TEXT", "description": "データ区分", "example": "1", "nullable": False},
-            {"name": "データ作成年月日", "type": "TEXT", "description": "データ作成日", "example": "20240525", "nullable": False},
-            {"name": "トレセン区分", "type": "TEXT", "description": "トレーニングセンター（0=美浦、1=栗東）", "example": "1", "nullable": False},
-            {"name": "調教年月日", "type": "TEXT", "description": "調教実施日", "example": "20240525", "nullable": False},
-            {"name": "調教時刻", "type": "TEXT", "description": "調教実施時刻", "example": "0630", "nullable": False},
-            {"name": "血統登録番号", "type": "TEXT", "description": "馬の血統登録番号", "example": "2020123456", "nullable": False},
-            {"name": "4F走破タイム", "type": "REAL", "description": "4ハロン走破タイム（秒）", "example": "52.3", "nullable": True},
-            {"name": "800M-600Mラップ", "type": "REAL", "description": "800M～600Mのラップタイム（秒）", "example": "13.8", "nullable": True},
-            {"name": "3F走破タイム", "type": "REAL", "description": "3ハロン走破タイム（秒）", "example": "38.5", "nullable": True},
-            {"name": "600M-400Mラップ", "type": "REAL", "description": "600M～400Mのラップタイム（秒）", "example": "13.0", "nullable": True},
-            {"name": "2F走破タイム", "type": "REAL", "description": "2ハロン走破タイム（秒）", "example": "25.5", "nullable": True},
-            {"name": "400M-200Mラップ", "type": "REAL", "description": "400M～200Mのラップタイム（秒）", "example": "12.8", "nullable": True},
-            {"name": "200M-0Mラップ", "type": "REAL", "description": "200M～0Mのラップタイム（秒）", "example": "12.7", "nullable": True}
-        ],
-        "primary_key": ["トレセン区分", "調教年月日", "調教時刻", "血統登録番号"],
-        "indexes": ["血統登録番号", "調教年月日"]
-    },
+    "NL_HC": _schema_backed_metadata(
+        "NL_HC",
+        record_type="HC",
+        description="坂路調教タイム情報",
+        purpose=(
+            "公式60バイトHCをトレセン・調教日・調教時刻・血統登録番号の"
+            "4項目キーで保持し、走破タイムとラップを秒へ正規化"
+        ),
+        indexes=["KettoNum", "ChokyoDate"],
+    ),
 
     "NL_HS": {
         "table_name": "NL_HS",

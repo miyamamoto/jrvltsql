@@ -39,6 +39,11 @@
 
 ### Fixed
 
+- `HC`を公式現行60バイト配置と4項目キーへ結び付け、native `NL_HC`と標準名
+  `HANRO`で0.1秒単位の全time field、provider順の更新、status 0 exact delete、
+  caller validation、SQLite/PostgreSQLのstrict schema preflightを一致させた。
+  旧nullable/keyless/wrong-key tableは自動移行せずbackup・rebuild・`SLOP`
+  reimportを要求し、HCは蓄積系のみであることを明記した
 - `HS`を現行HOSNの公式200バイト配置と3項目キーへ結び付け、native `NL_HS`と
   標準名`SALE`でprovider順の更新・exact delete・operation統計を一致させた。
   旧196バイトHOSEは引き続き拒否し、v2以前の既存tableは空でも値長から推測せず

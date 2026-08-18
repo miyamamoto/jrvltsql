@@ -32,6 +32,10 @@ JV-Data. They do not contain provider records or a copy of the SDK source.
   196-byte HOSE store. It also pins the official historical-value policy: age
   is already unified to the post-2001 method, while sale names retain their
   historical notation.
+- `hc_contract_4901.json` records the current 60-byte HC hill-training layout,
+  four-part identity, status domain, tenths-of-a-second timing fields, and the
+  same-layout Miho measurement-distance history independently transcribed from
+  both pinned current workbooks.
 
 The manifest is intentionally independent of jrvltsql parser and schema code.
 When the official source changes, regenerate it from a separately obtained SDK

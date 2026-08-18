@@ -13,11 +13,11 @@ from typing import Dict, Iterator, List, Optional, Union
 from src.database.base import BaseDatabase, DatabaseError
 from src.database.migration import SchemaMigrationError
 from src.importer.importer import (
-    _PROVIDER_OPERATION_COUNT_STORAGE_TABLES,
     _ORDERED_MASTER_STORAGE_TABLES,
     _PREPARED_CH_SEISEKI_ROWS_KEY,
     _PREPARED_CK_ROWS_KEY,
     _PREPARED_KS_SEISEKI_ROWS_KEY,
+    _PROVIDER_OPERATION_COUNT_STORAGE_TABLES,
     _RC_STORAGE_TABLES,
     _STANDARD_ODDS_CONFIG_BY_OWNER,
     _STANDARD_VOTE_CONFIG_BY_OWNER,
@@ -66,6 +66,7 @@ from src.importer.importer import (
     resolve_standard_table_name,
     rollback_failed_import,
     validate_av_record,
+    validate_hc_record,
     validate_hr_record,
     validate_hs_record,
     validate_import_record_header,
@@ -80,9 +81,10 @@ from src.importer.importer import (
     verify_ch_coupled_table,
     verify_ck_coupled_tables,
     verify_cs_storage_schema,
-    verify_hy_storage_schema,
+    verify_hc_storage_schema,
     verify_hr_storage_schema,
     verify_hs_storage_schema,
+    verify_hy_storage_schema,
     verify_jc_storage_schema,
     verify_jg_storage_schema,
     verify_ks_coupled_table,
@@ -136,6 +138,7 @@ class OptimizedDataImporter:
         self._verified_av_tables: set[str] = set()
         self._verified_hr_tables: set[str] = set()
         self._verified_hs_tables: set[str] = set()
+        self._verified_hc_tables: set[str] = set()
         self._verified_jc_tables: set[str] = set()
         self._verified_cs_tables: set[str] = set()
         self._verified_jg_tables: set[str] = set()
@@ -353,6 +356,7 @@ class OptimizedDataImporter:
                     validate_av_record(first_record, first_table_name)
                     validate_hr_record(first_record, first_table_name)
                     validate_hs_record(first_record, first_table_name)
+                    validate_hc_record(first_record, first_table_name)
                     validate_jc_record(first_record, first_table_name)
                 records = chain((first_record,), records)
         except Exception:
@@ -446,6 +450,10 @@ class OptimizedDataImporter:
                     if verify_hs_storage_schema(self.database, table_name):
                         self._verified_hs_tables.add(table_name)
                 validate_hs_record(record, table_name)
+                if table_name not in self._verified_hc_tables:
+                    if verify_hc_storage_schema(self.database, table_name):
+                        self._verified_hc_tables.add(table_name)
+                validate_hc_record(record, table_name)
                 if table_name not in self._verified_jc_tables:
                     if verify_jc_storage_schema(self.database, table_name):
                         self._verified_jc_tables.add(table_name)

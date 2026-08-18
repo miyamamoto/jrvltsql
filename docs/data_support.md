@@ -53,7 +53,7 @@ jrvltsql は JRA / 中央競馬専用です。NAR / 地方競馬はこのリポ�
 | `DIFN` | `DIFF` | 蓄積系マスタ差分 | `UM`, `KS`, `CH`, `BR`, `BN`, `RC` | `NL_UM`, `NL_KS`, `NL_KS_SEISEKI`, `NL_CH`, `NL_CH_SEISEKI`, `NL_BR`, `NL_BN`, `NL_RC` | はい | いいえ | はい | 旧名 `DIFF` は受け付けません（下記参照）。 |
 | `BLDN` | `BLOD` | 血統情報 | `HN`, `SK`, `BT` | `NL_HN`, `NL_SK`, `NL_BT` | はい | いいえ | はい | 旧名 `BLOD` は受け付けません（下記参照）。 |
 | `MING` | - | データマイニング予想 | `DM`, `TM` | `NL_DM`, `NL_TM` | はい | いいえ | はい | full quickstart に含めています。 |
-| `SLOP` | - | 坂路調教関連 | `HC` | `NL_HC` | はい | いいえ | はい | standard / full quickstart に含めています。 |
+| `SLOP` | - | 坂路調教関連 | `HC` | `NL_HC`（native）、`HANRO`（標準名モード） | はい | いいえ | はい | 現行60バイトを全項目保存します。公式4項目キーの同一recordを更新し、`0`はexact deleteです。standard / full quickstart に含めています。 |
 | `WOOD` | - | ウッドチップ調教関連 | `WC` | `NL_WC`（native）、`WOOD`（標準名モード） | はい | いいえ | はい | 現行105バイトを全項目保存します。公式キーはトレセン区分・調教年月日・調教時刻・血統登録番号の4項目で、`0` は同じキーの削除です。standard / full quickstart に含めています。 |
 | `YSCH` | - | 開催スケジュール | `YS` | `NL_YS` | はい | いいえ | はい | 開催カレンダー保守に使います。 |
 | `HOSN` | `HOSE` | 競走馬市場取引価格 | `HS` | `NL_HS` | はい | いいえ | はい | 旧名 `HOSE` は受け付けません（下記参照）。 |
@@ -229,6 +229,21 @@ jrvltsql は現在、以下 38 種類の JRA レコード種別に対してパ�
 対応済みの速報系レコードは `RT_*` にも保存できます。公式時系列オッズは
 `TS_O1` / `TS_O2`、開催週速報オッズは `TS_SOKUHO_O1`〜`TS_SOKUHO_O6`
 に保存します。
+
+`HC`（坂路調教）は現行JV-Data 4.9.0.1 / SDK 5.0.0の60バイト配置だけを
+受け付けます。identityは`TresenKubun`, `ChokyoDate`, `ChokyoTime`,
+`KettoNum`の4項目です。native `NL_HC`と標準名`HANRO`は同じordered primary
+key、必須header/key/body、公式field capacityを使用し、7つの走破・lap timeを
+0.1秒単位のprovider整数から秒へ正規化します。公式の測定不能値`0000`/`000`は
+0.0秒として欠損と混同せず保持します。
+
+`DataKubun=0`は4項目keyだけを使うexact eraseです。非key本文をdecodeしないのは
+削除指示を失わせないためのproject policyであり、provider仕様が任意binary本文を
+規定するという意味ではありません。既存のnullable、keyless、wrong-key、wrong-type、
+追加UNIQUE/FK/CHECKを持つ`NL_HC`/`HANRO`は自動修復せず、mutation前に停止します。
+backup後にcurrent schemaでrebuildし、`SLOP`を再importしてください。HCは蓄積系のみで
+`RT_HC`は作成しません。美浦の測定距離は2004-11-30に600mから800mへ変わりましたが、
+物理record長と4項目identityは変わりません。
 
 `HS`（競走馬市場取引価格）は現行JV-Data 4.9.0.1 / SDK 5.0.0の
 200バイト配置だけを受け付け、旧196バイト配置は常に拒否します。公式の保存identityは

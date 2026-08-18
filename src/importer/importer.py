@@ -555,8 +555,29 @@ _HS_LOSSLESS_TEXT_WIDTHS = {
     }
     for table_name in _HS_STORAGE_TABLES
 }
+_HC_STORAGE_TABLES = frozenset({"NL_HC", "HANRO"})
+_HC_KEY_COLUMNS = ("TresenKubun", "ChokyoDate", "ChokyoTime", "KettoNum")
+_HC_LOSSLESS_TEXT_WIDTHS = {
+    "NL_HC": {
+        "RecordSpec": 2,
+        "DataKubun": 1,
+        "MakeDate": 8,
+        "TresenKubun": 1,
+        "ChokyoDate": 8,
+        "ChokyoTime": 4,
+        "KettoNum": 10,
+    },
+    "HANRO": {
+        "RecordSpec": 2,
+        "DataKubun": 1,
+        "TresenKubun": 1,
+        "ChokyoDate": 8,
+        "ChokyoTime": 4,
+        "KettoNum": 10,
+    },
+}
 _PROVIDER_OPERATION_COUNT_STORAGE_TABLES = (
-    _AV_STORAGE_TABLES | _HR_STORAGE_TABLES | _HS_STORAGE_TABLES
+    _AV_STORAGE_TABLES | _HR_STORAGE_TABLES | _HS_STORAGE_TABLES | _HC_STORAGE_TABLES
 )
 _JC_STORAGE_TABLES = frozenset({"NL_JC", "RT_JC", "KISYU_CHANGE"})
 _JC_KEY_COLUMNS = (
@@ -615,6 +636,7 @@ _STRICT_NONADDITIVE_STANDARD_TABLES = frozenset(
         "JOGAIBA",
         "HARAI",
         "SALE",
+        "HANRO",
         "KISYU_CHANGE",
         "TORIKESI_JYOGAI",
         "TENKO_BABA",
@@ -1641,6 +1663,108 @@ def validate_hs_record(record: dict, table_name: str | None = None) -> bool:
     except ValueError as error:
         raise SchemaMigrationError(str(error)) from error
     record["CurrentLayoutVersion"] = HSParser.CURRENT_LAYOUT_VERSION
+    return True
+
+
+def _verify_hc_no_unapproved_constraints(
+    database: BaseDatabase,
+    table_name: str,
+) -> None:
+    """Reject constraints beyond HC's one official immediate primary key."""
+
+    from src.database.migration import _migration_targets
+
+    targets = _migration_targets(database)
+    if targets != (database,):
+        for target in targets:
+            _verify_hc_no_unapproved_constraints(target, table_name)
+        return
+
+    db_type = database.get_db_type()
+    if db_type == "sqlite":
+        if database.fetch_all(f'PRAGMA foreign_key_list("{table_name}")'):
+            raise SchemaMigrationError(
+                f"HC storage {table_name} has unsupported FOREIGN KEY constraints"
+            )
+        row = database.fetch_one(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?",
+            (table_name,),
+        )
+        definition = str((row or {}).get("sql") or "")
+        if re.search(r"\bCHECK\s*\(", definition, flags=re.IGNORECASE):
+            raise SchemaMigrationError(
+                f"HC storage {table_name} has unsupported CHECK constraints"
+            )
+        return
+    if db_type == "postgresql":
+        unexpected = database.fetch_all(
+            "SELECT conname AS constraint_name, contype AS constraint_type "
+            "FROM pg_constraint WHERE conrelid = to_regclass(?) "
+            "AND contype NOT IN ('p', 'n') ORDER BY conname",
+            (table_name.lower(),),
+        )
+        if unexpected:
+            raise SchemaMigrationError(
+                f"HC storage {table_name} has unsupported additional constraints: "
+                f"{unexpected}"
+            )
+        return
+    raise SchemaMigrationError(
+        f"HC constraints cannot be verified for database type {db_type!r}"
+    )
+
+
+def verify_hc_storage_schema(database: BaseDatabase, table_name: str) -> bool:
+    """Fail closed unless HC storage preserves every field and official key."""
+
+    if table_name not in _HC_STORAGE_TABLES:
+        return False
+    transaction_snapshot = _snapshot_validation_transactions(database)
+    from src.database.migration import verify_table_schema
+    from src.database.schema import SCHEMAS
+    from src.database.schema_jravan import JRAVAN_SCHEMAS
+
+    try:
+        schema_sql = SCHEMAS.get(table_name) or JRAVAN_SCHEMAS.get(table_name)
+        if schema_sql is None:
+            raise SchemaMigrationError(f"HC storage schema is undefined: {table_name}")
+        verify_table_schema(database, table_name, schema_sql)
+        _verify_strict_storage_column_contract(
+            database,
+            table_name,
+            schema_sql,
+            allow_missing_columns=False,
+            storage_label="HC",
+            lossless_text_widths=_HC_LOSSLESS_TEXT_WIDTHS[table_name],
+        )
+        _verify_hc_no_unapproved_constraints(database, table_name)
+        _verify_replacement_key_constraints(database, table_name, "HC storage")
+        return True
+    except Exception:
+        _rollback_call_created_validation_transactions(
+            transaction_snapshot,
+            context="failed HC schema validation",
+        )
+        raise
+
+
+def validate_hc_record(record: dict, table_name: str | None = None) -> bool:
+    """Validate a caller-built HC row before coercion or mutation."""
+
+    if table_name is not None and table_name not in _HC_STORAGE_TABLES:
+        return False
+    if _record_type_from_record(record) != "HC":
+        if table_name is None:
+            return False
+        raise SchemaMigrationError(f"{table_name} received a non-HC record")
+
+    from src.parser.hc_parser import HCParser
+
+    try:
+        data_kubun = resolve_record_data_kubun(record)
+        HCParser.validate_current_fields(record, data_kubun=data_kubun)
+    except ValueError as error:
+        raise SchemaMigrationError(str(error)) from error
     return True
 
 
@@ -2760,6 +2884,8 @@ def _preflight_standard_schema_migrations(
             verify_hr_storage_schema(database, standard_name)
         if standard_name == "SALE":
             verify_hs_storage_schema(database, standard_name)
+        if standard_name == "HANRO":
+            verify_hc_storage_schema(database, standard_name)
         if standard_name == "KISYU_CHANGE":
             verify_jc_storage_schema(database, standard_name)
         if standard_name in {"UMA", "COURSE"}:
@@ -3285,6 +3411,7 @@ _OFFICIAL_ERASE_KEY_COLUMNS = {
     "JC": _JC_KEY_COLUMNS,
     "HR": _MINING_RACE_KEY_COLUMNS,
     "HS": _HS_KEY_COLUMNS,
+    "HC": _HC_KEY_COLUMNS,
     # One physical H1/H6/O1-O6 record expands into multiple child rows.
     "H1": _MINING_RACE_KEY_COLUMNS,
     "H6": _MINING_RACE_KEY_COLUMNS,
@@ -3309,6 +3436,7 @@ _OFFICIAL_ERASE_STORAGE_TABLES = {
     "JC": set(_JC_STORAGE_TABLES),
     "HR": {"NL_HR", "RT_HR", "HARAI"},
     "HS": set(_HS_STORAGE_TABLES),
+    "HC": set(_HC_STORAGE_TABLES),
     "H1": {"NL_H1", "RT_H1", "HYO_TANPUKU"},
     "H6": {"NL_H6", "RT_H6", "HYO_SANRENTAN"},
     "O1": {"NL_O1", "RT_O1", "ODDS_TANPUKUWAKU_HEAD"},
@@ -3410,6 +3538,8 @@ def validate_import_record_header(record: dict) -> tuple[str, str]:
             validate_hr_record(record)
         if record_type == "HS":
             validate_hs_record(record)
+        if record_type == "HC":
+            validate_hc_record(record)
         if record_type == "JC":
             validate_jc_record(record)
         return record_type, data_kubun
@@ -5954,6 +6084,7 @@ class DataImporter:
         self._verified_av_tables: set[str] = set()
         self._verified_hr_tables: set[str] = set()
         self._verified_hs_tables: set[str] = set()
+        self._verified_hc_tables: set[str] = set()
         self._verified_jc_tables: set[str] = set()
         self._verified_cs_tables: set[str] = set()
         self._verified_jg_tables: set[str] = set()
@@ -6219,6 +6350,7 @@ class DataImporter:
                     validate_av_record(first_record, first_table_name)
                     validate_hr_record(first_record, first_table_name)
                     validate_hs_record(first_record, first_table_name)
+                    validate_hc_record(first_record, first_table_name)
                     validate_jc_record(first_record, first_table_name)
                 records = chain((first_record,), records)
         except Exception:
@@ -6304,6 +6436,10 @@ class DataImporter:
                     if verify_hs_storage_schema(self.database, table_name):
                         self._verified_hs_tables.add(table_name)
                 validate_hs_record(record, table_name)
+                if table_name not in self._verified_hc_tables:
+                    if verify_hc_storage_schema(self.database, table_name):
+                        self._verified_hc_tables.add(table_name)
+                validate_hc_record(record, table_name)
                 if table_name not in self._verified_jc_tables:
                     if verify_jc_storage_schema(self.database, table_name):
                         self._verified_jc_tables.add(table_name)
@@ -6953,6 +7089,7 @@ class DataImporter:
                 validate_av_record(record, table_name)
                 validate_hr_record(record, table_name)
                 validate_hs_record(record, table_name)
+                validate_hc_record(record, table_name)
                 validate_jc_record(record, table_name)
         except SchemaMigrationError:
             if not auto_commit:
@@ -7034,6 +7171,10 @@ class DataImporter:
                 if verify_hs_storage_schema(self.database, table_name):
                     self._verified_hs_tables.add(table_name)
             validate_hs_record(record, table_name)
+            if table_name not in self._verified_hc_tables:
+                if verify_hc_storage_schema(self.database, table_name):
+                    self._verified_hc_tables.add(table_name)
+            validate_hc_record(record, table_name)
             if table_name not in self._verified_jc_tables:
                 if verify_jc_storage_schema(self.database, table_name):
                     self._verified_jc_tables.add(table_name)

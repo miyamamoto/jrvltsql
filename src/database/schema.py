@@ -448,20 +448,20 @@ SCHEMAS = {
     """,
     "NL_HC": """
         CREATE TABLE IF NOT EXISTS NL_HC (
-            RecordSpec TEXT,
-            DataKubun TEXT,
-            MakeDate TEXT,
-            TresenKubun TEXT,
-            ChokyoDate TEXT,
-            ChokyoTime TEXT,
-            KettoNum TEXT,
-            HaronTime4 REAL,
-            LapTime4 REAL,
-            HaronTime3 REAL,
-            LapTime3 REAL,
-            HaronTime2 REAL,
-            LapTime2 REAL,
-            LapTime1 REAL,
+            RecordSpec TEXT NOT NULL,
+            DataKubun TEXT NOT NULL,
+            MakeDate TEXT NOT NULL,
+            TresenKubun TEXT NOT NULL,
+            ChokyoDate TEXT NOT NULL,
+            ChokyoTime TEXT NOT NULL,
+            KettoNum TEXT NOT NULL,
+            HaronTime4 REAL NOT NULL,
+            LapTime4 REAL NOT NULL,
+            HaronTime3 REAL NOT NULL,
+            LapTime3 REAL NOT NULL,
+            HaronTime2 REAL NOT NULL,
+            LapTime2 REAL NOT NULL,
+            LapTime1 REAL NOT NULL,
             RecordDelimiter TEXT,
             PRIMARY KEY (TresenKubun, ChokyoDate, ChokyoTime, KettoNum)
         )
@@ -2759,6 +2759,7 @@ STRICT_WE_STORAGE_TABLES = frozenset({"NL_WE", "RT_WE"})
 STRICT_AV_STORAGE_TABLES = frozenset({"NL_AV", "RT_AV"})
 STRICT_HR_STORAGE_TABLES = frozenset({"NL_HR", "RT_HR"})
 STRICT_HS_STORAGE_TABLES = frozenset({"NL_HS"})
+STRICT_HC_STORAGE_TABLES = frozenset({"NL_HC"})
 STRICT_JC_STORAGE_TABLES = frozenset({"NL_JC", "RT_JC"})
 
 
@@ -2768,6 +2769,7 @@ def _preflight_existing_strict_storage(db: BaseDatabase) -> None:
     from src.database.migration import _migration_targets
     from src.importer.importer import (
         verify_av_storage_schema,
+        verify_hc_storage_schema,
         verify_hr_storage_schema,
         verify_hs_storage_schema,
         verify_jc_storage_schema,
@@ -2808,6 +2810,9 @@ def _preflight_existing_strict_storage(db: BaseDatabase) -> None:
                     table_name,
                     allow_missing_columns=True,
                 )
+        for table_name in STRICT_HC_STORAGE_TABLES:
+            if target.table_exists_strict(table_name):
+                verify_hc_storage_schema(target, table_name)
         for table_name in STRICT_JC_STORAGE_TABLES:
             if target.table_exists_strict(table_name):
                 verify_jc_storage_schema(target, table_name)
@@ -2898,6 +2903,10 @@ class SchemaManager:
                 from src.importer.importer import verify_hs_storage_schema
 
                 verify_hs_storage_schema(self.db, table_name)
+            if table_name in STRICT_HC_STORAGE_TABLES:
+                from src.importer.importer import verify_hc_storage_schema
+
+                verify_hc_storage_schema(self.db, table_name)
             if table_name in STRICT_JC_STORAGE_TABLES:
                 from src.importer.importer import verify_jc_storage_schema
 
@@ -2960,6 +2969,10 @@ class SchemaManager:
                     from src.importer.importer import verify_hs_storage_schema
 
                     verify_hs_storage_schema(self.db, table_name)
+                if table_name in STRICT_HC_STORAGE_TABLES:
+                    from src.importer.importer import verify_hc_storage_schema
+
+                    verify_hc_storage_schema(self.db, table_name)
                 if table_name in STRICT_JC_STORAGE_TABLES:
                     from src.importer.importer import verify_jc_storage_schema
 
@@ -3325,6 +3338,10 @@ def create_all_tables(db: BaseDatabase) -> None:
                 from src.importer.importer import verify_hs_storage_schema
 
                 verify_hs_storage_schema(db, table_name)
+            if table_name in STRICT_HC_STORAGE_TABLES:
+                from src.importer.importer import verify_hc_storage_schema
+
+                verify_hc_storage_schema(db, table_name)
             if table_name in STRICT_JC_STORAGE_TABLES:
                 from src.importer.importer import verify_jc_storage_schema
 

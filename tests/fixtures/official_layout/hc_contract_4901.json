@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "record_type": "HC",
+  "data_spec": "SLOP",
+  "record_length": 60,
+  "format_sources": [
+    {
+      "artifact": "JV-Data4802.xlsx",
+      "sha256": "6a567f10b601115eca350571f36d27d9d28bd2d3835ea72b5bc057711155d4a7",
+      "sheet": "フォーマット",
+      "rows": "1142-1167"
+    },
+    {
+      "artifact": "JV-Data4901.xlsx",
+      "sha256": "23bafd375f704acbdd696b5032ac1619f17d47e882587d6e7954b610527a8234",
+      "sheet": "フォーマット",
+      "rows": "1142-1167"
+    }
+  ],
+  "fields": [
+    ["RecordSpec", 1, 2],
+    ["DataKubun", 3, 1],
+    ["MakeDate", 4, 8],
+    ["TresenKubun", 12, 1],
+    ["ChokyoDate", 13, 8],
+    ["ChokyoTime", 21, 4],
+    ["KettoNum", 25, 10],
+    ["HaronTime4", 35, 4],
+    ["LapTime4", 39, 3],
+    ["HaronTime3", 42, 4],
+    ["LapTime3", 46, 3],
+    ["HaronTime2", 49, 4],
+    ["LapTime2", 53, 3],
+    ["LapTime1", 56, 3],
+    ["RecordDelimiter", 59, 2]
+  ],
+  "primary_key": ["TresenKubun", "ChokyoDate", "ChokyoTime", "KettoNum"],
+  "current_data_kubun": ["0", "1"],
+  "measurement_fields": {
+    "HaronTime4": {"width": 4, "scale_seconds": 0.1, "failure_value": "0000"},
+    "LapTime4": {"width": 3, "scale_seconds": 0.1, "failure_value": "000"},
+    "HaronTime3": {"width": 4, "scale_seconds": 0.1, "failure_value": "0000"},
+    "LapTime3": {"width": 3, "scale_seconds": 0.1, "failure_value": "000"},
+    "HaronTime2": {"width": 4, "scale_seconds": 0.1, "failure_value": "0000"},
+    "LapTime2": {"width": 3, "scale_seconds": 0.1, "failure_value": "000"},
+    "LapTime1": {"width": 3, "scale_seconds": 0.1, "failure_value": "000"}
+  },
+  "history": {
+    "physical_layout_changed": false,
+    "data_available_from": "2003",
+    "miho_measurement": {
+      "through_2004_11_29": "600m",
+      "from_2004_11_30": "800m"
+    },
+    "sources": [
+      "JV-Data4901.xlsx:特記事項:195-198",
+      "JV-Data4901.xlsx:変更履歴:170,174,344"
+    ]
+  },
+  "delivery": {
+    "frequency": "daily_irregular",
+    "unit": "complete_training_center_day",
+    "retention": "1 year",
+    "source": "JV-Data4901.xlsx:データ提供タイミング・提供単位:26"
+  }
+}
