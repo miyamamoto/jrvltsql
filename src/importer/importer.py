@@ -1508,7 +1508,7 @@ def _verify_hs_no_unapproved_constraints(
         unexpected = database.fetch_all(
             "SELECT conname AS constraint_name, contype AS constraint_type "
             "FROM pg_constraint WHERE conrelid = to_regclass(?) "
-            "AND contype NOT IN ('p', 'c') ORDER BY conname",
+            "AND contype NOT IN ('p', 'c', 'n') ORDER BY conname",
             (table_name.lower(),),
         )
         if unexpected:

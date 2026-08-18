@@ -22,6 +22,7 @@ from src.database.schema_types import (
 from src.database.sqlite_handler import SQLiteDatabase
 from src.importer.importer import (
     DataImporter,
+    _verify_hs_no_unapproved_constraints,
     validate_import_record_header,
     verify_hs_storage_schema,
 )
@@ -88,6 +89,29 @@ CREATE TABLE SALE (
     Price VARCHAR(10)
 )
 """
+
+
+class SyntheticPostgreSQLConstraintCatalog:
+    """Expose catalog rows according to the verifier's NOT IN allowlist."""
+
+    def __init__(self, constraint_type: str):
+        self.constraint_type = constraint_type
+
+    def get_db_type(self) -> str:
+        return "postgresql"
+
+    def fetch_all(self, sql: str, parameters=None):
+        assert "FROM pg_constraint" in sql
+        assert parameters == ("nl_hs",)
+        allowed = set(re.findall(r"'([a-z])'", sql.split("NOT IN", 1)[1]))
+        if self.constraint_type in allowed:
+            return []
+        return [
+            {
+                "constraint_name": "synthetic_constraint",
+                "constraint_type": self.constraint_type,
+            }
+        ]
 
 
 def hs_schema_missing_marker_with_extra_check() -> str:
@@ -497,6 +521,20 @@ def test_hs_schema_verifier_rejects_unsafe_storage(
         database.commit()
         with pytest.raises(SchemaMigrationError):
             verify_hs_storage_schema(database, table_name)
+
+
+def test_hs_postgresql_constraint_allowlist_accepts_not_null_only() -> None:
+    """PostgreSQL 18 catalogued NOT NULL is safe; unrelated constraints are not."""
+
+    _verify_hs_no_unapproved_constraints(
+        SyntheticPostgreSQLConstraintCatalog("n"),
+        "NL_HS",
+    )
+    with pytest.raises(SchemaMigrationError, match="unsupported additional constraints"):
+        _verify_hs_no_unapproved_constraints(
+            SyntheticPostgreSQLConstraintCatalog("f"),
+            "NL_HS",
+        )
 
 
 def test_hs_nonempty_unmarked_store_requires_rebuild_before_any_migration(

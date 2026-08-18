@@ -370,3 +370,40 @@ then extract the full official HS oracle before editing production code.
   finding reviewer to confirm this combination closure. Package and
   transaction reviews remain valid because this follow-up changes only the HS
   marker CHECK census, its focused tests and this worklog.
+
+## PR #212 PostgreSQL 18 review repair (2026-08-18)
+
+- PR #212 was opened from clean candidate
+  `f2d0d7e95c24ae1b565ccefc3bc30aacf86a1205`. GitHub test, fatal/advisory
+  lint and 32-bit Windows launcher jobs all completed successfully;
+  performance remained the intentional zero-step conditional skip. The one
+  GitHub-native Copilot request returned only its quota-limit notice and was
+  not retried.
+- CodeRabbit supplied one actionable compatibility finding after the other
+  review evidence had completed. PostgreSQL 18 now records table-column
+  `NOT NULL` constraints in `pg_constraint` as `contype = 'n'`, while the HS
+  constraint census allowed only the official primary-key and layout-marker
+  CHECK catalog types. The finding was verified against the PostgreSQL 18
+  catalog and release documentation before editing.
+- A compact catalog regression was added first. Against unchanged
+  `f2d0d7e...` it failed with
+  `SchemaMigrationError: ... constraint_type: 'n'`; its paired synthetic
+  foreign-key row remained rejected. A fresh actual PostgreSQL 18 container
+  independently reproduced the production impact: a canonical `NL_HS` table
+  exposed thirteen `*_not_null` `contype='n'` rows and the normal native owned
+  import failed before DML.
+- The bounded repair adds only `n` to the catalog-query allowlist. Exact column
+  nullability is still checked separately for every expected column, and all
+  foreign-key, unique, exclusion, extra CHECK, deferrability and extra-column
+  checks remain fail closed. The formerly red catalog test passes, and the
+  complete HS contract on fresh PostgreSQL 18 passes `134 passed`.
+- CodeRabbit's separate transaction-helper extraction was classified as a
+  non-blocking low-value refactor. The three current call sites have already
+  passed SQLite/PostgreSQL/Dual ownership and recovery matrices; changing
+  their structure in this compatibility follow-up would broaden risk without
+  altering the official HS contract. It is answered courteously but not mixed
+  into this final repair.
+- Next safe action: run the affected/fatal gates once, commit and push this
+  worklog-inclusive repair, verify the new exact full SHA and clean tree, then
+  reply to and resolve the actionable review thread. Do not re-request
+  Copilot or CodeRabbit.
