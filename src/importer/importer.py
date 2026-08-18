@@ -138,18 +138,21 @@ def resolve_standard_table_name(database: BaseDatabase, native_table_name: str) 
             "does not. Automatic JC import is refused; rebuild the standard table "
             "as KISYU_CHANGE and reimport current 161-byte source records."
         )
-    if (
-        native_table_name == "NL_TC"
-        and database.is_connected()
-        and database.table_exists("COMMENT")
-        and not database.table_exists(standard_name)
-    ):
-        raise SchemaMigrationError(
-            "Legacy standard table COMMENT exists but canonical "
-            "HASSOU_JIKOKU_CHANGE does not. Automatic TC import is refused; "
-            "rebuild the standard table as HASSOU_JIKOKU_CHANGE and reimport "
-            "current 45-byte source records."
-        )
+    if native_table_name == "NL_TC":
+        from src.database.migration import _migration_targets
+
+        for target in _migration_targets(database):
+            if (
+                target.is_connected()
+                and target.table_exists("COMMENT")
+                and not target.table_exists(standard_name)
+            ):
+                raise SchemaMigrationError(
+                    "Legacy standard table COMMENT exists but canonical "
+                    "HASSOU_JIKOKU_CHANGE does not. Automatic TC import is refused; "
+                    "rebuild the standard table as HASSOU_JIKOKU_CHANGE and reimport "
+                    "current 45-byte source records."
+                )
     if (
         native_table_name == "NL_WF"
         and database.is_connected()
@@ -915,7 +918,8 @@ def _verify_strict_storage_column_contract(
     if database.get_db_type() == "postgresql":
         rows = database.fetch_all(
             "SELECT a.attname AS name, format_type(a.atttypid, a.atttypmod) AS type, "
-            "a.attnotnull AS not_null FROM pg_attribute a "
+            "a.attnotnull AS not_null, a.attgenerated AS generated, "
+            "a.attidentity AS identity FROM pg_attribute a "
             "WHERE a.attrelid = to_regclass(?) AND a.attnum > 0 AND NOT a.attisdropped",
             (table_name.lower(),),
         )
@@ -930,13 +934,7 @@ def _verify_strict_storage_column_contract(
             f"{storage_label} column contract cannot be verified for database type "
             f"{database.get_db_type()!r}"
         )
-    actual = {
-        str(row.get("name") or "").lower(): (
-            str(row.get("type") or ""),
-            bool(row.get("not_null", row.get("notnull", 0))),
-        )
-        for row in rows
-    }
+    actual = {str(row.get("name") or "").lower(): row for row in rows}
     mismatches: list[str] = []
     if not allow_extra_columns:
         expected_columns = {column.lower() for column in definitions}
@@ -949,7 +947,20 @@ def _verify_strict_storage_column_contract(
             if not allow_missing_columns:
                 mismatches.append(f"{column_name} missing")
             continue
-        actual_type, actual_not_null = actual[column]
+        actual_row = actual[column]
+        actual_type = str(actual_row.get("type") or "")
+        actual_not_null = bool(
+            actual_row.get("not_null", actual_row.get("notnull", 0))
+        )
+        generated = str(actual_row.get("generated") or "")
+        identity = str(actual_row.get("identity") or "")
+        hidden = int(actual_row.get("hidden") or 0)
+        if generated or identity or hidden:
+            mismatches.append(
+                f"{column_name} is generated/identity/hidden "
+                f"(generated={generated or '<none>'}, identity={identity or '<none>'}, "
+                f"hidden={hidden})"
+            )
         expected_type = _normalize_strict_storage_type(_definition_type(definition))
         normalized_actual_type = _normalize_strict_storage_type(actual_type)
         compatible_type = _strict_storage_type_is_compatible(normalized_actual_type, expected_type)
@@ -1813,6 +1824,55 @@ def validate_hc_record(record: dict, table_name: str | None = None) -> bool:
     return True
 
 
+def _sqlite_schema_code(definition: str) -> str:
+    """Remove SQLite comments and quoted tokens before keyword inspection."""
+
+    code: list[str] = []
+    index = 0
+    while index < len(definition):
+        current = definition[index]
+        following = definition[index + 1] if index + 1 < len(definition) else ""
+        if current == "-" and following == "-":
+            index += 2
+            while index < len(definition) and definition[index] not in "\r\n":
+                index += 1
+            code.append("\n")
+            continue
+        if current == "/" and following == "*":
+            end = definition.find("*/", index + 2)
+            index = len(definition) if end < 0 else end + 2
+            code.append(" ")
+            continue
+        if current in {"'", '"', "`"}:
+            quote = current
+            index += 1
+            while index < len(definition):
+                if definition[index] == quote:
+                    if index + 1 < len(definition) and definition[index + 1] == quote:
+                        index += 2
+                        continue
+                    index += 1
+                    break
+                index += 1
+            code.append(" ")
+            continue
+        if current == "[":
+            index += 1
+            while index < len(definition):
+                if definition[index] == "]":
+                    if index + 1 < len(definition) and definition[index + 1] == "]":
+                        index += 2
+                        continue
+                    index += 1
+                    break
+                index += 1
+            code.append(" ")
+            continue
+        code.append(current)
+        index += 1
+    return "".join(code)
+
+
 def _verify_tc_no_unapproved_constraints(
     database: BaseDatabase,
     table_name: str,
@@ -1838,7 +1898,11 @@ def _verify_tc_no_unapproved_constraints(
             (table_name,),
         )
         definition = str((row or {}).get("sql") or "")
-        if re.search(r"\bCHECK\s*\(", definition, flags=re.IGNORECASE):
+        if re.search(
+            r"\bCHECK\s*\(",
+            _sqlite_schema_code(definition),
+            flags=re.IGNORECASE,
+        ):
             raise SchemaMigrationError(
                 f"TC storage {table_name} has unsupported CHECK constraints"
             )

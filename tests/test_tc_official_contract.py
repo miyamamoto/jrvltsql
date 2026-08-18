@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -204,7 +205,8 @@ def test_tc_native_standard_and_realtime_schemas_encode_the_official_identity() 
     for table_name in ("NL_TC", "RT_TC", "HASSOU_JIKOKU_CHANGE"):
         assert tuple(get_table_primary_key_columns(table_name)) == OFFICIAL_KEY
         nullability = get_table_column_nullability(table_name)
-        assert all(nullability[column] is False for column in OFFICIAL_KEY)
+        assert set(nullability) == NATIVE_FIELDS
+        assert all(nullability[column] is False for column in NATIVE_FIELDS)
     assert set(get_table_column_types("NL_TC")) == NATIVE_FIELDS
     assert set(get_table_column_types("RT_TC")) == NATIVE_FIELDS
     assert set(get_table_column_types("HASSOU_JIKOKU_CHANGE")) == STANDARD_FIELDS
@@ -255,6 +257,7 @@ def test_tc_caller_validation_precedes_coercion_and_mutation(
     invalid_rows = []
     for field_name, invalid_value in (
         ("MakeDate", "20260230"),
+        ("MakeDate", datetime(2026, 8, 18, 12, 34, 56)),
         ("Year", "20A6"),
         ("Year", 26),
         ("MonthDay", "0230"),
@@ -290,6 +293,11 @@ def _defective_schema(table_name: str, defect: str) -> str:
             "Year                           SMALLINT NOT NULL",
             "Year                           SMALLINT         ",
         )
+    if defect == "nullable-body":
+        return schema.replace("AtoFun TEXT NOT NULL", "AtoFun TEXT").replace(
+            "AtoFun                         VARCHAR(2) NOT NULL",
+            "AtoFun                         VARCHAR(2)         ",
+        )
     if defect == "wrong-type":
         return schema.replace("Year INTEGER NOT NULL", "Year TEXT NOT NULL").replace(
             "Year                           SMALLINT NOT NULL",
@@ -306,6 +314,9 @@ def _defective_schema(table_name: str, defect: str) -> str:
     if defect == "extra-check":
         body, close = schema.rsplit(")", 1)
         return f"{body}, CHECK (AtoJi = '00')\n        ){close}"
+    if defect == "obfuscated-check":
+        body, close = schema.rsplit(")", 1)
+        return f"{body}, CHECK /* official-looking comment */ (AtoJi = '00')\n        ){close}"
     if defect == "extra-foreign-key":
         body, close = schema.rsplit(")", 1)
         return (
@@ -330,6 +341,14 @@ def _defective_schema(table_name: str, defect: str) -> str:
             f"{body}, ExternalRequired TEXT GENERATED ALWAYS AS (NULL) "
             f"VIRTUAL NOT NULL\n        ){close}"
         )
+    if defect == "generated-official-column":
+        return schema.replace(
+            "AtoFun TEXT NOT NULL",
+            "AtoFun TEXT GENERATED ALWAYS AS ('00') STORED NOT NULL",
+        ).replace(
+            "AtoFun                         VARCHAR(2) NOT NULL",
+            "AtoFun                         VARCHAR(2) GENERATED ALWAYS AS ('00') STORED NOT NULL",
+        )
     raise AssertionError(defect)
 
 
@@ -339,10 +358,12 @@ def _defective_schema(table_name: str, defect: str) -> str:
     [
         "wrong-key",
         "nullable-key",
+        "nullable-body",
         "wrong-type",
         "short-text",
         "extra-unique",
         "extra-check",
+        "obfuscated-check",
         "extra-foreign-key",
         "extra-required-column",
         "extra-generated-required-column",
@@ -385,6 +406,39 @@ def test_tc_schema_manager_preflights_before_an_additive_column_change(tmp_path)
         assert safe.fetch_one("SELECT COUNT(*) AS n FROM NL_TC") == {"n": 0}
 
 
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+@pytest.mark.parametrize("legacy_target", ("primary", "secondary"))
+def test_tc_legacy_standard_alias_stops_dual_migration_before_any_alter(
+    tmp_path, importer_class, legacy_target: str
+) -> None:
+    race_without_youbi = JRAVAN_SCHEMAS["RACE"].replace(
+        "            YoubiCD                        VARCHAR(1)          ,  -- 文字列(1)\n",
+        "",
+    )
+    assert race_without_youbi != JRAVAN_SCHEMAS["RACE"]
+    legacy_tc = JRAVAN_SCHEMAS["HASSOU_JIKOKU_CHANGE"].replace("HASSOU_JIKOKU_CHANGE", "COMMENT", 1)
+    primary = SQLiteDatabase({"path": str(tmp_path / "legacy-primary.db")})
+    secondary = SQLiteDatabase({"path": str(tmp_path / "legacy-secondary.db")})
+    with primary, secondary:
+        for database in (primary, secondary):
+            database.execute(race_without_youbi)
+            database.commit()
+        legacy_database = primary if legacy_target == "primary" else secondary
+        legacy_database.execute(legacy_tc)
+        legacy_database.commit()
+        before_primary = primary.fetch_all('PRAGMA table_info("RACE")')
+        before_secondary = secondary.fetch_all('PRAGMA table_info("RACE")')
+
+        with pytest.raises(SchemaMigrationError, match=r"COMMENT.*HASSOU_JIKOKU_CHANGE"):
+            importer_class(
+                DualDatabase(primary, secondary),
+                use_jravan_schema=True,
+            ).import_records(iter([]))
+
+        assert primary.fetch_all('PRAGMA table_info("RACE")') == before_primary
+        assert secondary.fetch_all('PRAGMA table_info("RACE")') == before_secondary
+
+
 @pytest.mark.parametrize("auto_commit", (True, False), ids=("owned", "caller"))
 @pytest.mark.parametrize("table_name,standard", [("NL_TC", False), ("HASSOU_JIKOKU_CHANGE", True)])
 def test_tc_single_record_uses_the_same_fail_closed_validator(
@@ -412,7 +466,9 @@ def test_tc_realtime_uses_the_same_fail_closed_validator(tmp_path) -> None:
             realtime.execute(SCHEMAS[table_name])
         realtime.commit()
         updater = RealtimeUpdater(realtime)
-        inserted = updater.process_parsed_records_batch([parsed_tc()])
+        inserted = updater.process_parsed_records_batch(
+            [parsed_tc(RaceNum="10"), parsed_tc(RaceNum="11")]
+        )
         invalid = parsed_tc()
         invalid["HappyoTime"] = "08189999"
         rejected = updater.process_parsed_records_batch([invalid])
@@ -420,13 +476,13 @@ def test_tc_realtime_uses_the_same_fail_closed_validator(tmp_path) -> None:
         revised = updater.process_parsed_records_batch(
             [parsed_tc(HappyoTime="08181205", AtoJi="12", AtoFun="20")]
         )
-        rows = realtime.fetch_all("SELECT HappyoTime, AtoFun FROM RT_TC")
+        rows = realtime.fetch_all("SELECT RaceNum, HappyoTime, AtoFun FROM RT_TC ORDER BY RaceNum")
 
     assert inserted["success"] is True
     assert rejected["success"] is False
     assert rejected["inserted"] == 0
     assert revised["success"] is True
-    assert rows == [{"HappyoTime": "08181205", "AtoFun": "20"}]
+    assert rows == [{"RaceNum": 11, "HappyoTime": "08181205", "AtoFun": "20"}]
 
 
 def test_tc_header_validator_rejects_missing_blank_and_conflicting_aliases() -> None:
@@ -506,12 +562,14 @@ def test_tc_postgresql_all_entrypoints_preserve_provider_revision_order(
     "defect",
     [
         "wrong-key",
+        "nullable-body",
         "wrong-type",
         "short-text",
         "extra-unique",
         "extra-check",
         "extra-foreign-key",
         "extra-required-column",
+        "generated-official-column",
         "deferrable-primary-key",
     ],
 )
@@ -536,20 +594,30 @@ def test_tc_postgresql_schema_defects_fail_before_mutation(
 
 def test_tc_postgresql_realtime_gate(postgresql_db) -> None:
     postgresql_db.execute(SCHEMAS["RT_TC"])
+    postgresql_db.execute("CREATE TABLE TC_CALLER_MARKER (id INTEGER PRIMARY KEY)")
     postgresql_db.commit()
     updater = RealtimeUpdater(postgresql_db)
+    invalid = parsed_tc()
+    invalid["AtoFun"] = "60"
+    rejected = updater.process_parsed_record(invalid)
+    assert rejected["success"] is False
+    assert postgresql_db.has_pending_transaction() is False
+
+    postgresql_db.begin_transaction()
+    postgresql_db.execute("INSERT INTO TC_CALLER_MARKER (id) VALUES (1)")
+    borrowed_rejection = updater.process_parsed_record(invalid)
+    assert borrowed_rejection["success"] is False
+    assert postgresql_db.has_pending_transaction() is True
+    assert postgresql_db.fetch_one('SELECT COUNT(*) AS "n" FROM TC_CALLER_MARKER') == {"n": 1}
+    postgresql_db.rollback()
+
     result = updater.process_parsed_records_batch(
         [parsed_tc(), parsed_tc(HappyoTime="08181205", AtoFun="20")]
     )
-    invalid = parsed_tc()
-    invalid["AtoFun"] = "60"
-    rejected = updater.process_parsed_records_batch([invalid])
     assert result["success"] is True
     assert result["inserted"] == 2
     assert result["errors"] == 0
     assert result["tables"] == ["RT_TC"]
-    assert rejected["success"] is False
-    assert rejected["inserted"] == 0
     assert postgresql_db.fetch_all(
         'SELECT HappyoTime AS "HappyoTime", AtoFun AS "AtoFun" FROM RT_TC'
     ) == [{"HappyoTime": "08181205", "AtoFun": "20"}]
@@ -565,11 +633,12 @@ def test_tc_dual_rejects_an_unsafe_target_before_either_database_changes(
     standard: bool,
 ) -> None:
     safe = JRAVAN_SCHEMAS[table_name] if standard else SCHEMAS[table_name]
-    unsafe = _defective_schema(table_name, "extra-required-column")
+    sqlite_unsafe = _defective_schema(table_name, "obfuscated-check")
+    postgresql_unsafe = _defective_schema(table_name, "generated-official-column")
     sqlite = SQLiteDatabase({"path": str(tmp_path / f"{table_name}-{unsafe_target}.db")})
     with sqlite:
-        sqlite.execute(unsafe if unsafe_target == "primary" else safe)
-        postgresql_db.execute(unsafe if unsafe_target == "secondary" else safe)
+        sqlite.execute(sqlite_unsafe if unsafe_target == "primary" else safe)
+        postgresql_db.execute(postgresql_unsafe if unsafe_target == "secondary" else safe)
         sqlite.commit()
         postgresql_db.commit()
         primary, secondary = (
@@ -579,7 +648,7 @@ def test_tc_dual_rejects_an_unsafe_target_before_either_database_changes(
             DataImporter(
                 DualDatabase(primary, secondary),
                 use_jravan_schema=standard,
-            ).import_records(iter([parsed_tc()]))
+            ).import_records(iter([parsed_tc()]), auto_commit=True)
         assert sqlite.fetch_one(f"SELECT COUNT(*) AS n FROM {table_name}") == {"n": 0}
         assert postgresql_db.fetch_one(f'SELECT COUNT(*) AS "n" FROM {table_name}') == {"n": 0}
 

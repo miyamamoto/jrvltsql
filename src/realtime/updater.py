@@ -279,10 +279,12 @@ class RealtimeUpdater:
                         self._verified_hr_tables.add(table_name)
                 validate_hr_record(record, table_name)
             elif table_name == "RT_TC":
+                # Reject malformed caller data before a PostgreSQL catalog
+                # read can lazily open a transaction owned by this call.
+                validate_tc_record(record, table_name)
                 if table_name not in self._verified_tc_tables:
                     if verify_tc_storage_schema(self.database, table_name):
                         self._verified_tc_tables.add(table_name)
-                validate_tc_record(record, table_name)
             elif table_name == "RT_JC":
                 if table_name not in self._verified_jc_tables:
                     if verify_jc_storage_schema(self.database, table_name):

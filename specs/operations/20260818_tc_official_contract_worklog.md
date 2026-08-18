@@ -159,13 +159,48 @@
   contract and rebuild/reimport boundary. No release or production adoption is
   claimed by this candidate.
 
+## Independent review and consolidated repair (2026-08-18)
+
+- Three independent read-only reviews targeted exact clean candidate
+  `c5953c8777fa9a592fad8a66dc17b12dba268bc6`: official workbook/SDK oracle,
+  SQLite/fresh PostgreSQL/Dual data-integrity attack, and test/package mutant
+  review. The official 45-byte/15-span/status-1/six-key/provider-context oracle
+  remained correct, but the reviewers found four grouped implementation gaps
+  and three test-oracle gaps.
+- The implementation gaps were: caller `datetime` values passing the DATE-only
+  MakeDate contract; secondary-only legacy `COMMENT` escaping Dual preflight;
+  generated/identity official columns and comment-obfuscated SQLite CHECKs
+  escaping strict schema validation; and the first invalid direct realtime TC
+  opening a lazy PostgreSQL catalog transaction before validation. The test
+  gaps were: nullable body columns not explicitly asserted, stale same-date TC
+  races not read back after 0B14 replacement, and 0B16 non-replacement not
+  bound to monitor behavior.
+- Tests were extended before the implementation repair. Exact c595 production
+  with those tests failed `12` SQLite cases and `19` cases with fresh
+  PostgreSQL enabled. Separately, the test reviewer proved the old 0B14 test
+  false-green with a mutation that disabled only the RT_TC date deletion; the
+  expanded two-race survivor assertion turns that mutant red.
+- One consolidated repair now rejects `datetime`, inspects every concrete Dual
+  migration target, rejects generated/identity/hidden official columns,
+  lexes SQLite DDL without comments or quoted tokens before CHECK detection,
+  and validates direct realtime TC input before any catalog read. Existing
+  tests were expanded rather than adding one function per review hypothesis.
+- Repair verification is green: SQLite TC/realtime `66 passed, 39 skipped`;
+  fresh PostgreSQL 16 TC contract `104 passed`; affected official/importer/
+  migration/realtime selection `1413 passed, 309 skipped, 9 subtests passed`;
+  and the non-E2E/non-integration full suite `3402 passed, 373 skipped, 20
+  subtests passed`. Fatal lint, test gate, lock check, Black on the new TC files,
+  and diff check also pass. The repair PostgreSQL container and red/green logs
+  were removed.
+
 ## Next safe command and STOP conditions
 
-- Freeze one clean full SHA after committing this evidence and run the actual
-  git-archive wheel/sdist content and installed-wheel smoke gates against that
-  immutable candidate. Send that
-  exact SHA once to both independent Codex reviewers, aggregate findings, and
-  apply at most one consolidated repair batch before PR gates.
+- Commit the consolidated repair and freeze a clean full SHA. Ask the same
+  reviewers only for bounded closure of their recorded findings, then rerun the
+  git-archive wheel/sdist content and installed-wheel smoke gates on that final
+  immutable candidate. If closure is green, push one PR, resolve every review
+  thread, verify the required checks on the exact PR head, and merge before the
+  separate CC iteration begins.
 - STOP on any non-worklog external drift, backend divergence, unresolved
   correctness/data-integrity finding, or recovery state that cannot be proven
   safe without additional authority.

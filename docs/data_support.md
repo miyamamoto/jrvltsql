@@ -196,8 +196,9 @@ identityは `Year`, `MonthDay`, `JyoCD`, `Kaiji`, `Nichiji`, `RaceNum` の
 から消えた変更を除去します。`0B16` は指定イベントの更新であり、この日単位置換とは
 別です。
 
-既存のnullable、keyless、wrong-key、wrong-type、容量不足、追加列または追加
-UNIQUE/FK/CHECKを持つTC tableは自動修復せず、mutation前に停止します。DBを
+既存のnullable、keyless、wrong-key、wrong-type、容量不足、generated/identity列、
+追加列または追加UNIQUE/FK/CHECKを持つTC tableは自動修復せず、mutation前に
+停止します。DBを
 backupして該当TC tableをcurrent schemaでrebuildし、保持期間内の`0B14`/`0B16`
 または対応する蓄積sourceからreimportしてください。旧標準名`COMMENT`しかない構成を
 `HASSOU_JIKOKU_CHANGE`へ自動転用しません。

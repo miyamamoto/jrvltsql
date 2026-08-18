@@ -1,7 +1,7 @@
 """Parser for the official TC start-time-change record."""
 
 from collections.abc import Mapping
-from datetime import date
+from datetime import date, datetime
 from typing import Any, List
 
 from src.parser.base import BaseParser, FieldDef
@@ -29,6 +29,8 @@ class TCParser(BaseParser):
 
     @staticmethod
     def _require_date(field_name: str, value: object) -> date:
+        if isinstance(value, datetime):
+            raise ValueError(f"TC {field_name} must not contain a time component")
         if isinstance(value, date):
             return value
         if (

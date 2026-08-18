@@ -145,7 +145,7 @@ RECORD_TYPE_TO_TABLE: Dict[str, str] = {
     "HS": "NL_HS",  # 競走馬市場取引価格 (Sale)
     "AV": "NL_AV",  # 出走取消・競走除外 (Scratched/Excluded Horse)
     "BT": "NL_BT",  # 血統情報 (Bloodline)
-    "TC": "NL_TC",  # コメント (Training Comment)
+    "TC": "NL_TC",  # 発走時刻変更 (Start Time Change)
     "CK": "NL_CK",  # 調教詳細 (Training Details)
     "TM": "NL_TM",  # 対戦型データマイニング予想
     "DM": "NL_DM",  # タイム型データマイニング予想
