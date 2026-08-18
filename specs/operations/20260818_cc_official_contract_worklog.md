@@ -226,22 +226,25 @@
   but did not directly bind the runtime `CCParser` track/reason sets to those
   fixture domains. The runtime sets themselves were already correct.
 - The existing oracle test was minimally extended with the two direct runtime
-  equality assertions. Before retaining that test change, a temporary mutant
-  added unsupported track `30` and reason `5` to the runtime sets; the oracle
-  failed exactly at the new binding with extra item `30`. The mutant was
-  removed and the provider-valid runtime remained unchanged. This is the
-  recorded red-first proof that the corrected oracle can reject domain drift.
+  equality assertions. Before retaining that test change, one temporary mutant
+  added unsupported track `30`; the oracle failed at the track binding with
+  extra item `30`. After restoring it, a separate reason-only mutant added
+  unsupported reason `5`; the oracle passed the track assertion and failed at
+  the reason binding with extra item `5`. Both mutants were removed and the
+  provider-valid runtime remained unchanged. These are the recorded red-first
+  proofs that both corrected oracle branches can reject domain drift.
 - Both reviewers also identified that the prior `Next` paragraph described
   steps already completed by `8b9761a...`; the current next step is publication
   and PR gating, not another evidence commit or broad review cycle.
 
 ## Next safe command and STOP conditions
 
-- Next: run the compact CC test on the final test/worklog-only delta, commit it,
-  push one branch, open one PR, request the single native Copilot review,
+- Next: from the current clean committed HEAD, push one branch, open one PR,
+  request the single native Copilot review,
   address actionable comments in one batch, require unresolved thread count
   zero, and merge only after the applicable checks and exact-head evidence are
-  green. Do not rerun the already-green broad suite for this two-assertion
+  green. The compact CC test is green after both temporary mutants were
+  removed. Do not rerun the already-green broad suite for this two-assertion
   oracle-only delta unless the exact change expands.
 - STOP on non-worklog drift, a material disagreement among pinned official
   sources, backend divergence that is not explained and tested, or any need
