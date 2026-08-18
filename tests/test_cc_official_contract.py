@@ -79,13 +79,51 @@ def parsed_cc(**overrides: str) -> dict:
 
 def test_cc_oracle_binds_both_workbooks_sdk_and_every_parser_span() -> None:
     assert CONTRACT["record_length"] == 50
+    assert CONTRACT["format_sources"] == [
+        {
+            "artifact": "JV-Data4802.xlsx",
+            "sha256": "6a567f10b601115eca350571f36d27d9d28bd2d3835ea72b5bc057711155d4a7",
+            "sheet": "フォーマット",
+            "rows": "1531-1553",
+        },
+        {
+            "artifact": "JV-Data4901.xlsx",
+            "sha256": "23bafd375f704acbdd696b5032ac1619f17d47e882587d6e7954b610527a8234",
+            "sheet": "フォーマット",
+            "rows": "1531-1553",
+        },
+    ]
+    assert CONTRACT["sdk_source"] == {
+        "artifact": "JRA-VAN Data Lab. SDK Ver5.0.0/JVData_Struct.cs",
+        "sha256": "605057bb211eb6a94056a54496f3dd30f864ac2ad140fcfc8840ac8a6ed9e4fe",
+        "struct": "JV_CC_INFO",
+    }
     assert CONTRACT["fields"] == [[name, position, width] for name, position, width, _ in FIELDS]
     assert tuple(CONTRACT["primary_key"]) == OFFICIAL_KEY
     assert CONTRACT["current_data_kubun"] == ["1"]
+    assert CONTRACT["track_codes"] == [
+        "00",
+        *[str(value) for value in range(10, 30)],
+        *[str(value) for value in range(51, 60)],
+    ]
+    assert CONTRACT["reason_codes"] == ["0", "1", "2", "3", "4"]
     assert CURRENT_ACCUMULATED_DATA_KUBUN["CC"] == frozenset({"1"})
-    assert CONTRACT["history"]["physical_layout_changed"] is False
+    assert CONTRACT["history"] == {
+        "added": "2004-05-25",
+        "version": "1.1.6",
+        "physical_layout_changed": False,
+        "sources": [
+            "JV-Data4901.xlsx:変更履歴:217,221",
+            "JV-Data4802.xlsx:変更履歴:174,178",
+        ],
+    }
     assert CONTRACT["current_provider_specs"] == ["0B14", "0B16"]
     assert CONTRACT["snapshot_provider_spec"] == "0B14"
+    assert (
+        CONTRACT["snapshot_policy_source"]
+        == "JV-Data4901.xlsx:データ提供タイミング･提供単位:60"
+    )
+    assert CONTRACT["cancellation_note_source"] == "JV-Data4901.xlsx:特記事項:265"
 
     parser_spans = [(field.name, field.start + 1, field.length) for field in CCParser()._fields]
     assert parser_spans == [(name, position, width) for name, position, width, _ in FIELDS]
@@ -97,6 +135,19 @@ def test_cc_oracle_binds_both_workbooks_sdk_and_every_parser_span() -> None:
     ) == ("2000", "18", "1800", "17", "1")
 
     assert MANIFEST["root_records"]["CC"] == {"struct": "JV_CC_INFO", "length": 50}
+    assert MANIFEST["structures"]["JV_CC_INFO"] == {
+        "width": 50,
+        "fields": [
+            {"name": "head", "kind": "nested", "start": 1, "width": 11, "struct": "RECORD_ID"},
+            {"name": "id", "kind": "nested", "start": 12, "width": 16, "struct": "RACE_ID"},
+            {"name": "HappyoTime", "kind": "nested", "start": 28, "width": 8, "struct": "MDHM"},
+            {"name": "CCInfoAfter", "kind": "nested", "start": 36, "width": 6, "struct": "CC_INFO"},
+            {"name": "CCInfoBefore", "kind": "nested", "start": 42, "width": 6, "struct": "CC_INFO"},
+            {"name": "JiyuCd", "kind": "scalar", "start": 48, "width": 1, "decoder": "text"},
+            {"name": "crlf", "kind": "scalar", "start": 49, "width": 2, "decoder": "text"},
+        ],
+        "expanded_leaf_count": 21,
+    }
     assert [
         (field["name"], field["start"], field["width"])
         for field in MANIFEST["structures"]["CC_INFO"]["fields"]
@@ -143,6 +194,24 @@ def test_cc_explicit_initial_values_remain_accepted_and_lossless() -> None:
         parsed[name]
         for name in ("HappyoTime", "AtoKyori", "AtoTruckCD", "MaeKyori", "MaeTruckCD", "JiyuCD")
     ) == ("00000000", "0000", "00", "0000", "00", "0")
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_cc_standard_normalizes_caller_integer_distances_to_four_digits(
+    tmp_path, importer_class
+) -> None:
+    database = SQLiteDatabase({"path": str(tmp_path / "integer-distances.db")})
+    row = parsed_cc()
+    row["AtoKyori"] = 0
+    row["MaeKyori"] = 12
+    with database:
+        database.execute(JRAVAN_SCHEMAS["COURSE_CHANGE"])
+        database.commit()
+        result = importer_class(database, use_jravan_schema=True).import_records(iter([row]))
+        stored = database.fetch_one("SELECT AtoKyori, MaeKyori FROM COURSE_CHANGE")
+    assert result["records_imported"] == 1
+    assert result["records_failed"] == 0
+    assert stored == {"AtoKyori": "0000", "MaeKyori": "0012"}
 
 
 def test_cc_storage_schemas_encode_the_complete_official_identity() -> None:
@@ -494,6 +563,20 @@ def test_cc_postgresql_realtime_rejects_before_catalog_transaction(postgresql_db
     assert result["success"] is False
     assert postgresql_db.has_pending_transaction() is False
     assert postgresql_db.fetch_one('SELECT COUNT(*) AS "n" FROM RT_CC') == {"n": 0}
+
+
+@pytest.mark.parametrize("operation", ("create_table", "create_all_tables"))
+def test_cc_postgresql_schema_manager_closes_failed_preflight_transaction(
+    postgresql_db, operation: str
+) -> None:
+    postgresql_db.execute(_defective_schema("NL_CC", "extra-unique"))
+    postgresql_db.commit()
+    manager = SchemaManager(postgresql_db)
+    if operation == "create_table":
+        assert manager.create_table("NL_CC") is False
+    else:
+        assert manager.create_all_tables()["NL_CC"] is False
+    assert postgresql_db.has_pending_transaction() is False
 
 
 @pytest.mark.parametrize("unsafe_target", ("primary", "secondary"))
