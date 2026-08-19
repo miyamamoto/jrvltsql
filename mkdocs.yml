@@ -1,5 +1,5 @@
 site_name: JRVLTSQL ドキュメント
-site_description: JRA-VAN DataLab データを SQLite/PostgreSQL に取り込む Windows 向けツール
+site_description: JRA-VAN DataLab データを SQLite/PostgreSQL に取り込むツール (Windows / Linux+Docker)
 site_author: JRVLTSQL コントリビューター
 site_url: https://miyamamoto.github.io/jrvltsql/
 

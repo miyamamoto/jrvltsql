@@ -5,8 +5,11 @@
 
 ## 0. 準備
 
-JRVLTSQL は Windows + JRA-VAN DataLab / JV-Link を前提にした JRA 用ツールです。
-地方競馬は対象外です。
+JRVLTSQL は JRA-VAN DataLab / JV-Link を前提にした JRA 用ツールです。
+地方競馬は対象外です。このページは Windows で動かす手順です。x86_64 Linux で
+動かす場合は [Wine/Docker](wine_docker.md) と
+[JV-Link 手動登録](jvlink_manual_registration.md) を読んでください。CLI の使い方は
+どちらの環境でも同じです。
 
 Python は 3.12 以上が必要です。リリース検証済みの構成は 32-bit Python と
 32-bit JV-Link の組み合わせです。公式 JV-Link SDK 5.0.0 では 64-bit 版も

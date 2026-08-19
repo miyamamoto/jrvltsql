@@ -1,9 +1,12 @@
 # JRVLTSQL ドキュメント
 
 JRVLTSQL は、JRA-VAN DataLab の JRA データを SQLite または PostgreSQL に保存する
-Windows 向けツールです。NAR / 地方競馬は対象外です。
+ツールです。NAR / 地方競馬は対象外です。Windows では JV-Link を直接呼び、
+x86_64 Linux では同梱の Docker イメージが Wine 上で 32-bit bridge を動かします。
 
 初めて使う場合は、まず [はじめに](getting_started.md) を読んでください。
+Linux で動かす場合は [Wine/Docker](wine_docker.md) と
+[JV-Link 手動登録](jvlink_manual_registration.md) を先に読んでください。
 
 ## 最初に見る順序
 
@@ -12,8 +15,21 @@ Windows 向けツールです。NAR / 地方競馬は対象外です。
 3. [PostgreSQL](postgresql.md): PostgreSQL 運用と日次同期
 4. [対応データ種別一覧](data_support.md): JVOpen / JVRTOpen spec と保存先
 5. [CLI](CLI.md): `jltsql` の主要コマンド
-6. [スクリプト一覧](scripts.md): batch / PowerShell の役割
-7. [アーキテクチャ](architecture.md): 実装構成
+6. [Wine/Docker](wine_docker.md): Linux での実行構成と 32-bit の前提
+7. [JV-Link 手動登録](jvlink_manual_registration.md): noVNC での手作業
+8. [スクリプト一覧](scripts.md): batch / PowerShell の役割
+9. [アーキテクチャ](architecture.md): 実装構成
+
+## 実行環境
+
+| 実行環境 | 使うもの | 位置づけ |
+| --- | --- | --- |
+| Windows 10 / 11 | batch と `jltsql` CLI | JV-Link 公式の想定環境 |
+| Linux (x86_64) | `docker compose up -d jltsql` | Wine 上で 32-bit bridge を動かす同梱環境 |
+
+ARM（Apple Silicon）では動きません。JV-Link と bridge が 32-bit x86 で、
+Rosetta 2 は x86_64 しか扱いません。どちらの環境でも、インストール・規約同意・
+サービスキー登録は人が行い、未登録なら取得は fail closed で止まります。
 
 ## まず使うコマンド
 

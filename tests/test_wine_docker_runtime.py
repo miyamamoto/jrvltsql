@@ -16,6 +16,7 @@ COMPOSE = ROOT / "docker-compose.yml"
 ENTRYPOINT = ROOT / "scripts" / "docker-entrypoint.sh"
 BRIDGE_SOURCE = ROOT / "tools" / "jvlink-bridge" / "bridge_native.c"
 MANUAL_GUIDE = ROOT / "docs" / "jvlink_manual_registration.md"
+README = ROOT / "README.md"
 
 APPROVAL_AUTOMATION = (
     "setup_wine_jvlink",
@@ -115,6 +116,22 @@ def test_native_bridge_releases_every_invoke_result() -> None:
     source = BRIDGE_SOURCE.read_text(encoding="utf-8")
 
     assert source.count("VariantInit(&result)") == source.count("VariantClear(&result)")
+
+
+@pytest.mark.parametrize(
+    "phrase",
+    (
+        "docker compose up -d jltsql",
+        "localhost:6080/vnc.html",
+        "JVLINK_AUTO_CLOSE_DIALOGS=1",
+        "docs/wine_docker.md",
+        "docs/jvlink_manual_registration.md",
+    ),
+)
+def test_readme_documents_the_linux_runtime(phrase: str) -> None:
+    """A reader on Linux has to find the runtime and its manual steps here."""
+
+    assert phrase in README.read_text(encoding="utf-8")
 
 
 def test_bridge_source_is_shipped_for_the_image_build() -> None:

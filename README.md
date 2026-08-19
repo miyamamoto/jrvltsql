@@ -1,16 +1,33 @@
 # JRVLTSQL
 
 JRVLTSQL は、JRA-VAN DataLab の JRA データを SQLite または PostgreSQL に保存する
-Windows 向けツールです。NAR / 地方競馬は対象外です。
+ツールです。NAR / 地方競馬は対象外です。
 
 公開ドキュメント: https://miyamamoto.github.io/jrvltsql/
+
+## 実行環境は2通り
+
+JV-Link は 32-bit の Windows COM コンポーネントなので、公式の実行環境は Windows
+です。Linux では同梱の Docker イメージが Wine 上で 32-bit の bridge を動かします。
+
+| 実行環境 | 使うもの | 位置づけ |
+| --- | --- | --- |
+| Windows 10 / 11 | `quickstart.bat` などの batch と `jltsql` CLI | JV-Link 公式の想定環境 |
+| Linux (x86_64) | `Dockerfile` / `docker-compose.yml` + Wine | 同梱の Docker/Wine 実行環境。[Wine/Docker](docs/wine_docker.md) |
+
+ARM（Apple Silicon）では動きません。JV-Link と bridge が 32-bit x86 で、
+Rosetta 2 は x86_64 しか扱わないためです。x86_64 のホストを使ってください。
+
+どちらの環境でも、JV-Link のインストール・利用規約への同意・サービスキー登録は
+人が行います。このリポジトリは代行しません。未登録なら取得は理由を出して
+fail closed で止まります。
 
 ## まず準備
 
 | 項目 | 要件 |
 | --- | --- |
-| OS | Windows 10 / 11 |
-| Python | Python 3.12 以上。リリース検証済み経路は 32-bit Python + 32-bit JV-Link です。 |
+| OS | Windows 10 / 11、または x86_64 Linux + Docker |
+| Python | Python 3.12 以上。Windows のリリース検証済み経路は 32-bit Python + 32-bit JV-Link です。 |
 | 契約 | JRA-VAN DataLab + サービスキー |
 | PostgreSQL | PostgreSQL 運用時のみ必要 |
 
@@ -111,11 +128,47 @@ powershell -NoProfile -ExecutionPolicy Bypass -File install_tasks.ps1 -DbType po
 公式 `TS_O1` / `TS_O2` と開催週の速報系データも取得します。
 通常データだけに絞る場合は `--no-timeseries --no-realtime` を指定してください。
 
+## Linux (Docker + Wine) で動かす
+
+イメージは Wine と 32-bit bridge、noVNC の画面を含みます。JV-Link 本体の
+インストールと利用登録は、その画面上で人が一度だけ行います。
+
+```bash
+docker compose up -d jltsql
+docker compose logs jltsql | tail -20
+```
+
+prefix に JV-Link が無ければ、entrypoint がその旨を出して取得は行いません。
+ブラウザで noVNC を開き、インストーラを実行して規約に同意し、サービスキーを
+入力します（同じ箱で作業している場合。別ホストなら `ssh -L 6080:localhost:6080`）。
+
+```text
+http://localhost:6080/vnc.html
+```
+
+VNC はパスワード無しなので、compose は `127.0.0.1` にだけ公開します。
+手順の全体は [JV-Link 手動登録](docs/jvlink_manual_registration.md) にあります。
+
+登録後は Windows と同じ CLI を使います。
+
+```bash
+docker compose exec jltsql jltsql init
+docker compose exec jltsql jltsql status
+docker compose exec jltsql jltsql fetch --spec RACE --from 20260101 --to 20260417
+```
+
+取得中に JV-Link が版更新の確認ダイアログを出すことがあります。既定では
+何も押さないので、noVNC 上で人が答えるまで `JVOpen` は戻りません（実測
+1,008 秒）。無人で流す場合だけ `JVLINK_AUTO_CLOSE_DIALOGS=1` を明示すると、
+既知のダイアログを Escape で拒否します（承諾する入力は送りません）。
+
 ## 詳細ドキュメント
 
 | ドキュメント | 内容 |
 | --- | --- |
 | [はじめに](docs/getting_started.md) | 目的別の実行順序 |
+| [Wine/Docker](docs/wine_docker.md) | Linux での実行構成と 32-bit の前提 |
+| [JV-Link 手動登録](docs/jvlink_manual_registration.md) | noVNC でのインストールと利用登録 |
 | [対応データ種別一覧](docs/data_support.md) | JVOpen / JVRTOpen spec と保存先 |
 | [レコード別の公式契約と移行手順](docs/record_contracts.md) | レコード種別ごとの公式レイアウト・主キー・`DataKubun`・既存 DB の移行手順 |
 | [時系列オッズ](docs/timeseries_odds.md) | `0B41/0B42` と `0B30` 系の違い |
@@ -127,6 +180,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File install_tasks.ps1 -DbType po
 ## テスト
 
 ```bat
+pytest tests/ -q --ignore=tests/integration/ --ignore=tests/e2e/
+```
+
+イメージには実行時の依存だけを入れているので、テストはリポジトリ側で実行して
+ください。Linux でも同じコマンドです。
+
+```bash
 pytest tests/ -q --ignore=tests/integration/ --ignore=tests/e2e/
 ```
 
