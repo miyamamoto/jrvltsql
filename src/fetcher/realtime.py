@@ -398,12 +398,13 @@ class RealtimeFetcher(BaseFetcher):
                       - 0B36: 速報オッズ3連単 (O6, 1週間)
                       - 0B41: 時系列オッズ単複枠 (O1, 1年間)
                       - 0B42: 時系列オッズ馬連 (O2, 1年間)
-            db_path: Path to SQLite database with NL_RA table.
-                     Ignored when pg_config is supplied.
+            db_path: Path to SQLite database with NL_RA (and optionally
+                     RT_RA) tables. Ignored when pg_config is supplied.
             from_date: Start date in YYYYMMDD format (optional)
             to_date: End date in YYYYMMDD format (optional)
             pg_config: PostgreSQL connection config. When supplied, race keys
-                       are read from public.nl_ra instead of SQLite.
+                       are read from public.nl_ra and public.rt_ra instead
+                       of SQLite.
             progress_callback: Optional callback called after each race key is
                                attempted. Receives counters and key status.
 
@@ -436,12 +437,29 @@ class RealtimeFetcher(BaseFetcher):
                 f"Time series specs: {', '.join(sorted(JVRTOPEN_TIME_SERIES_SPECS.keys()))}"
             )
 
-        # Build query for race keys from NL_RA
+        # Forward-only 0B15 cards are stored in RT_RA, while historical RACE
+        # records are stored in NL_RA. Use both sources and de-duplicate the
+        # key-bearing columns. This exposes no result fields: only the race
+        # identity is used to construct the JVRTOpen request key.
         if pg_config:
-            query = """
+            rt_union = (
+                """
+                    UNION
+                    SELECT year, monthday, jyocd, kaiji, nichiji, racenum
+                    FROM rt_ra
+                """
+                if self._postgres_table_exists(pg_config, "rt_ra")
+                else ""
+            )
+            query = f"""
+                WITH race_targets AS (
+                    SELECT year, monthday, jyocd, kaiji, nichiji, racenum
+                    FROM nl_ra
+                    {rt_union}
+                )
                 SELECT DISTINCT
                     year, monthday, jyocd, kaiji, nichiji, racenum
-                FROM nl_ra
+                FROM race_targets
                 WHERE 1=1
             """
             params = []
@@ -451,10 +469,38 @@ class RealtimeFetcher(BaseFetcher):
             db_file = Path(db_path)
             if not db_file.exists():
                 raise FetcherError(f"Database not found: {db_path}")
-            query = """
+            import sqlite3
+            from contextlib import closing
+
+            with closing(sqlite3.connect(db_path)) as conn:
+                has_rt_ra = (
+                    conn.execute(
+                        """
+                        SELECT 1
+                        FROM sqlite_master
+                        WHERE type = 'table' AND lower(name) = lower('RT_RA')
+                        """
+                    ).fetchone()
+                    is not None
+                )
+            rt_union = (
+                """
+                    UNION
+                    SELECT Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum
+                    FROM RT_RA
+                """
+                if has_rt_ra
+                else ""
+            )
+            query = f"""
+                WITH race_targets AS (
+                    SELECT Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum
+                    FROM NL_RA
+                    {rt_union}
+                )
                 SELECT DISTINCT
                     Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum
-                FROM NL_RA
+                FROM race_targets
                 WHERE 1=1
             """
             params = []
@@ -865,7 +911,10 @@ class RealtimeFetcher(BaseFetcher):
                             ret, read_count = self.jvlink.jv_rt_open(data_spec, key)
 
                             if ret == -1:
-                                # No data for this race (not held or not available)
+                                # No data for this race (not held or not
+                                # available). JVRTOpen still opened the stream,
+                                # so it must be closed before the next key or
+                                # that key fails with -202.
                                 no_data_keys += 1
                                 logger.debug(
                                     "No data for key",
@@ -873,6 +922,7 @@ class RealtimeFetcher(BaseFetcher):
                                     track=JYO_CODES[jyo_code],
                                     race=race_num,
                                 )
+                                self.jvlink.jv_close()
                                 continue
 
                             if ret != JV_RT_SUCCESS:
@@ -882,6 +932,10 @@ class RealtimeFetcher(BaseFetcher):
                                     key=key,
                                     error_code=ret,
                                 )
+                                try:
+                                    self.jvlink.jv_close()
+                                except Exception:
+                                    pass
                                 continue
 
                             # Do not expose a partial key when a later JVRead
@@ -934,6 +988,54 @@ class RealtimeFetcher(BaseFetcher):
             error_keys=error_keys,
             total_records=total_records,
         )
+
+    @staticmethod
+    def _postgres_table_exists(pg_config: dict, table_name: str) -> bool:
+        """Return whether a public PostgreSQL table exists."""
+        query = """
+            SELECT EXISTS (
+                SELECT 1
+                FROM information_schema.tables
+                WHERE table_schema = 'public' AND table_name = %s
+            )
+        """
+        try:
+            import psycopg
+
+            conn = psycopg.connect(
+                host=pg_config.get("host", "localhost"),
+                port=int(pg_config.get("port", 5432)),
+                dbname=pg_config.get("database", "keiba"),
+                user=pg_config.get("user", "postgres"),
+                password=pg_config.get("password", ""),
+            )
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(query, [table_name])
+                    return bool(cur.fetchone()[0])
+            finally:
+                conn.close()
+        except ImportError:
+            try:
+                import pg8000.dbapi as pgdb
+
+                conn = pgdb.connect(
+                    host=pg_config.get("host", "localhost"),
+                    port=int(pg_config.get("port", 5432)),
+                    database=pg_config.get("database", "keiba"),
+                    user=pg_config.get("user", "postgres"),
+                    password=pg_config.get("password", ""),
+                )
+                try:
+                    cur = conn.cursor()
+                    cur.execute(query, [table_name])
+                    return bool(cur.fetchone()[0])
+                finally:
+                    conn.close()
+            except ImportError as exc:
+                raise FetcherError(
+                    "PostgreSQL driver not installed. Install psycopg[binary]."
+                ) from exc
 
     def __enter__(self):
         """Context manager entry."""

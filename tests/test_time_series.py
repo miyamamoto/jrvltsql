@@ -300,7 +300,7 @@ def test_fetch_time_series_batch_discards_partial_key():
 
 
 def test_fetch_time_series_batch_from_postgres_uses_pg_race_keys(monkeypatch):
-    """PostgreSQL保存のNL_RAから時系列取得キーを作れることを確認する。"""
+    """PostgreSQL保存のNL_RA/RT_RAから時系列取得キーを作れることを確認する。"""
     import types
 
     from src.fetcher.realtime import RealtimeFetcher
@@ -317,6 +317,11 @@ def test_fetch_time_series_batch_from_postgres_uses_pg_race_keys(monkeypatch):
         RealtimeFetcher,
         "_fetch_time_series_race_rows_from_postgres",
         staticmethod(fake_pg_rows),
+    )
+    monkeypatch.setattr(
+        RealtimeFetcher,
+        "_postgres_table_exists",
+        staticmethod(lambda _config, table_name: table_name == "rt_ra"),
     )
 
     class FakeJVLink:
@@ -352,10 +357,66 @@ def test_fetch_time_series_batch_from_postgres_uses_pg_race_keys(monkeypatch):
     )
 
     assert "FROM nl_ra" in captured["query"]
+    assert "FROM rt_ra" in captured["query"]
     assert captured["params"] == [2025, 2025, 1201, 2025, 2025, 1201]
     assert fetcher.jvlink.opened == [("0B42", "202512010511")]
     assert records == [{"RecordSpec": "O2", "_raw": b"O2"}]
 
+
+def test_fetch_time_series_batch_from_postgres_supports_missing_rt_ra(monkeypatch):
+    """旧PostgreSQL schemaにRT_RAが無くてもNL_RAだけで収集を継続する。"""
+    import types
+
+    from src.fetcher.realtime import RealtimeFetcher
+
+    captured = {}
+
+    def fake_pg_rows(query, params, pg_config):
+        captured["query"] = query
+        return [(2025, 1201, "05", 5, 8, 11)]
+
+    monkeypatch.setattr(
+        RealtimeFetcher,
+        "_fetch_time_series_race_rows_from_postgres",
+        staticmethod(fake_pg_rows),
+    )
+    monkeypatch.setattr(
+        RealtimeFetcher,
+        "_postgres_table_exists",
+        staticmethod(lambda _config, _table_name: False),
+    )
+
+    class FakeJVLink:
+        def jv_init(self):
+            return 0
+
+        def jv_rt_open(self, data_spec, key):
+            return 0, 1
+
+        def jv_close(self):
+            pass
+
+    fetcher = object.__new__(RealtimeFetcher)
+    fetcher.jvlink = FakeJVLink()
+
+    def fake_fetch_and_parse(self):
+        yield {"RecordSpec": "O2", "_raw": b"O2"}
+
+    fetcher._fetch_and_parse = types.MethodType(fake_fetch_and_parse, fetcher)
+
+    records = list(
+        fetcher.fetch_time_series_batch_from_db(
+            data_spec="0B42",
+            db_path="ignored.sqlite",
+            from_date="20251201",
+            to_date="20251201",
+            pg_config={"host": "localhost", "database": "keiba"},
+        )
+    )
+
+    assert "FROM nl_ra" in captured["query"]
+    assert "FROM rt_ra" not in captured["query"]
+    assert records == [{"RecordSpec": "O2", "_raw": b"O2"}]
 
 def test_odds_parsers_expand_combination_arrays():
     """O1-O6 parsers should expand embedded odds arrays into row lists."""
@@ -497,3 +558,221 @@ def test_list_methods():
     assert set(tracks) == {f"{code:02d}" for code in range(1, 11)}
     assert set(specs) <= set(all_specs)
     print("\n[PASSED] 静的メソッドテスト")
+
+
+def test_fetch_time_series_batch_closes_no_data_stream_before_next_key():
+    """The range-scan path must close a no-data JVRTOpen before the next key.
+
+    JVRTOpen opens the stream even when it answers -1, so skipping JVClose
+    leaves it open and the next JVRTOpen fails with -202 (not closed). Every
+    later key in the scan is then lost.
+    """
+    from src.fetcher.realtime import RealtimeFetcher
+
+    class FakeJVLink:
+        def __init__(self):
+            self.opened = []
+            self.closed = 0
+            self._open = False
+
+        def jv_init(self):
+            return 0
+
+        def jv_rt_open(self, data_spec, key):
+            if self._open:
+                return -202, 0
+            self._open = True
+            self.opened.append((data_spec, key))
+            return -1, 0
+
+        def jv_close(self):
+            self._open = False
+            self.closed += 1
+            return 0
+
+    fetcher = object.__new__(RealtimeFetcher)
+    fetcher.jvlink = FakeJVLink()
+
+    records = list(
+        fetcher.fetch_time_series_batch(
+            data_spec="0B30",
+            from_date="20251201",
+            to_date="20251201",
+            jyo_codes=["05"],
+            race_nums=[1, 2],
+        )
+    )
+
+    assert records == []
+    assert fetcher.jvlink.opened == [
+        ("0B30", "202512010501"),
+        ("0B30", "202512010502"),
+    ]
+
+
+def test_fetch_time_series_batch_closes_error_stream_before_next_key():
+    """A non-success JVRTOpen other than -1 carries the same close obligation."""
+    from src.fetcher.realtime import RealtimeFetcher
+
+    class FakeJVLink:
+        def __init__(self):
+            self.opened = []
+            self.closed = 0
+            self._open = False
+
+        def jv_init(self):
+            return 0
+
+        def jv_rt_open(self, data_spec, key):
+            if self._open:
+                return -202, 0
+            self._open = True
+            self.opened.append((data_spec, key))
+            return -114, 0
+
+        def jv_close(self):
+            self._open = False
+            self.closed += 1
+            return 0
+
+    fetcher = object.__new__(RealtimeFetcher)
+    fetcher.jvlink = FakeJVLink()
+
+    records = list(
+        fetcher.fetch_time_series_batch(
+            data_spec="0B30",
+            from_date="20251201",
+            to_date="20251201",
+            jyo_codes=["05"],
+            race_nums=[1, 2],
+        )
+    )
+
+    assert records == []
+    assert fetcher.jvlink.opened == [
+        ("0B30", "202512010501"),
+        ("0B30", "202512010502"),
+    ]
+
+
+def test_fetch_time_series_batch_from_db_includes_rt_ra_targets():
+    """Forward-only 0B15 cards land in RT_RA before NL_RA exists.
+
+    Same-day odds collection must be able to run off the card feed alone, so
+    the race-target query reads NL_RA and RT_RA and de-duplicates.
+    """
+    from contextlib import closing
+    import sqlite3
+    import tempfile
+    from pathlib import Path
+
+    from src.fetcher.realtime import RealtimeFetcher
+
+    with tempfile.TemporaryDirectory(dir="/tmp") as temp_dir:
+        db_path = Path(temp_dir) / "keiba.db"
+        with closing(sqlite3.connect(db_path)) as conn:
+            for table in ("NL_RA", "RT_RA"):
+                conn.execute(
+                    f"""
+                    CREATE TABLE {table} (
+                        Year INTEGER,
+                        MonthDay INTEGER,
+                        JyoCD TEXT,
+                        Kaiji INTEGER,
+                        Nichiji INTEGER,
+                        RaceNum INTEGER
+                    )
+                    """
+                )
+            # Shared in both tables plus one that only the card feed knows.
+            conn.execute("INSERT INTO NL_RA VALUES (2025, 1201, '05', 5, 8, 11)")
+            conn.execute("INSERT INTO RT_RA VALUES (2025, 1201, '05', 5, 8, 11)")
+            conn.execute("INSERT INTO RT_RA VALUES (2025, 1201, '05', 5, 8, 12)")
+            conn.commit()
+
+        class FakeJVLink:
+            def __init__(self):
+                self.opened = []
+
+            def jv_init(self):
+                return 0
+
+            def jv_rt_open(self, data_spec, key):
+                self.opened.append((data_spec, key))
+                return -1, 0
+
+            def jv_close(self):
+                return 0
+
+        fetcher = object.__new__(RealtimeFetcher)
+        fetcher.jvlink = FakeJVLink()
+
+        list(
+            fetcher.fetch_time_series_batch_from_db(
+                data_spec="0B30",
+                db_path=str(db_path),
+                from_date="20251201",
+                to_date="20251201",
+            )
+        )
+
+        assert sorted(fetcher.jvlink.opened) == [
+            ("0B30", "202512010511"),
+            ("0B30", "202512010512"),
+        ]
+
+
+def test_fetch_time_series_batch_from_db_works_without_rt_ra():
+    """A database that predates the card feed still resolves NL_RA targets."""
+    from contextlib import closing
+    import sqlite3
+    import tempfile
+    from pathlib import Path
+
+    from src.fetcher.realtime import RealtimeFetcher
+
+    with tempfile.TemporaryDirectory(dir="/tmp") as temp_dir:
+        db_path = Path(temp_dir) / "keiba.db"
+        with closing(sqlite3.connect(db_path)) as conn:
+            conn.execute(
+                """
+                CREATE TABLE NL_RA (
+                    Year INTEGER,
+                    MonthDay INTEGER,
+                    JyoCD TEXT,
+                    Kaiji INTEGER,
+                    Nichiji INTEGER,
+                    RaceNum INTEGER
+                )
+                """
+            )
+            conn.execute("INSERT INTO NL_RA VALUES (2025, 1201, '05', 5, 8, 11)")
+            conn.commit()
+
+        class FakeJVLink:
+            def __init__(self):
+                self.opened = []
+
+            def jv_init(self):
+                return 0
+
+            def jv_rt_open(self, data_spec, key):
+                self.opened.append((data_spec, key))
+                return -1, 0
+
+            def jv_close(self):
+                return 0
+
+        fetcher = object.__new__(RealtimeFetcher)
+        fetcher.jvlink = FakeJVLink()
+
+        list(
+            fetcher.fetch_time_series_batch_from_db(
+                data_spec="0B30",
+                db_path=str(db_path),
+                from_date="20251201",
+                to_date="20251201",
+            )
+        )
+
+        assert fetcher.jvlink.opened == [("0B30", "202512010511")]
