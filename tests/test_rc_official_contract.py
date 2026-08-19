@@ -516,3 +516,63 @@ def test_rc_postgresql_native_and_standard_preserve_keyed_deletion(
             'RecUmaBamei3 AS "RecUmaBamei3" '
             f"FROM {table_name}"
         ) == {"SyubetuCD": "14", "RecUmaBamei3": "OTHER3"}
+
+
+def _parsed_rc_record(**kwargs) -> dict:
+    """Return one parsed current RC row for storage-contract tests."""
+
+    record = RCParser().parse(build_rc_record(**kwargs)[0])
+    assert record is not None
+    return record
+
+
+@pytest.mark.parametrize(
+    ("table_name", "standard"),
+    (("NL_RC", False), ("RECORD", True)),
+)
+def test_rc_storage_rejects_an_extra_unique_before_it_can_erase_another_key(
+    tmp_path,
+    table_name: str,
+    standard: bool,
+) -> None:
+    """An extra UNIQUE turns a replacement into a silent erase of a different key."""
+
+    schema = (JRAVAN_SCHEMAS if standard else SCHEMAS)[table_name]
+    assert "PRIMARY KEY (" in schema
+    drifted = schema.replace("PRIMARY KEY (", "UNIQUE (RecordSpec), PRIMARY KEY (", 1)
+
+    for importer_class in (DataImporter, OptimizedDataImporter):
+        for auto_commit in (True, False):
+            database = SQLiteDatabase(
+                {
+                    "path": str(
+                        tmp_path
+                        / f"unique-{table_name}-{importer_class.__name__}-{auto_commit}.db"
+                    )
+                }
+            )
+            with database:
+                database.execute(drifted)
+                database.commit()
+                before_indexes = database.fetch_all(f'PRAGMA index_list("{table_name}")')
+                importer = importer_class(database, use_jravan_schema=standard)
+                with pytest.raises(SchemaMigrationError, match="UNIQUE"):
+                    importer.import_records(
+                        iter([_parsed_rc_record()]),
+                        auto_commit=auto_commit,
+                    )
+                assert database.fetch_all(f'PRAGMA index_list("{table_name}")') == before_indexes
+                assert database.fetch_one(f"SELECT COUNT(*) AS count FROM {table_name}") == {
+                    "count": 0
+                }
+                assert importer.get_statistics()["records_imported"] == 0
+
+    database = SQLiteDatabase({"path": str(tmp_path / f"official-{table_name}.db")})
+    with database:
+        database.create_table(table_name, schema)
+        importer = DataImporter(database, use_jravan_schema=standard)
+        importer.import_records(iter([_parsed_rc_record()]))
+        importer.import_records(
+            iter([_parsed_rc_record(key_overrides={"RaceNum": "12"})])
+        )
+        assert database.fetch_one(f"SELECT COUNT(*) AS count FROM {table_name}") == {"count": 2}

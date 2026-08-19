@@ -291,9 +291,14 @@ fields that make `0000`, `00000000` and `0000000000` valid provider values.
    Mutation probe: deleting all four `verify_sk_storage_schema` call sites in
    `src/importer/importer.py` left the SK contract module at **2 failed, 45
    passed, 11 skipped** — the six unsafe-schema cases only exercised
-   `verify_sk_storage_schema` directly, so a future refactor could remove the
-   guard from every importer path without a red test. Deleting the
-   `importer_optimized.py` call site left **1 failed**.
+   `verify_sk_storage_schema` directly, so every defect class and the
+   single-record path could regress with only two cases left to notice.
+   Deleting the `importer_optimized.py` call site left **1 failed**.
+   Correction (2026-08-19, see
+   `specs/operations/20260819_storage_preflight_unique_gap_worklog.md`): this
+   item first said the guard could be removed "from every importer path without
+   a red test", which contradicts the 2 failures quoted in the same sentence.
+   The measurements were right; that conclusion was overstated.
    Repair (this commit): `test_sk_importer_paths_reject_each_unsafe_contract_before_dml`
    (both batch importers x six defects, insert and erase) and
    `test_sk_single_record_path_rejects_each_unsafe_contract_before_dml`

@@ -2793,6 +2793,7 @@ def verify_jg_storage_schema(database: BaseDatabase, table_name: str) -> bool:
     if schema_sql is None:
         raise SchemaMigrationError(f"JG storage schema is undefined: {table_name}")
     verify_table_schema(database, table_name, schema_sql)
+    _verify_replacement_key_constraints(database, table_name, "JG storage")
     return True
 
 
@@ -2898,6 +2899,7 @@ def verify_wc_storage_schema(database: BaseDatabase, table_name: str) -> bool:
     if schema_sql is None:
         raise SchemaMigrationError(f"WC storage schema is undefined: {table_name}")
     verify_table_schema(database, table_name, schema_sql)
+    _verify_replacement_key_constraints(database, table_name, "WC storage")
     return True
 
 
@@ -3703,6 +3705,7 @@ def verify_rc_storage_schema(database: BaseDatabase, table_name: str) -> bool:
     if schema_sql is None:
         raise SchemaMigrationError(f"RC storage schema is undefined: {table_name}")
     verify_table_schema(database, table_name, schema_sql)
+    _verify_replacement_key_constraints(database, table_name, "RC storage")
     return True
 
 

@@ -39,6 +39,11 @@
 
 ### Fixed
 
+- JG・RC・WC の storage 検証が、公式主キー以外の追加 `UNIQUE`/exclusion 制約と
+  PostgreSQL の遅延主キーを検査していなかった fail-open を修正。drift した既存表
+  では、別キーの行が置換で消えても両方の取込が成功と報告されていた（実測で 2 行
+  投入後 1 行）。mutation 前に拒否する
+
 - native `NL_UM` の保存経路にも標準名 `UMA` と同じ置換キー検証を追加し、公式主キー
   以外の `UNIQUE`/exclusion 制約、PostgreSQL の `ON CONFLICT` に使えない遅延
   主キー、`KettoNum` 以外の主キーや keyless、テーブル欠落を持つ既存 `NL_UM` を、
