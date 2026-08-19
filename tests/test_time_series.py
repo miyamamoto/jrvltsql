@@ -776,3 +776,56 @@ def test_fetch_time_series_batch_from_db_works_without_rt_ra():
         )
 
         assert fetcher.jvlink.opened == [("0B30", "202512010511")]
+
+
+def test_postgres_table_probe_resolves_like_the_query(monkeypatch):
+    """The probe must follow ``search_path``, as the unqualified query does."""
+
+    import pytest  # noqa: F401 - module keeps imports function-local
+    from src.fetcher.realtime import RealtimeFetcher
+
+    captured: dict = {}
+
+    class _Cursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            return False
+
+        def execute(self, query, params=None):
+            captured["query"] = query
+            captured["params"] = params
+
+        def fetchone(self):
+            return (True,)
+
+    class _Connection:
+        def cursor(self):
+            return _Cursor()
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(
+        "psycopg.connect", lambda **_kwargs: _Connection(), raising=False
+    )
+    assert RealtimeFetcher._postgres_table_exists({}, "rt_ra") is True
+    assert "to_regclass" in captured["query"]
+    assert "information_schema" not in captured["query"]
+    assert captured["params"] == ["rt_ra"]
+
+
+def test_postgres_table_probe_failure_is_a_fetcher_error(monkeypatch):
+    """A probe that cannot answer must not silently drop the RT_RA targets."""
+
+    import pytest
+    from src.fetcher.base import FetcherError
+    from src.fetcher.realtime import RealtimeFetcher
+
+    def _explode(**_kwargs):
+        raise RuntimeError("connection refused")
+
+    monkeypatch.setattr("psycopg.connect", _explode, raising=False)
+    with pytest.raises(FetcherError):
+        RealtimeFetcher._postgres_table_exists({}, "rt_ra")

@@ -451,13 +451,14 @@ class RealtimeFetcher(BaseFetcher):
                 if self._postgres_table_exists(pg_config, "rt_ra")
                 else ""
             )
+            distinct = "" if rt_union else " DISTINCT"
             query = f"""
                 WITH race_targets AS (
                     SELECT year, monthday, jyocd, kaiji, nichiji, racenum
                     FROM nl_ra
                     {rt_union}
                 )
-                SELECT DISTINCT
+                SELECT{distinct}
                     year, monthday, jyocd, kaiji, nichiji, racenum
                 FROM race_targets
                 WHERE 1=1
@@ -492,13 +493,14 @@ class RealtimeFetcher(BaseFetcher):
                 if has_rt_ra
                 else ""
             )
+            distinct = "" if rt_union else " DISTINCT"
             query = f"""
                 WITH race_targets AS (
                     SELECT Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum
                     FROM NL_RA
                     {rt_union}
                 )
-                SELECT DISTINCT
+                SELECT{distinct}
                     Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum
                 FROM race_targets
                 WHERE 1=1
@@ -991,14 +993,12 @@ class RealtimeFetcher(BaseFetcher):
 
     @staticmethod
     def _postgres_table_exists(pg_config: dict, table_name: str) -> bool:
-        """Return whether a public PostgreSQL table exists."""
-        query = """
-            SELECT EXISTS (
-                SELECT 1
-                FROM information_schema.tables
-                WHERE table_schema = 'public' AND table_name = %s
-            )
+        """Return whether the query would resolve ``table_name`` to a table.
+
+        ``to_regclass`` follows the session ``search_path``, so the probe and
+        the unqualified query below always agree on which table is meant.
         """
+        query = "SELECT to_regclass(%s) IS NOT NULL"
         try:
             import psycopg
 
@@ -1036,6 +1036,16 @@ class RealtimeFetcher(BaseFetcher):
                 raise FetcherError(
                     "PostgreSQL driver not installed. Install psycopg[binary]."
                 ) from exc
+            except Exception as exc:
+                raise FetcherError(
+                    f"Could not check whether {table_name} exists: {exc}"
+                ) from exc
+        except FetcherError:
+            raise
+        except Exception as exc:
+            raise FetcherError(
+                f"Could not check whether {table_name} exists: {exc}"
+            ) from exc
 
     def __enter__(self):
         """Context manager entry."""
