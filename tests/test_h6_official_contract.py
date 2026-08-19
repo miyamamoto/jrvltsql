@@ -239,6 +239,28 @@ def test_h6_records_without_a_sold_combination_keep_the_official_totals() -> Non
     assert validate_h6_record(row, "NL_H6") is True
 
 
+@pytest.mark.parametrize("use_standard", (False, True), ids=("native", "standard"))
+def test_h6_blank_refund_span_is_stored_without_failing(
+    tmp_path: Path,
+    use_standard: bool,
+) -> None:
+    """全位置が空白の返還馬番情報も取り込みを失敗させない（H1 と同じ扱い）。"""
+
+    tables = _tables(use_standard)
+    database = SQLiteDatabase({"path": str(tmp_path / f"blank-refund-{use_standard}.db")})
+    with database:
+        _create(database, tables)
+        rows = h6_rows()
+        for row in rows:
+            row["HenkanUma"] = " " * 18
+        stats = DataImporter(database, use_jravan_schema=use_standard).import_records(iter(rows))
+        assert stats["records_failed"] == 0
+        if use_standard:
+            assert database.fetch_one("SELECT HenkanUma1 AS flag FROM HYOSU2") == {"flag": None}
+        else:
+            assert database.fetch_one("SELECT HenkanUma AS span FROM NL_H6") == {"span": None}
+
+
 def test_h6_rows_must_carry_a_combination_or_the_totals_sentinel() -> None:
     """組番を持たない caller row は DML 前に拒否する（NOT NULL 違反にしない）。"""
 

@@ -5,7 +5,10 @@
 - repository: `miyamamoto/jrvltsql`
 - worktree: `/home/keiba/scratch/20260819_jrvltsql_h6_official`
 - branch: `agent/h6-official-contract-20260819`
-- base: `cddf51b`（H1 公式契約 PR #224 の merge commit）
+- base: `cddf51b68814c42d93833de2e7aa09e775217a89`（H1 公式契約 PR #224 の
+  merge commit、短縮 `cddf51b`）
+- PR: https://github.com/miyamamoto/jrvltsql/pull/225
+- 直前の実装 commit: `fc14aca56bb477b0df53ca511935b37128e87e67`（以降の追記は同 PR の後続 commit）
 
 直列順の位置づけ: HN → SK → UM → H1 → **H6** → O1-O6（真偽・parser）→ O1-O6
 （無損失 storage）→ 2.0.0.dev0。H1 は merge 済み・CI green のため H6 に着手した。
