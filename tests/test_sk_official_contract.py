@@ -332,6 +332,110 @@ def test_sk_sqlite_schema_verifier_rejects_each_unsafe_contract(
     assert after == before
 
 
+@pytest.mark.parametrize(
+    "defect",
+    (
+        "nullable-key",
+        "wrong-body-type",
+        "extra-unique",
+        "extra-check",
+        "extra-foreign-key",
+        "extra-generated",
+    ),
+)
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_sk_importer_paths_reject_each_unsafe_contract_before_dml(
+    tmp_path: Path,
+    importer_class,
+    defect: str,
+) -> None:
+    """Both batch entry points must reach the verifier for every unsafe schema.
+
+    Calling ``verify_sk_storage_schema`` directly only proves the verifier; it
+    does not prove that the importers still call it.
+    """
+
+    database = SQLiteDatabase({"path": str(tmp_path / f"path-{defect}.db")})
+    with database:
+        database.execute(_defective_native_schema(defect))
+        database.commit()
+        before = database.fetch_all('PRAGMA table_xinfo("NL_SK")')
+        importer = importer_class(database)
+        with pytest.raises(SchemaMigrationError):
+            importer.import_records(iter([deepcopy(sk_record())]))
+        with pytest.raises(SchemaMigrationError):
+            importer.import_records(iter([sk_erase()]))
+        assert database.fetch_all('PRAGMA table_xinfo("NL_SK")') == before
+        assert database.fetch_one("SELECT COUNT(*) AS count FROM NL_SK") == {"count": 0}
+        assert importer.get_statistics()["records_imported"] == 0
+
+
+@pytest.mark.parametrize(
+    "defect",
+    (
+        "nullable-key",
+        "wrong-body-type",
+        "extra-unique",
+        "extra-check",
+        "extra-foreign-key",
+        "extra-generated",
+    ),
+)
+@pytest.mark.parametrize("auto_commit", (True, False), ids=("owned", "caller-owned"))
+def test_sk_single_record_path_rejects_each_unsafe_contract_before_dml(
+    tmp_path: Path,
+    auto_commit: bool,
+    defect: str,
+) -> None:
+    """The single-record path must not bypass the SK schema verifier."""
+
+    database = SQLiteDatabase({"path": str(tmp_path / f"single-{defect}-{auto_commit}.db")})
+    with database:
+        database.execute(_defective_native_schema(defect))
+        database.commit()
+        before = database.fetch_all('PRAGMA table_xinfo("NL_SK")')
+        importer = DataImporter(database)
+        with pytest.raises(SchemaMigrationError):
+            importer.import_single_record(sk_record(), auto_commit=auto_commit)
+        with pytest.raises(SchemaMigrationError):
+            importer.import_single_record(sk_erase(), auto_commit=auto_commit)
+        assert database.fetch_all('PRAGMA table_xinfo("NL_SK")') == before
+        assert database.fetch_one("SELECT COUNT(*) AS count FROM NL_SK") == {"count": 0}
+
+
+@pytest.mark.parametrize(
+    ("use_standard", "expected"),
+    ((False, 0), (True, "0000")),
+    ids=("native", "standard"),
+)
+def test_sk_zero_import_year_readback_follows_the_declared_column_type(
+    tmp_path: Path,
+    use_standard: bool,
+    expected: object,
+) -> None:
+    """`0000` is the official domestic value; native declares INTEGER.
+
+    ``NL_SK.ImportYear`` is ``INTEGER`` while ``SANKU.ImportYear`` is
+    ``VARCHAR(4)``, so the same official value reads back as ``0`` natively and
+    as ``"0000"`` on the standard name. Pin both so the documented contract
+    cannot drift from the storage.
+    """
+
+    table_name, schema = _table(use_standard)
+    record = sk_record()
+    record["ImportYear"] = "0000"
+    database = SQLiteDatabase({"path": str(tmp_path / f"import-year-{table_name}.db")})
+    with database:
+        database.execute(schema)
+        database.commit()
+        stats = DataImporter(database, use_jravan_schema=use_standard).import_records(
+            iter([record])
+        )
+        assert stats["records_imported"] == 1
+        assert database.fetch_one(f"SELECT ImportYear FROM {table_name}") == {
+            "ImportYear": expected
+        }
+
 def test_sk_dual_rejects_either_unsafe_target_before_mutation(tmp_path: Path) -> None:
     for unsafe_target in ("primary", "secondary"):
         primary = SQLiteDatabase({"path": str(tmp_path / f"{unsafe_target}-primary.db")})

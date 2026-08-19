@@ -768,6 +768,9 @@ cache の変更に入る前に、対応する現行種別名を示して停止�
   です。
 - 公式に空欄になり得る `SanchiName` は、両 table とも `NULL` ではなく空文字で
   保持します。欠落した項目や `None` は検証で拒否され、`NULL` として保存されません。
+- `ImportYear` の保存型は table で異なります。`NL_SK.ImportYear` は `INTEGER`、
+  `SANKU.ImportYear` は `VARCHAR(4)` なので、公式に有効な `0000` は native では
+  `0`、標準名では `0000` として読み戻ります（値は 4 桁 zero fill で復元できます）。
 
 **既存 DB からの移行手順:**
 

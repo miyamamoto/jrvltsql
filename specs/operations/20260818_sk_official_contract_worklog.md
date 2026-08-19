@@ -261,3 +261,107 @@ the locked Python 3.12 venv, `--no-cov -p no:cacheprovider` unless noted):
   `dict.fromkeys`; three pre-existing `typing.Dict/Optional` findings in the
   old `sk_parser.py` disappeared); `mkdocs build --strict` pass (site built to
   `/tmp` and removed); `git diff --check` clean.
+
+## Independent review (2026-08-19, Devin, direct implementation)
+
+The implementation commit `01b65867285822d3992716c5d2284a2ddb8d4747` was
+produced by the delegated Claude Code session, which stopped at its 09:25 JST
+session limit before the review batch. On the user's instruction the delegation
+was ended and the remaining work was done directly by Devin
+(session `83dda3bd2bb44d7abe83462669c51210`). Everything below was measured in
+this worktree; the disposable PostgreSQL 16 container `jltsql-sk-pg16-8215`
+(`127.0.0.1:32904`, schema-per-test) was reused and is removed at the end of the
+iteration.
+
+### Official source cross-check redone against the workbook text
+
+`JV-Data 4.9.0.1` section `１９．産駒マスタ` (extracted text) confirms record
+length `208`, `データ区分` `0/1/2`, `血統登録番号` `12/10` with composition
+`生年(西暦)4桁＋品種1桁＋数字5桁`, `生年月日` `22/8` `yyyymmdd`, `性別コード`
+`30/1`, `品種コード` `31/1`, `毛色コード` `32/2`, `産駒持込区分` `34/1` with the
+domain `0:内国産 1:持込 2:輸入内国産扱い 3:輸入` (`9:その他` only appears in the
+breeding-horse master), `輸入年` `35/4`, `生産者コード` `39/8`, `産地名` `47/Ｓ`,
+and change history item `１９` for the 2023-08 `6→8` / `8→10` widths. The
+implemented parser spans and domains match this, including the `初期値 0`
+fields that make `0000`, `00000000` and `0000000000` valid provider values.
+
+### Findings
+
+1. **The per-defect schema tests did not pin the importer call sites.**
+   Mutation probe: deleting all four `verify_sk_storage_schema` call sites in
+   `src/importer/importer.py` left the SK contract module at **2 failed, 45
+   passed, 11 skipped** — the six unsafe-schema cases only exercised
+   `verify_sk_storage_schema` directly, so a future refactor could remove the
+   guard from every importer path without a red test. Deleting the
+   `importer_optimized.py` call site left **1 failed**.
+   Repair (this commit): `test_sk_importer_paths_reject_each_unsafe_contract_before_dml`
+   (both batch importers x six defects, insert and erase) and
+   `test_sk_single_record_path_rejects_each_unsafe_contract_before_dml`
+   (`auto_commit=True|False` x six defects), each asserting
+   `SchemaMigrationError`, an unchanged `PRAGMA table_xinfo`, zero rows, and
+   zero counted imports. After the repair the same probes fail **20** and
+   **7** cases respectively.
+2. **`ImportYear` readback was stronger in the documentation than in storage.**
+   Measured: the officially valid domestic value `0000` reads back as `0` from
+   `NL_SK` (`ImportYear INTEGER`) and as `"0000"` from `SANKU`
+   (`ImportYear VARCHAR(4)`; the SQLite standard schema mirror declares
+   `SMALLINT` for the reconstructed variant). The worklog stated this but
+   `docs/record_contracts.md` did not.
+   Repair: the SK contract section now states the per-table storage type and
+   that the value is recoverable by four-digit zero fill, and
+   `test_sk_zero_import_year_readback_follows_the_declared_column_type` pins
+   both readbacks so documentation and storage cannot drift apart.
+3. **`_SK_LOSSLESS_TEXT_WIDTHS["NL_SK"]` has no `ImportYear` entry** while
+   `"SANKU"` does. Verified by measurement that this is only because the native
+   column is `INTEGER`: `_verify_strict_storage_column_contract` still checks
+   its declared type, and `test_sk_sqlite_schema_verifier_rejects_each_unsafe_contract[wrong-body-type]`
+   plus the new importer-path variant reject `ImportYear TEXT NOT NULL` before
+   any DML. No capacity gap; no code change needed.
+4. **Refuted / no change.** Blank `SanchiName` handling is non-vacuous
+   (removing the `convert_record_types` branch fails both
+   `test_sk_blank_sanchi_name_remains_an_empty_provider_value` cases). Caller
+   validation is non-vacuous (removing the five `validate_sk_record` call sites
+   fails 6 cases). The SQLite constraint audit intentionally checks only
+   FK/CHECK because extra UNIQUE and deferrable primary keys are covered by
+   `_verify_replacement_key_constraints`, which is exercised by the
+   `extra-unique` and PostgreSQL deferrable-PK cases.
+
+### Residual risk carried forward (not fixed here)
+
+- **The same test-shape weakness exists in the merged HN iteration.** Measured:
+  deleting all six `verify_hn_storage_schema` call sites
+  (`importer.py` x4, `importer_optimized.py` x2) leaves
+  `tests/test_hn_official_contract.py` at **3 failed, 34 passed, 11 skipped`**,
+  i.e. HN's per-defect cases also call the verifier directly. This is a missing
+  regression pin, not a fail-open in shipped behaviour. It is recorded as the
+  first item of the next iteration rather than widening this PR, and the other
+  merged families (CS, WF, JG, TC, CC, ...) must be probed the same way.
+- `SchemaManager` / `jltsql init` still cannot repair a drifted `NL_SK`; it
+  fails closed and requires backup, rebuild and `BLDN` reimport, as documented.
+- PostgreSQL evidence is PostgreSQL 16 only.
+
+### Final candidate gates (rerun by Devin on the repaired tree)
+
+- `tests/test_sk_official_contract.py` with `JLTSQL_RUN_POSTGRESQL_INTEGRATION=1`
+  => **73 passed, 11 skipped** (the 11 skips are the mixed-Dual/PostgreSQL cases
+  that need the fixture's schema-per-test PostgreSQL, which ran in the wider
+  selection below).
+- PostgreSQL-enabled selection `tests/test_sk_official_contract.py
+  tests/test_sk_parser_layout.py tests/test_hn_official_contract.py
+  tests/test_migration.py tests/test_current_record_validation.py
+  tests/test_metadata_application.py tests/test_postgresql.py
+  tests/test_all_schemas.py tests/test_dual_handler_transactions.py`
+  => **389 passed, 3 subtests passed**.
+- Workflow-equivalent suite (`pytest tests --ignore=tests/integration
+  --ignore=tests/e2e -m 'not slow' -q`, coverage on as in CI)
+  => **3586 passed, 435 skipped, 14 deselected, 20 subtests passed** (104 s).
+- `uv lock --check` pass; `scripts/validate_test_gate.py` `TEST GATE PASS`;
+  fatal flake8 (`E9,F63,F7,F82`, `--isolated`, `src tests scripts tools`) `0`;
+  `mkdocs build --strict` pass (built to `/tmp` and removed);
+  `git diff --check` clean.
+
+### STOP conditions for the next operator
+
+- Do not treat the HN test-shape finding as an SK regression; it is a separate
+  bounded PR.
+- Do not restart a second PostgreSQL container while the disk is at 99 %.
