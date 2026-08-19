@@ -6719,7 +6719,8 @@ def convert_record_types(record: dict, table_name: str) -> dict:
             and isinstance(value, str)
             and not value.strip()
         ):
-            # The official SK 産地名 span may be blank (initial value Ｓ). The v2
+            # The official SK 産地名 span may be blank: the workbook's 初期値
+            # column marks it Ｓ, meaning spaces rather than a literal S. The v2
             # SK schema is NOT NULL, so keep the validated empty provider value
             # rather than coercing it to NULL.
             converted[field_name] = ""
