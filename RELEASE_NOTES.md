@@ -50,6 +50,25 @@ Public API replacements:
 - native and standard schemas now verify primary keys, types, capacities,
   child-table constraints, and cancellation/delete behavior before mutation;
   several record families gained complete child storage or corrected keys
+- H1 vote storage (票数１・全掛式) now validates the official 28,955-byte record
+  body (official `DataKubun` `0`/`2`/`4`/`5`/`9`, a real `MakeDate` and race day,
+  two-digit course/meeting/day/race numbers, registered and starting counts, sale
+  flags `0`/`1`/`3`/`7`, place-payout key `0`/`2`/`3`, twenty-eight/eight/eight
+  positional refund flags, per-bet-type two/four/six-digit combinations,
+  eleven-digit vote counts, per-bet-type two/three-digit favourite order, and
+  fourteen eleven-digit vote totals) across native `NL_H1`, realtime `RT_H1`, and
+  the standard `HYOSU` owner/child family. One record replaces one complete race
+  snapshot, and `DataKubun=0` performs a physical exact-key erase of every H1
+  table, including the standard owner and children that the previous erase map
+  missed because it named the non-existent `HYO_TANPUKU` alias. The official
+  favourite order is not numeric: `--` (cancelled before sale), `**` (cancelled
+  after sale) and blank (not registered) are provider values, so `NL_H1.Ninki`
+  and `RT_H1.Ninki` change from `INTEGER` to `TEXT` and standard
+  `HYOSU_WAKU`/`HYOSU_UMATAN`/`HYOSU_SANREN.Ninki` change from `SMALLINT` to
+  `VARCHAR`; blanks are stored as empty strings rather than `NULL`. Key columns
+  become `NOT NULL`, and the standard children reject any UNIQUE index other than
+  the official key. Operators must back up, rebuild, and reimport retained `RACE`
+  data; cancellation markers are not recoverable without a reimport
 - UM racehorse master storage now validates the official 1609-byte record body
   (real registration/erase/birth dates, `0/1` erase flag, `0/1`-or-blank stabling
   flag, digit symbol/sex/breed/coat/affiliation codes, five/eight/six-digit

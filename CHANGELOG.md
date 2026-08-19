@@ -44,6 +44,21 @@
   では、別キーの行が置換で消えても両方の取込が成功と報告されていた（実測で 2 行
   投入後 1 行）。mutation 前に拒否する
 
+- `H1`（票数１・全掛式）を公式現行28,955バイト配置へ結び付け、native `NL_H1`・
+  速報 `RT_H1`・標準名 `HYOSU` 系でレース単位snapshot置換、`DataKubun=0`の物理
+  exact erase（従来の消去表は存在しない別名 `HYO_TANPUKU` を指しており、標準名
+  header/子tableが消去対象から漏れていた）、caller validation（公式データ区分
+  `0/2/4/5/9`、実在する`MakeDate`とレース日、2桁の場・回・日・レース番号、
+  登録/出走頭数、発売フラグ`0/1/3/7`、複勝着払キー`0/2/3`、位置ごとの返還
+  フラグ28/8/8桁、賭式ごとの2/4/6桁組番、11桁票数、賭式ごとの2/3桁人気順、
+  11桁×14の票数合計）、SQLite/PostgreSQL/Dualのstrict schema preflightを
+  一致させた。公式の人気順は数値ではなく`--`（発売前取消）・`**`（発売後取消）・
+  空白（登録なし）も取るため、`NL_H1`/`RT_H1`の`Ninki`を`INTEGER`から`TEXT`へ、
+  標準名`HYOSU_WAKU`/`HYOSU_UMATAN`/`HYOSU_SANREN`の`Ninki`を`SMALLINT`から
+  `VARCHAR`へ変更し（従来は取消マーカーが`NULL`に落ちていた）、空白は`NULL`では
+  なく空文字で保持する。key列は`NOT NULL`にし、標準名子tableでは公式キー以外の
+  `UNIQUE` indexも拒否する。既存tableは自動移行せず、backup・rebuild・`RACE`
+  reimportを要求する
 - native `NL_UM` の保存経路にも標準名 `UMA` と同じ置換キー検証を追加し、公式主キー
   以外の `UNIQUE`/exclusion 制約、PostgreSQL の `ON CONFLICT` に使えない遅延
   主キー、`KettoNum` 以外の主キーや keyless、テーブル欠落を持つ既存 `NL_UM` を、

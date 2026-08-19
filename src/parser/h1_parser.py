@@ -27,7 +27,8 @@ H1レコードパーサー: ５．票数１（全掛式）
   Total = 28,955
 """
 
-from typing import Dict, List, Optional
+from datetime import date
+from typing import Dict, List, Mapping, Optional
 from uuid import uuid4
 
 from src.parser.base import validate_fixed_record
@@ -67,6 +68,150 @@ class H1Parser:
 
     RECORD_TYPE = "H1"
     RECORD_LENGTH = 28955
+    # ５．票数１ のデータ区分。1/3 は公式に存在しない。
+    DATA_KUBUN_VALUES = frozenset({"0", "2", "4", "5", "9"})
+    # 発売フラグ（0:発売なし 1:発売前取消 3:発売後取消 7:発売あり）
+    HATUBAI_FLAG_VALUES = frozenset({"0", "1", "3", "7"})
+    HATUBAI_FLAG_FIELDS = tuple(f"HatubaiFlag{slot}" for slot in range(1, 8))
+    # 複勝着払キー（0:複勝発売なし 2:2着まで払い 3:3着まで払い）
+    FUKU_CHAKU_BARAI_KEY_VALUES = frozenset({"0", "2", "3"})
+    KEY_CODE_WIDTHS = {"JyoCD": 2, "Kaiji": 2, "Nichiji": 2, "RaceNum": 2}
+    COUNT_WIDTHS = {"TorokuTosu": 2, "SyussoTosu": 2}
+    # 返還情報は馬番/枠番の位置ごとに 0:返還なし 1:返還あり を並べた固定長。
+    REFUND_SPAN_WIDTHS = {"HenkanUma": 28, "HenkanWaku": 8, "HenkanDoWaku": 8}
+    COMBINATION_WIDTHS = {
+        "Tansyo": 2,
+        "Fukusyo": 2,
+        "Wakuren": 2,
+        "Umaren": 4,
+        "Wide": 4,
+        "Umatan": 4,
+        "Sanrenpuku": 6,
+    }
+    FAVOURITE_WIDTHS = {
+        "Tansyo": 2,
+        "Fukusyo": 2,
+        "Wakuren": 2,
+        "Umaren": 3,
+        "Wide": 3,
+        "Umatan": 3,
+        "Sanrenpuku": 3,
+    }
+    VOTE_WIDTH = 11
+    TOTAL_BET_TYPE = "Total"
+    TOTAL_COMBINATION = "TOTAL"
+    TOTAL_FIELDS = tuple(_TOTAL_NAMES)
+
+    @staticmethod
+    def _require_ascii_digits(field_name: str, value: object, width: int) -> str:
+        if isinstance(value, str) and len(value) == width and value.isascii() and value.isdigit():
+            return value
+        raise ValueError(f"H1 {field_name} must be exactly {width} ASCII digits")
+
+    @classmethod
+    def _require_date(cls, field_name: str, value: object) -> str:
+        digits = cls._require_ascii_digits(field_name, value, 8)
+        try:
+            date(int(digits[:4]), int(digits[4:6]), int(digits[6:]))
+        except ValueError as error:
+            raise ValueError(f"H1 {field_name} must be a real YYYYMMDD date") from error
+        return digits
+
+    @classmethod
+    def _require_race_day(cls, record: Mapping[str, object]) -> None:
+        year = cls._require_ascii_digits("Year", record.get("Year"), 4)
+        month_day = cls._require_ascii_digits("MonthDay", record.get("MonthDay"), 4)
+        try:
+            date(int(year), int(month_day[:2]), int(month_day[2:]))
+        except ValueError as error:
+            raise ValueError("H1 Year/MonthDay must be a real race day") from error
+
+    @classmethod
+    def _require_flag_span(cls, field_name: str, value: object, width: int) -> None:
+        # 公式の初期値は 0 だが、提供データは未設定位置を空白で送ってくる（本リポジトリ
+        # の H1/H6 返還エリアの無損失 pin が実測済み）。空白は提供値として保持し、
+        # それ以外の文字と桁落ちは拒否する。
+        if not isinstance(value, str) or len(value) != width or set(value) - {"0", "1", " "}:
+            raise ValueError(f"H1 {field_name} must be {width} positional 0/1 refund flags")
+
+    @classmethod
+    def _require_vote_total(cls, field_name: str, value: object) -> None:
+        if isinstance(value, str) and not value.strip():
+            # 提供データは合計エリアを空白で送ることがある（parse 後は空文字）。
+            return
+        cls._require_ascii_digits(field_name, value, cls.VOTE_WIDTH)
+
+    @classmethod
+    def _require_favourite(cls, value: object, width: int) -> None:
+        """人気順は数字のほか '--':発売前取消 '**':発売後取消 空白:登録なし を取る。"""
+
+        if not isinstance(value, str):
+            raise ValueError("H1 Ninki must be a provider value")
+        if not value.strip():
+            return
+        text = value.strip()
+        if len(text) <= width and set(text) in ({"-"}, {"*"}):
+            return
+        if len(text) == width and text.isascii() and text.isdigit():
+            return
+        raise ValueError(
+            f"H1 Ninki must be {width} ASCII digits, a cancel marker, or blank"
+        )
+
+    @classmethod
+    def validate_key_fields(cls, record: Mapping[str, object]) -> None:
+        """The official race key identifies the record regardless of status."""
+
+        cls._require_date("MakeDate", record.get("MakeDate"))
+        cls._require_race_day(record)
+        for field_name, width in cls.KEY_CODE_WIDTHS.items():
+            cls._require_ascii_digits(field_name, record.get(field_name), width)
+
+    @classmethod
+    def validate_current_fields(
+        cls,
+        record: Mapping[str, object],
+        *,
+        data_kubun: str | None = None,
+    ) -> None:
+        """Validate one expanded H1 row against the official domain."""
+
+        status = data_kubun if data_kubun is not None else record.get("DataKubun")
+        if status not in cls.DATA_KUBUN_VALUES:
+            raise ValueError("H1 DataKubun is not an official code")
+        cls.validate_key_fields(record)
+        if status == "0":
+            # 削除指示は本文を持たない。キーとヘッダのみが公式値。
+            return
+
+        for field_name, width in cls.COUNT_WIDTHS.items():
+            cls._require_ascii_digits(field_name, record.get(field_name), width)
+        for field_name in cls.HATUBAI_FLAG_FIELDS:
+            if record.get(field_name) not in cls.HATUBAI_FLAG_VALUES:
+                raise ValueError(f"H1 {field_name} is not an official sale flag")
+        if record.get("FukuChakuBaraiKey") not in cls.FUKU_CHAKU_BARAI_KEY_VALUES:
+            raise ValueError("H1 FukuChakuBaraiKey is not an official code")
+        for field_name, width in cls.REFUND_SPAN_WIDTHS.items():
+            cls._require_flag_span(field_name, record.get(field_name), width)
+
+        bet_type = record.get("BetType")
+        if bet_type == cls.TOTAL_BET_TYPE:
+            if record.get("Kumi") != cls.TOTAL_COMBINATION:
+                raise ValueError("H1 total row must carry the TOTAL combination")
+            for field_name in cls.TOTAL_FIELDS:
+                cls._require_vote_total(field_name, record.get(field_name))
+        elif bet_type in cls.COMBINATION_WIDTHS:
+            cls._require_ascii_digits(
+                "Kumi", record.get("Kumi"), cls.COMBINATION_WIDTHS[bet_type]
+            )
+            cls._require_ascii_digits("Hyo", record.get("Hyo"), cls.VOTE_WIDTH)
+            cls._require_favourite(record.get("Ninki"), cls.FAVOURITE_WIDTHS[bet_type])
+        else:
+            raise ValueError("H1 BetType is not an official 賭式")
+
+        for field_name in cls.TOTAL_FIELDS:
+            if field_name in record and bet_type != cls.TOTAL_BET_TYPE:
+                cls._require_vote_total(field_name, record.get(field_name))
 
     def __init__(self):
         self.logger = get_logger(__name__)

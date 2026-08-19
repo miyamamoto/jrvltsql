@@ -116,7 +116,7 @@ jrvltsql は JRA / 中央競馬専用です。NAR / 地方競馬はこのリポ�
 
 | データ種別 | 内容 | 想定レコード種別 | 通常速報モードの保存先 | 時系列モードの保存先 | キー形式 | JRA-VAN 側の保持 | 運用コマンド |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `0B20` | 速報票数 | `H1`, `H6` | `RT_H1`, `RT_H6` | 対象外 | `YYYYMMDDJJRR` | 約1週間 | パーサー・スキーマのみ。推奨 batch helper は未整備 |
+| `0B20` | 速報票数 | `H1`, `H6` | `RT_H1`, `RT_H6` | 対象外 | `YYYYMMDDJJRR` | 約1週間 | パーサー・スキーマのみ。推奨 batch helper は未整備。`H1` は公式 28,955-byte 形式・人気順の取消マーカー保持・`DataKubun=0` の物理 exact erase まで固定済み（[レコード別契約](record_contracts.md#h11)）|
 | `0B30` | 全賭式の速報オッズ | `O1`〜`O6` | `RT_O1`〜`RT_O6` | `TS_SOKUHO_O1`〜`TS_SOKUHO_O6` | `YYYYMMDDJJRR` | 約1週間 | `jltsql realtime odds-sokuho-timeseries` |
 | `0B31` | 単勝・複勝・枠連の速報オッズ | `O1` | `RT_O1` | `TS_SOKUHO_O1` | `YYYYMMDDJJRR` | 約1週間 | `jltsql realtime timeseries --spec 0B31` |
 | `0B32` | 馬連の速報オッズ | `O2` | `RT_O2` | `TS_SOKUHO_O2` | `YYYYMMDDJJRR` | 約1週間 | `jltsql realtime timeseries --spec 0B32` |

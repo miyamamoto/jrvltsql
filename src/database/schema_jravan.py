@@ -502,12 +502,12 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             RecordSpec                     CHAR(2)             ,  -- レコード種別ID
             DataKubun                      CHAR(1)             ,  -- データ区分
             MakeDate                       DATE                ,  -- YYYYMMDD形式の日付
-            Year                           SMALLINT            ,  -- 年(4桁)
-            MonthDay                       SMALLINT            ,  -- 月日(MMDD)
-            JyoCD                          CHAR(2)             ,  -- 競馬場コード
-            Kaiji                          SMALLINT            ,  -- 開催回
-            Nichiji                        SMALLINT            ,  -- 開催日目
-            RaceNum                        SMALLINT            ,  -- レース番号
+            Year                           SMALLINT NOT NULL   ,  -- 年(4桁)
+            MonthDay                       SMALLINT NOT NULL   ,  -- 月日(MMDD)
+            JyoCD                          CHAR(2) NOT NULL    ,  -- 競馬場コード
+            Kaiji                          SMALLINT NOT NULL   ,  -- 開催回
+            Nichiji                        SMALLINT NOT NULL   ,  -- 開催日目
+            RaceNum                        SMALLINT NOT NULL   ,  -- レース番号
             TorokuTosu                     SMALLINT            ,  -- 登録頭数
             SyussoTosu                     SMALLINT            ,  -- 出走頭数
             HatubaiFlag1                   VARCHAR(1)          ,  -- 文字列(1)
@@ -617,15 +617,15 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
     "HYOSU_SANREN": """
         CREATE TABLE IF NOT EXISTS HYOSU_SANREN (
             MakeDate                       DATE                ,  -- YYYYMMDD形式の日付
-            Year                           SMALLINT            ,  -- 年(4桁)
-            MonthDay                       SMALLINT            ,  -- 月日(MMDD)
-            JyoCD                          CHAR(2)             ,  -- 競馬場コード
-            Kaiji                          SMALLINT            ,  -- 開催回
-            Nichiji                        SMALLINT            ,  -- 開催日目
-            RaceNum                        SMALLINT            ,  -- レース番号
-            Kumi                           VARCHAR(6)          ,  -- 文字列(6)
+            Year                           SMALLINT NOT NULL   ,  -- 年(4桁)
+            MonthDay                       SMALLINT NOT NULL   ,  -- 月日(MMDD)
+            JyoCD                          CHAR(2) NOT NULL    ,  -- 競馬場コード
+            Kaiji                          SMALLINT NOT NULL   ,  -- 開催回
+            Nichiji                        SMALLINT NOT NULL   ,  -- 開催日目
+            RaceNum                        SMALLINT NOT NULL   ,  -- レース番号
+            Kumi                           VARCHAR(6) NOT NULL ,  -- 文字列(6)
             Hyo                            VARCHAR(11)         ,  -- 文字列(11)
-            Ninki                          SMALLINT              -- 人気
+            Ninki                          VARCHAR(3)              -- 人気
         )
     """,
     "HYOSU_SANRENTAN": """
@@ -645,13 +645,13 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
     "HYOSU_TANPUKU": """
         CREATE TABLE IF NOT EXISTS HYOSU_TANPUKU (
             MakeDate                       DATE                ,  -- YYYYMMDD形式の日付
-            Year                           SMALLINT            ,  -- 年(4桁)
-            MonthDay                       SMALLINT            ,  -- 月日(MMDD)
-            JyoCD                          CHAR(2)             ,  -- 競馬場コード
-            Kaiji                          SMALLINT            ,  -- 開催回
-            Nichiji                        SMALLINT            ,  -- 開催日目
-            RaceNum                        SMALLINT            ,  -- レース番号
-            Umaban                         SMALLINT            ,  -- 馬番
+            Year                           SMALLINT NOT NULL   ,  -- 年(4桁)
+            MonthDay                       SMALLINT NOT NULL   ,  -- 月日(MMDD)
+            JyoCD                          CHAR(2) NOT NULL    ,  -- 競馬場コード
+            Kaiji                          SMALLINT NOT NULL   ,  -- 開催回
+            Nichiji                        SMALLINT NOT NULL   ,  -- 開催日目
+            RaceNum                        SMALLINT NOT NULL   ,  -- レース番号
+            Umaban                         SMALLINT NOT NULL   ,  -- 馬番
             TanHyo                         VARCHAR(11)         ,  -- 文字列(11)
             TanNinki                       VARCHAR(2)          ,  -- 文字列(2)
             FukuHyo                        VARCHAR(11)         ,  -- 文字列(11)
@@ -661,13 +661,13 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
     "HYOSU_UMARENWIDE": """
         CREATE TABLE IF NOT EXISTS HYOSU_UMARENWIDE (
             MakeDate                       DATE                ,  -- YYYYMMDD形式の日付
-            Year                           SMALLINT            ,  -- 年(4桁)
-            MonthDay                       SMALLINT            ,  -- 月日(MMDD)
-            JyoCD                          CHAR(2)             ,  -- 競馬場コード
-            Kaiji                          SMALLINT            ,  -- 開催回
-            Nichiji                        SMALLINT            ,  -- 開催日目
-            RaceNum                        SMALLINT            ,  -- レース番号
-            Kumi                           VARCHAR(4)          ,  -- 文字列(4)
+            Year                           SMALLINT NOT NULL   ,  -- 年(4桁)
+            MonthDay                       SMALLINT NOT NULL   ,  -- 月日(MMDD)
+            JyoCD                          CHAR(2) NOT NULL    ,  -- 競馬場コード
+            Kaiji                          SMALLINT NOT NULL   ,  -- 開催回
+            Nichiji                        SMALLINT NOT NULL   ,  -- 開催日目
+            RaceNum                        SMALLINT NOT NULL   ,  -- レース番号
+            Kumi                           VARCHAR(4) NOT NULL ,  -- 文字列(4)
             UmarenHyo                      VARCHAR(11)         ,  -- 文字列(11)
             UmarenNinki                    VARCHAR(3)          ,  -- 文字列(3)
             WideHyo                        VARCHAR(11)         ,  -- 文字列(11)
@@ -677,29 +677,29 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
     "HYOSU_UMATAN": """
         CREATE TABLE IF NOT EXISTS HYOSU_UMATAN (
             MakeDate                       DATE                ,  -- YYYYMMDD形式の日付
-            Year                           SMALLINT            ,  -- 年(4桁)
-            MonthDay                       SMALLINT            ,  -- 月日(MMDD)
-            JyoCD                          CHAR(2)             ,  -- 競馬場コード
-            Kaiji                          SMALLINT            ,  -- 開催回
-            Nichiji                        SMALLINT            ,  -- 開催日目
-            RaceNum                        SMALLINT            ,  -- レース番号
-            Kumi                           VARCHAR(4)          ,  -- 文字列(4)
+            Year                           SMALLINT NOT NULL   ,  -- 年(4桁)
+            MonthDay                       SMALLINT NOT NULL   ,  -- 月日(MMDD)
+            JyoCD                          CHAR(2) NOT NULL    ,  -- 競馬場コード
+            Kaiji                          SMALLINT NOT NULL   ,  -- 開催回
+            Nichiji                        SMALLINT NOT NULL   ,  -- 開催日目
+            RaceNum                        SMALLINT NOT NULL   ,  -- レース番号
+            Kumi                           VARCHAR(4) NOT NULL ,  -- 文字列(4)
             Hyo                            VARCHAR(11)         ,  -- 文字列(11)
-            Ninki                          SMALLINT              -- 人気
+            Ninki                          VARCHAR(3)              -- 人気
         )
     """,
     "HYOSU_WAKU": """
         CREATE TABLE IF NOT EXISTS HYOSU_WAKU (
             MakeDate                       DATE                ,  -- YYYYMMDD形式の日付
-            Year                           SMALLINT            ,  -- 年(4桁)
-            MonthDay                       SMALLINT            ,  -- 月日(MMDD)
-            JyoCD                          CHAR(2)             ,  -- 競馬場コード
-            Kaiji                          SMALLINT            ,  -- 開催回
-            Nichiji                        SMALLINT            ,  -- 開催日目
-            RaceNum                        SMALLINT            ,  -- レース番号
-            Kumi                           VARCHAR(2)          ,  -- 文字列(2)
+            Year                           SMALLINT NOT NULL   ,  -- 年(4桁)
+            MonthDay                       SMALLINT NOT NULL   ,  -- 月日(MMDD)
+            JyoCD                          CHAR(2) NOT NULL    ,  -- 競馬場コード
+            Kaiji                          SMALLINT NOT NULL   ,  -- 開催回
+            Nichiji                        SMALLINT NOT NULL   ,  -- 開催日目
+            RaceNum                        SMALLINT NOT NULL   ,  -- レース番号
+            Kumi                           VARCHAR(2) NOT NULL ,  -- 文字列(2)
             Hyo                            VARCHAR(11)         ,  -- 文字列(11)
-            Ninki                          SMALLINT              -- 人気
+            Ninki                          VARCHAR(2)              -- 人気
         )
     """,
     "JOGAIBA": """

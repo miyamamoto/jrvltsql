@@ -382,12 +382,12 @@ SCHEMAS = {
             RecordSpec TEXT,
             DataKubun TEXT,
             MakeDate TEXT,
-            Year INTEGER,
-            MonthDay INTEGER,
-            JyoCD TEXT,
-            Kaiji INTEGER,
-            Nichiji INTEGER,
-            RaceNum INTEGER,
+            Year INTEGER NOT NULL,
+            MonthDay INTEGER NOT NULL,
+            JyoCD TEXT NOT NULL,
+            Kaiji INTEGER NOT NULL,
+            Nichiji INTEGER NOT NULL,
+            RaceNum INTEGER NOT NULL,
             TorokuTosu INTEGER,
             SyussoTosu INTEGER,
             HatubaiFlag1 TEXT,
@@ -401,10 +401,10 @@ SCHEMAS = {
             HenkanUma TEXT,
             HenkanWaku TEXT,
             HenkanDoWaku TEXT,
-            BetType TEXT,
-            Kumi TEXT,
+            BetType TEXT NOT NULL,
+            Kumi TEXT NOT NULL,
             Hyo BIGINT,
-            Ninki INTEGER,
+            Ninki TEXT,
             TanHyoTotal BIGINT,
             FukuHyoTotal BIGINT,
             WakuHyoTotal BIGINT,
@@ -1672,12 +1672,12 @@ SCHEMAS = {
             RecordSpec TEXT,
             DataKubun TEXT,
             MakeDate TEXT,
-            Year INTEGER,
-            MonthDay INTEGER,
-            JyoCD TEXT,
-            Kaiji INTEGER,
-            Nichiji INTEGER,
-            RaceNum INTEGER,
+            Year INTEGER NOT NULL,
+            MonthDay INTEGER NOT NULL,
+            JyoCD TEXT NOT NULL,
+            Kaiji INTEGER NOT NULL,
+            Nichiji INTEGER NOT NULL,
+            RaceNum INTEGER NOT NULL,
             TorokuTosu INTEGER,
             SyussoTosu INTEGER,
             HatubaiFlag1 TEXT,
@@ -1691,10 +1691,10 @@ SCHEMAS = {
             HenkanUma TEXT,
             HenkanWaku TEXT,
             HenkanDoWaku TEXT,
-            BetType TEXT,
-            Kumi TEXT,
+            BetType TEXT NOT NULL,
+            Kumi TEXT NOT NULL,
             Hyo BIGINT,
-            Ninki INTEGER,
+            Ninki TEXT,
             TanHyoTotal BIGINT,
             FukuHyoTotal BIGINT,
             WakuHyoTotal BIGINT,
@@ -2763,6 +2763,7 @@ STRICT_HC_STORAGE_TABLES = frozenset({"NL_HC"})
 STRICT_HN_STORAGE_TABLES = frozenset({"NL_HN"})
 STRICT_SK_STORAGE_TABLES = frozenset({"NL_SK"})
 STRICT_UM_STORAGE_TABLES = frozenset({"NL_UM"})
+STRICT_H1_STORAGE_TABLES = frozenset({"NL_H1", "RT_H1"})
 STRICT_TC_STORAGE_TABLES = frozenset({"NL_TC", "RT_TC"})
 STRICT_CC_STORAGE_TABLES = frozenset({"NL_CC", "RT_CC"})
 STRICT_JC_STORAGE_TABLES = frozenset({"NL_JC", "RT_JC"})
@@ -2795,6 +2796,7 @@ def _verify_existing_strict_storage_targets(db: BaseDatabase) -> None:
         verify_av_storage_schema,
         verify_cc_storage_schema,
         verify_hc_storage_schema,
+        verify_h1_storage_schema,
         verify_hn_storage_schema,
         verify_hr_storage_schema,
         verify_hs_storage_schema,
@@ -2851,6 +2853,9 @@ def _verify_existing_strict_storage_targets(db: BaseDatabase) -> None:
         for table_name in STRICT_UM_STORAGE_TABLES:
             if target.table_exists_strict(table_name):
                 verify_um_storage_schema(target, table_name)
+        for table_name in STRICT_H1_STORAGE_TABLES:
+            if target.table_exists_strict(table_name):
+                verify_h1_storage_schema(target, table_name)
         for table_name in STRICT_TC_STORAGE_TABLES:
             if target.table_exists_strict(table_name):
                 verify_tc_storage_schema(target, table_name)
@@ -2963,6 +2968,10 @@ class SchemaManager:
                 from src.importer.importer import verify_um_storage_schema
 
                 verify_um_storage_schema(self.db, table_name)
+            if table_name in STRICT_H1_STORAGE_TABLES:
+                from src.importer.importer import verify_h1_storage_schema
+
+                verify_h1_storage_schema(self.db, table_name)
             if table_name in STRICT_TC_STORAGE_TABLES:
                 from src.importer.importer import verify_tc_storage_schema
 
@@ -3049,6 +3058,10 @@ class SchemaManager:
                     from src.importer.importer import verify_um_storage_schema
 
                     verify_um_storage_schema(self.db, table_name)
+                if table_name in STRICT_H1_STORAGE_TABLES:
+                    from src.importer.importer import verify_h1_storage_schema
+
+                    verify_h1_storage_schema(self.db, table_name)
                 if table_name in STRICT_TC_STORAGE_TABLES:
                     from src.importer.importer import verify_tc_storage_schema
 
@@ -3438,6 +3451,10 @@ def create_all_tables(db: BaseDatabase) -> None:
                 from src.importer.importer import verify_um_storage_schema
 
                 verify_um_storage_schema(db, table_name)
+            if table_name in STRICT_H1_STORAGE_TABLES:
+                from src.importer.importer import verify_h1_storage_schema
+
+                verify_h1_storage_schema(db, table_name)
             if table_name in STRICT_TC_STORAGE_TABLES:
                 from src.importer.importer import verify_tc_storage_schema
 
