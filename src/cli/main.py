@@ -285,11 +285,13 @@ def status():
     console.print(f"Version: {__version__}")
     console.print()
     console.print("[bold]JRA-VAN DataLab:[/bold]")
-    try:
-        from src.jvlink import JVLinkWrapper
-        console.print("  状態: [green]利用可能[/green]")
-    except ImportError:
-        console.print("  状態: [red]利用不可[/red]")
+    from src.jvlink import is_jvlink_available
+
+    if is_jvlink_available():
+        console.print("  JV-Link transport: [green]利用可能[/green]")
+    else:
+        console.print("  JV-Link transport: [red]利用不可[/red]")
+    console.print("  利用登録状態: 未確認 (JVInit/JVOpen で判定)")
     console.print("Status: [green]Ready[/green]")
 
 
@@ -306,11 +308,16 @@ def version(check):
 
     console.print()
     console.print("[bold]対応データソース:[/bold]")
-    try:
-        from src.jvlink import JVLinkWrapper
-        console.print("  - JRA-VAN DataLab (JV-Link): [green]利用可能[/green]")
-    except ImportError:
-        console.print("  - JRA-VAN DataLab (JV-Link): [red]未インストール[/red]")
+    from src.jvlink import is_jvlink_available
+
+    if is_jvlink_available():
+        console.print(
+            "  - JRA-VAN DataLab (JV-Link transport): [green]利用可能[/green]"
+        )
+    else:
+        console.print(
+            "  - JRA-VAN DataLab (JV-Link transport): [red]未インストール[/red]"
+        )
 
     if check:
         console.print()
