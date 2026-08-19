@@ -160,7 +160,9 @@ docker compose exec jltsql jltsql fetch --spec RACE --from 20260101 --to 2026041
 取得中に JV-Link が版更新の確認ダイアログを出すことがあります。既定では
 何も押さないので、noVNC 上で人が答えるまで `JVOpen` は戻りません（実測
 1,008 秒）。無人で流す場合だけ `JVLINK_AUTO_CLOSE_DIALOGS=1` を明示すると、
-既知のダイアログを Escape で拒否します（承諾する入力は送りません）。
+既知のダイアログを Escape で拒否します（承諾する入力は送りません）。人の応答待ちや
+setup 取得が 120 秒を超える環境では `JVLINK_OPEN_TIMEOUT_SECONDS`（1〜7200 秒）で
+`JVOpen` の応答待ちを延ばします。
 
 ## 詳細ドキュメント
 

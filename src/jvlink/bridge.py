@@ -128,8 +128,37 @@ _DISMISSIBLE_DIALOG_TITLE_PATTERNS = (
     r"^JRA-VAN DataLab\.$",
     r"^JRA-VANからのお知らせ$",
 )
+_DEFAULT_OPEN_TIMEOUT_SECONDS = 120.0
+_MAX_OPEN_TIMEOUT_SECONDS = 7200.0
 _ENABLED_VALUES = {"1", "true", "yes", "on"}
 _DISABLED_VALUES = {"0", "false", "no", "off"}
+
+
+def _open_timeout() -> float:
+    """Read the JVOpen response budget, which a deployment has to own.
+
+    JVOpen returns only after JV-Link has enumerated (and for setup options,
+    downloaded) the requested range, and it also blocks while a JV-Link dialog
+    waits for an answer: a real provider run measured 1,008s. A fixed budget
+    either cuts those runs off or hides a hung bridge, so the value is
+    configurable within a bound and an unusable setting fails closed instead of
+    silently falling back.
+    """
+    raw = os.environ.get("JVLINK_OPEN_TIMEOUT_SECONDS")
+    if raw is None or raw.strip() == "":
+        return _DEFAULT_OPEN_TIMEOUT_SECONDS
+    try:
+        timeout = float(raw)
+    except ValueError as error:
+        raise JVLinkBridgeError(
+            f"JVLINK_OPEN_TIMEOUT_SECONDS must be a number, got {raw!r}"
+        ) from error
+    if not math.isfinite(timeout) or not 1.0 <= timeout <= _MAX_OPEN_TIMEOUT_SECONDS:
+        raise JVLinkBridgeError(
+            "JVLINK_OPEN_TIMEOUT_SECONDS must be between 1 and "
+            f"{int(_MAX_OPEN_TIMEOUT_SECONDS)} seconds, got {raw!r}"
+        )
+    return timeout
 
 
 def _repo_root() -> Path:
@@ -615,7 +644,7 @@ class JVLinkBridge:
 
         response = self._send_command(
             {"cmd": "open", "dataspec": data_spec, "fromtime": fromtime, "option": option},
-            timeout=120.0,
+            timeout=_open_timeout(),
         )
 
         # A protocol-level success means the remote COM call has already

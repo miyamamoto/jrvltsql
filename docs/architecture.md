@@ -44,7 +44,10 @@ JV-Link は `JVOpen` / `JVRTOpen` 中にお知らせや DataLab 更新確認を�
 `JVOpen` は戻りません（実測 1,008 秒）。無人運転する場合に限り
 `JVLINK_AUTO_CLOSE_DIALOGS=1` を明示すると、既知のダイアログだけを安全側へ
 拒否します（承諾する入力は送りません）。監視間隔は
-`JVLINK_DIALOG_WATCH_INTERVAL_SECONDS` で変更できます。未知のダイアログ、応答
+`JVLINK_DIALOG_WATCH_INTERVAL_SECONDS` で変更できます。`JVOpen` の応答待ち
+上限は既定 120 秒で、setup 取得や人の応答待ちが長い環境では
+`JVLINK_OPEN_TIMEOUT_SECONDS`（1〜7200 秒）で延ばします。読めない値は既定へ
+落とさず error にします。未知のダイアログ、応答
 timeout、読めない bridge 応答は成功扱いせず、timeout 時は状態不明の bridge
 process を終了します。
 

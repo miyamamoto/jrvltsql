@@ -34,7 +34,7 @@ Windows では直接起動し、それ以外のホストでは `JVLINK_BRIDGE_RU
 | `JVLINK_BRIDGE_RUNNER` | `wine`（イメージ） | 非 Windows での外部ランナー |
 | `JVLINK_WINEPREFIX` | `/wineprefix` | JV-Link を含む Wine prefix |
 | `JVLINK_WINEARCH` | `win64` | prefix の種別（32-bit 側が必須） |
-| `JVLINK_OPEN_TIMEOUT_SECONDS` | `120` | `JVOpen`/`JVRead` の上限（1〜7200） |
+| `JVLINK_OPEN_TIMEOUT_SECONDS` | `120` | `JVOpen` 応答待ちの上限秒（1〜7200） |
 
 サービスキーを設定する環境変数は持たない。登録は noVNC 上で人が行う。
 

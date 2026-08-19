@@ -18,6 +18,10 @@ services:
       # prompts wait for a person on the noVNC desktop; set 1 to let the client
       # reject the known ones so an unattended fetch is not blocked.
       JVLINK_AUTO_CLOSE_DIALOGS: ${JVLINK_AUTO_CLOSE_DIALOGS:-0}
+      # JVOpen returns only after JV-Link has enumerated the range, and it also
+      # waits while a dialog is unanswered (measured 1,008s). Raise this when a
+      # setup fetch or a human answer needs longer than the 120s default.
+      JVLINK_OPEN_TIMEOUT_SECONDS: ${JVLINK_OPEN_TIMEOUT_SECONDS:-120}
       NOVNC_PUBLIC_PORT: 6080
       VNC_PUBLIC_PORT: 15900
       POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
