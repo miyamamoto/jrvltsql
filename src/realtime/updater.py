@@ -452,7 +452,9 @@ class RealtimeUpdater:
             for item in parsed_data:
                 if timeseries and source_spec:
                     item.setdefault("SourceSpec", source_spec)
-                odds_table = self.RECORD_TYPE_TABLE.get(item.get("RecordSpec"))
+                odds_table = (
+                    None if timeseries else self.RECORD_TYPE_TABLE.get(item.get("RecordSpec"))
+                )
                 if odds_table is not None:
                     from src.importer.importer import (
                         _is_odds_snapshot_follower,

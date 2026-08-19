@@ -119,12 +119,21 @@ storage 側で守ることである。
    で固定した（検証を外すと 5 件 RED）。
 4. PostgreSQL のレース単位置換テストが無かったため追加した
    （`test_postgresql_snapshot_replacement_removes_withdrawn_combinations`）。
-5. 合計のみ snapshot の sentinel 行（`Kumi=TOTAL`）は、parser が公式に組合せの
+5. 時系列取込（`timeseries=True`）の展開リスト経路で、宛先を
+   `RECORD_TYPE_TABLE` から解決していたため、公式の `TS_O*` /
+   `TS_SOKUHO_O*` ではなく native `RT_O*` の置換へ迂回していた。時系列は履歴を
+   蓄積する table なので置換対象にせず、既存の `_resolve_timeseries_table` 経路へ
+   戻した。`test_timeseries_odds_stay_in_the_official_timeseries_table` で固定
+   （迂回を戻すと 5 件 RED）。
+6. `parse` の戻り型注釈が `Optional[List[Dict[str, str]]]` のままで、snapshot
+   metadata（list / int）を含む実体と合っていなかったため
+   `Optional[List[Dict[str, object]]]` へ修正した。
+7. 合計のみ snapshot の sentinel 行（`Kumi=TOTAL`）は、parser が公式に組合せの
    無いことを空文字で表すため、無損失化後は `NULL` ではなく空文字で保存される。
    既存 `tests/test_expanded_record_storage.py` の期待値をこれに合わせた。
 
-追加後の証跡: 焦点テスト SQLite 217 passed / PostgreSQL 16 実機込み 234 passed、
-フルスイート PostgreSQL 16 実機込み **5008 passed**。
+追加後の証跡: 焦点テスト SQLite 239 passed / PostgreSQL 16 実機込み 244 passed、
+フルスイート PostgreSQL 16 実機込み **5013 passed**。
 
 ## この段で扱っていないこと
 

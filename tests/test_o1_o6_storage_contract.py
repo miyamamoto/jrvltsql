@@ -818,3 +818,24 @@ def test_realtime_rejects_a_non_official_snapshot_before_mutation(
         with pytest.raises((SchemaMigrationError, ValueError)):
             updater.process_parsed_records_batch(broken)
         assert _stored_combinations(database, table_name) == stored
+
+
+@pytest.mark.parametrize("record_type", ALL_RECORD_TYPES)
+def test_timeseries_odds_stay_in_the_official_timeseries_table(
+    tmp_path: Path,
+    record_type: str,
+) -> None:
+    """時系列取込は公式の TS_O* が対象で、native 置換へ迂回してはならない。"""
+
+    # SourceSpec を伴わない O3-O6 は公式に当週速報のみなので TS_SOKUHO_O* が対象。
+    timeseries_tables = (f"TS_{record_type}", f"TS_SOKUHO_{record_type}")
+    native_table = f"RT_{record_type}"
+    database = SQLiteDatabase({"path": str(tmp_path / f"ts-{record_type}.db")})
+    with database:
+        _create(database, (*timeseries_tables, native_table))
+        updater = RealtimeUpdater(database)
+        updater.process_parsed_record(_rows(record_type, filled=3), timeseries=True)
+        assert (
+            database.fetch_one(f"SELECT COUNT(*) AS total FROM {native_table}")["total"]
+            == 0
+        )

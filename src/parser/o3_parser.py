@@ -49,7 +49,7 @@ class O3Parser(odds_domain.OddsCombinationValidationMixin):
         """バイトデータをデコードして文字列に変換"""
         return data.decode("cp932", errors="strict").strip()
 
-    def parse(self, data: bytes) -> Optional[List[Dict[str, str]]]:
+    def parse(self, data: bytes) -> Optional[List[Dict[str, object]]]:
         """
         O3レコードをパースしてフィールド辞書を返す
 
