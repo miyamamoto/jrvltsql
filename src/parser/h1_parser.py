@@ -143,15 +143,16 @@ class H1Parser:
 
     @classmethod
     def _require_favourite(cls, value: object, width: int) -> None:
-        """人気順は数字のほか '--':発売前取消 '**':発売後取消 空白:登録なし を取る。"""
+        """人気順は数字のほか 全桁'-':発売前取消 全桁'*':発売後取消 空白:登録なし。"""
 
         if not isinstance(value, str):
             raise ValueError("H1 Ninki must be a provider value")
         if value == "":
             return
         text = value.strip()
-        if text in {"--", "**"}:
-            # 公式表記は2文字固定（'--':発売前取消 '**':発売後取消）。
+        if text in {"-" * width, "*" * width}:
+            # 取消マーカーは項目幅ぶんの繰り返しで届く（実データの3桁票数系は
+            # '***'）。幅の違うマーカーは桁落ちなので拒否する。
             return
         if len(text) == width and text.isascii() and text.isdigit():
             return

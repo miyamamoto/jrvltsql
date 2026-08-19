@@ -65,11 +65,17 @@ def require_race_day(record_type: str, record: Mapping[str, object]) -> None:
 
 
 def require_announced_time(record_type: str, value: object) -> None:
-    """発表月日時分は中間オッズのみ設定される。空白は提供値として許す。"""
+    """発表月日時分は中間オッズのみ設定される。未設定値は提供値として許す。
+
+    公式の初期値は 0 で、実提供データは確定オッズの全レコードにゼロ詰めの
+    "00000000" を載せてくる。空白で届く経路もあるためどちらも保持する。
+    """
 
     if value in ("", None):
         return
     digits = require_ascii_digits(record_type, "HassoTime", value, ANNOUNCED_TIME_WIDTH)
+    if digits == "0" * ANNOUNCED_TIME_WIDTH:
+        return
     try:
         date(2000, int(digits[:2]), int(digits[2:4]))
     except ValueError as error:

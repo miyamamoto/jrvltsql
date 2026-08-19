@@ -735,3 +735,52 @@ def test_realtime_keeps_every_official_no_vote_combination(
         results = updater.process_record(raw)
         assert results and all(result["success"] for result in results)
         assert database.fetch_one(f"SELECT COUNT(*) AS cnt FROM {table_name}")["cnt"] == 3
+
+
+@pytest.mark.parametrize("record_type", ALL_RECORD_TYPES)
+@pytest.mark.parametrize("data_kubun", OFFICIAL_DATA_KUBUN)
+@pytest.mark.parametrize(
+    "announced",
+    (
+        pytest.param(b"00000000", id="official-initial-zeros"),
+        pytest.param(b"        ", id="blank"),
+    ),
+)
+def test_unset_announced_time_is_accepted(
+    record_type: str, data_kubun: str, announced: bytes
+) -> None:
+    """発表月日時分 is set for 中間 odds only; final odds carry the initial value.
+
+    Live JV-Link RACE data sends the zero-filled form for every final O1-O6
+    snapshot, so rejecting it rejects the whole feed.
+    """
+
+    layout = LAYOUTS[record_type]
+    raw = bytearray(layout.raw(data_kubun=data_kubun))
+    raw[27:35] = announced
+    rows = layout.parser_class().parse(bytes(raw))
+    assert rows
+    for row in rows:
+        layout.parser_class.validate_current_fields(row)
+
+
+@pytest.mark.parametrize("record_type", ALL_RECORD_TYPES)
+@pytest.mark.parametrize(
+    "announced",
+    (
+        pytest.param(b"01321200", id="impossible-day"),
+        pytest.param(b"01012500", id="impossible-hour"),
+        pytest.param(b"0101120x", id="non-digit"),
+    ),
+)
+def test_malformed_announced_time_is_still_rejected(
+    record_type: str, announced: bytes
+) -> None:
+    layout = LAYOUTS[record_type]
+    raw = bytearray(layout.raw())
+    raw[27:35] = announced
+    rows = layout.parser_class().parse(bytes(raw))
+    assert rows
+    with pytest.raises(ValueError):
+        for row in rows:
+            layout.parser_class.validate_current_fields(row)
