@@ -101,7 +101,11 @@ SELECT Kumi, Odds, Ninki FROM NL_O2 -> [{'Kumi': '0102', 'Odds': None, 'Ninki': 
    行を作らないようにした（合計は header table の `TotalHyosu*` 列に入る）。
 6. `src/database/schema_metadata.py` の時系列オッズ 6 table の `HassoTime` 記述を
    公式の「発表月日時分（MMDDhhmm）」へ修正した。
-7. 既存テスト `test_sqlite_importer_skips_empty_expanded_o2_header_row` を公式
+7. 独立レビューで確認した点として、`DataKubun=0` の物理 exact erase は
+   `_OFFICIAL_ERASE_STORAGE_TABLES` に O1-O6 が登録済みで、合計行 sentinel が
+   tombstone として残らないことを実測した（native・標準名 header/子 table の
+   いずれも 0 行）。回帰しないようテストで固定した。
+8. 既存テスト `test_sqlite_importer_skips_empty_expanded_o2_header_row` を公式
    契約どおりの
    `test_sqlite_importer_keeps_the_official_total_of_an_empty_o2_snapshot` へ
    置き換えた（合計行 1 件が保存されることを固定）。
@@ -117,8 +121,9 @@ SELECT Kumi, Odds, Ninki FROM NL_O2 -> [{'Kumi': '0102', 'Odds': None, 'Ninki': 
 実装後:
 
 ```text
-tests/test_o1_o6_official_contract.py: 232 passed, 12 skipped   （SQLite のみ）
-tests/test_o1_o6_official_contract.py: 244 passed               （PostgreSQL 16 込み）
+tests/test_o1_o6_official_contract.py: 256 passed, 12 skipped   （SQLite のみ）
+tests/test_o1_o6_official_contract.py
+  + tests/test_expanded_record_storage.py: 337 passed           （PostgreSQL 16 込み）
 ```
 
 PostgreSQL 16 は既存の使い捨てコンテナ `jltsql-sk-pg16-8215`
@@ -127,7 +132,7 @@ PostgreSQL 16 は既存の使い捨てコンテナ `jltsql-sk-pg16-8215`
 フルスイート:
 
 ```text
-4259 passed, 479 skipped, 20 subtests passed
+4319 passed, 491 skipped, 20 subtests passed
 ```
 
 必須ゲート:
@@ -145,6 +150,7 @@ git diff --check: pass
 - provider / JV-Link への接続は禁止されているため、実データの O1-O6 取り込みは
   行っていない。検証はすべて公式仕様どおりに構成した合成レコードで行った。
 - native/標準名のオッズ・人気順列を無損失（記号値保存）にする変更、importer
-  経路への本文検証接続、strict schema preflight、`DataKubun=0` の物理 exact
-  erase は次段「O1-O6（無損失 storage）」で扱う。この worklog の時点では、
+  経路への本文検証接続、strict schema preflight は次段「O1-O6（無損失
+  storage）」で扱う（`DataKubun=0` の物理 exact erase は既存実装が公式どおりに
+  動くことを実測し、この段でテストに固定した）。この worklog の時点では、
   公式の取消マーカーは保存時に `NULL` へ落ちる。
