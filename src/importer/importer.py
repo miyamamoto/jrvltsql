@@ -14,6 +14,7 @@ from src.database.schema_types import (
     get_table_column_types,
     get_table_primary_key_columns,
 )
+from src.parser.odds_domain import TOTAL_COMBINATION as ODDS_TOTAL_COMBINATION
 from src.parser.status_domain import (
     DataKubunContext,
     resolve_data_kubun_aliases,
@@ -5181,7 +5182,10 @@ def prepare_standard_odds_record(
     if record_type == "O1":
         umaban = str(source.get("Umaban") or "").strip()
         kumi = str(source.get("Kumi") or "").strip()
-        if umaban.strip("0"):
+        if kumi == ODDS_TOTAL_COMBINATION:
+            # 組合せを持たない snapshot の合計行。子表に該当行は無い。
+            child_table = None
+        elif umaban.strip("0"):
             child_table = "ODDS_TANPUKU"
             child_source.update(
                 {
@@ -5204,7 +5208,8 @@ def prepare_standard_odds_record(
             )
     else:
         kumi = str(source.get("Kumi") or "").strip()
-        if kumi:
+        # 組合せを持たない snapshot の合計行は header だけが公式値。
+        if kumi and kumi != ODDS_TOTAL_COMBINATION:
             child_table = next(iter(config["children"]))
             child_source["Kumi"] = source.get("Kumi")
             if record_type == "O3":

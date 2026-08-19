@@ -330,16 +330,28 @@ def test_sqlite_realtime_batch_stores_heterogeneous_o1_rows(sqlite_db):
     _assert_o1_storage(sqlite_db, "RT_O1")
 
 
-def test_sqlite_importer_skips_empty_expanded_o2_header_row(sqlite_db):
+def test_sqlite_importer_keeps_the_official_total_of_an_empty_o2_snapshot(sqlite_db):
+    """組合せを持たない snapshot でも公式の馬連票数合計を保持する。
+
+    公式仕様（JV-Data 4.9.0.1「８．オッズ2（馬連）」）は馬連票数合計を
+    オッズ部とは独立に提供するため、H1/H6 と同じ合計行 sentinel で保存する。
+    """
+
     _create_tables(sqlite_db, ["NL_O2"])
     rows = _flatten(O2Parser().parse(_make_empty_o2_record()))
 
     stats = DataImporter(sqlite_db, batch_size=100).import_records(iter(rows))
 
-    assert stats["records_imported"] == 0
-    assert stats["records_failed"] == 1
-    count = sqlite_db.fetch_one("SELECT COUNT(*) AS cnt FROM NL_O2")
-    assert count["cnt"] == 0
+    assert stats["records_imported"] == 1
+    assert stats["records_failed"] == 0
+    assert sqlite_db.fetch_all("SELECT Kumi, Odds, Ninki, Vote FROM NL_O2") == [
+        {
+            "Kumi": O2Parser.TOTAL_COMBINATION,
+            "Odds": None,
+            "Ninki": None,
+            "Vote": 999,
+        }
+    ]
 
 
 def test_sqlite_realtime_delete_removes_expanded_o1_record(sqlite_db):
