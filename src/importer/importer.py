@@ -741,9 +741,7 @@ _CC_LOSSLESS_TEXT_WIDTHS = {
         "JiyuCD": 1,
     },
 }
-_UM_STORAGE_TABLES = frozenset({"NL_UM"})
-# 消去・統計・値域検証は native と標準名の両方が対象。schema 検証だけは
-# native と標準名で契約が違うため ``_UM_STORAGE_TABLES`` を使い分ける。
+# 消去・統計・値域検証と schema 検証は native と標準名の両方が対象。
 _UM_ERASE_STORAGE_TABLES = frozenset({"NL_UM", "UMA"})
 _UM_KEY_COLUMNS = ("KettoNum",)
 # 公式の初期値が空白（Ｓ / sp）の項目。空白は「不明」ではなく提供された空値
@@ -2946,7 +2944,7 @@ def _verify_um_no_unapproved_constraints(
         unexpected = database.fetch_all(
             "SELECT conname AS constraint_name, contype AS constraint_type "
             "FROM pg_constraint "
-            "WHERE conrelid = to_regclass(%s) AND contype IN ('c', 'f')",
+            "WHERE conrelid = to_regclass(?) AND contype IN ('c', 'f')",
             (table_name,),
         )
         if unexpected:
@@ -2980,16 +2978,15 @@ def validate_um_record(record: dict, table_name: str | None = None) -> bool:
 
 
 def verify_um_storage_schema(database: BaseDatabase, table_name: str) -> bool:
-    """Fail closed unless native UM storage keeps a replacement-safe key.
+    """Fail closed unless UM storage keeps the official body and key.
 
-    Native ``NL_UM`` replaces rows through the official single-column
-    ``KettoNum`` primary key. A missing table, a primary key other than
-    ``KettoNum``, an additional UNIQUE/exclusion constraint, or a PostgreSQL
-    primary key that ``ON CONFLICT`` cannot use would let one replacement
-    erase or duplicate a different registration, so all are rejected before
-    any DML. Standard ``UMA`` receives the same replacement-key check from
-    ``_preflight_standard_schema_migrations`` before the record loop and is
-    intentionally not re-verified here.
+    Native ``NL_UM`` and standard ``UMA`` both replace rows through the official
+    single-column ``KettoNum`` primary key. A missing table, a primary key other
+    than ``KettoNum``, an additional UNIQUE/exclusion constraint, or a PostgreSQL
+    primary key that ``ON CONFLICT`` cannot use would let one replacement erase
+    or duplicate a different registration. A nullable, under-capacity,
+    wrong-typed, generated, extra, or additionally constrained column would lose
+    official values. All are rejected before any DML.
     """
 
     if table_name not in _UM_ERASE_STORAGE_TABLES:

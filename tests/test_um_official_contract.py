@@ -581,3 +581,27 @@ def test_um_schema_manager_refuses_to_migrate_an_unsafe_existing_table(
         assert manager.create_table("NL_UM") is False
         assert manager.create_all_tables()["NL_UM"] is False
         assert database.fetch_all('PRAGMA table_xinfo("NL_UM")') == before
+
+
+def test_um_constraint_probe_uses_the_repository_placeholder_contract() -> None:
+    """PostgreSQL probes must use ? so every driver binding works."""
+
+    from src.importer.importer import _verify_um_no_unapproved_constraints
+
+    class RecordingPostgres:
+        def __init__(self) -> None:
+            self.statements: list[str] = []
+
+        def get_db_type(self) -> str:
+            return "postgresql"
+
+        def fetch_all(self, sql: str, params: tuple = ()) -> list:
+            self.statements.append(sql)
+            return []
+
+    database = RecordingPostgres()
+    _verify_um_no_unapproved_constraints(database, "NL_UM")
+    assert database.statements
+    for statement in database.statements:
+        assert "%s" not in statement, statement
+        assert "to_regclass(?)" in statement, statement
