@@ -65,7 +65,9 @@ Public API replacements:
   after sale) and blank (not registered) are provider values, so `NL_H1.Ninki`
   and `RT_H1.Ninki` change from `INTEGER` to `TEXT` and standard
   `HYOSU_WAKU`/`HYOSU_UMATAN`/`HYOSU_SANREN.Ninki` change from `SMALLINT` to
-  `VARCHAR`; blanks are stored as empty strings rather than `NULL`. Key columns
+  `VARCHAR`; the already-textual `HYOSU_TANPUKU.TanNinki`/`FukuNinki` and
+  `HYOSU_UMARENWIDE.UmarenNinki`/`WideNinki` carry the same contract, and blanks
+  are stored as empty strings rather than `NULL`. Key columns
   become `NOT NULL`, and the standard children reject any UNIQUE index other than
   the official key. Operators must back up, rebuild, and reimport retained `RACE`
   data; cancellation markers are not recoverable without a reimport

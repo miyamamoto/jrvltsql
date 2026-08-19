@@ -619,6 +619,29 @@ def test_h1_postgresql_rejects_deferrable_primary_key(postgresql_db, table_name:
         verify_h1_storage_schema(postgresql_db, table_name)
 
 
+@pytest.mark.parametrize(
+    "index_sql",
+    (
+        "CREATE UNIQUE INDEX jltsql_h1_expr ON HYOSU "
+        "(Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, (Kaiji + 1))",
+        "CREATE UNIQUE INDEX jltsql_h1_partial ON HYOSU "
+        "(Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum) WHERE Kaiji = 1",
+    ),
+)
+def test_h1_postgresql_rejects_expression_and_partial_unique_indexes(
+    postgresql_db,
+    index_sql: str,
+) -> None:
+    """An expression or predicate does not make the official key unique."""
+
+    for table_name in STANDARD_TABLES:
+        postgresql_db.execute(_canonical(table_name))
+    postgresql_db.execute(index_sql)
+    postgresql_db.commit()
+    with pytest.raises(SchemaMigrationError):
+        verify_h1_storage_schema(postgresql_db, "HYOSU")
+
+
 def test_h1_postgresql_standard_family_accepts_only_the_official_key_index(
     postgresql_db,
 ) -> None:

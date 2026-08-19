@@ -56,7 +56,9 @@
   空白（登録なし）も取るため、`NL_H1`/`RT_H1`の`Ninki`を`INTEGER`から`TEXT`へ、
   標準名`HYOSU_WAKU`/`HYOSU_UMATAN`/`HYOSU_SANREN`の`Ninki`を`SMALLINT`から
   `VARCHAR`へ変更し（従来は取消マーカーが`NULL`に落ちていた）、空白は`NULL`では
-  なく空文字で保持する。key列は`NOT NULL`にし、標準名子tableでは公式キー以外の
+  なく空文字で保持する（`HYOSU_TANPUKU.TanNinki`/`FukuNinki`と
+  `HYOSU_UMARENWIDE.UmarenNinki`/`WideNinki`は以前から文字列列で、同じ
+  マーカー契約の対象）。key列は`NOT NULL`にし、標準名子tableでは公式キー以外の
   `UNIQUE` indexも拒否する。既存tableは自動移行せず、backup・rebuild・`RACE`
   reimportを要求する
 - native `NL_UM` の保存経路にも標準名 `UMA` と同じ置換キー検証を追加し、公式主キー

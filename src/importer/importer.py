@@ -3079,6 +3079,8 @@ def _verify_h1_standard_replacement_key(
             "SELECT index_class.relname AS index_name, "
             "index_row.indisexclusion AS is_exclusion, "
             "index_row.indisprimary AS is_primary, "
+            "index_row.indpred IS NOT NULL AS is_partial, "
+            "index_row.indexprs IS NOT NULL AS has_expressions, "
             "ARRAY(SELECT attribute.attname FROM unnest(index_row.indkey) AS key_column "
             "JOIN pg_attribute attribute ON attribute.attrelid = index_row.indrelid "
             "AND attribute.attnum = key_column) AS key_columns "
@@ -3092,7 +3094,14 @@ def _verify_h1_standard_replacement_key(
         unexpected = []
         for row in rows:
             columns = {str(column).lower() for column in (row.get("key_columns") or [])}
-            if not bool(row.get("is_exclusion")) and columns == official:
+            # 式 index は attnum=0 のため unnest から落ちる。部分 index も
+            # 公式キー全体を一意にしないので、どちらも公式キーとは認めない。
+            if (
+                not bool(row.get("is_exclusion"))
+                and not bool(row.get("is_partial"))
+                and not bool(row.get("has_expressions"))
+                and columns == official
+            ):
                 continue
             unexpected.append(str(row.get("index_name") or "<unnamed>"))
         if unexpected:

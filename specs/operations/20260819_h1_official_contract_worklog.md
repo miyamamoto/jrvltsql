@@ -2,7 +2,9 @@
 
 ## 前提
 
+- repository: `github.com/miyamamoto/jrvltsql`
 - base: `9aaefe5bb01df5b0e80e5f61f964232e8f0e1df41`（PR #223 merge、UM 契約）
+- implementation: `c7a0aef` → `5b30ff2`（branch head、PR #224）
 - worktree: `/home/keiba/scratch/20260819_jrvltsql_h1_official`
 - branch: `agent/h1-official-contract-20260819`
 - 実装: Devin（session `83dda3bd2bb44d7abe83462669c51210`）
@@ -28,8 +30,7 @@
 | 複勝着払キー | `0` 複勝発売なし / `2` 2着まで / `3` 3着まで |
 | 返還馬番/枠番/同枠 | 位置ごとの `0`/`1`、28 / 8 / 8 桁、初期値 `0` |
 | 票数 | 11 バイト、単位百円、ALL0 は発売前取消し・発売票数なし |
-| 人気順 | 数字（単勝・複勝・枠連 2 桁、馬連・ワイド・馬単・3連複 3 桁）、
-  `--` 発売前取消、`**` 発売後取消、空白 登録なし |
+| 人気順 | 数字（単勝・複勝・枠連 2 桁、馬連・ワイド・馬単・3連複 3 桁）、`--` 発売前取消、`**` 発売後取消、空白 登録なし |
 | 票数合計 | 11 バイト × 14 個（返還分票数を含む） |
 
 ## 着手前の実測（RED / 現状の欠陥）
@@ -91,8 +92,8 @@
 
 | 対象 | 結果 |
 | --- | --- |
-| `tests/test_h1_official_contract.py`（SQLite） | 141 passed / 11 skipped |
-| 同（PostgreSQL 16 有効） | 148 passed / 4 skipped |
+| `tests/test_h1_official_contract.py`（SQLite） | 141 passed / 13 skipped |
+| 同（PostgreSQL 16 有効） | 150 passed / 4 skipped |
 | フルスイート（SQLite） | 3903 passed / 464 skipped / 20 subtests |
 
 PostgreSQL は既存の使い捨てコンテナ `jltsql-sk-pg16-8215`

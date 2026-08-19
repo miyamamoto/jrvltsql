@@ -732,9 +732,14 @@ cache の変更に入る前に、対応する現行種別名を示して停止�
 **値の扱い:**
 
 - 人気順は数値ではありません。公式に `--`（発売前取消）・`**`（発売後取消）・
-  空白（登録なし）も取り得るため、native `NL_H1`/`RT_H1` の `Ninki` と標準名
-  `HYOSU_WAKU`・`HYOSU_UMATAN`・`HYOSU_SANREN` の `Ninki` は文字列として
-  保持します（数値列だった旧 schema は取消マーカーを `NULL` に落とします）。
+  空白（登録なし）も取り得るため、人気順列はすべて文字列として保持します。
+  対象は native `NL_H1`/`RT_H1` の `Ninki`、標準名 `HYOSU_TANPUKU` の
+  `TanNinki`・`FukuNinki`、`HYOSU_UMARENWIDE` の `UmarenNinki`・`WideNinki`、
+  `HYOSU_WAKU`・`HYOSU_UMATAN`・`HYOSU_SANREN` の `Ninki` です。このうち
+  数値列だったのは `NL_H1`/`RT_H1` の `Ninki`（`INTEGER`）と
+  `HYOSU_WAKU`/`HYOSU_UMATAN`/`HYOSU_SANREN` の `Ninki`（`SMALLINT`）で、
+  旧 schema は取消マーカーを `NULL` に落とします。`HYOSU_TANPUKU` と
+  `HYOSU_UMARENWIDE` の人気順列は以前から文字列です。
 - 空白の人気順は `NULL` ではなく空文字で保持します（他の table の
   「空欄→`NULL`」規則の例外）。
 - 返還馬番・返還枠番・返還同枠は位置ごとの `0`/`1` フラグ列で、公式初期値は
