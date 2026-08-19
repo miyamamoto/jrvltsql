@@ -767,6 +767,16 @@ _H1_BLANK_TEXT_FIELDS = frozenset(
         "WideNinki",
     }
 )
+# H6（票数６・3連単）も native/リアルタイム/標準名が同じ公式スナップショットを
+# 保持する。消去・値域検証・schema 検証はその全部を対象にする。
+_H6_NATIVE_STORAGE_TABLES = frozenset({"NL_H6", "RT_H6"})
+_H6_STANDARD_OWNER_TABLE = "HYOSU2"
+_H6_STANDARD_CHILD_TABLES = frozenset({"HYOSU_SANRENTAN"})
+_H6_STANDARD_STORAGE_TABLES = frozenset({_H6_STANDARD_OWNER_TABLE}) | _H6_STANDARD_CHILD_TABLES
+_H6_STORAGE_TABLES = _H6_NATIVE_STORAGE_TABLES | _H6_STANDARD_STORAGE_TABLES
+# 公式の人気順は '----':発売前取消 '****':発売後取消 空白:登録なし も提供値なので、
+# 空白を NULL に変換せず空文字のまま保存する。
+_H6_BLANK_TEXT_FIELDS = frozenset({"SanrentanNinki", "Ninki"})
 # 消去・統計・値域検証と schema 検証は native と標準名の両方が対象。
 _UM_ERASE_STORAGE_TABLES = frozenset({"NL_UM", "UMA"})
 _UM_KEY_COLUMNS = ("KettoNum",)
@@ -3195,6 +3205,214 @@ def verify_h1_storage_schema(database: BaseDatabase, table_name: str) -> bool:
         raise
 
 
+def _verify_h6_no_unapproved_constraints(
+    database: BaseDatabase,
+    table_name: str,
+) -> None:
+    """Reject CHECK/FOREIGN KEY constraints beyond the official H6 key."""
+
+    from src.database.migration import _migration_targets
+
+    targets = _migration_targets(database)
+    if targets != (database,):
+        for target in targets:
+            _verify_h6_no_unapproved_constraints(target, table_name)
+        return
+
+    db_type = database.get_db_type()
+    if db_type == "sqlite":
+        if database.fetch_all(f'PRAGMA foreign_key_list("{table_name}")'):
+            raise SchemaMigrationError(
+                f"H6 storage {table_name} has unsupported FOREIGN KEY constraints"
+            )
+        row = database.fetch_one(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?",
+            (table_name,),
+        )
+        definition = _sqlite_schema_code(str((row or {}).get("sql") or ""))
+        if re.search(r"\bCHECK\s*\(", definition, flags=re.IGNORECASE):
+            raise SchemaMigrationError(f"H6 storage {table_name} has unsupported CHECK constraints")
+        return
+    if db_type == "postgresql":
+        unexpected = database.fetch_all(
+            "SELECT conname AS constraint_name, contype AS constraint_type "
+            "FROM pg_constraint "
+            "WHERE conrelid = to_regclass(?) AND contype IN ('c', 'f')",
+            (table_name.lower(),),
+        )
+        if unexpected:
+            raise SchemaMigrationError(
+                f"H6 storage {table_name} has unsupported CHECK/FOREIGN KEY constraints"
+            )
+        return
+    raise SchemaMigrationError(f"H6 constraints cannot be verified for database type {db_type!r}")
+
+
+def _h6_official_key_columns(table_name: str) -> tuple[str, ...]:
+    """The official key that one H6 replacement is allowed to match."""
+
+    if table_name == _H6_STANDARD_OWNER_TABLE:
+        return _STANDARD_VOTE_RACE_KEY_COLUMNS
+    return tuple(_STANDARD_VOTE_CONFIG["H6"]["children"][table_name])
+
+
+def _verify_h6_standard_replacement_key(
+    database: BaseDatabase,
+    table_name: str,
+) -> None:
+    """Reject UNIQUEs that a standard-schema H6 replacement does not control."""
+
+    from src.database.migration import _migration_targets
+
+    targets = _migration_targets(database)
+    if targets != (database,):
+        for target in targets:
+            _verify_h6_standard_replacement_key(target, table_name)
+        return
+
+    official = {column.lower() for column in _h6_official_key_columns(table_name)}
+    db_type = database.get_db_type()
+    if db_type == "sqlite":
+        unexpected = []
+        for row in database.fetch_all(f'PRAGMA index_list("{table_name}")'):
+            name = str(row.get("name") or "<unnamed>")
+            if int(row.get("unique") or 0) != 1:
+                continue
+            if str(row.get("origin") or "").lower() == "pk":
+                continue
+            columns = {
+                str(info.get("name") or "").lower()
+                for info in database.fetch_all(f'PRAGMA index_info("{name}")')
+            }
+            if columns != official or int(row.get("partial") or 0) == 1:
+                unexpected.append(name)
+        if unexpected:
+            raise SchemaMigrationError(
+                f"H6 storage {table_name} has unsupported additional UNIQUE "
+                f"constraints/indexes: {sorted(unexpected)}"
+            )
+        return
+    if db_type == "postgresql":
+        rows = database.fetch_all(
+            "SELECT index_class.relname AS index_name, "
+            "index_row.indisexclusion AS is_exclusion, "
+            "index_row.indisprimary AS is_primary, "
+            "index_row.indpred IS NOT NULL AS is_partial, "
+            "index_row.indexprs IS NOT NULL AS has_expressions, "
+            "index_row.indisvalid AS is_valid, "
+            "index_row.indisready AS is_ready, "
+            "ARRAY(SELECT attribute.attname FROM unnest(index_row.indkey) AS key_column "
+            "JOIN pg_attribute attribute ON attribute.attrelid = index_row.indrelid "
+            "AND attribute.attnum = key_column) AS key_columns "
+            "FROM pg_index index_row "
+            "JOIN pg_class index_class ON index_class.oid = index_row.indexrelid "
+            "WHERE index_row.indrelid = to_regclass(?) "
+            "AND (index_row.indisunique OR index_row.indisexclusion) "
+            "ORDER BY index_class.relname",
+            (table_name.lower(),),
+        )
+        unexpected = []
+        for row in rows:
+            columns = {str(column).lower() for column in (row.get("key_columns") or [])}
+            # 式 index は attnum=0 のため unnest から落ちる。部分 index と無効な
+            # index も公式キー全体を一意にしないので、公式キーとは認めない。
+            if (
+                not bool(row.get("is_exclusion"))
+                and not bool(row.get("is_partial"))
+                and not bool(row.get("has_expressions"))
+                and bool(row.get("is_valid"))
+                and bool(row.get("is_ready"))
+                and columns == official
+            ):
+                continue
+            unexpected.append(str(row.get("index_name") or "<unnamed>"))
+        if unexpected:
+            raise SchemaMigrationError(
+                f"H6 storage {table_name} has unsupported additional UNIQUE/exclusion "
+                f"indexes: {sorted(unexpected)}"
+            )
+        return
+    raise SchemaMigrationError(f"H6 constraints cannot be verified for database type {db_type!r}")
+
+
+def validate_h6_record(record: dict, table_name: str | None = None) -> bool:
+    """Validate one expanded H6 row against the official 102,890-byte domain.
+
+    Native ``NL_H6``/``RT_H6`` and the standard ``HYOSU2``/``HYOSU_SANRENTAN``
+    pair all store the same official spans, so the official values are validated
+    before any schema-specific expansion or coercion runs.
+    """
+
+    if table_name is not None and table_name not in _H6_STORAGE_TABLES:
+        return False
+    if _record_type_from_record(record) != "H6":
+        if table_name is None:
+            return False
+        raise SchemaMigrationError(f"{table_name} received a non-H6 record")
+
+    from src.parser.h6_parser import H6Parser
+
+    try:
+        data_kubun = resolve_record_data_kubun(record)
+        H6Parser.validate_current_fields(record, data_kubun=data_kubun)
+    except ValueError as error:
+        raise SchemaMigrationError(str(error)) from error
+    return True
+
+
+def verify_h6_storage_schema(database: BaseDatabase, table_name: str) -> bool:
+    """Fail closed unless H6 storage keeps the official snapshot and race key.
+
+    Native ``NL_H6``, realtime ``RT_H6`` and the standard ``HYOSU2`` owner with
+    its ``HYOSU_SANRENTAN`` child all replace one complete race snapshot at a
+    time. A missing table, a key that no longer distinguishes 組番, an additional
+    UNIQUE/exclusion constraint, or a PostgreSQL primary key that ``ON CONFLICT``
+    cannot use would let one replacement erase or duplicate another race. A
+    nullable key, wrong-typed, under-capacity, generated, extra, or additionally
+    constrained column would lose official values, including the non-numeric
+    人気順 markers. All are rejected before any DML. Verifying the owner table
+    also verifies its child, because one physical record spans both.
+    """
+
+    if table_name not in _H6_STORAGE_TABLES:
+        return False
+    transaction_snapshot = _snapshot_validation_transactions(database)
+    from src.database.migration import verify_table_schema
+    from src.database.schema import SCHEMAS
+    from src.database.schema_jravan import JRAVAN_SCHEMAS
+
+    try:
+        if table_name == _H6_STANDARD_OWNER_TABLE:
+            targets = (table_name, *sorted(_H6_STANDARD_CHILD_TABLES))
+        else:
+            targets = (table_name,)
+        for target_table in targets:
+            schema_sql = SCHEMAS.get(target_table) or JRAVAN_SCHEMAS.get(target_table)
+            if schema_sql is None:
+                raise SchemaMigrationError(f"H6 storage schema is undefined: {target_table}")
+            verify_table_schema(database, target_table, schema_sql)
+            _verify_strict_storage_column_contract(
+                database,
+                target_table,
+                schema_sql,
+                allow_missing_columns=False,
+                storage_label="H6",
+                allow_extra_columns=False,
+            )
+            _verify_h6_no_unapproved_constraints(database, target_table)
+            if target_table in _H6_NATIVE_STORAGE_TABLES:
+                _verify_replacement_key_constraints(database, target_table, "H6 storage")
+            else:
+                _verify_h6_standard_replacement_key(database, target_table)
+        return True
+    except Exception:
+        _rollback_call_created_validation_transactions(
+            transaction_snapshot,
+            context="failed H6 schema validation",
+        )
+        raise
+
+
 def validate_um_record(record: dict, table_name: str | None = None) -> bool:
     """Validate one caller-built UM row against the official 1609-byte domain.
 
@@ -4660,7 +4878,7 @@ _OFFICIAL_ERASE_STORAGE_TABLES = {
     "SK": set(_SK_STORAGE_TABLES),
     "UM": set(_UM_ERASE_STORAGE_TABLES),
     "H1": set(_H1_STORAGE_TABLES),
-    "H6": {"NL_H6", "RT_H6", "HYO_SANRENTAN"},
+    "H6": set(_H6_STORAGE_TABLES),
     "O1": {"NL_O1", "RT_O1", "ODDS_TANPUKUWAKU_HEAD"},
     "O2": {"NL_O2", "RT_O2", "ODDS_UMAREN_HEAD"},
     "O3": {"NL_O3", "RT_O3", "ODDS_WIDE_HEAD"},
@@ -4739,6 +4957,8 @@ def validate_import_record_header(record: dict) -> tuple[str, str]:
             validate_um_record(record)
         if record_type == "H1":
             validate_h1_record(record)
+        if record_type == "H6":
+            validate_h6_record(record)
         if record_type == "CS":
             from src.parser.cs_parser import CSParser
 
@@ -7197,6 +7417,17 @@ def convert_record_types(record: dict, table_name: str) -> dict:
             continue
 
         if (
+            table_name in _H6_STORAGE_TABLES
+            and field_name in _H6_BLANK_TEXT_FIELDS
+            and isinstance(value, str)
+            and not value.strip()
+        ):
+            # 公式の人気順は空白（登録なし）も提供値。NULL に落とすと「未提供」と
+            # 区別できなくなるので、空文字のまま保存する。
+            converted[field_name] = ""
+            continue
+
+        if (
             table_name in _H1_STORAGE_TABLES
             and field_name in _H1_BLANK_TEXT_FIELDS
             and isinstance(value, str)
@@ -7366,6 +7597,7 @@ class DataImporter:
         self._verified_cs_tables: set[str] = set()
         self._verified_um_tables: set[str] = set()
         self._verified_h1_tables: set[str] = set()
+        self._verified_h6_tables: set[str] = set()
         self._verified_jg_tables: set[str] = set()
         self._verified_wc_tables: set[str] = set()
         self._verified_wf_tables: set[str] = set()
@@ -7752,6 +7984,10 @@ class DataImporter:
                     if verify_h1_storage_schema(self.database, table_name):
                         self._verified_h1_tables.add(table_name)
                 validate_h1_record(record, table_name)
+                if table_name not in self._verified_h6_tables:
+                    if verify_h6_storage_schema(self.database, table_name):
+                        self._verified_h6_tables.add(table_name)
+                validate_h6_record(record, table_name)
                 if table_name not in self._verified_jg_tables:
                     if verify_jg_storage_schema(self.database, table_name):
                         self._verified_jg_tables.add(table_name)
@@ -8513,6 +8749,10 @@ class DataImporter:
                 if verify_h1_storage_schema(self.database, table_name):
                     self._verified_h1_tables.add(table_name)
             validate_h1_record(record, table_name)
+            if table_name not in self._verified_h6_tables:
+                if verify_h6_storage_schema(self.database, table_name):
+                    self._verified_h6_tables.add(table_name)
+            validate_h6_record(record, table_name)
             if table_name not in self._verified_jg_tables:
                 if verify_jg_storage_schema(self.database, table_name):
                     self._verified_jg_tables.add(table_name)

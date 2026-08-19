@@ -583,12 +583,12 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             RecordSpec                     CHAR(2)             ,  -- レコード種別ID
             DataKubun                      CHAR(1)             ,  -- データ区分
             MakeDate                       DATE                ,  -- YYYYMMDD形式の日付
-            Year                           SMALLINT            ,  -- 年(4桁)
-            MonthDay                       SMALLINT            ,  -- 月日(MMDD)
-            JyoCD                          CHAR(2)             ,  -- 競馬場コード
-            Kaiji                          SMALLINT            ,  -- 開催回
-            Nichiji                        SMALLINT            ,  -- 開催日目
-            RaceNum                        SMALLINT            ,  -- レース番号
+            Year                           SMALLINT NOT NULL   ,  -- 年(4桁)
+            MonthDay                       SMALLINT NOT NULL   ,  -- 月日(MMDD)
+            JyoCD                          CHAR(2) NOT NULL    ,  -- 競馬場コード
+            Kaiji                          SMALLINT NOT NULL   ,  -- 開催回
+            Nichiji                        SMALLINT NOT NULL   ,  -- 開催日目
+            RaceNum                        SMALLINT NOT NULL   ,  -- レース番号
             TorokuTosu                     SMALLINT            ,  -- 登録頭数
             SyussoTosu                     SMALLINT            ,  -- 出走頭数
             HatubaiFlag1                   VARCHAR(1)          ,  -- 文字列(1)
@@ -631,15 +631,15 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
     "HYOSU_SANRENTAN": """
         CREATE TABLE IF NOT EXISTS HYOSU_SANRENTAN (
             MakeDate                       DATE                ,  -- YYYYMMDD形式の日付
-            Year                           SMALLINT            ,  -- 年(4桁)
-            MonthDay                       SMALLINT            ,  -- 月日(MMDD)
-            JyoCD                          CHAR(2)             ,  -- 競馬場コード
-            Kaiji                          SMALLINT            ,  -- 開催回
-            Nichiji                        SMALLINT            ,  -- 開催日目
-            RaceNum                        SMALLINT            ,  -- レース番号
-            Kumi                           VARCHAR(6)          ,  -- 文字列(6)
+            Year                           SMALLINT NOT NULL   ,  -- 年(4桁)
+            MonthDay                       SMALLINT NOT NULL   ,  -- 月日(MMDD)
+            JyoCD                          CHAR(2) NOT NULL    ,  -- 競馬場コード
+            Kaiji                          SMALLINT NOT NULL   ,  -- 開催回
+            Nichiji                        SMALLINT NOT NULL   ,  -- 開催日目
+            RaceNum                        SMALLINT NOT NULL   ,  -- レース番号
+            Kumi                           VARCHAR(6) NOT NULL ,  -- 文字列(6)
             Hyo                            VARCHAR(11)         ,  -- 文字列(11)
-            Ninki                          SMALLINT              -- 人気
+            Ninki                          VARCHAR(4)              -- 人気
         )
     """,
     "HYOSU_TANPUKU": """

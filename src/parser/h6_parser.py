@@ -20,7 +20,8 @@ H6レコードパーサー: ６．票数6（3連単）
 HYO_INFO4: kumi(6) + hyo(11) + ninki(4) = 21
 """
 
-from typing import Dict, List, Optional
+from datetime import date
+from typing import Dict, List, Mapping, Optional
 from uuid import uuid4
 
 from src.parser.base import validate_fixed_record
@@ -38,6 +39,111 @@ class H6Parser:
 
     RECORD_TYPE = "H6"
     RECORD_LENGTH = 102890
+    # データ区分（0:削除 2:前日売最終 4:最終 5:月曜最終 9:レース中止）
+    DATA_KUBUN_VALUES = frozenset({"0", "2", "4", "5", "9"})
+    # 発売フラグ（0:発売なし 1:発売前取消 3:発売後取消 7:発売あり）
+    HATUBAI_FLAG_VALUES = frozenset({"0", "1", "3", "7"})
+    KEY_CODE_WIDTHS = {"JyoCD": 2, "Kaiji": 2, "Nichiji": 2, "RaceNum": 2}
+    COUNT_WIDTHS = {"TorokuTosu": 2, "SyussoTosu": 2}
+    # 返還馬番情報は馬番01～18の位置ごとに 0:返還なし 1:返還あり を並べた固定長。
+    REFUND_SPAN_WIDTH = 18
+    COMBINATION_WIDTH = 6
+    VOTE_WIDTH = 11
+    FAVOURITE_WIDTH = 4
+    # 人気順の取消表記は公式に4文字固定（'----':発売前取消 '****':発売後取消）。
+    FAVOURITE_MARKERS = frozenset({"----", "****"})
+    TOTAL_FIELDS = ("SanrentanHyoTotal", "SanrentanHenkanHyoTotal")
+
+    @staticmethod
+    def _require_ascii_digits(field_name: str, value: object, width: int) -> str:
+        if isinstance(value, str) and len(value) == width and value.isascii() and value.isdigit():
+            return value
+        raise ValueError(f"H6 {field_name} must be exactly {width} ASCII digits")
+
+    @classmethod
+    def _require_date(cls, field_name: str, value: object) -> str:
+        digits = cls._require_ascii_digits(field_name, value, 8)
+        try:
+            date(int(digits[:4]), int(digits[4:6]), int(digits[6:]))
+        except ValueError as error:
+            raise ValueError(f"H6 {field_name} must be a real YYYYMMDD date") from error
+        return digits
+
+    @classmethod
+    def _require_race_day(cls, record: Mapping[str, object]) -> None:
+        year = cls._require_ascii_digits("Year", record.get("Year"), 4)
+        month_day = cls._require_ascii_digits("MonthDay", record.get("MonthDay"), 4)
+        try:
+            date(int(year), int(month_day[:2]), int(month_day[2:]))
+        except ValueError as error:
+            raise ValueError("H6 Year/MonthDay must be a real race day") from error
+
+    @classmethod
+    def _require_flag_span(cls, field_name: str, value: object, width: int) -> None:
+        # 公式の初期値は 0 だが、提供データは未設定位置を空白で送ってくる。空白は
+        # 提供値として保持し、それ以外の文字と桁落ちは拒否する。
+        if not isinstance(value, str) or len(value) != width or set(value) - {"0", "1", " "}:
+            raise ValueError(f"H6 {field_name} must be {width} positional 0/1 refund flags")
+
+    @classmethod
+    def _require_vote_total(cls, field_name: str, value: object) -> None:
+        if value == "":
+            # 提供データは合計エリアを空白で送ることがある（parse 後は空文字）。
+            return
+        cls._require_ascii_digits(field_name, value, cls.VOTE_WIDTH)
+
+    @classmethod
+    def _require_favourite(cls, value: object) -> None:
+        """人気順は数字のほか '----':発売前取消 '****':発売後取消 空白:登録なし。"""
+
+        if not isinstance(value, str):
+            raise ValueError("H6 SanrentanNinki must be a provider value")
+        if value == "" or value in cls.FAVOURITE_MARKERS:
+            return
+        cls._require_ascii_digits("SanrentanNinki", value, cls.FAVOURITE_WIDTH)
+
+    @classmethod
+    def validate_key_fields(cls, record: Mapping[str, object]) -> None:
+        """The official race key identifies the record regardless of status."""
+
+        cls._require_date("MakeDate", record.get("MakeDate"))
+        cls._require_race_day(record)
+        for field_name, width in cls.KEY_CODE_WIDTHS.items():
+            cls._require_ascii_digits(field_name, record.get(field_name), width)
+
+    @classmethod
+    def validate_current_fields(
+        cls,
+        record: Mapping[str, object],
+        *,
+        data_kubun: str | None = None,
+    ) -> None:
+        """Validate one expanded H6 row against the official domain."""
+
+        status = data_kubun if data_kubun is not None else record.get("DataKubun")
+        if status not in cls.DATA_KUBUN_VALUES:
+            raise ValueError("H6 DataKubun is not an official code")
+        cls.validate_key_fields(record)
+        if status == "0":
+            # 削除指示は本文を持たない。キーとヘッダのみが公式値。
+            return
+
+        for field_name, width in cls.COUNT_WIDTHS.items():
+            cls._require_ascii_digits(field_name, record.get(field_name), width)
+        if record.get("HatubaiFlag") not in cls.HATUBAI_FLAG_VALUES:
+            raise ValueError("H6 HatubaiFlag is not an official sale flag")
+        cls._require_flag_span("HenkanUma", record.get("HenkanUma"), cls.REFUND_SPAN_WIDTH)
+        for field_name in cls.TOTAL_FIELDS:
+            cls._require_vote_total(field_name, record.get(field_name))
+
+        if "SanrentanKumi" not in record and "SanrentanHyo" not in record:
+            # 発売のない組番のみのレコードは合計エリアだけを持つ。
+            return
+        cls._require_ascii_digits(
+            "SanrentanKumi", record.get("SanrentanKumi"), cls.COMBINATION_WIDTH
+        )
+        cls._require_ascii_digits("SanrentanHyo", record.get("SanrentanHyo"), cls.VOTE_WIDTH)
+        cls._require_favourite(record.get("SanrentanNinki"))
 
     def __init__(self):
         self.logger = get_logger(__name__)

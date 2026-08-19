@@ -50,6 +50,20 @@ Public API replacements:
 - native and standard schemas now verify primary keys, types, capacities,
   child-table constraints, and cancellation/delete behavior before mutation;
   several record families gained complete child storage or corrected keys
+- H6 vote storage (票数６・3連単) now validates the official 102,890-byte record
+  body (official `DataKubun` `0`/`2`/`4`/`5`/`9`, a real `MakeDate` and race day,
+  two-digit course/meeting/day/race numbers, registered and starting counts, the
+  sale flag `0`/`1`/`3`/`7`, eighteen positional refund flags, six-digit
+  combinations, eleven-digit vote counts, four-digit favourite order, and the two
+  eleven-digit vote totals) before storage, keeps the official non-numeric
+  favourite markers (`----` cancelled before sale, `****` cancelled after sale,
+  blank not registered) as text in `NL_H6`/`RT_H6` (`SanrentanNinki` was
+  `INTEGER`) and standard `HYOSU_SANRENTAN.Ninki` (was `SMALLINT`), and erases a
+  status-0 race physically from every H6 table, including the standard
+  `HYOSU2`/`HYOSU_SANRENTAN` pair that the previous mapping missed. Existing H6
+  tables with nullable keys, numeric favourite columns, missing columns,
+  additional UNIQUE indexes, or other drift are not migrated automatically:
+  back up, rebuild with the current schema, and reimport from `RACE`.
 - H1 vote storage (票数１・全掛式) now validates the official 28,955-byte record
   body (official `DataKubun` `0`/`2`/`4`/`5`/`9`, a real `MakeDate` and race day,
   two-digit course/meeting/day/race numbers, registered and starting counts, sale

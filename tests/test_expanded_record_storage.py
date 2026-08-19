@@ -1038,7 +1038,7 @@ def _assert_standard_h6_replaces_complete_snapshot(db, importer_class):
     assert db.fetch_one(
         "SELECT Kumi AS kumi, Hyo AS hyo, Ninki AS ninki "
         "FROM HYOSU_SANRENTAN"
-    ) == {"kumi": "010203", "hyo": "00000000808", "ninki": 8}
+    ) == {"kumi": "010203", "hyo": "00000000808", "ninki": "0008"}
 
     empty = _flatten(
         H6Parser().parse(
@@ -1219,7 +1219,14 @@ def test_sqlite_standard_vote_verification_is_reused(
     assert verification_calls == 1
 
 
-def _assert_standard_h6_migrates_existing_child_columns(db, importer_class):
+def _assert_standard_h6_rejects_a_drifted_child_table(db, importer_class):
+    """A drifted H6 child table fails closed instead of being auto-migrated.
+
+    The official 3連単 snapshot needs the 人気順 column and a NOT NULL race key to
+    replace one race at a time, so a table that lost either is not silently
+    extended: the importer stops before any DML.
+    """
+
     _create_jravan_tables(db, ["HYOSU2"])
     db.execute(
         "CREATE TABLE HYOSU_SANRENTAN ("
@@ -1230,26 +1237,24 @@ def _assert_standard_h6_migrates_existing_child_columns(db, importer_class):
     db.commit()
     rows = _flatten(H6Parser().parse(_make_h6_vote_record()))
 
-    stats = importer_class(db, use_jravan_schema=True).import_records(iter(rows))
+    with pytest.raises(SchemaMigrationError):
+        importer_class(db, use_jravan_schema=True).import_records(iter(rows))
 
-    assert stats["records_failed"] == 0
-    assert db.fetch_one(
-        "SELECT Ninki AS ninki FROM HYOSU_SANRENTAN"
-    ) == {"ninki": 8}
+    assert db.fetch_one("SELECT COUNT(*) AS cnt FROM HYOSU_SANRENTAN")["cnt"] == 0
 
 
 @pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
-def test_sqlite_standard_h6_migrates_existing_child_columns(
+def test_sqlite_standard_h6_rejects_a_drifted_child_table(
     sqlite_db, importer_class
 ):
-    _assert_standard_h6_migrates_existing_child_columns(sqlite_db, importer_class)
+    _assert_standard_h6_rejects_a_drifted_child_table(sqlite_db, importer_class)
 
 
 @pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
-def test_postgresql_standard_h6_migrates_existing_child_columns(
+def test_postgresql_standard_h6_rejects_a_drifted_child_table(
     postgresql_db, importer_class
 ):
-    _assert_standard_h6_migrates_existing_child_columns(
+    _assert_standard_h6_rejects_a_drifted_child_table(
         postgresql_db, importer_class
     )
 
