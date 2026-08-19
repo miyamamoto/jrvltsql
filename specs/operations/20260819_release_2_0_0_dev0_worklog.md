@@ -55,8 +55,25 @@ O1-O6 parser #226 / O1-O6 storage #227）はすべて merge 済み・CI green �
 - したがって `2.0.0.dev0` は開発検証用 prerelease であり、本番互換性や
   取得可用性の主張ではない。RELEASE_NOTES.md 冒頭にこの範囲を明記した。
 
-## 未実施（承認待ち）
+## publish 実施（ユーザー承認済み）
 
-- prerelease tag `v2.0.0.dev0` の作成と GitHub prerelease の publish。
-  release state を変えるため、ユーザー承認を得てから実施する。
-- 実開発環境での install、実 JV-Link 取得・保存確認、`2.0.0` 本リリース判断。
+- release notes 反映 PR #228 を merge（`ed54f5c110dd6179b130142f251e30548b025b47`）。
+- その merge commit を detached worktree で checkout し、同一 SHA から成果物を再 build
+  したうえで、隔離 venv に wheel のみ install して smoke を再実行した
+  （`jltsql --version` = 2.0.0.dev0、`filled=3`→`filled=2` の完全 snapshot 置換、
+  `------` / `******` / `000000` の保存）。
+- tag `v2.0.0.dev0` を `ed54f5c` に作成し、GitHub prerelease として公開した
+  （draft ではない。`isPrerelease=true`, `isDraft=false`）。
+  https://github.com/miyamamoto/jrvltsql/releases/tag/v2.0.0.dev0
+- 添付した成果物の SHA-256:
+
+```text
+32a290287ef36fa70ac08b9d6d2e6facaf0b2f6401fb559811e0daaeee36db71  jltsql-2.0.0.dev0-py3-none-any.whl
+6f95a99160f55c4c0b7e159f2c07d65a521ec314c36a3f287273fcbcff8a0121  jltsql-2.0.0.dev0.tar.gz
+```
+
+## 未実施
+
+- 実開発環境（Windows・32-bit JV-Link・利用登録済み）での install、実 JV-Link
+  取得・保存確認、`2.0.0` 本リリース判断。この環境が無いためこのセッションでは
+  実施できない。
