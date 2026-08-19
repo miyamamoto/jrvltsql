@@ -169,7 +169,7 @@ class OddsCombinationValidationMixin:
             raise ValueError(f"{record_type} DataKubun is not an official code")
         cls.validate_key_fields(record)
         if status == "0":
-            # 削除指示は本文を持たない。キーとヘッダのみが公式値。
+            # 削除指示は本文もヘッダも持たないため、レースキーだけを検証する。
             return
 
         validate_header_fields(
