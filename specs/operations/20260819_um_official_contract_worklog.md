@@ -177,6 +177,26 @@ unmutated                        117 passed
 3. release/test/docs — 累積賞金が native `REAL` / 標準名 `VARCHAR(9)` で読み戻り
    が異なる点はドキュメントに明記（SK の `ImportYear` と同じ扱い）。
 
+## PR #223 のレビュー対応
+
+外部レビュー（Copilot / CodeRabbit）で 5 件、うち実在の欠陥 4 件を赤先行で修正:
+
+1. PostgreSQL の CHECK/FK probe が  placeholder を使っていた。 を driver
+   別へ変換する契約なので pg8000 fallback で壊れる（。placeholder pin を
+   追加し、 に戻すと RED になることを実測）。
+2. 同 probe が SQLite/PostgreSQL 以外の db_type で無言 return し、検証を飛ばして
+   いた（。SK の同型 probe は raise していた）。
+3.  が importer/schema では公式 2 バイト span 扱いなのに
+    に無く、caller 行では任意文字列が通っていた
+   （）。
+4. 未使用になった  と、 の
+   「標準名 UMA は再検証しない」という古い docstring/コメント（）。
+5.  の  fragment（markdownlint MD051）は
+   反証。mkdocs strict build 後の HTML に  が存在し、当該 7 箇所は
+   すべて解決する。MD051 は GitHub の slug 規則を仮定しており明示 anchor を見ない。
+
+レビュー後の実測: 全スイート（PostgreSQL 16 有効）4182 passed / 33 skipped。
+
 ## 残余リスク
 
 - 累積賞金 6 項目の native 型は `REAL` のままで、9 桁 zero fill の文字列表現は
