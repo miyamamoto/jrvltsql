@@ -94,6 +94,29 @@ def test_manual_guide_covers_the_human_steps() -> None:
         assert required in guide
 
 
+def test_compose_keeps_the_passwordless_desktop_on_the_loopback_interface() -> None:
+    """x11vnc runs with -nopw, so publishing the desktop must be deliberate."""
+
+    compose = yaml.safe_load(COMPOSE.read_text(encoding="utf-8"))
+    published = [
+        mapping
+        for service in compose["services"].values()
+        for mapping in service.get("ports", [])
+    ]
+
+    assert published
+    for mapping in published:
+        assert str(mapping).startswith("127.0.0.1:"), mapping
+
+
+def test_native_bridge_releases_every_invoke_result() -> None:
+    """A VARIANT filled by Invoke owns memory until it is cleared."""
+
+    source = BRIDGE_SOURCE.read_text(encoding="utf-8")
+
+    assert source.count("VariantInit(&result)") == source.count("VariantClear(&result)")
+
+
 def test_bridge_source_is_shipped_for_the_image_build() -> None:
     assert BRIDGE_SOURCE.is_file()
     assert "CoCreateInstance" in BRIDGE_SOURCE.read_text(

@@ -259,6 +259,19 @@ def test_distribution_gate_pins_the_private_runner_hash_without_plaintext() -> N
     )
 
 
+def test_distribution_gate_allows_the_public_wine_runner_names(tmp_path: Path) -> None:
+    """The Wine runner is part of the published runtime, not a private detail."""
+
+    wheel, sdist = _clean_pair(tmp_path)
+    _write_wheel(
+        wheel,
+        ("src/jvlink/bridge.py",),
+        b'env["WINEPREFIX"] = env["JVLINK_WINEPREFIX"]  # wine runner',
+    )
+
+    assert validate_distributions((wheel, sdist)) == []
+
+
 @pytest.mark.parametrize(
     "member",
     ("C:/escape.py", "C:\\escape.py", "C:escape.py", "specs./internal.md"),

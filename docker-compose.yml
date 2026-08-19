@@ -26,8 +26,11 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     ports:
-      - "6080:6080"  # noVNC browser UI
-      - "15900:5900" # raw VNC
+      # The VNC server runs without a password, so these stay on the loopback
+      # interface. Reach the desktop from another machine with
+      # `ssh -L 6080:localhost:6080 <host>` rather than by publishing them.
+      - "127.0.0.1:6080:6080"  # noVNC browser UI
+      - "127.0.0.1:15900:5900" # raw VNC
     volumes:
       - ./config:/app/config
       - ./data:/app/data

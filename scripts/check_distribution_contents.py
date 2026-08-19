@@ -23,21 +23,17 @@ SUPERSEDED_AUDIT_PAGES = frozenset(
 )
 
 MAX_SCANNED_TEXT_BYTES = 4 * 1024 * 1024
+# Hashed identifiers of private deployment environments. The Wine runner is
+# documented and shipped by this package, so its names are not listed here.
 PROHIBITED_TOKEN_SHA256 = frozenset(
     {
         "06a423e23a1131d5c1cd54a44911fc5fd259a4cbbaa5c9a13344a2d73baf5bbd",
         "08c64f088046a0504f39c8b52ed474483d642ac4efdee5211a54ad41a10684e8",
-        "1487241b177b0353807ec09be32c409de832fc657c93f7ed5eb23b444708d7e7",
-        "32c4feed996880bc92a062dc476f9b8cdb2596a989f2cc5246e9cef605bd5c78",
         "3958765b23d8a51d3445d91f98c1e76f62b896d615011d132b4ae85e4331d2fe",
         "454e0f9c502a52a6c351c9614bac911e22d42908a87dcaf47467645b6001fb17",
-        "594f63ba499f2248fdf20c6472a7527a13be1a96e0642615c7f045bf886c3405",
-        "684be438b04d22074ca4bb4b1d83bac553d09e3c02680e1ee3a4936d8af22a0a",
         "73c8f9e2b5ef6864b87be7deda7fbeb12fcb1d8b90ade6e36e410b183a23f0a3",
         "8f3d03ddd4e6e26a782e700bb5b5f9e405526fda47eb4e26d5ed5024754e6bed",
-        "ae18045e96b66b0e460c7d45703e60e6c26967378f1c0075e64c6e4a08cd3adc",
         "b8e53cd98b9bf7af29cbc6e4fa20d26399e6bc9d0e3e8fba32ae6d447fafacf5",
-        "d64983e3ffe1b4e6a14c21d6de24f74a430abc60974cfebaaa2d6ae6ed27e37b",
         "f20bdf9f71ec0c4226a026cc6a982947d203cba6cd877186df673f3e6120c122",
         "f428ec1505fba1faf17b898419f19035cc5f0a3348a83dfbc51d3e9216c93b00",
         "fce60e2787277f5ac2251efd16d6516604a30278e4c457c8c6f74e98631bbcdc",

@@ -59,10 +59,14 @@ static int CallMethodStr(IDispatch* disp, const wchar_t* method, const char* arg
 
     SysFreeString(bstr);
 
-    if (FAILED(hr)) return -9998;
-    if (V_VT(&result) == VT_I4) return V_I4(&result);
-    if (V_VT(&result) == VT_I2) return V_I2(&result);
-    return 0;
+    int code = -9998;
+    if (SUCCEEDED(hr)) {
+        code = 0;
+        if (V_VT(&result) == VT_I4) code = V_I4(&result);
+        else if (V_VT(&result) == VT_I2) code = V_I2(&result);
+    }
+    VariantClear(&result);
+    return code;
 }
 
 // Helper: Call a method with two string arguments, return int result
@@ -95,10 +99,14 @@ static int CallMethodStrStr(IDispatch* disp, const wchar_t* method, const char* 
     SysFreeString(bArg1);
     SysFreeString(bArg2);
 
-    if (FAILED(hr)) return -9998;
-    if (V_VT(&result) == VT_I4) return V_I4(&result);
-    if (V_VT(&result) == VT_I2) return V_I2(&result);
-    return 0;
+    int code = -9998;
+    if (SUCCEEDED(hr)) {
+        code = 0;
+        if (V_VT(&result) == VT_I4) code = V_I4(&result);
+        else if (V_VT(&result) == VT_I2) code = V_I2(&result);
+    }
+    VariantClear(&result);
+    return code;
 }
 
 // Helper: Call a method with no arguments, return int result
@@ -114,11 +122,14 @@ static int CallMethodNoArgs(IDispatch* disp, const wchar_t* method) {
     HRESULT hr = IDispatch_Invoke(disp, id, &IID_NULL, LOCALE_USER_DEFAULT,
                                    DISPATCH_METHOD, &params, &result, &excep, NULL);
 
-    if (FAILED(hr)) return -9998;
-    if (V_VT(&result) == VT_I4) return V_I4(&result);
-    if (V_VT(&result) == VT_I2) return V_I2(&result);
+    int code = -9998;
+    if (SUCCEEDED(hr)) {
+        code = 0;
+        if (V_VT(&result) == VT_I4) code = V_I4(&result);
+        else if (V_VT(&result) == VT_I2) code = V_I2(&result);
+    }
     VariantClear(&result);
-    return 0;
+    return code;
 }
 
 // Call JVOpen: JVOpen(dataspec, fromtime, option, ref readcount, ref downloadcount, ref lastfiletimestamp)
@@ -169,11 +180,14 @@ static int CallJVOpen(const char* dataspec, const char* fromtime, int option,
     SysFreeString(bDataspec);
     SysFreeString(bFromtime);
 
-    if (FAILED(hr)) return -9998;
-    if (V_VT(&result) == VT_I4) return V_I4(&result);
-    if (V_VT(&result) == VT_I2) return V_I2(&result);
+    int code = -9998;
+    if (SUCCEEDED(hr)) {
+        code = 0;
+        if (V_VT(&result) == VT_I4) code = V_I4(&result);
+        else if (V_VT(&result) == VT_I2) code = V_I2(&result);
+    }
     VariantClear(&result);
-    return 0;
+    return code;
 }
 
 // Call JVRead: int JVRead(ref string buff, int size, ref string filename)
@@ -259,8 +273,8 @@ static int CallJVRead(char* buff, int buff_size, char* filename, int fn_size, in
         SysFreeString(bFilename);
     }
 
-    if (FAILED(hr)) return -9998;
     VariantClear(&result);
+    if (FAILED(hr)) return -9998;
     return code;
 }
 
@@ -512,6 +526,7 @@ int main(int argc, char* argv[]) {
             VARIANT result; VariantInit(&result);
             IDispatch_Invoke(g_jvlink, id, &IID_NULL, LOCALE_USER_DEFAULT, DISPATCH_METHOD, &params, &result, NULL, NULL);
             int code = (V_VT(&result) == VT_I4) ? V_I4(&result) : 0;
+            VariantClear(&result);
             json_response("{\"status\":\"ok\",\"code\":%d}", code);
         }
         else if (strcmp(cmd, "close") == 0) {
@@ -540,6 +555,7 @@ int main(int argc, char* argv[]) {
             VARIANT result; VariantInit(&result);
             IDispatch_Invoke(g_jvlink, id, &IID_NULL, LOCALE_USER_DEFAULT, DISPATCH_METHOD, &params, &result, NULL, NULL);
             int code = (V_VT(&result) == VT_I4) ? V_I4(&result) : 0;
+            VariantClear(&result);
             json_response("{\"status\":\"ok\",\"code\":%d}", code);
         }
         else if (strcmp(cmd, "quit") == 0) {
