@@ -181,18 +181,18 @@ unmutated                        117 passed
 
 外部レビュー（Copilot / CodeRabbit）で 5 件、うち実在の欠陥 4 件を赤先行で修正:
 
-1. PostgreSQL の CHECK/FK probe が  placeholder を使っていた。 を driver
-   別へ変換する契約なので pg8000 fallback で壊れる（。placeholder pin を
-   追加し、 に戻すと RED になることを実測）。
+1. PostgreSQL の CHECK/FK probe が `%s` placeholder を使っていた。`?` を driver
+   別へ変換する契約なので pg8000 fallback で壊れる（`33e9269`。placeholder pin を
+   追加し、`%s` に戻すと RED になることを実測）。
 2. 同 probe が SQLite/PostgreSQL 以外の db_type で無言 return し、検証を飛ばして
-   いた（。SK の同型 probe は raise していた）。
-3.  が importer/schema では公式 2 バイト span 扱いなのに
-    に無く、caller 行では任意文字列が通っていた
-   （）。
-4. 未使用になった  と、 の
-   「標準名 UMA は再検証しない」という古い docstring/コメント（）。
-5.  の  fragment（markdownlint MD051）は
-   反証。mkdocs strict build 後の HTML に  が存在し、当該 7 箇所は
+   いた（`86f665b`。SK の同型 probe は raise していた）。
+3. `Reserved_1608` が importer/schema では公式 2 バイト span 扱いなのに
+   `UMParser.TEXT_FIELD_WIDTHS` に無く、caller 行では任意文字列が通っていた
+   （`86f665b`）。
+4. 未使用になった `_UM_STORAGE_TABLES` と、`verify_um_storage_schema` の
+   「標準名 UMA は再検証しない」という古い docstring/コメント（`33e9269`）。
+5. `docs/record_contracts.md` の `#datakubun` fragment（markdownlint MD051）は
+   反証。mkdocs strict build 後の HTML に `id="datakubun"` が存在し、当該 7 箇所は
    すべて解決する。MD051 は GitHub の slug 規則を仮定しており明示 anchor を見ない。
 
 レビュー後の実測: 全スイート（PostgreSQL 16 有効）4182 passed / 33 skipped。
