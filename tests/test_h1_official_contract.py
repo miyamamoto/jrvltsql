@@ -755,7 +755,11 @@ def test_h1_three_character_cancel_markers_survive_storage(
     assert any(row.get("Ninki") == marker for row in rows)
 
     tables = _tables(use_standard)
-    database = SQLiteDatabase({"path": str(tmp_path / f"wide-{use_standard}-{marker}.db")})
+    # '*' is not a portable filename character, so name the file by the marker.
+    marker_name = "pre-sale" if marker.startswith("-") else "post-sale"
+    database = SQLiteDatabase(
+        {"path": str(tmp_path / f"wide-{use_standard}-{marker_name}.db")}
+    )
     with database:
         _create(database, tables)
         stats = DataImporter(database, use_jravan_schema=use_standard).import_records(

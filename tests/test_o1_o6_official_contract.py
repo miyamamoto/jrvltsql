@@ -738,6 +738,7 @@ def test_realtime_keeps_every_official_no_vote_combination(
 
 
 @pytest.mark.parametrize("record_type", ALL_RECORD_TYPES)
+@pytest.mark.parametrize("data_kubun", OFFICIAL_DATA_KUBUN)
 @pytest.mark.parametrize(
     "announced",
     (
@@ -745,7 +746,9 @@ def test_realtime_keeps_every_official_no_vote_combination(
         pytest.param(b"        ", id="blank"),
     ),
 )
-def test_unset_announced_time_is_accepted(record_type: str, announced: bytes) -> None:
+def test_unset_announced_time_is_accepted(
+    record_type: str, data_kubun: str, announced: bytes
+) -> None:
     """発表月日時分 is set for 中間 odds only; final odds carry the initial value.
 
     Live JV-Link RACE data sends the zero-filled form for every final O1-O6
@@ -753,7 +756,7 @@ def test_unset_announced_time_is_accepted(record_type: str, announced: bytes) ->
     """
 
     layout = LAYOUTS[record_type]
-    raw = bytearray(layout.raw())
+    raw = bytearray(layout.raw(data_kubun=data_kubun))
     raw[27:35] = announced
     rows = layout.parser_class().parse(bytes(raw))
     assert rows
