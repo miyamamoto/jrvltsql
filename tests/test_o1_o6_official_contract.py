@@ -656,3 +656,56 @@ def test_postgresql_keeps_the_totals_only_snapshot(
     assert postgresql_db.fetch_one(f"SELECT COUNT(*) AS cnt FROM {owner}")["cnt"] == 1
     for child in children:
         assert postgresql_db.fetch_one(f"SELECT COUNT(*) AS cnt FROM {child}")["cnt"] == 0
+
+
+def live_rows(record_type: str) -> list[dict]:
+    """One official snapshot that sells three combinations."""
+
+    if record_type == "O1":
+        return [dict(row) for row in _o1_rows(data_kubun="4", horses=3, brackets=3)]
+    return [dict(row) for row in LAYOUTS[record_type].rows(data_kubun="4", filled=3)]
+
+
+def erase_rows(record_type: str) -> list[dict]:
+    """The official status-0 command carries the race key and no body."""
+
+    if record_type == "O1":
+        return [dict(row) for row in _o1_rows(data_kubun="0", horses=0, brackets=0)]
+    return [
+        dict(row)
+        for row in LAYOUTS[record_type].rows(data_kubun="0", filled=0, sale_flag=b"0")
+    ]
+
+
+@pytest.mark.parametrize("record_type", ("O1", *ALL_RECORD_TYPES))
+@pytest.mark.parametrize("importer_class", IMPORTERS)
+@pytest.mark.parametrize("use_standard", (False, True), ids=("native", "standard"))
+def test_sqlite_status_zero_erases_the_snapshot_without_a_tombstone(
+    tmp_path: Path,
+    record_type: str,
+    importer_class: type,
+    use_standard: bool,
+) -> None:
+    """公式の削除指示は合計行 sentinel を残さず対象レースを物理削除する。"""
+
+    tables = STANDARD_TABLES[record_type] if use_standard else (NATIVE_TABLES[record_type],)
+    database = SQLiteDatabase(
+        {
+            "path": str(
+                tmp_path
+                / f"erase-{record_type}-{importer_class.__name__}-{use_standard}.db"
+            )
+        }
+    )
+    with database:
+        _create(database, tables)
+        importer = importer_class(database, batch_size=1, use_jravan_schema=use_standard)
+        assert importer.import_records(iter(live_rows(record_type)))["records_failed"] == 0
+        assert database.fetch_one(f"SELECT COUNT(*) AS cnt FROM {tables[-1]}")["cnt"] > 0
+
+        assert importer.import_records(iter(erase_rows(record_type)))["records_failed"] == 0
+
+        for table_name in tables:
+            assert (
+                database.fetch_one(f"SELECT COUNT(*) AS cnt FROM {table_name}")["cnt"] == 0
+            )

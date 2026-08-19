@@ -1365,13 +1365,18 @@ def test_postgresql_importer_stores_heterogeneous_o1_rows(postgresql_db):
     _assert_o1_storage(postgresql_db, "NL_O1")
 
 
-def test_postgresql_importer_skips_empty_expanded_o2_header_row(postgresql_db):
+def test_postgresql_importer_keeps_the_official_total_of_an_empty_o2_snapshot(
+    postgresql_db,
+):
+    """公式の馬連票数合計は組合せが無い snapshot でも保持する（合計行 sentinel）。"""
+
     _create_tables(postgresql_db, ["NL_O2"])
     rows = _flatten(O2Parser().parse(_make_empty_o2_record()))
 
     stats = DataImporter(postgresql_db, batch_size=100).import_records(iter(rows))
 
-    assert stats["records_imported"] == 0
-    assert stats["records_failed"] == 1
-    count = postgresql_db.fetch_one("SELECT COUNT(*) AS cnt FROM NL_O2")
-    assert count["cnt"] == 0
+    assert stats["records_imported"] == 1
+    assert stats["records_failed"] == 0
+    assert postgresql_db.fetch_all(
+        'SELECT Kumi AS "Kumi", Vote AS "Vote" FROM NL_O2'
+    ) == [{"Kumi": O2Parser.TOTAL_COMBINATION, "Vote": 999}]
