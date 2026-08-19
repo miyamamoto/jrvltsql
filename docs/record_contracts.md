@@ -799,18 +799,53 @@ cache の変更に入る前に、対応する現行種別名を示して停止�
 
 **保存先:**
 
-- native `NL_UM`、標準名 `UMA`。
+- native `NL_UM`、標準名 `UMA`。どちらも同じ `KettoNum` 主キー・必須
+  header/key/body・公式 field capacity を使い、status 1/2/3/4/9 を provider 順に
+  同じ行へ反映します。
 - 現行の標準名 `UMA` では、公式レコード内の 27 組×6 着回数、4 脚質、登録
   レース数も個別列へ欠落なく展開し、抹消年月日の `00000000` は 8 文字のまま
   保持します。
+- UM は蓄積系（`DIFN`/`BLDN`）master だけであり、`RT_UM` は作成せず、速報経路
+  にもルーティングしません。
 
 **DataKubun:**
 
 - base domain は [公式 DataKubun の検証](#datakubun) の表と `UM=9` の
   `MakeDate` 境界を参照してください。
+- `DataKubun=0` はこの key だけを使う物理 exact erase で、両 table から行を
+  削除します（tombstone 行は残しません）。削除指示の非 key 本文を decode しない
+  扱いは HN / SK と同じ project policy です。
+- `9:抹消` は削除ではなく生存中の更新です。抹消区分・抹消年月日を含む本文を
+  同じ行へ反映します。
+
+**値の扱い（公式 4.9.0.1 の domain）:**
+
+- `RegDate`/`DelDate`/`BirthDate` は実在する `yyyymmdd`（公式初期値の
+  `00000000` も有効）、競走馬抹消区分 `DelKubun` は `0/1`、JRA 施設在きゅう
+  フラグ `ZaikyuFlag` は `0/1` または空欄（平成 18 年 6 月 6 日より前は未設定）
+  です。
+- `UmaKigoCD`/`SexCD`/`HinsyuCD`/`KeiroCD`/`TozaiCD` は 2/1/1/2/1 桁の数字、
+  `ChokyosiCode` は 5 桁、`BreederCode` は 8 桁、`BanusiCode` は 6 桁、累積
+  賞金 6 項目は各 9 桁、27 組の着回数は各 18 桁、脚質傾向は 12 桁、登録レース数
+  は 3 桁の数字です（コード表 2201-2203/2204/2301 の値は将来増え得るため表照合
+  はしません）。
+- 3 代血統の 14 個の繁殖登録番号は 10 桁数字（未設定の `0000000000` も有効）、
+  14 個の馬名は公式 36 バイト以内です。
+- 公式に空欄になり得るテキスト項目（`BameiEng`・`Reserved`・`ZaikyuFlag`・
+  `ChokyosiRyakusyo`・`Syotai`・`BreederName`・`SanchiName`・`BanusiName`・
+  3 代血統の馬名）は、両 table とも `NULL` ではなく空文字で保持します。欠落した
+  項目や `None` は検証で拒否され、`NULL` として保存されません。
+- 累積賞金 6 項目の保存型は table で異なります。`NL_UM` は `REAL`、`UMA` は
+  `VARCHAR(9)` なので、公式の 9 桁 zero fill は native では数値として、標準名では
+  9 文字のまま読み戻ります。
 
 **既存 DB からの移行手順:**
 
+- 既存の nullable、keyless、wrong-key、wrong-type、容量不足、generated /
+  identity 列、追加列または追加 UNIQUE/FK/CHECK を持つ `NL_UM` / `UMA` は
+  自動修復せず、mutation 前に停止します。v2 で `NL_UM.ZaikyuFlag` は
+  `INTEGER` から `TEXT` になり（公式の空欄を保持できないため）、両 table の
+  全列が `NOT NULL` になりました。
 - 公式主キー以外の `UNIQUE`/exclusion 制約や、PostgreSQL で `ON CONFLICT` に
   使えない遅延主キーがある既存テーブルも、行を置換して消失させるおそれが
   あるため変更前に拒否します。

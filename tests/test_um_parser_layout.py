@@ -53,14 +53,14 @@ FIELDS = [
     ("DataKubun", 3, 1, b"2"),
     ("MakeDate", 4, 8, b"20260801"),
     ("KettoNum", 12, 10, b"2019900001"),
-    ("DelKubun", 22, 1, b"3"),
+    ("DelKubun", 22, 1, b"1"),
     ("RegDate", 23, 8, b"20210401"),
     ("DelDate", 31, 8, b"00000000"),
     ("BirthDate", 39, 8, b"20190315"),
     ("Bamei", 47, 36, _pad("テストウマアルファ", 36, zenkaku=True)),
     ("BameiKana", 83, 36, _pad("ﾃｽﾄｳﾏｱﾙﾌｧ", 36)),
     ("BameiEng", 119, 60, _pad("Test Horse Alpha", 60)),
-    ("ZaikyuFlag", 179, 1, b"4"),
+    ("ZaikyuFlag", 179, 1, b"0"),
     ("Reserved", 180, 19, _pad("RESERVED-180", 19)),
     ("UmaKigoCD", 199, 2, b"00"),
     ("SexCD", 201, 1, b"5"),
@@ -641,10 +641,14 @@ def test_um_native_wrong_or_missing_key_is_rejected_before_mutation(tmp_path, en
     database = SQLiteDatabase({"path": str(tmp_path / f"native-{defect}-{entrypoint}.db")})
     with database:
         database.execute(_defective_native_um_schema(defect))
+        legacy = parsed_record(ketto_num="2019900009")
+        legacy["Bamei"] = "legacy-row"
         database.execute(
-            "INSERT INTO NL_UM (RecordSpec, DataKubun, MakeDate, KettoNum, DelDate, Bamei) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            ("UM", "1", "20000101", "2019900009", "00000000", "legacy-row"),
+            "INSERT INTO NL_UM ({}) VALUES ({})".format(
+                ", ".join(legacy),
+                ", ".join("?" for _ in legacy),
+            ),
+            tuple(legacy.values()),
         )
         database.commit()
         before_columns = database.fetch_all('PRAGMA table_xinfo("NL_UM")')
@@ -665,9 +669,11 @@ def test_um_storage_verifier_covers_only_native_um_storage():
     with database:
         assert verify_um_storage_schema(database, "NL_RA") is False
         assert verify_um_storage_schema(database, "UMA_RACE") is False
-        # Standard UMA is verified by the standard-schema preflight before the
-        # record loop; the per-record verifier is intentionally native-only.
-        assert verify_um_storage_schema(database, "UMA") is False
+        # Standard UMA carries the same official contract, so it is in scope for
+        # the per-record verifier too: a missing table fails closed rather than
+        # returning False.
+        with pytest.raises(SchemaMigrationError, match="UMA"):
+            verify_um_storage_schema(database, "UMA")
 
 
 @pytest.fixture

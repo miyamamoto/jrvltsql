@@ -50,6 +50,20 @@ Public API replacements:
 - native and standard schemas now verify primary keys, types, capacities,
   child-table constraints, and cancellation/delete behavior before mutation;
   several record families gained complete child storage or corrected keys
+- UM racehorse master storage now validates the official 1609-byte record body
+  (real registration/erase/birth dates, `0/1` erase flag, `0/1`-or-blank stabling
+  flag, digit symbol/sex/breed/coat/affiliation codes, five/eight/six-digit
+  trainer/breeder/owner codes, six nine-digit accumulated prizes, twenty-seven
+  eighteen-digit finish-count groups, twelve-digit running-style counts,
+  three-digit registered race count, fourteen ten-digit pedigree numbers) and the
+  exact ten-digit `KettoNum` identity. Native `NL_UM` and standard `UMA` apply
+  provider-ordered status 1/2/3/4/9 revisions and a physical exact-key status-0
+  erase that leaves no tombstone row, and reject nullable, keyless, wrong-type,
+  under-capacity, generated, extended, or additionally constrained schemas before
+  mutation. Officially blankable text spans are stored as empty strings rather
+  than `NULL`; `NL_UM.ZaikyuFlag` changes from `INTEGER` to `TEXT` so the official
+  blank survives. Operators must back up, rebuild, and reimport retained `DIFN`
+  data; UM remains accumulated-only without an `RT_UM` table
 - SK progeny master storage now validates the current official 208-byte
   record body (real `BirthDate`, digit sex/breed/coat codes, 産駒持込区分
   `0/1/2/3`, four-digit import year, eight-digit breeder code, fourteen

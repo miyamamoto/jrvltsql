@@ -1352,96 +1352,96 @@ SCHEMAS = {
     """,
     "NL_UM": """
         CREATE TABLE IF NOT EXISTS NL_UM (
-            RecordSpec TEXT,
-            DataKubun TEXT,
-            MakeDate TEXT,
-            KettoNum TEXT,
-            DelKubun TEXT,
-            RegDate TEXT,
-            DelDate TEXT,
-            BirthDate TEXT,
-            Bamei TEXT,
-            BameiKana TEXT,
-            BameiEng TEXT,
-            ZaikyuFlag INTEGER,
-            Reserved TEXT,
-            UmaKigoCD TEXT,
-            SexCD TEXT,
-            HinsyuCD TEXT,
-            KeiroCD TEXT,
-            Ketto3InfoHansyokuNum1 TEXT,
-            Ketto3InfoBamei1 TEXT,
-            Ketto3InfoHansyokuNum2 TEXT,
-            Ketto3InfoBamei2 TEXT,
-            Ketto3InfoHansyokuNum3 TEXT,
-            Ketto3InfoBamei3 TEXT,
-            Ketto3InfoHansyokuNum4 TEXT,
-            Ketto3InfoBamei4 TEXT,
-            Ketto3InfoHansyokuNum5 TEXT,
-            Ketto3InfoBamei5 TEXT,
-            Ketto3InfoHansyokuNum6 TEXT,
-            Ketto3InfoBamei6 TEXT,
-            Ketto3InfoHansyokuNum7 TEXT,
-            Ketto3InfoBamei7 TEXT,
-            Ketto3InfoHansyokuNum8 TEXT,
-            Ketto3InfoBamei8 TEXT,
-            Ketto3InfoHansyokuNum9 TEXT,
-            Ketto3InfoBamei9 TEXT,
-            Ketto3InfoHansyokuNum10 TEXT,
-            Ketto3InfoBamei10 TEXT,
-            Ketto3InfoHansyokuNum11 TEXT,
-            Ketto3InfoBamei11 TEXT,
-            Ketto3InfoHansyokuNum12 TEXT,
-            Ketto3InfoBamei12 TEXT,
-            Ketto3InfoHansyokuNum13 TEXT,
-            Ketto3InfoBamei13 TEXT,
-            Ketto3InfoHansyokuNum14 TEXT,
-            Ketto3InfoBamei14 TEXT,
-            TozaiCD TEXT,
-            ChokyosiCode TEXT,
-            ChokyosiRyakusyo TEXT,
-            Syotai TEXT,
-            BreederCode TEXT,
-            BreederName TEXT,
-            SanchiName TEXT,
-            BanusiCode TEXT,
-            BanusiName TEXT,
-            RuikeiHonsyoHeiti REAL,
-            RuikeiHonsyoSyogai REAL,
-            RuikeiFukaHeichi REAL,
-            RuikeiFukaSyogai REAL,
-            RuikeiSyutokuHeichi REAL,
-            RuikeiSyutokuSyogai REAL,
-            SogoChaku TEXT,
-            ChuoGokeiChaku TEXT,
-            SibaChokuChaku TEXT,
-            SibaMigiChaku TEXT,
-            SibaHidariChaku TEXT,
-            DirtChokuChaku TEXT,
-            DirtMigiChaku TEXT,
-            DirtHidariChaku TEXT,
-            SyogaiChaku TEXT,
-            SibaRyoChaku TEXT,
-            SibaYayaomoChaku TEXT,
-            SibaOmoChaku TEXT,
-            SibaFuryoChaku TEXT,
-            DirtRyoChaku TEXT,
-            DirtYayaomoChaku TEXT,
-            DirtOmoChaku TEXT,
-            DirtFuryoChaku TEXT,
-            SyogaiRyoChaku TEXT,
-            SyogaiYayaomoChaku TEXT,
-            SyogaiOmoChaku TEXT,
-            SyogaiFuryoChaku TEXT,
-            SibaShortChaku TEXT,
-            SibaMiddleChaku TEXT,
-            SibaLongChaku TEXT,
-            DirtShortChaku TEXT,
-            DirtMiddleChaku TEXT,
-            DirtLongChaku TEXT,
-            KyakusituKeiko TEXT,
-            TorokuRaceSu TEXT,
-            Reserved_1608 TEXT,
+            RecordSpec TEXT NOT NULL,
+            DataKubun TEXT NOT NULL,
+            MakeDate TEXT NOT NULL,
+            KettoNum TEXT NOT NULL,
+            DelKubun TEXT NOT NULL,
+            RegDate TEXT NOT NULL,
+            DelDate TEXT NOT NULL,
+            BirthDate TEXT NOT NULL,
+            Bamei TEXT NOT NULL,
+            BameiKana TEXT NOT NULL,
+            BameiEng TEXT NOT NULL,
+            ZaikyuFlag TEXT NOT NULL,
+            Reserved TEXT NOT NULL,
+            UmaKigoCD TEXT NOT NULL,
+            SexCD TEXT NOT NULL,
+            HinsyuCD TEXT NOT NULL,
+            KeiroCD TEXT NOT NULL,
+            Ketto3InfoHansyokuNum1 TEXT NOT NULL,
+            Ketto3InfoBamei1 TEXT NOT NULL,
+            Ketto3InfoHansyokuNum2 TEXT NOT NULL,
+            Ketto3InfoBamei2 TEXT NOT NULL,
+            Ketto3InfoHansyokuNum3 TEXT NOT NULL,
+            Ketto3InfoBamei3 TEXT NOT NULL,
+            Ketto3InfoHansyokuNum4 TEXT NOT NULL,
+            Ketto3InfoBamei4 TEXT NOT NULL,
+            Ketto3InfoHansyokuNum5 TEXT NOT NULL,
+            Ketto3InfoBamei5 TEXT NOT NULL,
+            Ketto3InfoHansyokuNum6 TEXT NOT NULL,
+            Ketto3InfoBamei6 TEXT NOT NULL,
+            Ketto3InfoHansyokuNum7 TEXT NOT NULL,
+            Ketto3InfoBamei7 TEXT NOT NULL,
+            Ketto3InfoHansyokuNum8 TEXT NOT NULL,
+            Ketto3InfoBamei8 TEXT NOT NULL,
+            Ketto3InfoHansyokuNum9 TEXT NOT NULL,
+            Ketto3InfoBamei9 TEXT NOT NULL,
+            Ketto3InfoHansyokuNum10 TEXT NOT NULL,
+            Ketto3InfoBamei10 TEXT NOT NULL,
+            Ketto3InfoHansyokuNum11 TEXT NOT NULL,
+            Ketto3InfoBamei11 TEXT NOT NULL,
+            Ketto3InfoHansyokuNum12 TEXT NOT NULL,
+            Ketto3InfoBamei12 TEXT NOT NULL,
+            Ketto3InfoHansyokuNum13 TEXT NOT NULL,
+            Ketto3InfoBamei13 TEXT NOT NULL,
+            Ketto3InfoHansyokuNum14 TEXT NOT NULL,
+            Ketto3InfoBamei14 TEXT NOT NULL,
+            TozaiCD TEXT NOT NULL,
+            ChokyosiCode TEXT NOT NULL,
+            ChokyosiRyakusyo TEXT NOT NULL,
+            Syotai TEXT NOT NULL,
+            BreederCode TEXT NOT NULL,
+            BreederName TEXT NOT NULL,
+            SanchiName TEXT NOT NULL,
+            BanusiCode TEXT NOT NULL,
+            BanusiName TEXT NOT NULL,
+            RuikeiHonsyoHeiti REAL NOT NULL,
+            RuikeiHonsyoSyogai REAL NOT NULL,
+            RuikeiFukaHeichi REAL NOT NULL,
+            RuikeiFukaSyogai REAL NOT NULL,
+            RuikeiSyutokuHeichi REAL NOT NULL,
+            RuikeiSyutokuSyogai REAL NOT NULL,
+            SogoChaku TEXT NOT NULL,
+            ChuoGokeiChaku TEXT NOT NULL,
+            SibaChokuChaku TEXT NOT NULL,
+            SibaMigiChaku TEXT NOT NULL,
+            SibaHidariChaku TEXT NOT NULL,
+            DirtChokuChaku TEXT NOT NULL,
+            DirtMigiChaku TEXT NOT NULL,
+            DirtHidariChaku TEXT NOT NULL,
+            SyogaiChaku TEXT NOT NULL,
+            SibaRyoChaku TEXT NOT NULL,
+            SibaYayaomoChaku TEXT NOT NULL,
+            SibaOmoChaku TEXT NOT NULL,
+            SibaFuryoChaku TEXT NOT NULL,
+            DirtRyoChaku TEXT NOT NULL,
+            DirtYayaomoChaku TEXT NOT NULL,
+            DirtOmoChaku TEXT NOT NULL,
+            DirtFuryoChaku TEXT NOT NULL,
+            SyogaiRyoChaku TEXT NOT NULL,
+            SyogaiYayaomoChaku TEXT NOT NULL,
+            SyogaiOmoChaku TEXT NOT NULL,
+            SyogaiFuryoChaku TEXT NOT NULL,
+            SibaShortChaku TEXT NOT NULL,
+            SibaMiddleChaku TEXT NOT NULL,
+            SibaLongChaku TEXT NOT NULL,
+            DirtShortChaku TEXT NOT NULL,
+            DirtMiddleChaku TEXT NOT NULL,
+            DirtLongChaku TEXT NOT NULL,
+            KyakusituKeiko TEXT NOT NULL,
+            TorokuRaceSu TEXT NOT NULL,
+            Reserved_1608 TEXT NOT NULL,
             PRIMARY KEY (KettoNum)
         )
     """,
@@ -2762,6 +2762,7 @@ STRICT_HS_STORAGE_TABLES = frozenset({"NL_HS"})
 STRICT_HC_STORAGE_TABLES = frozenset({"NL_HC"})
 STRICT_HN_STORAGE_TABLES = frozenset({"NL_HN"})
 STRICT_SK_STORAGE_TABLES = frozenset({"NL_SK"})
+STRICT_UM_STORAGE_TABLES = frozenset({"NL_UM"})
 STRICT_TC_STORAGE_TABLES = frozenset({"NL_TC", "RT_TC"})
 STRICT_CC_STORAGE_TABLES = frozenset({"NL_CC", "RT_CC"})
 STRICT_JC_STORAGE_TABLES = frozenset({"NL_JC", "RT_JC"})
@@ -2800,6 +2801,7 @@ def _verify_existing_strict_storage_targets(db: BaseDatabase) -> None:
         verify_jc_storage_schema,
         verify_se_storage_schema,
         verify_sk_storage_schema,
+        verify_um_storage_schema,
         verify_tc_storage_schema,
         verify_we_storage_schema,
     )
@@ -2846,6 +2848,9 @@ def _verify_existing_strict_storage_targets(db: BaseDatabase) -> None:
         for table_name in STRICT_SK_STORAGE_TABLES:
             if target.table_exists_strict(table_name):
                 verify_sk_storage_schema(target, table_name)
+        for table_name in STRICT_UM_STORAGE_TABLES:
+            if target.table_exists_strict(table_name):
+                verify_um_storage_schema(target, table_name)
         for table_name in STRICT_TC_STORAGE_TABLES:
             if target.table_exists_strict(table_name):
                 verify_tc_storage_schema(target, table_name)
@@ -2954,6 +2959,10 @@ class SchemaManager:
                 from src.importer.importer import verify_sk_storage_schema
 
                 verify_sk_storage_schema(self.db, table_name)
+            if table_name in STRICT_UM_STORAGE_TABLES:
+                from src.importer.importer import verify_um_storage_schema
+
+                verify_um_storage_schema(self.db, table_name)
             if table_name in STRICT_TC_STORAGE_TABLES:
                 from src.importer.importer import verify_tc_storage_schema
 
@@ -3036,6 +3045,10 @@ class SchemaManager:
                     from src.importer.importer import verify_sk_storage_schema
 
                     verify_sk_storage_schema(self.db, table_name)
+                if table_name in STRICT_UM_STORAGE_TABLES:
+                    from src.importer.importer import verify_um_storage_schema
+
+                    verify_um_storage_schema(self.db, table_name)
                 if table_name in STRICT_TC_STORAGE_TABLES:
                     from src.importer.importer import verify_tc_storage_schema
 
@@ -3421,6 +3434,10 @@ def create_all_tables(db: BaseDatabase) -> None:
                 from src.importer.importer import verify_sk_storage_schema
 
                 verify_sk_storage_schema(db, table_name)
+            if table_name in STRICT_UM_STORAGE_TABLES:
+                from src.importer.importer import verify_um_storage_schema
+
+                verify_um_storage_schema(db, table_name)
             if table_name in STRICT_TC_STORAGE_TABLES:
                 from src.importer.importer import verify_tc_storage_schema
 

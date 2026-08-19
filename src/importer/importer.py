@@ -741,6 +741,175 @@ _CC_LOSSLESS_TEXT_WIDTHS = {
         "JiyuCD": 1,
     },
 }
+_UM_STORAGE_TABLES = frozenset({"NL_UM"})
+# 消去・統計・値域検証は native と標準名の両方が対象。schema 検証だけは
+# native と標準名で契約が違うため ``_UM_STORAGE_TABLES`` を使い分ける。
+_UM_ERASE_STORAGE_TABLES = frozenset({"NL_UM", "UMA"})
+_UM_KEY_COLUMNS = ("KettoNum",)
+# 公式の初期値が空白（Ｓ / sp）の項目。空白は「不明」ではなく提供された空値
+# なので、NULL に変換せず空文字のまま保存する。
+_UM_BLANK_TEXT_FIELDS = frozenset(
+    {
+        "Bamei",
+        "BameiKana",
+        "BameiEng",
+        "Reserved",
+        "ZaikyuFlag",
+        "Reserved_1608",
+        "ChokyosiRyakusyo",
+        "Syotai",
+        "BreederName",
+        "SanchiName",
+        "BanusiName",
+        *(f"Ketto3InfoBamei{slot}" for slot in range(1, 15)),
+    }
+)
+_UM_NATIVE_LOSSLESS_TEXT_WIDTHS = {
+        "RecordSpec": 2,
+        "DataKubun": 1,
+        "KettoNum": 10,
+        "DelKubun": 1,
+        "RegDate": 8,
+        "DelDate": 8,
+        "Bamei": 36,
+        "BameiKana": 36,
+        "BameiEng": 60,
+        "ZaikyuFlag": 1,
+        "Reserved": 19,
+        "UmaKigoCD": 2,
+        "SexCD": 1,
+        "HinsyuCD": 1,
+        "KeiroCD": 2,
+        "TozaiCD": 1,
+        "ChokyosiCode": 5,
+        "ChokyosiRyakusyo": 8,
+        "Syotai": 20,
+        "BreederCode": 8,
+        "BreederName": 72,
+        "SanchiName": 20,
+        "BanusiCode": 6,
+        "BanusiName": 64,
+        "TorokuRaceSu": 3,
+        "MakeDate": 8,
+        "Ketto3InfoHansyokuNum1": 10,
+        "Ketto3InfoBamei1": 36,
+        "Ketto3InfoHansyokuNum2": 10,
+        "Ketto3InfoBamei2": 36,
+        "Ketto3InfoHansyokuNum3": 10,
+        "Ketto3InfoBamei3": 36,
+        "Ketto3InfoHansyokuNum4": 10,
+        "Ketto3InfoBamei4": 36,
+        "Ketto3InfoHansyokuNum5": 10,
+        "Ketto3InfoBamei5": 36,
+        "Ketto3InfoHansyokuNum6": 10,
+        "Ketto3InfoBamei6": 36,
+        "Ketto3InfoHansyokuNum7": 10,
+        "Ketto3InfoBamei7": 36,
+        "Ketto3InfoHansyokuNum8": 10,
+        "Ketto3InfoBamei8": 36,
+        "Ketto3InfoHansyokuNum9": 10,
+        "Ketto3InfoBamei9": 36,
+        "Ketto3InfoHansyokuNum10": 10,
+        "Ketto3InfoBamei10": 36,
+        "Ketto3InfoHansyokuNum11": 10,
+        "Ketto3InfoBamei11": 36,
+        "Ketto3InfoHansyokuNum12": 10,
+        "Ketto3InfoBamei12": 36,
+        "Ketto3InfoHansyokuNum13": 10,
+        "Ketto3InfoBamei13": 36,
+        "Ketto3InfoHansyokuNum14": 10,
+        "Ketto3InfoBamei14": 36,
+        "SogoChaku": 18,
+        "ChuoGokeiChaku": 18,
+        "SibaChokuChaku": 18,
+        "SibaMigiChaku": 18,
+        "SibaHidariChaku": 18,
+        "DirtChokuChaku": 18,
+        "DirtMigiChaku": 18,
+        "DirtHidariChaku": 18,
+        "SyogaiChaku": 18,
+        "SibaRyoChaku": 18,
+        "SibaYayaomoChaku": 18,
+        "SibaOmoChaku": 18,
+        "SibaFuryoChaku": 18,
+        "DirtRyoChaku": 18,
+        "DirtYayaomoChaku": 18,
+        "DirtOmoChaku": 18,
+        "DirtFuryoChaku": 18,
+        "SyogaiRyoChaku": 18,
+        "SyogaiYayaomoChaku": 18,
+        "SyogaiOmoChaku": 18,
+        "SyogaiFuryoChaku": 18,
+        "SibaShortChaku": 18,
+        "SibaMiddleChaku": 18,
+        "SibaLongChaku": 18,
+        "DirtShortChaku": 18,
+        "DirtMiddleChaku": 18,
+        "DirtLongChaku": 18,
+    "KyakusituKeiko": 12,
+    "Reserved_1608": 2,
+}
+# 標準名 UMA は着回数と脚質傾向を 3 桁ずつの列へ展開し、``MakeDate`` を DATE
+# 型で持つため、無損失幅の対象はこの二つを除いた共通項目になる。
+_UM_STANDARD_LOSSLESS_TEXT_WIDTHS = {
+        "RecordSpec": 2,
+        "DataKubun": 1,
+        "KettoNum": 10,
+        "DelKubun": 1,
+        "RegDate": 8,
+        "DelDate": 8,
+        "Bamei": 36,
+        "BameiKana": 36,
+        "BameiEng": 60,
+        "ZaikyuFlag": 1,
+        "Reserved": 19,
+        "UmaKigoCD": 2,
+        "SexCD": 1,
+        "HinsyuCD": 1,
+        "KeiroCD": 2,
+        "TozaiCD": 1,
+        "ChokyosiCode": 5,
+        "ChokyosiRyakusyo": 8,
+        "Syotai": 20,
+        "BreederCode": 8,
+        "BreederName": 72,
+        "SanchiName": 20,
+        "BanusiCode": 6,
+        "BanusiName": 64,
+        "TorokuRaceSu": 3,
+        "Ketto3InfoHansyokuNum1": 10,
+        "Ketto3InfoBamei1": 36,
+        "Ketto3InfoHansyokuNum2": 10,
+        "Ketto3InfoBamei2": 36,
+        "Ketto3InfoHansyokuNum3": 10,
+        "Ketto3InfoBamei3": 36,
+        "Ketto3InfoHansyokuNum4": 10,
+        "Ketto3InfoBamei4": 36,
+        "Ketto3InfoHansyokuNum5": 10,
+        "Ketto3InfoBamei5": 36,
+        "Ketto3InfoHansyokuNum6": 10,
+        "Ketto3InfoBamei6": 36,
+        "Ketto3InfoHansyokuNum7": 10,
+        "Ketto3InfoBamei7": 36,
+        "Ketto3InfoHansyokuNum8": 10,
+        "Ketto3InfoBamei8": 36,
+        "Ketto3InfoHansyokuNum9": 10,
+        "Ketto3InfoBamei9": 36,
+        "Ketto3InfoHansyokuNum10": 10,
+        "Ketto3InfoBamei10": 36,
+        "Ketto3InfoHansyokuNum11": 10,
+        "Ketto3InfoBamei11": 36,
+        "Ketto3InfoHansyokuNum12": 10,
+        "Ketto3InfoBamei12": 36,
+        "Ketto3InfoHansyokuNum13": 10,
+        "Ketto3InfoBamei13": 36,
+        "Ketto3InfoHansyokuNum14": 10,
+        "Ketto3InfoBamei14": 36,
+}
+_UM_LOSSLESS_TEXT_WIDTHS = {
+    "NL_UM": _UM_NATIVE_LOSSLESS_TEXT_WIDTHS,
+    "UMA": _UM_STANDARD_LOSSLESS_TEXT_WIDTHS,
+}
 _PROVIDER_OPERATION_COUNT_STORAGE_TABLES = (
     _AV_STORAGE_TABLES
     | _HR_STORAGE_TABLES
@@ -750,6 +919,7 @@ _PROVIDER_OPERATION_COUNT_STORAGE_TABLES = (
     | _SK_STORAGE_TABLES
     | _TC_STORAGE_TABLES
     | _CC_STORAGE_TABLES
+    | _UM_ERASE_STORAGE_TABLES
 )
 _JC_STORAGE_TABLES = frozenset({"NL_JC", "RT_JC", "KISYU_CHANGE"})
 _JC_KEY_COLUMNS = (
@@ -779,7 +949,6 @@ _JC_LOSSLESS_TEXT_WIDTHS = {
     for table_name in _JC_STORAGE_TABLES
 }
 _CS_STORAGE_TABLES = frozenset({"NL_CS", "COURSE"})
-_UM_STORAGE_TABLES = frozenset({"NL_UM"})
 _JG_STORAGE_TABLES = frozenset({"NL_JG", "JOGAIBA"})
 _JG_KEY_COLUMNS = (
     "Year",
@@ -2745,6 +2914,71 @@ def verify_cs_storage_schema(database: BaseDatabase, table_name: str) -> bool:
     return True
 
 
+def _verify_um_no_unapproved_constraints(
+    database: BaseDatabase,
+    table_name: str,
+) -> None:
+    """Reject constraints beyond UM's one official immediate primary key."""
+
+    from src.database.migration import _migration_targets
+
+    targets = _migration_targets(database)
+    if targets != (database,):
+        for target in targets:
+            _verify_um_no_unapproved_constraints(target, table_name)
+        return
+
+    db_type = database.get_db_type()
+    if db_type == "sqlite":
+        if database.fetch_all(f'PRAGMA foreign_key_list("{table_name}")'):
+            raise SchemaMigrationError(
+                f"UM storage {table_name} has unsupported FOREIGN KEY constraints"
+            )
+        row = database.fetch_one(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?",
+            (table_name,),
+        )
+        definition = _sqlite_schema_code(str((row or {}).get("sql") or ""))
+        if re.search(r"\bCHECK\s*\(", definition, flags=re.IGNORECASE):
+            raise SchemaMigrationError(f"UM storage {table_name} has unsupported CHECK constraints")
+        return
+    if db_type == "postgresql":
+        unexpected = database.fetch_all(
+            "SELECT conname AS constraint_name, contype AS constraint_type "
+            "FROM pg_constraint "
+            "WHERE conrelid = to_regclass(%s) AND contype IN ('c', 'f')",
+            (table_name,),
+        )
+        if unexpected:
+            raise SchemaMigrationError(
+                f"UM storage {table_name} has unsupported CHECK/FOREIGN KEY constraints"
+            )
+
+
+def validate_um_record(record: dict, table_name: str | None = None) -> bool:
+    """Validate one caller-built UM row against the official 1609-byte domain.
+
+    The standard ``UMA`` body is an expansion of the same official spans, so the
+    official values are validated before that expansion runs.
+    """
+
+    if table_name is not None and table_name not in _UM_ERASE_STORAGE_TABLES:
+        return False
+    if _record_type_from_record(record) != "UM":
+        if table_name is None:
+            return False
+        raise SchemaMigrationError(f"{table_name} received a non-UM record")
+
+    from src.parser.um_parser import UMParser
+
+    try:
+        data_kubun = resolve_record_data_kubun(record)
+        UMParser.validate_current_fields(record, data_kubun=data_kubun)
+    except ValueError as error:
+        raise SchemaMigrationError(str(error)) from error
+    return True
+
+
 def verify_um_storage_schema(database: BaseDatabase, table_name: str) -> bool:
     """Fail closed unless native UM storage keeps a replacement-safe key.
 
@@ -2758,7 +2992,7 @@ def verify_um_storage_schema(database: BaseDatabase, table_name: str) -> bool:
     intentionally not re-verified here.
     """
 
-    if table_name not in _UM_STORAGE_TABLES:
+    if table_name not in _UM_ERASE_STORAGE_TABLES:
         return False
     transaction_snapshot = _snapshot_validation_transactions(database)
     from src.database.migration import verify_table_schema
@@ -2770,6 +3004,16 @@ def verify_um_storage_schema(database: BaseDatabase, table_name: str) -> bool:
         if schema_sql is None:
             raise SchemaMigrationError(f"UM storage schema is undefined: {table_name}")
         verify_table_schema(database, table_name, schema_sql)
+        _verify_strict_storage_column_contract(
+            database,
+            table_name,
+            schema_sql,
+            allow_missing_columns=False,
+            storage_label="UM",
+            lossless_text_widths=_UM_LOSSLESS_TEXT_WIDTHS[table_name],
+            allow_extra_columns=False,
+        )
+        _verify_um_no_unapproved_constraints(database, table_name)
         _verify_replacement_key_constraints(database, table_name, "UM storage")
         return True
     except Exception:
@@ -4147,6 +4391,7 @@ _OFFICIAL_ERASE_KEY_COLUMNS = {
     "HC": _HC_KEY_COLUMNS,
     "HN": _HN_KEY_COLUMNS,
     "SK": _SK_KEY_COLUMNS,
+    "UM": _UM_KEY_COLUMNS,
     # One physical H1/H6/O1-O6 record expands into multiple child rows.
     "H1": _MINING_RACE_KEY_COLUMNS,
     "H6": _MINING_RACE_KEY_COLUMNS,
@@ -4174,6 +4419,7 @@ _OFFICIAL_ERASE_STORAGE_TABLES = {
     "HC": set(_HC_STORAGE_TABLES),
     "HN": set(_HN_STORAGE_TABLES),
     "SK": set(_SK_STORAGE_TABLES),
+    "UM": set(_UM_ERASE_STORAGE_TABLES),
     "H1": {"NL_H1", "RT_H1", "HYO_TANPUKU"},
     "H6": {"NL_H6", "RT_H6", "HYO_SANRENTAN"},
     "O1": {"NL_O1", "RT_O1", "ODDS_TANPUKUWAKU_HEAD"},
@@ -4251,14 +4497,7 @@ def validate_import_record_header(record: dict) -> tuple[str, str]:
             context=DataKubunContext.ACCUMULATED,
         )
         if record_type == "UM":
-            ketto_num = record.get("KettoNum")
-            if (
-                not isinstance(ketto_num, str)
-                or len(ketto_num) != 10
-                or not ketto_num.isascii()
-                or not ketto_num.isdigit()
-            ):
-                raise ValueError("UM KettoNum must be exactly 10 ASCII digits")
+            validate_um_record(record)
         if record_type == "CS":
             from src.parser.cs_parser import CSParser
 
@@ -6717,6 +6956,18 @@ def convert_record_types(record: dict, table_name: str) -> dict:
             continue
 
         if (
+            table_name in _UM_ERASE_STORAGE_TABLES
+            and field_name in _UM_BLANK_TEXT_FIELDS
+            and isinstance(value, str)
+            and not value.strip()
+        ):
+            # These official UM spans carry 初期値 Ｓ/sp, i.e. spaces. The v2 UM
+            # schema is NOT NULL, so keep the validated empty provider value
+            # rather than coercing a provided blank to NULL.
+            converted[field_name] = ""
+            continue
+
+        if (
             table_name in _SK_STORAGE_TABLES
             and field_name in _SK_BLANK_TEXT_FIELDS
             and isinstance(value, str)
@@ -7243,6 +7494,7 @@ class DataImporter:
                 if table_name not in self._verified_um_tables:
                     if verify_um_storage_schema(self.database, table_name):
                         self._verified_um_tables.add(table_name)
+                validate_um_record(record, table_name)
                 if table_name not in self._verified_jg_tables:
                     if verify_jg_storage_schema(self.database, table_name):
                         self._verified_jg_tables.add(table_name)
@@ -7999,6 +8251,7 @@ class DataImporter:
             if table_name not in self._verified_um_tables:
                 if verify_um_storage_schema(self.database, table_name):
                     self._verified_um_tables.add(table_name)
+            validate_um_record(record, table_name)
             if table_name not in self._verified_jg_tables:
                 if verify_jg_storage_schema(self.database, table_name):
                     self._verified_jg_tables.add(table_name)

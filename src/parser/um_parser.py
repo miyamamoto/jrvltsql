@@ -6,6 +6,8 @@ UMレコードパーサー: １３．競走馬マスタ
 このファイルはJV-Data仕様書 Ver.4.9.0.1に基づいて修正されました。
 """
 
+from collections.abc import Mapping
+from datetime import date
 from typing import Dict, Optional
 
 from src.parser.base import validate_fixed_record
@@ -27,6 +29,147 @@ class UMParser:
     # 項番63 レコード区切の位置。レコード全体が仕様どおりに並んでいるかを
     # 1 箇所で検算するために使う（ここが CR/LF なら手前の全項目が正しく閉じている）
     RECORD_DELIMITER_START = 1607
+
+    # 公式コード表の桁数。項番14/15/16/17/19（馬記号・性別・品種・毛色・東西所属）は
+    # コード値そのものを列挙せず、公式の桁数と数字であることだけを検査する
+    # （コード表は追加され得るため、未知コードで取込を止めない）
+    CODE_WIDTHS = {
+        "UmaKigoCD": 2,
+        "SexCD": 1,
+        "HinsyuCD": 1,
+        "KeiroCD": 2,
+        "TozaiCD": 1,
+        "ChokyosiCode": 5,
+        "BreederCode": 8,
+        "BanusiCode": 6,
+        "TorokuRaceSu": 3,
+    }
+    # 項番5 競走馬抹消区分、項番12 JRA施設在きゅうフラグ。後者は初期値が空白
+    # （平成18年6月6日以降設定）なので空文字も公式値として受け付ける
+    DEL_KUBUN_VALUES = frozenset({"0", "1"})
+    ZAIKYU_FLAG_VALUES = frozenset({"0", "1", ""})
+    DATE_FIELDS = ("RegDate", "DelDate", "BirthDate")
+    MONEY_FIELDS = (
+        "RuikeiHonsyoHeiti",
+        "RuikeiHonsyoSyogai",
+        "RuikeiFukaHeichi",
+        "RuikeiFukaSyogai",
+        "RuikeiSyutokuHeichi",
+        "RuikeiSyutokuSyogai",
+    )
+    CHAKU_FIELDS = (
+        "SogoChaku",
+        "ChuoGokeiChaku",
+        "SibaChokuChaku",
+        "SibaMigiChaku",
+        "SibaHidariChaku",
+        "DirtChokuChaku",
+        "DirtMigiChaku",
+        "DirtHidariChaku",
+        "SyogaiChaku",
+        "SibaRyoChaku",
+        "SibaYayaomoChaku",
+        "SibaOmoChaku",
+        "SibaFuryoChaku",
+        "DirtRyoChaku",
+        "DirtYayaomoChaku",
+        "DirtOmoChaku",
+        "DirtFuryoChaku",
+        "SyogaiRyoChaku",
+        "SyogaiYayaomoChaku",
+        "SyogaiOmoChaku",
+        "SyogaiFuryoChaku",
+        "SibaShortChaku",
+        "SibaMiddleChaku",
+        "SibaLongChaku",
+        "DirtShortChaku",
+        "DirtMiddleChaku",
+        "DirtLongChaku",
+    )
+    TEXT_FIELD_WIDTHS = {
+        "Bamei": 36,
+        "BameiKana": 36,
+        "BameiEng": 60,
+        "Reserved": 19,
+        "ChokyosiRyakusyo": 8,
+        "Syotai": 20,
+        "BreederName": 72,
+        "SanchiName": 20,
+        "BanusiName": 64,
+        **{f"Ketto3InfoBamei{slot}": 36 for slot in range(1, 15)},
+    }
+    PEDIGREE_NUMBER_FIELDS = tuple(f"Ketto3InfoHansyokuNum{slot}" for slot in range(1, 15))
+
+    @staticmethod
+    def _require_ascii_digits(field_name: str, value: object, width: int) -> str:
+        if isinstance(value, str) and len(value) == width and value.isascii() and value.isdigit():
+            return value
+        raise ValueError(f"UM {field_name} must be exactly {width} ASCII digits")
+
+    @classmethod
+    def _require_date(cls, field_name: str, value: object) -> str:
+        """公式の日付項目。初期値 0 埋めの ``00000000`` も提供値として許す。"""
+
+        digits = cls._require_ascii_digits(field_name, value, 8)
+        if digits == "00000000":
+            return digits
+        try:
+            date(int(digits[:4]), int(digits[4:6]), int(digits[6:]))
+        except ValueError as error:
+            raise ValueError(f"UM {field_name} must be a real YYYYMMDD date") from error
+        return digits
+
+    @staticmethod
+    def _require_cp932_text(field_name: str, value: object, width: int) -> None:
+        if not isinstance(value, str):
+            raise ValueError(f"UM {field_name} must be provider text")
+        try:
+            encoded = value.encode("cp932", errors="strict")
+        except UnicodeEncodeError as error:
+            raise ValueError(f"UM {field_name} is not CP932 encodable") from error
+        if len(encoded) > width:
+            raise ValueError(f"UM {field_name} exceeds its official {width}-byte span")
+
+    @classmethod
+    def validate_key_fields(cls, record: Mapping[str, object]) -> None:
+        cls._require_date("MakeDate", record.get("MakeDate"))
+        cls._require_ascii_digits("KettoNum", record.get("KettoNum"), 10)
+
+    @classmethod
+    def validate_current_fields(
+        cls,
+        record: Mapping[str, object],
+        *,
+        data_kubun: str | None = None,
+    ) -> None:
+        """公式 1609 バイトの本文値域を検査する。
+
+        ``DataKubun=0`` は「該当レコード削除」であり、公式に意味を持つのは
+        ヘッダと血統登録番号だけなので、本文は不透明なまま鍵一致だけを見る。
+        """
+
+        cls.validate_key_fields(record)
+        status = data_kubun if data_kubun is not None else record.get("DataKubun")
+        if status == "0":
+            return
+
+        if record.get("DelKubun") not in cls.DEL_KUBUN_VALUES:
+            raise ValueError("UM DelKubun is not an official code")
+        if record.get("ZaikyuFlag") not in cls.ZAIKYU_FLAG_VALUES:
+            raise ValueError("UM ZaikyuFlag is not an official code")
+        for field_name in cls.DATE_FIELDS:
+            cls._require_date(field_name, record.get(field_name))
+        for field_name, width in cls.CODE_WIDTHS.items():
+            cls._require_ascii_digits(field_name, record.get(field_name), width)
+        for field_name in cls.MONEY_FIELDS:
+            cls._require_ascii_digits(field_name, record.get(field_name), 9)
+        for field_name in cls.CHAKU_FIELDS:
+            cls._require_ascii_digits(field_name, record.get(field_name), 18)
+        cls._require_ascii_digits("KyakusituKeiko", record.get("KyakusituKeiko"), 12)
+        for field_name in cls.PEDIGREE_NUMBER_FIELDS:
+            cls._require_ascii_digits(field_name, record.get(field_name), 10)
+        for field_name, width in cls.TEXT_FIELD_WIDTHS.items():
+            cls._require_cp932_text(field_name, record.get(field_name), width)
 
     def __init__(self):
         self.logger = get_logger(__name__)

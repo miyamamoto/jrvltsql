@@ -50,6 +50,18 @@
   行の置換前に `SchemaMigrationError` で拒否する（`docs/record_contracts.md` の
   UM 契約どおり。兄弟レコードと同じ検証器を同じ位置で呼ぶだけで、parser の挙動と
   標準名 `UMA` の既存 preflight は変えない）
+- `UM`を公式現行1609バイト配置の本文domainへ結び付け、native `NL_UM`と標準名
+  `UMA`でprovider順のstatus 1/2/3/4/9更新、status 0の物理exact erase（従来は
+  両tableにstatus 0のtombstone行が残っていた）、caller validation（実在する
+  `RegDate`/`DelDate`/`BirthDate`、抹消区分`0/1`、在きゅうフラグ`0/1`または空欄、
+  2/1/1/2/1桁の馬記号/性別/品種/毛色/東西所属コード、5/8/6桁の調教師/生産者/
+  馬主コード、9桁×6の累積賞金、18桁×27の着回数、12桁の脚質傾向、3桁の登録
+  レース数、14個の10桁繁殖登録番号）、SQLite/PostgreSQL/Dualのstrict schema
+  preflightを一致させた。公式に空欄になり得るテキスト項目は`NULL`ではなく空文字
+  で保持する。`NL_UM.ZaikyuFlag`は公式の空欄を保持するため`INTEGER`から`TEXT`へ
+  変更し、両tableの全列を`NOT NULL`にした。nullable/keyless/wrong-type/追加
+  UNIQUE/CHECK/FKを持つ既存tableは自動移行せず、backup・rebuild・`DIFN`
+  reimportを要求する。UMは蓄積系masterだけであり、`RT_UM`を追加しない
 - `SK`を公式現行208バイト配置と10桁`KettoNum` identityへ結び付け、native
   `NL_SK`と標準名`SANKU`でprovider順のstatus 1/2更新、status 0 exact erase、
   caller validation（実在する`BirthDate`、1/1/2桁の性別/品種/毛色コード、

@@ -76,6 +76,7 @@ from src.importer.importer import (
     validate_jg_record,
     validate_se_record,
     validate_sk_record,
+    validate_um_record,
     validate_tc_record,
     validate_wc_record,
     validate_we_record,
@@ -496,6 +497,7 @@ class OptimizedDataImporter:
                 if table_name not in self._verified_um_tables:
                     if verify_um_storage_schema(self.database, table_name):
                         self._verified_um_tables.add(table_name)
+                validate_um_record(record, table_name)
                 if table_name not in self._verified_jg_tables:
                     if verify_jg_storage_schema(self.database, table_name):
                         self._verified_jg_tables.add(table_name)
