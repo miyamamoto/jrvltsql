@@ -30,6 +30,8 @@ nav:
   - PostgreSQL: postgresql.md
   - 対応データ種別一覧: data_support.md
   - CLI: CLI.md
+  - Wine/Docker: wine_docker.md
+  - JV-Link 手動登録: jvlink_manual_registration.md
   - スクリプト一覧: scripts.md
   - アーキテクチャ: architecture.md
 

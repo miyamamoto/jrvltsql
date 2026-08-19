@@ -102,6 +102,44 @@ class TestJVLinkBridgeInit:
         with pytest.raises(JVLinkBridgeError, match="JVLINK_BRIDGE_RUNNER"):
             bridge._build_command()
 
+    def test_external_runner_env_selects_the_jvlink_wine_prefix(
+        self, tmp_path, monkeypatch
+    ):
+        """The registered JV-Link lives in a prefix the runner must be told about."""
+
+        monkeypatch.setattr("src.jvlink.bridge.sys.platform", "linux")
+        exe = tmp_path / "JVLinkBridge.exe"
+        exe.touch()
+        monkeypatch.setenv("JVLINK_BRIDGE_RUNNER", "wine")
+        monkeypatch.setenv("JVLINK_WINEPREFIX", "/wineprefix")
+        monkeypatch.setenv("JVLINK_WINEARCH", "win64")
+        monkeypatch.delenv("WINEPREFIX", raising=False)
+        monkeypatch.delenv("WINEARCH", raising=False)
+        monkeypatch.delenv("WINEDEBUG", raising=False)
+
+        env = JVLinkBridge(bridge_path=exe)._build_env()
+
+        assert env["WINEPREFIX"] == "/wineprefix"
+        assert env["WINEARCH"] == "win64"
+        assert env["WINEDEBUG"] == "-all"
+
+    def test_explicit_wine_debug_setting_is_kept(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("src.jvlink.bridge.sys.platform", "linux")
+        exe = tmp_path / "JVLinkBridge.exe"
+        exe.touch()
+        monkeypatch.setenv("JVLINK_BRIDGE_RUNNER", "wine")
+        monkeypatch.setenv("WINEDEBUG", "+loaddll")
+
+        assert JVLinkBridge(bridge_path=exe)._build_env()["WINEDEBUG"] == "+loaddll"
+
+    def test_windows_bridge_env_is_not_rewritten_for_wine(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("src.jvlink.bridge.sys.platform", "win32")
+        exe = tmp_path / "JVLinkBridge.exe"
+        exe.touch()
+        monkeypatch.delenv("WINEDEBUG", raising=False)
+
+        assert "WINEDEBUG" not in JVLinkBridge(bridge_path=exe)._build_env()
+
     def test_windows_bridge_uses_direct_execution(self, tmp_path, monkeypatch):
         exe = tmp_path / "JVLinkBridge.exe"
         exe.touch()
@@ -242,6 +280,14 @@ class TestJVLinkBridgeAPI:
     def test_jv_init_error(self, bridge):
         _patch_responses(bridge, {"status": "error", "error": "JVInit failed", "code": -100})
         with pytest.raises(JVLinkBridgeError):
+            bridge.jv_init()
+
+    def test_bridge_diagnostic_survives_a_missing_result_code(self, bridge):
+        """An uninstalled JV-Link answers with an error and no result code."""
+
+        _patch_responses(bridge, {"error": "CoCreateInstance failed (0x80040154)"})
+
+        with pytest.raises(JVLinkBridgeError, match=r"CoCreateInstance failed"):
             bridge.jv_init()
 
     def test_jv_init_requires_an_official_result_code(self, bridge):

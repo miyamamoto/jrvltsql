@@ -1,0 +1,46 @@
+services:
+  jltsql:
+    build: .
+    image: jltsql:wine
+    # JV-Link must be installed and registered once by hand on the noVNC
+    # desktop; see docs/jvlink_manual_registration.md.
+    command: ["sleep", "infinity"]
+    environment:
+      DISPLAY: ":1"
+      TZ: Asia/Tokyo
+      WINEPREFIX: /wineprefix
+      WINEARCH: win64
+      JVLINK_WINEPREFIX: /wineprefix
+      JVLINK_WINEARCH: win64
+      JVLINK_BRIDGE_EXE: /app/tools/jvlink-bridge/bin/native/JVLinkBridge.exe
+      JVLINK_BRIDGE_RUNNER: wine
+      NOVNC_PUBLIC_PORT: 6080
+      VNC_PUBLIC_PORT: 15900
+      POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_DATABASE: ${POSTGRES_DATABASE:-keiba}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "6080:6080"  # noVNC browser UI
+      - "15900:5900" # raw VNC
+    volumes:
+      - ./config:/app/config
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./wineprefix:/wineprefix
+    shm_size: "1gb"
+    depends_on:
+      - postgres
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DATABASE:-keiba}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:

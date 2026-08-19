@@ -47,13 +47,28 @@ class JVLinkBridgeError(Exception):
         super().__init__(message)
 
 
+def _bridge_error_suffix(response: dict) -> str:
+    """Keep the runner's own diagnostic text on a protocol violation.
+
+    A bridge that cannot create the JV-Link COM object answers with an error
+    string and no result code; dropping it leaves the operator with nothing to
+    act on when JV-Link is simply not installed in the prefix.
+    """
+
+    error = response.get("error")
+    return f": {error}" if isinstance(error, str) and error else ""
+
+
 def _require_response_code(response: dict, command: str) -> int:
     if "code" not in response:
-        raise JVLinkBridgeError(f"{command} response has no result code")
+        raise JVLinkBridgeError(
+            f"{command} response has no result code{_bridge_error_suffix(response)}"
+        )
     code = response["code"]
     if type(code) is not int:
         raise JVLinkBridgeError(
             f"{command} response result code is not an integer: {code!r}"
+            f"{_bridge_error_suffix(response)}"
         )
     return code
 
@@ -237,7 +252,24 @@ class JVLinkBridge:
         return [self._runner, str(self._bridge_path)]
 
     def _build_env(self) -> dict[str, str]:
-        return os.environ.copy()
+        """Map the JV-Link settings onto the variables the runner understands.
+
+        A Wine runner reads WINEPREFIX/WINEARCH, so the prefix holding
+        the registered JV-Link is selected through JVLINK_WINEPREFIX and
+        JVLINK_WINEARCH without the caller having to export Wine's own
+        variables to the whole process.
+        """
+
+        env = os.environ.copy()
+        if self._use_external_runner:
+            env.setdefault("WINEDEBUG", "-all")
+        wineprefix = env.get("JVLINK_WINEPREFIX")
+        if wineprefix:
+            env["WINEPREFIX"] = wineprefix
+        winearch = env.get("JVLINK_WINEARCH")
+        if winearch:
+            env["WINEARCH"] = winearch
+        return env
 
     def _dialog_watcher_enabled(self) -> bool:
         if not self._use_external_runner:
