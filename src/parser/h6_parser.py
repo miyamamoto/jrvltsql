@@ -53,6 +53,9 @@ class H6Parser:
     # 人気順の取消表記は公式に4文字固定（'----':発売前取消 '****':発売後取消）。
     FAVOURITE_MARKERS = frozenset({"----", "****"})
     TOTAL_FIELDS = ("SanrentanHyoTotal", "SanrentanHenkanHyoTotal")
+    # 組番が1件も無い snapshot（発売なし・レース中止）でも公式の票数合計は
+    # 提供されるため、H1 の総計行（Kumi='TOTAL'）と同じ sentinel で1行だけ保持する。
+    TOTAL_COMBINATION = "TOTAL"
 
     @staticmethod
     def _require_ascii_digits(field_name: str, value: object, width: int) -> str:
@@ -137,7 +140,13 @@ class H6Parser:
             cls._require_vote_total(field_name, record.get(field_name))
 
         if "SanrentanKumi" not in record and "SanrentanHyo" not in record:
-            # 発売のない組番のみのレコードは合計エリアだけを持つ。
+            # 合計エリアだけを持つ caller row。
+            return
+        if record.get("SanrentanKumi") == cls.TOTAL_COMBINATION:
+            # 組番のない snapshot の合計行。組番票数と人気順は提供されない。
+            if record.get("SanrentanHyo") not in ("", None):
+                raise ValueError("H6 totals-only row must not carry a combination vote")
+            cls._require_favourite(record.get("SanrentanNinki"))
             return
         cls._require_ascii_digits(
             "SanrentanKumi", record.get("SanrentanKumi"), cls.COMBINATION_WIDTH
@@ -213,4 +222,10 @@ class H6Parser:
             row["SanrentanNinki"] = ninki
             rows.append(row)
 
-        return rows if rows else [header]
+        if rows:
+            return rows
+        totals_only = dict(header)
+        totals_only["SanrentanKumi"] = self.TOTAL_COMBINATION
+        totals_only["SanrentanHyo"] = ""
+        totals_only["SanrentanNinki"] = ""
+        return [totals_only]

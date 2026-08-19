@@ -73,7 +73,10 @@
   取るため、`NL_H6`/`RT_H6`の`SanrentanNinki`を`INTEGER`から`TEXT`へ、標準名
   `HYOSU_SANRENTAN.Ninki`を`SMALLINT`から`VARCHAR(4)`へ変更し（従来は取消
   マーカーが`NULL`に落ちていた）、空白は`NULL`ではなく空文字で保持する。key列は
-  `NOT NULL`にし、標準名では公式キー以外の`UNIQUE` indexも拒否する。既存tableは
+  `NOT NULL`にし、標準名では公式キー以外の`UNIQUE` indexも拒否する。組番が1件も
+  無いsnapshot（発売なし・レース中止）はnativeの置換キーを満たせず、公式の票数
+  合計ごと取り込みに失敗していた（`records_failed`）。H1の総計行と同じ
+  `SanrentanKumi=TOTAL`の1行として保持する。既存tableは
   自動移行せず（列の自動追加も行わない）、backup・rebuild・`RACE` reimportを
   要求する
 - native `NL_UM` の保存経路にも標準名 `UMA` と同じ置換キー検証を追加し、公式主キー

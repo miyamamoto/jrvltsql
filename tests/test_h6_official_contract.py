@@ -228,6 +228,43 @@ def test_h6_official_favourite_markers_survive_storage(
             }
 
 
+def test_h6_records_without_a_sold_combination_keep_the_official_totals() -> None:
+    """組番のない snapshot も合計だけの1行になり、native の identity を持つ。"""
+
+    rows = h6_rows(data_kubun="9", populated=False)
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["SanrentanKumi"] == H6Parser.TOTAL_COMBINATION
+    assert row["SanrentanHyoTotal"] == ""
+    assert validate_h6_record(row, "NL_H6") is True
+
+
+@pytest.mark.parametrize("use_standard", (False, True), ids=("native", "standard"))
+def test_h6_totals_only_snapshot_is_stored_once_per_race(
+    tmp_path: Path,
+    use_standard: bool,
+) -> None:
+    """A cancelled/unsold race keeps its totals and is replaced, not duplicated."""
+
+    tables = _tables(use_standard)
+    database = SQLiteDatabase({"path": str(tmp_path / f"totals-{use_standard}.db")})
+    with database:
+        _create(database, tables)
+        importer = DataImporter(database, use_jravan_schema=use_standard)
+        cancelled = h6_rows(data_kubun="9", populated=False)
+        for _ in range(2):
+            assert importer.import_records(iter(list(cancelled)))["records_failed"] == 0
+        if use_standard:
+            assert database.fetch_one("SELECT COUNT(*) AS count FROM HYOSU2") == {"count": 1}
+            assert database.fetch_one("SELECT COUNT(*) AS count FROM HYOSU_SANRENTAN") == {
+                "count": 0
+            }
+        else:
+            assert database.fetch_all(
+                "SELECT SanrentanKumi, SanrentanHyoTotal FROM NL_H6"
+            ) == [{"SanrentanKumi": "TOTAL", "SanrentanHyoTotal": None}]
+
+
 @pytest.mark.parametrize("use_standard", (False, True), ids=("native", "standard"))
 @pytest.mark.parametrize("auto_commit", (True, False), ids=("owned", "caller-owned"))
 @pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))

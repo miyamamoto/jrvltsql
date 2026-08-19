@@ -60,7 +60,11 @@ Public API replacements:
   blank not registered) as text in `NL_H6`/`RT_H6` (`SanrentanNinki` was
   `INTEGER`) and standard `HYOSU_SANRENTAN.Ninki` (was `SMALLINT`), and erases a
   status-0 race physically from every H6 table, including the standard
-  `HYOSU2`/`HYOSU_SANRENTAN` pair that the previous mapping missed. Existing H6
+  `HYOSU2`/`HYOSU_SANRENTAN` pair that the previous mapping missed. A snapshot
+  with no sold combination (no-sale flag or a cancelled race) previously failed
+  to import into native storage and lost its official vote totals; it is now
+  stored as a single `SanrentanKumi=TOTAL` row, matching the H1 totals row.
+  Existing H6
   tables with nullable keys, numeric favourite columns, missing columns,
   additional UNIQUE indexes, or other drift are not migrated automatically:
   back up, rebuild with the current schema, and reimport from `RACE`.

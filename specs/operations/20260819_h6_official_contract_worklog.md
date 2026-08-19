@@ -51,6 +51,15 @@ H1 の 2 文字表記（`--`/`**`）とは異なり **4 文字固定**である�
 5. 標準名の子 table では公式キー以外の `UNIQUE` index が検査されず、strict
    preflight にも H6 が含まれていなかった。
 
+6. 組番が 1 件も無い snapshot（発売フラグ `0`/`1`、`DataKubun=9` のレース中止）
+   は parser が header だけの 1 行を返すため、native の置換キー
+   （…＋`SanrentanKumi`）を満たせず取り込みに失敗し、公式の票数合計ごと失われて
+   いた（実測 `{'records_imported': 0, 'records_failed': 1}` /
+   `Skipping record with incomplete primary key`）。PostgreSQL では primary key の
+   `NOT NULL` により以前から失敗し、SQLite では `NULL` 組番の行が重複し得た。
+   H1 の総計行（`Kumi='TOTAL'`）と同じ sentinel `SanrentanKumi='TOTAL'` で 1 行
+   だけ保持する形へ直した。
+
 ## 赤先行
 
 `tests/test_h6_official_contract.py`（149 test）を実装前に追加した。実装前の実測:
@@ -91,10 +100,18 @@ ImportError: cannot import name 'validate_h6_record' from 'src.importer.importer
 ## 緑の証跡
 
 ```
-H6 focused (SQLite):        149 passed, 13 skipped
-H6 focused (PostgreSQL 16): 158 passed, 4 skipped
-full suite:                 4054 passed, 479 skipped, 20 subtests passed
+H6 focused (SQLite):        152 passed, 13 skipped
+H6 focused (PostgreSQL 16): 161 passed, 4 skipped
+full suite:                 4057 passed, 479 skipped, 20 subtests passed
 mkdocs build --strict:      0 warnings
+```
+
+合計行 sentinel の赤先行実測（実装前）:
+
+```
+FAILED test_h6_records_without_a_sold_combination_keep_the_official_totals
+FAILED test_h6_totals_only_snapshot_is_stored_once_per_race[native]
+2 failed, 1 passed
 ```
 
 PostgreSQL は既存の使い捨て container `jltsql-sk-pg16-8215`
