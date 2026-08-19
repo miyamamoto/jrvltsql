@@ -2945,12 +2945,14 @@ def _verify_um_no_unapproved_constraints(
             "SELECT conname AS constraint_name, contype AS constraint_type "
             "FROM pg_constraint "
             "WHERE conrelid = to_regclass(?) AND contype IN ('c', 'f')",
-            (table_name,),
+            (table_name.lower(),),
         )
         if unexpected:
             raise SchemaMigrationError(
                 f"UM storage {table_name} has unsupported CHECK/FOREIGN KEY constraints"
             )
+        return
+    raise SchemaMigrationError(f"UM constraints cannot be verified for database type {db_type!r}")
 
 
 def validate_um_record(record: dict, table_name: str | None = None) -> bool:

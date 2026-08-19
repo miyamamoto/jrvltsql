@@ -605,3 +605,33 @@ def test_um_constraint_probe_uses_the_repository_placeholder_contract() -> None:
     for statement in database.statements:
         assert "%s" not in statement, statement
         assert "to_regclass(?)" in statement, statement
+
+
+def test_um_constraint_probe_fails_closed_on_an_unverifiable_backend() -> None:
+    """An unknown backend must not silently skip the constraint probe."""
+
+    from src.importer.importer import _verify_um_no_unapproved_constraints
+
+    class UnknownBackend:
+        def get_db_type(self) -> str:
+            return "duckdb"
+
+        def fetch_all(self, sql: str, params: tuple = ()) -> list:
+            raise AssertionError("unverifiable backends must not be probed")
+
+    with pytest.raises(SchemaMigrationError, match="duckdb"):
+        _verify_um_no_unapproved_constraints(UnknownBackend(), "NL_UM")
+
+
+@pytest.mark.parametrize(
+    "value",
+    ("x" * 3, "あい", None),
+    ids=("too-long", "non-ascii-too-long", "missing"),
+)
+def test_um_caller_reserved_delimiter_span_is_validated(value: object) -> None:
+    """The 2-byte trailing span is an official field and must be checked."""
+
+    record = um_record()
+    record["Reserved_1608"] = value
+    with pytest.raises(SchemaMigrationError, match="Reserved_1608"):
+        validate_um_record(record, "NL_UM")

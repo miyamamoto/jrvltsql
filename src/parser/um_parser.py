@@ -95,6 +95,7 @@ class UMParser:
         "Syotai": 20,
         "BreederName": 72,
         "SanchiName": 20,
+        "Reserved_1608": 2,
         "BanusiName": 64,
         **{f"Ketto3InfoBamei{slot}": 36 for slot in range(1, 15)},
     }
