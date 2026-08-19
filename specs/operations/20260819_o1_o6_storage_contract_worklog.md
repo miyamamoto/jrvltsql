@@ -91,17 +91,20 @@ storage 側で守ることである。
 ## 独立レビューで見つけた欠陥（同一 PR 内で赤先行修正）
 
 1. 公式の空白（登録なし）を空文字で保存する分岐が**定義だけで未接続**だった。
-    は宣言済みなのに  から
-   参照されておらず、空白は （未提供）へ落ちていた。接続し、
-    で固定した。
-   O1 は単勝・複勝・枠連の配列が独立なので、その行に存在しない項目は 
+   `_ODDS_BLANK_TEXT_FIELDS` は宣言済みなのに `convert_record_types` から
+   参照されておらず、空白は `NULL`（未提供）へ落ちていた。接続し、
+   `test_blank_official_values_stay_blank_instead_of_null` で固定した。
+   O1 は単勝・複勝・枠連の配列が独立なので、その行に存在しない項目は `NULL`
    （未提供）のままである。
-2. 単発経路が snapshot の**追従行だけ**を渡されたとき、何も書かずに  を
+2. 単発経路が snapshot の**追従行だけ**を渡されたとき、何も書かずに `True` を
    返していた（silent fail-open）。追従行も snapshot 全体を保持しているため、
-   単独で渡されても完全な snapshot を適用し、件数は先頭行のみで数える形に修正。
-    で固定。
-3. PostgreSQL のレース単位置換テストが無かったため追加
-   （）。
+   単独で渡されても完全な snapshot を適用し、件数は先頭行のみで数える形に修正した。
+   `test_single_record_follower_row_alone_still_stores_the_whole_snapshot` で固定。
+3. PostgreSQL のレース単位置換テストが無かったため追加した
+   （`test_postgresql_snapshot_replacement_removes_withdrawn_combinations`）。
+4. 合計のみ snapshot の sentinel 行（`Kumi=TOTAL`）は、parser が公式に組合せの
+   無いことを空文字で表すため、無損失化後は `NULL` ではなく空文字で保存される。
+   既存 `tests/test_expanded_record_storage.py` の期待値をこれに合わせた。
 
 追加後の証跡: 焦点テスト SQLite 212 passed / PostgreSQL 16 実機込み 229 passed、
 フルスイート PostgreSQL 16 実機込み **5003 passed**。
