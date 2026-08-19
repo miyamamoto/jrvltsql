@@ -1,8 +1,23 @@
 # jrvltsql v2.0.0 Release Notes (unreleased draft)
 
-This version is not released yet. The repository reports `2.0.0.dev0` until
-the official data-contract repairs, documentation audit, and real acquisition
-and database release gates are complete.
+`2.0.0` is not released yet. `2.0.0.dev0` is a **development-test prerelease**
+of the official data-contract work. It is **not** a production compatibility
+claim and **not** an acquisition-readiness claim: it is still gated on fresh
+real-provider (JV-Link) validation in a real development environment.
+
+What `2.0.0.dev0` is verified against:
+
+- the complete test gate on the frozen release SHA, with SQLite and a real
+  PostgreSQL 16 backend
+- a wheel/sdist built from that same SHA, installed into an isolated virtual
+  environment, where `jltsql --version`, `jltsql init`, full schema creation
+  (80 tables), and an official fixed-width O2 import (complete-snapshot
+  replacement plus `------` / `******` / `000000` markers) were exercised
+
+What it is **not** verified against:
+
+- real JV-Link acquisition, real provider ordering, or 64-bit SDK execution
+- migration of an existing 1.x database (rebuild and reimport are required)
 
 Current migration boundary:
 
@@ -47,6 +62,32 @@ Public API replacements:
   be backed up, rebuilt, and reimported. Current status 1 is the only accepted
   status; stale realtime rows are removed only after a successful 0B14
   full-date snapshot, while 0B16 remains event-oriented.
+- O1-O6 odds (オッズ1〜6) now bind the official fixed-width layouts
+  (962 / 2,042 / 2,654 / 4,031 / 12,293 / 83,285 bytes) and keep every official
+  provider value. The parser previously discarded rows whose odds were all `0`
+  or `-`/`*`, so `000000` (no bet), `------` (cancelled before sale) and
+  `******` (cancelled after sale) were lost; odds and favourite-order columns
+  were `REAL`/`INTEGER` in `NL_O1`-`NL_O6` and `RT_O1`-`RT_O6` and
+  `DECIMAL`/`SMALLINT` in the standard `ODDS_*` children, so cancellation
+  markers collapsed into `NULL` and could not be told apart from "not
+  registered" (blank). Those columns are now text and store the official value
+  verbatim.
+- one physical O1-O6 record is the complete odds snapshot of one race at one
+  point in time, so native, realtime and standard storage now replace the whole
+  race snapshot. A later snapshot with fewer combinations no longer leaves the
+  combinations it no longer offers, and a totals-only snapshot (no sale or a
+  cancelled race) replaces every earlier combination while keeping the official
+  vote totals as a single `Kumi=TOTAL` row. `DataKubun=0` erases the race
+  physically from every O1-O6 table, leaving no tombstone or totals sentinel.
+- O1-O6 race keys and combination numbers are now `NOT NULL`, and the official
+  body domain plus a strict schema preflight run on every storage path
+  (batch importer, optimized importer, single-record import, realtime, and
+  `DualDatabase`) before any DML. Missing official keys, nullable keys,
+  additional UNIQUE/partial/expression/exclusion indexes, deferrable primary
+  keys, columns too narrow or too numeric for the official markers, missing
+  owner/child tables, and unapproved CHECK/FOREIGN KEY constraints are
+  rejected. Existing O1-O6 tables are not migrated automatically: back up,
+  rebuild with the current schema, and reimport from `RACE`.
 - native and standard schemas now verify primary keys, types, capacities,
   child-table constraints, and cancellation/delete behavior before mutation;
   several record families gained complete child storage or corrected keys
