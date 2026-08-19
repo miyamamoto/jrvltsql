@@ -691,3 +691,82 @@ def test_h1_postgresql_standard_family_accepts_only_the_official_key_index(
     postgresql_db.commit()
     with pytest.raises(SchemaMigrationError):
         verify_h1_storage_schema(postgresql_db, "HYOSU")
+
+
+@pytest.mark.parametrize(
+    "bet_type,marker",
+    (
+        pytest.param("Tansyo", "--", id="tansyo-pre-sale-cancel"),
+        pytest.param("Tansyo", "**", id="tansyo-post-sale-cancel"),
+        pytest.param("Umaren", "---", id="umaren-pre-sale-cancel"),
+        pytest.param("Umaren", "***", id="umaren-post-sale-cancel"),
+        pytest.param("Wide", "***", id="wide-post-sale-cancel"),
+        pytest.param("Umatan", "***", id="umatan-post-sale-cancel"),
+        pytest.param("Sanrenpuku", "***", id="sanrenpuku-post-sale-cancel"),
+    ),
+)
+def test_h1_cancel_markers_fill_the_official_field_width(
+    bet_type: str, marker: str
+) -> None:
+    """A cancel marker occupies the whole 人気順 field, which is 2 or 3 wide.
+
+    Live JV-Link RACE data carries '***' for the three-character bet types, so
+    accepting only the two-character form rejects a real provider snapshot.
+    """
+
+    row = next(row for row in h1_rows() if row.get("BetType") == bet_type)
+    row["Ninki"] = marker
+    row["Hyo"] = "0" * len(row["Hyo"])
+    assert validate_h1_record(row, "NL_H1") is True
+
+
+@pytest.mark.parametrize(
+    "bet_type,malformed",
+    (
+        pytest.param("Tansyo", "---", id="tansyo-too-wide-marker"),
+        pytest.param("Umaren", "**", id="umaren-too-narrow-marker"),
+        pytest.param("Umaren", "-*-", id="umaren-mixed-marker"),
+        pytest.param("Umaren", "-1-", id="umaren-partial-digits"),
+    ),
+)
+def test_h1_rejects_favourite_markers_that_do_not_match_the_field(
+    bet_type: str, malformed: str
+) -> None:
+    row = next(row for row in h1_rows() if row.get("BetType") == bet_type)
+    row["Ninki"] = malformed
+    with pytest.raises(SchemaMigrationError):
+        validate_h1_record(row, "NL_H1")
+
+
+@pytest.mark.parametrize("marker", ("---", "***"))
+@pytest.mark.parametrize("use_standard", (False, True), ids=("native", "standard"))
+def test_h1_three_character_cancel_markers_survive_storage(
+    tmp_path: Path,
+    marker: str,
+    use_standard: bool,
+) -> None:
+    """The 馬連 人気順 field is three wide, so its marker is three characters."""
+
+    raw = bytearray(h1_raw())
+    umaren_offset, kumi, _hyo, ninki = _FIRST_ENTRIES[3]
+    start = umaren_offset + len(kumi) + 11
+    raw[start : start + len(ninki)] = marker.encode("ascii")
+    rows = [dict(row) for row in H1Parser().parse(bytes(raw))]
+    assert any(row.get("Ninki") == marker for row in rows)
+
+    tables = _tables(use_standard)
+    database = SQLiteDatabase({"path": str(tmp_path / f"wide-{use_standard}-{marker}.db")})
+    with database:
+        _create(database, tables)
+        stats = DataImporter(database, use_jravan_schema=use_standard).import_records(
+            iter(rows)
+        )
+        assert stats["records_failed"] == 0
+        if use_standard:
+            assert database.fetch_one(
+                "SELECT UmarenNinki FROM HYOSU_UMARENWIDE WHERE Kumi = '0102'"
+            ) == {"UmarenNinki": marker}
+        else:
+            assert database.fetch_one(
+                "SELECT Ninki FROM NL_H1 WHERE BetType = 'Umaren'"
+            ) == {"Ninki": marker}
