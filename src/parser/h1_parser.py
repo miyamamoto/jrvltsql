@@ -150,7 +150,8 @@ class H1Parser:
         if not value.strip():
             return
         text = value.strip()
-        if len(text) <= width and set(text) in ({"-"}, {"*"}):
+        if text in {"--", "**"}:
+            # 公式表記は2文字固定（'--':発売前取消 '**':発売後取消）。
             return
         if len(text) == width and text.isascii() and text.isdigit():
             return

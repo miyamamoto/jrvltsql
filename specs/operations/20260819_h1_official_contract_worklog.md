@@ -91,9 +91,9 @@
 
 | 対象 | 結果 |
 | --- | --- |
-| `tests/test_h1_official_contract.py`（SQLite） | 140 passed / 11 skipped |
-| 同（PostgreSQL 16 有効） | 146 passed / 4 skipped |
-| フルスイート（SQLite） | 3899 passed / 463 skipped / 20 subtests |
+| `tests/test_h1_official_contract.py`（SQLite） | 141 passed / 11 skipped |
+| 同（PostgreSQL 16 有効） | 148 passed / 4 skipped |
+| フルスイート（SQLite） | 3903 passed / 464 skipped / 20 subtests |
 
 PostgreSQL は既存の使い捨てコンテナ `jltsql-sk-pg16-8215`
 （`127.0.0.1:32904`）のみを再利用し、新規コンテナは作成していない。テストは
@@ -113,6 +113,22 @@ PostgreSQL は既存の使い捨てコンテナ `jltsql-sk-pg16-8215`
 | 人気順列を数値型へ戻す | 5 failed |
 | 空白人気順の保持 | 2 failed |
 | 消去表を別名へ戻す | 1 failed |
+
+## 独立レビューと修正（同一イテレーション内）
+
+1. 人気順の取消マーカーが緩かった。`set(text) in ({"-"}, {"*"})` は `-` や `---`
+   も通していた。公式表記は 2 文字固定（`'--'` 発売前取消 / `'**'` 発売後取消、
+   `/tmp/jvdata4901.txt` の各賭式「スペース:登録なし '--':発売前取消
+   '**':発売後取消」）なので `{"--", "**"}` へ厳格化した。
+2. `_H1_KEY_COLUMNS` が未使用の死んだ定数だった（UM イテレーションと同じ指摘）。
+   削除し、公式キーは `_STANDARD_VOTE_RACE_KEY_COLUMNS` /
+   `_STANDARD_VOTE_CONFIG["H1"]["children"]` の単一の出所から取る。
+3. 既存 DB への追加 migration preflight（`_preflight_existing_strict_storage`）が
+   native 2 table だけを見ていた。標準名 owner `HYOSU`（子 table を含む）を
+   `STRICT_H1_STORAGE_TABLES` に加え、
+   `test_h1_migration_preflight_covers_the_standard_family` で pin した。
+   他レコードの `STRICT_*` は native のみだが、H1 の物理レコードは owner/子に
+   跨るため、drift した標準名 table を放置すると消去と置換が壊れる。
 
 ## 残余リスク
 

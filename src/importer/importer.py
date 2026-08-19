@@ -756,7 +756,6 @@ _H1_STANDARD_CHILD_TABLES = frozenset(
 )
 _H1_STANDARD_STORAGE_TABLES = frozenset({_H1_STANDARD_OWNER_TABLE}) | _H1_STANDARD_CHILD_TABLES
 _H1_STORAGE_TABLES = _H1_NATIVE_STORAGE_TABLES | _H1_STANDARD_STORAGE_TABLES
-_H1_KEY_COLUMNS = ("Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum")
 # 公式の人気順は '--':発売前取消 '**':発売後取消 空白:登録なし も提供値なので、
 # 空白を NULL に変換せず空文字のまま保存する。
 _H1_BLANK_TEXT_FIELDS = frozenset(

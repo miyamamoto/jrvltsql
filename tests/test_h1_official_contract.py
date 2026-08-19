@@ -514,6 +514,28 @@ def test_h1_schema_manager_refuses_to_migrate_an_unsafe_existing_table(
         assert database.fetch_all('PRAGMA table_xinfo("NL_H1")') == before
 
 
+def test_h1_migration_preflight_covers_the_standard_family(tmp_path: Path) -> None:
+    """A drifted standard owner/child stops unrelated additive migration."""
+
+    from src.database.schema import STRICT_H1_STORAGE_TABLES, _preflight_existing_strict_storage
+
+    assert {"NL_H1", "RT_H1", "HYOSU"} <= STRICT_H1_STORAGE_TABLES
+
+    database = SQLiteDatabase({"path": str(tmp_path / "preflight-standard.db")})
+    with database:
+        for table_name in STANDARD_TABLES:
+            database.execute(
+                _defective_schema("nullable-key", table_name)
+                if table_name == "HYOSU_TANPUKU"
+                else _canonical(table_name)
+            )
+        database.commit()
+        before = database.fetch_all('PRAGMA table_xinfo("HYOSU_TANPUKU")')
+        with pytest.raises(SchemaMigrationError):
+            _preflight_existing_strict_storage(database)
+        assert database.fetch_all('PRAGMA table_xinfo("HYOSU_TANPUKU")') == before
+
+
 def test_h1_realtime_routing_preserves_the_official_markers(tmp_path: Path) -> None:
     """H1 is a realtime record; RT_H1 must keep the same official values."""
 
