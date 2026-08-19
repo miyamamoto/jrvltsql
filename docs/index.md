@@ -11,10 +11,9 @@ Windows 向けツールです。NAR / 地方競馬は対象外です。
 2. [時系列オッズ](timeseries_odds.md): 公式時系列と開催週速報オッズの違い
 3. [PostgreSQL](postgresql.md): PostgreSQL 運用と日次同期
 4. [対応データ種別一覧](data_support.md): JVOpen / JVRTOpen spec と保存先
-5. [レコード別の公式契約と移行手順](record_contracts.md): レコード種別ごとの公式レイアウト・主キー・`DataKubun`・既存 DB の移行手順
-6. [CLI](CLI.md): `jltsql` の主要コマンド
-7. [スクリプト一覧](scripts.md): batch / PowerShell の役割
-8. [アーキテクチャ](architecture.md): 実装構成
+5. [CLI](CLI.md): `jltsql` の主要コマンド
+6. [スクリプト一覧](scripts.md): batch / PowerShell の役割
+7. [アーキテクチャ](architecture.md): 実装構成
 
 ## まず使うコマンド
 
