@@ -1,11 +1,18 @@
 # jrvltsql v2.0.0 Release Notes (unreleased draft)
 
-`2.0.0` is not released yet. `2.0.0.dev1` is a **development-test prerelease**
+`2.0.0` is not released yet. `2.0.0.dev2` is a **development-test prerelease**
 of the official data-contract work. It is **not** a production compatibility
 claim: the 64-bit SDK path, 1.x database migration, and long-run collection are
 still unverified.
 
-What `2.0.0.dev1` adds over `2.0.0.dev0`, all of it measured against a real
+What `2.0.0.dev2` adds over `2.0.0.dev1`:
+
+- `JVOpen` no longer imposes a fixed 120s response budget. A deployment sets
+  `JVLINK_OPEN_TIMEOUT_SECONDS` (1-7200, default 120) so a setup fetch, or a
+  `JVOpen` that is waiting on JV-Link's own dialog (measured 1,008s), is not
+  abandoned as a bridge timeout. An unreadable value fails closed
+
+What `2.0.0.dev1` added over `2.0.0.dev0`, all of it measured against a real
 registered JV-Link on a Linux/Wine development host:
 
 - a first end-to-end acquisition through storage: `JVInit` `0`,
@@ -26,7 +33,7 @@ registered JV-Link on a Linux/Wine development host:
   with a person, and JV-Link's own dialogs are left for that person unless
   `JVLINK_AUTO_CLOSE_DIALOGS=1` is set explicitly
 
-What `2.0.0.dev1` is verified against:
+What this prerelease is verified against:
 
 - the complete test gate on the frozen release SHA, with SQLite and a real
   PostgreSQL 16 backend
