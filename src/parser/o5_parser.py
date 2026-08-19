@@ -92,14 +92,14 @@ class O5Parser(odds_domain.OddsCombinationValidationMixin):
                 rows.append({**base, "Kumi": kumi, "Odds": odds, "Ninki": ninki, "Vote": vote})
 
             if rows:
-                return rows
+                return odds_domain.attach_snapshot_metadata(rows)
             # 組合せが1件も無い snapshot（発売なし・レース中止・削除）でも
             # 公式の票数合計は提供される。H1/H6 と同じ sentinel 行で保持する。
             totals_only = dict(base)
             totals_only["Kumi"] = self.TOTAL_COMBINATION
             totals_only["Odds"] = ""
             totals_only["Ninki"] = ""
-            return [totals_only]
+            return odds_domain.attach_snapshot_metadata([totals_only])
 
         except Exception as e:
             self.logger.error(f"O5レコードパース中にエラー: {e}")

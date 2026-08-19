@@ -14,6 +14,7 @@ from src.database.schema_types import (
     get_table_column_types,
     get_table_primary_key_columns,
 )
+from src.parser import odds_domain
 from src.parser.odds_domain import TOTAL_COMBINATION as ODDS_TOTAL_COMBINATION
 from src.parser.status_domain import (
     DataKubunContext,
@@ -31,6 +32,10 @@ class TransactionRecoveryError(RuntimeError):
 
 class MiningSnapshotMutationError(DatabaseError):
     """A DM/TM snapshot mutation failed after its transaction was rolled back."""
+
+
+class OddsSnapshotMutationError(DatabaseError):
+    """An O1-O6 snapshot mutation failed after its transaction was rolled back."""
 
 
 def rollback_failed_import(database: BaseDatabase, *, context: str) -> None:
@@ -768,6 +773,43 @@ _H1_BLANK_TEXT_FIELDS = frozenset(
         "WideNinki",
     }
 )
+# O1-O6（オッズ1〜6）も native/リアルタイム/標準名が同じ公式スナップショットを
+# 保持する。値域検証・schema 検証はその全部を対象にする。
+_ODDS_RECORD_TYPES = ("O1", "O2", "O3", "O4", "O5", "O6")
+_ODDS_NATIVE_STORAGE_TABLES = frozenset(
+    {f"NL_{record_type}" for record_type in _ODDS_RECORD_TYPES}
+    | {f"RT_{record_type}" for record_type in _ODDS_RECORD_TYPES}
+)
+_ODDS_STANDARD_STORAGE_TABLES = {
+    "O1": ("ODDS_TANPUKUWAKU_HEAD", "ODDS_TANPUKU", "ODDS_WAKU"),
+    "O2": ("ODDS_UMAREN_HEAD", "ODDS_UMAREN"),
+    "O3": ("ODDS_WIDE_HEAD", "ODDS_WIDE"),
+    "O4": ("ODDS_UMATAN_HEAD", "ODDS_UMATAN"),
+    "O5": ("ODDS_SANREN_HEAD", "ODDS_SANREN"),
+    "O6": ("ODDS_SANRENTAN_HEAD", "ODDS_SANRENTAN"),
+}
+_ODDS_STORAGE_TABLES = frozenset(_ODDS_NATIVE_STORAGE_TABLES).union(
+    *(set(tables) for tables in _ODDS_STANDARD_STORAGE_TABLES.values())
+)
+# 公式のオッズ・人気順は '0…0':無投票 '-…-':発売前取消 '*…*':発売後取消
+# 空白:登録なし も提供値なので、空白を NULL に変換せず空文字のまま保存する。
+_ODDS_BLANK_TEXT_FIELDS = frozenset(
+    {
+        "TanOdds",
+        "TanNinki",
+        "FukuOddsLow",
+        "FukuOddsHigh",
+        "FukuNinki",
+        "WakurenOdds",
+        "WakurenNinki",
+        "Odds",
+        "OddsLow",
+        "OddsHigh",
+        "Ninki",
+    }
+)
+
+
 # H6（票数６・3連単）も native/リアルタイム/標準名が同じ公式スナップショットを
 # 保持する。消去・値域検証・schema 検証はその全部を対象にする。
 _H6_NATIVE_STORAGE_TABLES = frozenset({"NL_H6", "RT_H6"})
@@ -3336,6 +3378,345 @@ def _verify_h6_standard_replacement_key(
     raise SchemaMigrationError(f"H6 constraints cannot be verified for database type {db_type!r}")
 
 
+def _odds_record_type_for_storage(table_name: str) -> str:
+    """The official record type one O1-O6 storage table belongs to."""
+
+    if table_name in _ODDS_NATIVE_STORAGE_TABLES:
+        return table_name.split("_", 1)[1]
+    for record_type, tables in _ODDS_STANDARD_STORAGE_TABLES.items():
+        if table_name in tables:
+            return record_type
+    raise SchemaMigrationError(f"{table_name} is not O1-O6 storage")
+
+
+def _odds_parser_class(record_type: str) -> type:
+    """The official parser that owns one odds record type's domain."""
+
+    from src.parser.o1_parser import O1Parser
+    from src.parser.o2_parser import O2Parser
+    from src.parser.o3_parser import O3Parser
+    from src.parser.o4_parser import O4Parser
+    from src.parser.o5_parser import O5Parser
+    from src.parser.o6_parser import O6Parser
+
+    return {
+        "O1": O1Parser,
+        "O2": O2Parser,
+        "O3": O3Parser,
+        "O4": O4Parser,
+        "O5": O5Parser,
+        "O6": O6Parser,
+    }[record_type]
+
+
+def _verify_odds_no_unapproved_constraints(
+    database: BaseDatabase,
+    table_name: str,
+) -> None:
+    """Reject CHECK/FOREIGN KEY constraints beyond the official odds key."""
+
+    from src.database.migration import _migration_targets
+
+    targets = _migration_targets(database)
+    if targets != (database,):
+        for target in targets:
+            _verify_odds_no_unapproved_constraints(target, table_name)
+        return
+
+    db_type = database.get_db_type()
+    if db_type == "sqlite":
+        if database.fetch_all(f'PRAGMA foreign_key_list("{table_name}")'):
+            raise SchemaMigrationError(
+                f"odds storage {table_name} has unsupported FOREIGN KEY constraints"
+            )
+        row = database.fetch_one(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?",
+            (table_name,),
+        )
+        definition = _sqlite_schema_code(str((row or {}).get("sql") or ""))
+        if re.search(r"\bCHECK\s*\(", definition, flags=re.IGNORECASE):
+            raise SchemaMigrationError(
+                f"odds storage {table_name} has unsupported CHECK constraints"
+            )
+        return
+    if db_type == "postgresql":
+        unexpected = database.fetch_all(
+            "SELECT conname AS constraint_name, contype AS constraint_type "
+            "FROM pg_constraint "
+            "WHERE conrelid = to_regclass(?) AND contype IN ('c', 'f')",
+            (table_name.lower(),),
+        )
+        if unexpected:
+            raise SchemaMigrationError(
+                f"odds storage {table_name} has unsupported CHECK/FOREIGN KEY constraints"
+            )
+        return
+    raise SchemaMigrationError(
+        f"odds constraints cannot be verified for database type {db_type!r}"
+    )
+
+
+def _odds_official_key_columns(table_name: str) -> tuple:
+    """The official key that one O1-O6 replacement is allowed to match."""
+
+    record_type = _odds_record_type_for_storage(table_name)
+    config = _STANDARD_ODDS_CONFIG[record_type]
+    if table_name == config["owner"]:
+        return _STANDARD_ODDS_RACE_KEY_COLUMNS
+    return tuple(config["children"][table_name])
+
+
+def _verify_odds_standard_replacement_key(
+    database: BaseDatabase,
+    table_name: str,
+) -> None:
+    """Reject UNIQUEs that a standard-schema odds replacement does not control."""
+
+    from src.database.migration import _migration_targets
+
+    targets = _migration_targets(database)
+    if targets != (database,):
+        for target in targets:
+            _verify_odds_standard_replacement_key(target, table_name)
+        return
+
+    official = {column.lower() for column in _odds_official_key_columns(table_name)}
+    db_type = database.get_db_type()
+    if db_type == "sqlite":
+        unexpected = []
+        for row in database.fetch_all(f'PRAGMA index_list("{table_name}")'):
+            name = str(row.get("name") or "<unnamed>")
+            if int(row.get("unique") or 0) != 1:
+                continue
+            columns = {
+                str(info.get("name") or "").lower()
+                for info in database.fetch_all(f'PRAGMA index_info("{name}")')
+            }
+            if columns != official or int(row.get("partial") or 0) == 1:
+                unexpected.append(name)
+        if unexpected:
+            raise SchemaMigrationError(
+                f"odds storage {table_name} has unsupported additional UNIQUE "
+                f"constraints/indexes: {sorted(unexpected)}"
+            )
+        return
+    if db_type == "postgresql":
+        rows = database.fetch_all(
+            "SELECT index_class.relname AS index_name, "
+            "index_row.indisexclusion AS is_exclusion, "
+            "index_row.indpred IS NOT NULL AS is_partial, "
+            "index_row.indexprs IS NOT NULL AS has_expressions, "
+            "index_row.indisvalid AS is_valid, "
+            "index_row.indisready AS is_ready, "
+            "ARRAY(SELECT attribute.attname FROM unnest(index_row.indkey) AS key_column "
+            "JOIN pg_attribute attribute ON attribute.attrelid = index_row.indrelid "
+            "AND attribute.attnum = key_column) AS key_columns "
+            "FROM pg_index index_row "
+            "JOIN pg_class index_class ON index_class.oid = index_row.indexrelid "
+            "WHERE index_row.indrelid = to_regclass(?) "
+            "AND (index_row.indisunique OR index_row.indisexclusion) "
+            "ORDER BY index_class.relname",
+            (table_name.lower(),),
+        )
+        unexpected = []
+        for row in rows:
+            columns = {str(column).lower() for column in (row.get("key_columns") or [])}
+            if (
+                not bool(row.get("is_exclusion"))
+                and not bool(row.get("is_partial"))
+                and not bool(row.get("has_expressions"))
+                and bool(row.get("is_valid"))
+                and bool(row.get("is_ready"))
+                and columns == official
+            ):
+                continue
+            unexpected.append(str(row.get("index_name") or "<unnamed>"))
+        if unexpected:
+            raise SchemaMigrationError(
+                f"odds storage {table_name} has unsupported additional UNIQUE/exclusion "
+                f"indexes: {sorted(unexpected)}"
+            )
+        return
+    raise SchemaMigrationError(
+        f"odds constraints cannot be verified for database type {db_type!r}"
+    )
+
+
+def _odds_native_snapshot_rows(record: dict, table_name: str) -> list[dict] | None:
+    """Return all native rows of one official O1-O6 snapshot, when available."""
+
+    if table_name not in _ODDS_NATIVE_STORAGE_TABLES:
+        return None
+    record_type = _record_type_from_record(record)
+    if record_type not in _ODDS_RECORD_TYPES:
+        return None
+    if _odds_record_type_for_storage(table_name) != record_type:
+        return None
+    if resolve_record_data_kubun(record) == "0":
+        return None
+    rows = record.get(odds_domain.SNAPSHOT_ROWS_KEY)
+    if not isinstance(rows, list) or not rows:
+        return None
+    return rows
+
+
+def _is_odds_snapshot_follower(record: dict, table_name: str) -> bool:
+    """Skip expanded rows already represented by the leading physical snapshot."""
+
+    if _odds_native_snapshot_rows(record, table_name) is None:
+        return False
+    return record.get(odds_domain.SNAPSHOT_INDEX_KEY) != 0
+
+
+def replace_odds_native_snapshot(
+    database: BaseDatabase,
+    record: dict,
+    table_name: str,
+) -> int:
+    """Replace one complete native O1-O6 snapshot without leaving stale rows.
+
+    One physical record is the complete odds snapshot of one race at one point
+    in time, so a later snapshot with fewer combinations must not leave the
+    combinations it no longer offers. Transaction ownership stays with the
+    caller and every replacement row is validated before the deletion, so
+    malformed metadata cannot erase stored data.
+    """
+
+    snapshot_rows = _odds_native_snapshot_rows(record, table_name)
+    if snapshot_rows is None:
+        raise ValueError(f"{table_name} odds snapshot metadata is missing")
+    record_type = _record_type_from_record(record)
+
+    converted_rows = [convert_record_types(row, table_name) for row in snapshot_rows]
+    primary_keys = get_table_primary_key_columns(table_name)
+    if not primary_keys:
+        raise SchemaMigrationError(f"{table_name} {record_type} snapshot requires a primary key")
+
+    expected_race_key = None
+    seen_primary_keys = set()
+    for converted in converted_rows:
+        missing = [column for column in primary_keys if converted.get(column) in (None, "")]
+        if missing:
+            raise ValueError(f"{record_type} snapshot row has incomplete key: {missing}")
+        race_key = tuple(converted[column] for column in _MINING_RACE_KEY_COLUMNS)
+        if expected_race_key is None:
+            expected_race_key = race_key
+        elif race_key != expected_race_key:
+            raise ValueError(f"{record_type} snapshot rows span more than one race")
+        primary_key = tuple(converted[column] for column in primary_keys)
+        if primary_key in seen_primary_keys:
+            raise ValueError(
+                f"{record_type} snapshot contains duplicate primary key: {primary_key}"
+            )
+        seen_primary_keys.add(primary_key)
+
+    converted_record = convert_record_types(record, table_name)
+    record_race_key = tuple(converted_record.get(column) for column in _MINING_RACE_KEY_COLUMNS)
+    if record_race_key != expected_race_key:
+        raise ValueError(f"{record_type} snapshot metadata does not match its expanded row")
+
+    where = " AND ".join(f"{column} = ?" for column in _MINING_RACE_KEY_COLUMNS)
+    try:
+        database.execute(f"DELETE FROM {table_name} WHERE {where}", expected_race_key)
+        inserted = database.insert_many(table_name, converted_rows, use_replace=True)
+        if inserted != len(converted_rows):
+            raise DatabaseError(
+                f"{table_name} {record_type} snapshot inserted "
+                f"{inserted} of {len(converted_rows)} rows"
+            )
+    except Exception as exc:
+        rollback_failed_import(
+            database,
+            context=f"{table_name} {record_type} snapshot replacement",
+        )
+        raise OddsSnapshotMutationError(str(exc)) from exc
+    return inserted
+
+
+def validate_odds_record(record: dict, table_name: str | None = None) -> bool:
+    """Validate one expanded O1-O6 row against the official odds domain.
+
+    Native ``NL_O1``-``NL_O6``, realtime ``RT_O1``-``RT_O6`` and the standard
+    ``ODDS_*`` families all store the same official spans, so the official
+    values are validated before any schema-specific expansion or coercion runs.
+    """
+
+    if table_name is not None and table_name not in _ODDS_STORAGE_TABLES:
+        return False
+    record_type = _record_type_from_record(record)
+    if record_type not in _ODDS_RECORD_TYPES:
+        if table_name is None:
+            return False
+        raise SchemaMigrationError(f"{table_name} received a non-odds record")
+    if table_name is not None and _odds_record_type_for_storage(table_name) != record_type:
+        raise SchemaMigrationError(f"{table_name} received a {record_type} record")
+
+    try:
+        data_kubun = resolve_record_data_kubun(record)
+        _odds_parser_class(record_type).validate_current_fields(record, data_kubun=data_kubun)
+    except ValueError as error:
+        raise SchemaMigrationError(str(error)) from error
+    return True
+
+
+def verify_odds_storage_schema(database: BaseDatabase, table_name: str) -> bool:
+    """Fail closed unless O1-O6 storage keeps the official odds losslessly.
+
+    The official odds and 人気順 include non-numeric provider values
+    (``0…0``:無投票 / ``-…-``:発売前取消 / ``*…*``:発売後取消 / 空白:登録なし), so a
+    numeric column would silently drop them. A nullable race key or 組番 would
+    let one race's replacement match another race, and an additional
+    UNIQUE/exclusion index or a PostgreSQL primary key that ``ON CONFLICT``
+    cannot use would erase or duplicate rows. All are rejected before any DML.
+    Verifying a standard owner table also verifies its children, because one
+    physical record spans them.
+    """
+
+    if table_name not in _ODDS_STORAGE_TABLES:
+        return False
+    transaction_snapshot = _snapshot_validation_transactions(database)
+    from src.database.migration import verify_table_schema
+    from src.database.schema import SCHEMAS
+    from src.database.schema_jravan import JRAVAN_SCHEMAS
+
+    try:
+        record_type = _odds_record_type_for_storage(table_name)
+        owner_table = _STANDARD_ODDS_CONFIG[record_type]["owner"]
+        if table_name == owner_table:
+            targets = _ODDS_STANDARD_STORAGE_TABLES[record_type]
+        else:
+            targets = (table_name,)
+        for target_table in targets:
+            schema_sql = SCHEMAS.get(target_table) or JRAVAN_SCHEMAS.get(target_table)
+            if schema_sql is None:
+                raise SchemaMigrationError(f"odds storage schema is undefined: {target_table}")
+            native = target_table in _ODDS_NATIVE_STORAGE_TABLES
+            if native:
+                verify_table_schema(database, target_table, schema_sql)
+            # 標準名の子表は不足列を取込前に追加して救済するため、ここでは既存列の
+            # 型・NULL 可否だけを検査する。追加できない欠陥はこの後で拒否される。
+            _verify_strict_storage_column_contract(
+                database,
+                target_table,
+                schema_sql,
+                allow_missing_columns=not native,
+                storage_label="odds",
+                allow_extra_columns=False,
+            )
+            _verify_odds_no_unapproved_constraints(database, target_table)
+            if native:
+                _verify_replacement_key_constraints(database, target_table, "odds storage")
+            else:
+                _verify_odds_standard_replacement_key(database, target_table)
+        return True
+    except Exception:
+        _rollback_call_created_validation_transactions(
+            transaction_snapshot,
+            context="failed odds schema validation",
+        )
+        raise
+
+
 def validate_h6_record(record: dict, table_name: str | None = None) -> bool:
     """Validate one expanded H6 row against the official 102,890-byte domain.
 
@@ -4960,6 +5341,8 @@ def validate_import_record_header(record: dict) -> tuple[str, str]:
             validate_h1_record(record)
         if record_type == "H6":
             validate_h6_record(record)
+        if record_type in _ODDS_RECORD_TYPES:
+            validate_odds_record(record)
         if record_type == "CS":
             from src.parser.cs_parser import CSParser
 
@@ -7603,6 +7986,7 @@ class DataImporter:
         self._verified_um_tables: set[str] = set()
         self._verified_h1_tables: set[str] = set()
         self._verified_h6_tables: set[str] = set()
+        self._verified_odds_tables: set[str] = set()
         self._verified_jg_tables: set[str] = set()
         self._verified_wc_tables: set[str] = set()
         self._verified_wf_tables: set[str] = set()
@@ -7993,6 +8377,10 @@ class DataImporter:
                     if verify_h6_storage_schema(self.database, table_name):
                         self._verified_h6_tables.add(table_name)
                 validate_h6_record(record, table_name)
+                if table_name not in self._verified_odds_tables:
+                    if verify_odds_storage_schema(self.database, table_name):
+                        self._verified_odds_tables.add(table_name)
+                validate_odds_record(record, table_name)
                 if table_name not in self._verified_jg_tables:
                     if verify_jg_storage_schema(self.database, table_name):
                         self._verified_jg_tables.add(table_name)
@@ -8075,6 +8463,9 @@ class DataImporter:
                 if _is_mining_snapshot_follower(record, table_name):
                     continue
 
+                if _is_odds_snapshot_follower(record, table_name):
+                    continue
+
                 mining_snapshot_rows = _mining_native_snapshot_rows(record, table_name)
                 if mining_snapshot_rows is not None:
                     pending = batch_buffers.setdefault(table_name, [])
@@ -8085,6 +8476,27 @@ class DataImporter:
                         self.database.begin_transaction()
                     try:
                         rows = replace_mining_native_snapshot(self.database, record, table_name)
+                        if auto_commit:
+                            self.database.commit()
+                    except TransactionRecoveryError:
+                        raise
+                    except Exception:
+                        self.database.rollback()
+                        raise
+                    self._records_imported += rows
+                    self._batches_processed += 1
+                    continue
+
+                odds_snapshot_rows = _odds_native_snapshot_rows(record, table_name)
+                if odds_snapshot_rows is not None:
+                    pending = batch_buffers.setdefault(table_name, [])
+                    if pending:
+                        self._flush_batch(table_name, pending, auto_commit)
+                        batch_buffers[table_name] = []
+                    if auto_commit:
+                        self.database.begin_transaction()
+                    try:
+                        rows = replace_odds_native_snapshot(self.database, record, table_name)
                         if auto_commit:
                             self.database.commit()
                     except TransactionRecoveryError:
@@ -8758,6 +9170,10 @@ class DataImporter:
                 if verify_h6_storage_schema(self.database, table_name):
                     self._verified_h6_tables.add(table_name)
             validate_h6_record(record, table_name)
+            if table_name not in self._verified_odds_tables:
+                if verify_odds_storage_schema(self.database, table_name):
+                    self._verified_odds_tables.add(table_name)
+            validate_odds_record(record, table_name)
             if table_name not in self._verified_jg_tables:
                 if verify_jg_storage_schema(self.database, table_name):
                     self._verified_jg_tables.add(table_name)
@@ -8862,6 +9278,23 @@ class DataImporter:
                     self.database.begin_transaction()
                 try:
                     rows = replace_mining_native_snapshot(self.database, record, table_name)
+                    if auto_commit:
+                        self.database.commit()
+                except TransactionRecoveryError:
+                    raise
+                except Exception:
+                    self.database.rollback()
+                    raise
+                self._records_imported += rows
+                self._batches_processed += 1
+                return True
+            if _odds_native_snapshot_rows(record, table_name) is not None:
+                if _is_odds_snapshot_follower(record, table_name):
+                    return True
+                if auto_commit:
+                    self.database.begin_transaction()
+                try:
+                    rows = replace_odds_native_snapshot(self.database, record, table_name)
                     if auto_commit:
                         self.database.commit()
                 except TransactionRecoveryError:

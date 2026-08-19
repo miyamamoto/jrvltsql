@@ -248,7 +248,7 @@ class O1Parser:
                 )
 
             if rows:
-                return rows
+                return odds_domain.attach_snapshot_metadata(rows)
             # 単勝・複勝・枠連のいずれも提供されない snapshot（発売なし・
             # レース中止・削除）でも公式の票数合計は提供される。H1/H6 と同じ
             # sentinel 行で保持する。
@@ -256,7 +256,7 @@ class O1Parser:
             totals_only["Umaban"] = self.BRACKET_ROW_HORSE_NUMBER
             totals_only["FukuUmaban"] = ""
             totals_only["Kumi"] = self.TOTAL_COMBINATION
-            return [totals_only]
+            return odds_domain.attach_snapshot_metadata([totals_only])
 
         except Exception as e:
             self.logger.error(f"O1レコードパース中にエラー: {e}")

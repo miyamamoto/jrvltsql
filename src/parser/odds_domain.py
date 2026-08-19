@@ -31,6 +31,10 @@ VOTE_TOTAL_WIDTH = 11
 # 組合せを1件も持たない snapshot（発売なし・レース中止・削除）でも公式の
 # 票数合計は提供されるため、H1/H6 と同じ sentinel で1行だけ保持する。
 TOTAL_COMBINATION = "TOTAL"
+# 1 レコードは 1 レース 1 時点の完全な snapshot なので、展開した行に snapshot 全体を
+# 持たせて storage 側が古い組合せを残さず置換できるようにする。
+SNAPSHOT_ROWS_KEY = "_odds_snapshot_rows"
+SNAPSHOT_INDEX_KEY = "_odds_snapshot_index"
 CANCELLED_MARKER_CHARACTERS = ("-", "*")
 
 
@@ -190,3 +194,13 @@ class OddsCombinationValidationMixin:
             record.get(cls.FAVOURITE_FIELD),
             cls.FAVOURITE_WIDTH,
         )
+
+
+def attach_snapshot_metadata(rows: list[dict[str, object]]) -> list[dict[str, object]]:
+    """Mark one complete official odds snapshot for storage replacement."""
+
+    snapshot_rows = [dict(row) for row in rows]
+    return [
+        {**row, SNAPSHOT_ROWS_KEY: snapshot_rows, SNAPSHOT_INDEX_KEY: index}
+        for index, row in enumerate(snapshot_rows)
+    ]

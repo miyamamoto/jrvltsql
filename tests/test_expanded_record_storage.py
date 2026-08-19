@@ -303,8 +303,8 @@ def _assert_o1_storage(db, table_name: str):
     assert len(rows) == 4
     wakuren_rows = [row for row in rows if row["umaban"] == 0]
     assert [(row["kumi"], row["wakurenodds"]) for row in wakuren_rows] == [
-        ("12", 123.4),
-        ("13", 567.8),
+        ("12", "01234"),
+        ("13", "05678"),
     ]
 
 
@@ -619,7 +619,7 @@ _STANDARD_ODDS_CASES = (
         {
             "SanrentanFlag": "1",
             "Kumi": "010203",
-            "Odds": "012340",
+            "Odds": "0123400",
             "Ninki": "0001",
         },
     ),
@@ -711,12 +711,19 @@ def _assert_standard_odds_duplicate_existing_keys_fail_closed(db):
     record = {
         "RecordSpec": "O2",
         "DataKubun": "9",
+        "MakeDate": "20260419",
         "Year": "2026",
         "MonthDay": "0419",
         "JyoCD": "06",
         "Kaiji": "03",
         "Nichiji": "08",
         "RaceNum": "11",
+        "HassoTime": "04191549",
+        "TorokuTosu": "18",
+        "SyussoTosu": "18",
+        "UmarenFlag": "1",
+        "Vote": "00000123456",
+        "Kumi": O2Parser.TOTAL_COMBINATION,
     }
 
     with pytest.raises(SchemaMigrationError, match="duplicate official keys"):
@@ -756,6 +763,8 @@ def _assert_standard_odds_replaces_snapshot_and_reuses_verification(
         "Kaiji": "03",
         "Nichiji": "08",
         "RaceNum": "11",
+        "TorokuTosu": "18",
+        "SyussoTosu": "18",
         "UmarenFlag": "1",
         "Vote": "00000123456",
         "Odds": "012340",
@@ -805,9 +814,10 @@ def _assert_standard_odds_migrates_existing_child_columns(db, importer_class):
     _create_jravan_tables(db, ["ODDS_UMAREN_HEAD"])
     db.execute(
         "CREATE TABLE ODDS_UMAREN ("
-        "MakeDate DATE, Year SMALLINT, MonthDay SMALLINT, JyoCD CHAR(2), "
-        "Kaiji SMALLINT, Nichiji SMALLINT, RaceNum SMALLINT, "
-        "Kumi VARCHAR(4), Odds DECIMAL(6,1))"
+        "MakeDate DATE, Year SMALLINT NOT NULL, MonthDay SMALLINT NOT NULL, "
+        "JyoCD CHAR(2) NOT NULL, Kaiji SMALLINT NOT NULL, "
+        "Nichiji SMALLINT NOT NULL, RaceNum SMALLINT NOT NULL, "
+        "Kumi VARCHAR(4) NOT NULL, Odds VARCHAR(6))"
     )
     db.commit()
     record = {
@@ -821,6 +831,8 @@ def _assert_standard_odds_migrates_existing_child_columns(db, importer_class):
         "Nichiji": "08",
         "RaceNum": "11",
         "HassoTime": "04191549",
+        "TorokuTosu": "18",
+        "SyussoTosu": "18",
         "UmarenFlag": "1",
         "Vote": "00000123456",
         "Kumi": "0102",
@@ -835,7 +847,7 @@ def _assert_standard_odds_migrates_existing_child_columns(db, importer_class):
     assert stats["records_failed"] == 0
     assert db.fetch_one(
         "SELECT Ninki AS ninki FROM ODDS_UMAREN"
-    ) == {"ninki": 1}
+    ) == {"ninki": "001"}
 
 
 @pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
@@ -872,6 +884,8 @@ def test_sqlite_standard_o2_empty_snapshot_preserves_total_and_clears_children(
         "Nichiji": "08",
         "RaceNum": "11",
         "HassoTime": "04191548",
+        "TorokuTosu": "18",
+        "SyussoTosu": "18",
         "UmarenFlag": "1",
         "Vote": "00000123456",
         "Kumi": "0102",
@@ -909,6 +923,8 @@ def test_sqlite_standard_odds_child_failure_rolls_back_header(
         "Nichiji": "08",
         "RaceNum": "11",
         "HassoTime": "04191549",
+        "TorokuTosu": "18",
+        "SyussoTosu": "18",
         "UmarenFlag": "1",
         "Vote": "00000123456",
         "Kumi": "0102",

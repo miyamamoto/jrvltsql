@@ -204,6 +204,7 @@ class RealtimeUpdater:
         self.parser_factory = ParserFactory()
         self.cache_manager = cache_manager
         self._verified_mining_native_tables: set[str] = set()
+        self._verified_odds_native_tables: set[str] = set()
         self._verified_se_tables: set[str] = set()
         self._verified_we_tables: set[str] = set()
         self._verified_av_tables: set[str] = set()
@@ -451,6 +452,23 @@ class RealtimeUpdater:
             for item in parsed_data:
                 if timeseries and source_spec:
                     item.setdefault("SourceSpec", source_spec)
+                odds_table = self.RECORD_TYPE_TABLE.get(item.get("RecordSpec"))
+                if odds_table is not None:
+                    from src.importer.importer import (
+                        _is_odds_snapshot_follower,
+                        _odds_native_snapshot_rows,
+                    )
+
+                    if _is_odds_snapshot_follower(item, odds_table):
+                        continue
+                    snapshot_rows = _odds_native_snapshot_rows(item, odds_table)
+                    if snapshot_rows is not None:
+                        results.extend(
+                            self._replace_odds_native_snapshot(
+                                item, snapshot_rows, odds_table
+                            )
+                        )
+                        continue
                 result = self._process_single_record(item, timeseries=timeseries)
                 # Keep rejected subrecords as None so fail-closed callers can
                 # count every parser expansion, not only successful inserts.
@@ -636,6 +654,73 @@ class RealtimeUpdater:
                 results.append(result)
             return results
 
+    def _replace_odds_native_snapshot(
+        self,
+        record: Dict,
+        snapshot_rows: list[Dict],
+        table_name: str,
+    ) -> List[Dict]:
+        """Replace one complete realtime O1-O6 snapshot in the caller transaction."""
+        from src.importer.importer import (
+            OddsSnapshotMutationError,
+            replace_odds_native_snapshot,
+            verify_odds_storage_schema,
+        )
+
+        record_type = record.get("RecordSpec")
+        owns_transaction = False
+        owned_transaction_started = False
+
+        try:
+            owns_transaction = not self.database.has_pending_transaction()
+            if owns_transaction:
+                self.database.begin_transaction()
+                owned_transaction_started = True
+            if table_name not in self._verified_odds_native_tables:
+                if verify_odds_storage_schema(self.database, table_name):
+                    self._verified_odds_native_tables.add(table_name)
+            inserted = replace_odds_native_snapshot(self.database, record, table_name)
+            if inserted != len(snapshot_rows):
+                raise RuntimeError(
+                    f"{table_name} snapshot inserted {inserted} of {len(snapshot_rows)} rows"
+                )
+            if owns_transaction:
+                self.database.commit()
+                owned_transaction_started = False
+            return [
+                {
+                    "operation": "insert",
+                    "table": table_name,
+                    "record_type": record_type,
+                    "success": True,
+                }
+                for _ in snapshot_rows
+            ]
+        except TransactionRecoveryError:
+            raise
+        except Exception as exc:
+            transaction_rolled_back = isinstance(exc, OddsSnapshotMutationError)
+            if owned_transaction_started and not transaction_rolled_back:
+                rollback_failed_import(
+                    self.database,
+                    context=f"{table_name} snapshot replacement",
+                )
+                transaction_rolled_back = True
+            logger.error(f"Failed to replace {table_name} snapshot: {exc}", exc_info=True)
+            results = []
+            for _ in snapshot_rows:
+                result = {
+                    "operation": "insert",
+                    "table": table_name,
+                    "record_type": record_type,
+                    "success": False,
+                    "error": str(exc),
+                }
+                if transaction_rolled_back:
+                    result["transaction_rolled_back"] = True
+                results.append(result)
+            return results
+
     def process_parsed_records_batch(self, records: list[Dict], timeseries: bool = False) -> Dict:
         """Insert already parsed records in batches grouped by target table."""
         try:
@@ -653,7 +738,15 @@ class RealtimeUpdater:
                 "tables": [],
             }
 
+        from src.importer.importer import (
+            _is_odds_snapshot_follower,
+            _odds_native_snapshot_rows,
+            replace_odds_native_snapshot,
+            verify_odds_storage_schema,
+        )
+
         grouped: dict[str, list[Dict]] = {}
+        odds_snapshots: list[tuple[str, Dict]] = []
         errors = 0
         batch_collected_at = self._current_collected_at() if timeseries else None
         validated_records: list[Dict] = []
@@ -809,6 +902,12 @@ class RealtimeUpdater:
                 errors += 1
                 continue
 
+            if _is_odds_snapshot_follower(record, table_name):
+                continue
+            if _odds_native_snapshot_rows(record, table_name) is not None:
+                odds_snapshots.append((table_name, record))
+                continue
+
             clean_data = self._prepare_data_for_db(table_name, record)
             if not self._has_complete_primary_key(table_name, clean_data):
                 logger.warning(
@@ -822,9 +921,14 @@ class RealtimeUpdater:
         owns_batch_transaction = not caller_transaction_pending
         owned_transaction_started = False
         try:
-            if grouped and owns_batch_transaction:
+            if (grouped or odds_snapshots) and owns_batch_transaction:
                 self.database.begin_transaction()
                 owned_transaction_started = True
+            for table_name, record in odds_snapshots:
+                if table_name not in self._verified_odds_native_tables:
+                    if verify_odds_storage_schema(self.database, table_name):
+                        self._verified_odds_native_tables.add(table_name)
+                inserted += replace_odds_native_snapshot(self.database, record, table_name)
             for table_name, rows in grouped.items():
                 self.database.insert_many(table_name, rows)
                 inserted += len(rows)
@@ -837,7 +941,9 @@ class RealtimeUpdater:
                 self.database,
                 context="atomic realtime batch",
             )
-            failed_operations = sum(len(rows) for rows in grouped.values())
+            failed_operations = sum(len(rows) for rows in grouped.values()) + len(
+                odds_snapshots
+            )
             logger.error(f"Atomic realtime batch failed: {exc}")
             return {
                 "operation": "batch_insert",
@@ -853,7 +959,7 @@ class RealtimeUpdater:
             "success": errors == 0,
             "inserted": inserted,
             "errors": errors,
-            "tables": sorted(grouped),
+            "tables": sorted({*grouped, *(table for table, _ in odds_snapshots)}),
         }
 
     def _process_mining_realtime_batch(

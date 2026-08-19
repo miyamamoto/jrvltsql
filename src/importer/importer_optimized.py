@@ -33,10 +33,12 @@ from src.importer.importer import (
     _expanded_record_fingerprint,
     _is_mining_race_delete,
     _is_mining_snapshot_follower,
+    _is_odds_snapshot_follower,
     _is_official_record_erase,
     _is_standard_odds_record_erase,
     _is_standard_vote_record_erase,
     _mining_native_snapshot_rows,
+    _odds_native_snapshot_rows,
     _rollback_call_created_validation_transactions,
     _snapshot_validation_transactions,
     _standard_odds_physical_fingerprint,
@@ -62,6 +64,7 @@ from src.importer.importer import (
     prepare_tk_coupled_record,
     prepare_wf_standard_record,
     replace_mining_native_snapshot,
+    replace_odds_native_snapshot,
     resolve_standard_storage_table_name,
     resolve_standard_table_name,
     rollback_failed_import,
@@ -78,6 +81,7 @@ from src.importer.importer import (
     validate_sk_record,
     validate_h1_record,
     validate_h6_record,
+    validate_odds_record,
     validate_um_record,
     validate_tc_record,
     validate_wc_record,
@@ -105,6 +109,7 @@ from src.importer.importer import (
     verify_tk_coupled_tables,
     verify_h1_storage_schema,
     verify_h6_storage_schema,
+    verify_odds_storage_schema,
     verify_um_storage_schema,
     verify_wc_storage_schema,
     verify_we_storage_schema,
@@ -162,6 +167,7 @@ class OptimizedDataImporter:
         self._verified_um_tables: set[str] = set()
         self._verified_h1_tables: set[str] = set()
         self._verified_h6_tables: set[str] = set()
+        self._verified_odds_tables: set[str] = set()
         self._verified_jg_tables: set[str] = set()
         self._verified_wc_tables: set[str] = set()
         self._verified_wf_tables: set[str] = set()
@@ -512,6 +518,10 @@ class OptimizedDataImporter:
                     if verify_h6_storage_schema(self.database, table_name):
                         self._verified_h6_tables.add(table_name)
                 validate_h6_record(record, table_name)
+                if table_name not in self._verified_odds_tables:
+                    if verify_odds_storage_schema(self.database, table_name):
+                        self._verified_odds_tables.add(table_name)
+                validate_odds_record(record, table_name)
                 if table_name not in self._verified_jg_tables:
                     if verify_jg_storage_schema(self.database, table_name):
                         self._verified_jg_tables.add(table_name)
@@ -614,6 +624,9 @@ class OptimizedDataImporter:
                     last_expanded_record_fingerprint = None
                     continue
 
+                if _is_odds_snapshot_follower(record, table_name):
+                    continue
+
                 if _is_mining_snapshot_follower(record, table_name):
                     continue
 
@@ -631,6 +644,33 @@ class OptimizedDataImporter:
                         self.database.begin_transaction()
                     try:
                         rows = replace_mining_native_snapshot(
+                            self.database, record, table_name
+                        )
+                        if auto_commit:
+                            self.database.commit()
+                    except TransactionRecoveryError:
+                        raise
+                    except Exception:
+                        self.database.rollback()
+                        raise
+                    self._records_imported += rows
+                    self._batches_processed += 1
+                    continue
+
+                odds_snapshot_rows = _odds_native_snapshot_rows(record, table_name)
+                if odds_snapshot_rows is not None:
+                    pending = batch_buffers.setdefault(table_name, [])
+                    if pending:
+                        self._flush_batch_optimized(
+                            table_name,
+                            pending,
+                            commit_batch=auto_commit,
+                        )
+                        batch_buffers[table_name] = []
+                    if auto_commit:
+                        self.database.begin_transaction()
+                    try:
+                        rows = replace_odds_native_snapshot(
                             self.database, record, table_name
                         )
                         if auto_commit:

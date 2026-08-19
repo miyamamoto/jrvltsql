@@ -870,15 +870,27 @@ cache の変更に入る前に、対応する現行種別名を示して停止�
   保持します。標準名では合計は header table に入るため、合計行に対応する
   子 table の行は作りません。
 
-**まだ無損失ではない点（次段で対応）:**
+**保存（storage）:**
 
-- native `NL_O1`〜`NL_O6` と速報 `RT_O1`〜`RT_O6` のオッズ列は `REAL`、人気順列は
-  `INTEGER` です。標準名 `ODDS_*` の子 table も `DECIMAL` / `SMALLINT` です。
-  そのため公式の取消マーカー（`-` / `*` の並び）は保存時に `NULL` へ落ち、
-  「登録なし」と区別できません。無投票（`0` の並び）は数値 `0` になります。
-- O1〜O6 には H1 / H6 と同じ本文検証・strict schema preflight・`DataKubun=0`
-  の物理 exact erase 契約をまだ適用していません。parser の公式ドメイン検証
-  （`validate_current_fields`）は実装済みで、storage 経路への接続は次段です。
+- native `NL_O1`〜`NL_O6`、速報 `RT_O1`〜`RT_O6`、標準名 `ODDS_*` の子 table は、
+  オッズ列と人気順列を文字列として公式提供値のまま保存します。数値・無投票
+  （`0` の並び）・発売前取消（`-` の並び）・発売後取消（`*` の並び）を区別でき、
+  登録なし（空白）と取消も混同しません。
+- レースキーと組番（`Umaban` / `Kumi`）は `NOT NULL` です。1 レースの置換が
+  別レースの行に当たらないことを schema 側で保証します。
+- 1 物理レコードは 1 レース 1 時点の完全な snapshot なので、native と速報は
+  レース単位で全行を置換します。組合せが減った snapshot（発売取消など）や
+  合計のみの snapshot を取り込んだあと、前の snapshot の組合せは残りません。
+  標準名でも子 table を置換前に削除します。
+- `DataKubun=0`（削除）はレースキーで header・子 table・native の全行を物理的に
+  消去します。合計行 sentinel や tombstone も残しません。
+- 取込前の strict schema preflight で、公式キーの欠落・nullable なキー・公式
+  主キー以外の追加 `UNIQUE`（部分・式・exclusion を含む）・遅延主キー・
+  桁が足りない、または記号値を保存できない列型・所有表や子 table の欠落・
+  未承認の `CHECK` / `FOREIGN KEY`・schema を安全に検査できない backend を
+  DML の前に拒否します。通常 importer・最適化 importer・単発取込・
+  `DualDatabase` の全経路で同じ検査が走ります。標準名の子 table で不足している
+  列は、公式 schema からの追加のみ従来どおり移行で補います。
 
 ### マスタ系（HN / SK / UM / BT / KS / CH / HS）
 

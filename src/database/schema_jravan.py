@@ -909,29 +909,29 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
     "ODDS_SANREN": """
         CREATE TABLE IF NOT EXISTS ODDS_SANREN (
             MakeDate                       DATE                ,  -- YYYYMMDD形式の日付
-            Year                           SMALLINT            ,  -- 年(4桁)
-            MonthDay                       SMALLINT            ,  -- 月日(MMDD)
-            JyoCD                          CHAR(2)             ,  -- 競馬場コード
-            Kaiji                          SMALLINT            ,  -- 開催回
-            Nichiji                        SMALLINT            ,  -- 開催日目
-            RaceNum                        SMALLINT            ,  -- レース番号
-            Kumi                           VARCHAR(6)          ,  -- 文字列(6)
-            Odds                           DECIMAL(6,1)        ,  -- オッズ
-            Ninki                          SMALLINT              -- 人気
+            Year                           SMALLINT NOT NULL   ,  -- 年(4桁)
+            MonthDay                       SMALLINT NOT NULL   ,  -- 月日(MMDD)
+            JyoCD                          CHAR(2) NOT NULL    ,  -- 競馬場コード
+            Kaiji                          SMALLINT NOT NULL   ,  -- 開催回
+            Nichiji                        SMALLINT NOT NULL   ,  -- 開催日目
+            RaceNum                        SMALLINT NOT NULL   ,  -- レース番号
+            Kumi                           VARCHAR(6) NOT NULL ,  -- 文字列(6)
+            Odds                           VARCHAR(6)          ,  -- オッズ
+            Ninki                          VARCHAR(3)            -- 人気
         )
     """,
     "ODDS_SANRENTAN": """
         CREATE TABLE IF NOT EXISTS ODDS_SANRENTAN (
             MakeDate                       DATE                ,  -- YYYYMMDD形式の日付
-            Year                           SMALLINT            ,  -- 年(4桁)
-            MonthDay                       SMALLINT            ,  -- 月日(MMDD)
-            JyoCD                          CHAR(2)             ,  -- 競馬場コード
-            Kaiji                          SMALLINT            ,  -- 開催回
-            Nichiji                        SMALLINT            ,  -- 開催日目
-            RaceNum                        SMALLINT            ,  -- レース番号
-            Kumi                           VARCHAR(6)          ,  -- 文字列(6)
-            Odds                           DECIMAL(6,1)        ,  -- オッズ
-            Ninki                          SMALLINT              -- 人気
+            Year                           SMALLINT NOT NULL   ,  -- 年(4桁)
+            MonthDay                       SMALLINT NOT NULL   ,  -- 月日(MMDD)
+            JyoCD                          CHAR(2) NOT NULL    ,  -- 競馬場コード
+            Kaiji                          SMALLINT NOT NULL   ,  -- 開催回
+            Nichiji                        SMALLINT NOT NULL   ,  -- 開催日目
+            RaceNum                        SMALLINT NOT NULL   ,  -- レース番号
+            Kumi                           VARCHAR(6) NOT NULL ,  -- 文字列(6)
+            Odds                           VARCHAR(7)          ,  -- オッズ
+            Ninki                          VARCHAR(4)            -- 人気
         )
     """,
     "ODDS_SANRENTAN_HEAD": """
@@ -939,12 +939,12 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             RecordSpec                     CHAR(2)             ,  -- レコード種別ID
             DataKubun                      CHAR(1)             ,  -- データ区分
             MakeDate                       DATE                ,  -- YYYYMMDD形式の日付
-            Year                           SMALLINT            ,  -- 年(4桁)
-            MonthDay                       SMALLINT            ,  -- 月日(MMDD)
-            JyoCD                          CHAR(2)             ,  -- 競馬場コード
-            Kaiji                          SMALLINT            ,  -- 開催回
-            Nichiji                        SMALLINT            ,  -- 開催日目
-            RaceNum                        SMALLINT            ,  -- レース番号
+            Year                           SMALLINT NOT NULL   ,  -- 年(4桁)
+            MonthDay                       SMALLINT NOT NULL   ,  -- 月日(MMDD)
+            JyoCD                          CHAR(2) NOT NULL    ,  -- 競馬場コード
+            Kaiji                          SMALLINT NOT NULL   ,  -- 開催回
+            Nichiji                        SMALLINT NOT NULL   ,  -- 開催日目
+            RaceNum                        SMALLINT NOT NULL   ,  -- レース番号
             HappyoTime                     VARCHAR(8)          ,  -- 発表月日時分(MMDDhhmm)
             TorokuTosu                     SMALLINT            ,  -- 登録頭数
             SyussoTosu                     SMALLINT            ,  -- 出走頭数
@@ -957,12 +957,12 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             RecordSpec                     CHAR(2)             ,  -- レコード種別ID
             DataKubun                      CHAR(1)             ,  -- データ区分
             MakeDate                       DATE                ,  -- YYYYMMDD形式の日付
-            Year                           SMALLINT            ,  -- 年(4桁)
-            MonthDay                       SMALLINT            ,  -- 月日(MMDD)
-            JyoCD                          CHAR(2)             ,  -- 競馬場コード
-            Kaiji                          SMALLINT            ,  -- 開催回
-            Nichiji                        SMALLINT            ,  -- 開催日目
-            RaceNum                        SMALLINT            ,  -- レース番号
+            Year                           SMALLINT NOT NULL   ,  -- 年(4桁)
+            MonthDay                       SMALLINT NOT NULL   ,  -- 月日(MMDD)
+            JyoCD                          CHAR(2) NOT NULL    ,  -- 競馬場コード
+            Kaiji                          SMALLINT NOT NULL   ,  -- 開催回
+            Nichiji                        SMALLINT NOT NULL   ,  -- 開催日目
+            RaceNum                        SMALLINT NOT NULL   ,  -- レース番号
             HappyoTime                     VARCHAR(8)          ,  -- 発表月日時分(MMDDhhmm)
             TorokuTosu                     SMALLINT            ,  -- 登録頭数
             SyussoTosu                     SMALLINT            ,  -- 出走頭数
@@ -973,13 +973,13 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
     "ODDS_TANPUKU": """
         CREATE TABLE IF NOT EXISTS ODDS_TANPUKU (
             MakeDate                       DATE                ,  -- YYYYMMDD形式の日付
-            Year                           SMALLINT            ,  -- 年(4桁)
-            MonthDay                       SMALLINT            ,  -- 月日(MMDD)
-            JyoCD                          CHAR(2)             ,  -- 競馬場コード
-            Kaiji                          SMALLINT            ,  -- 開催回
-            Nichiji                        SMALLINT            ,  -- 開催日目
-            RaceNum                        SMALLINT            ,  -- レース番号
-            Umaban                         SMALLINT            ,  -- 馬番
+            Year                           SMALLINT NOT NULL   ,  -- 年(4桁)
+            MonthDay                       SMALLINT NOT NULL   ,  -- 月日(MMDD)
+            JyoCD                          CHAR(2) NOT NULL    ,  -- 競馬場コード
+            Kaiji                          SMALLINT NOT NULL   ,  -- 開催回
+            Nichiji                        SMALLINT NOT NULL   ,  -- 開催日目
+            RaceNum                        SMALLINT NOT NULL   ,  -- レース番号
+            Umaban                         SMALLINT NOT NULL   ,  -- 馬番
             TanOdds                        VARCHAR(4)          ,  -- 文字列(4)
             TanNinki                       VARCHAR(2)          ,  -- 文字列(2)
             FukuOddsLow                    VARCHAR(4)          ,  -- 文字列(4)
@@ -992,12 +992,12 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             RecordSpec                     CHAR(2)             ,  -- レコード種別ID
             DataKubun                      CHAR(1)             ,  -- データ区分
             MakeDate                       DATE                ,  -- YYYYMMDD形式の日付
-            Year                           SMALLINT            ,  -- 年(4桁)
-            MonthDay                       SMALLINT            ,  -- 月日(MMDD)
-            JyoCD                          CHAR(2)             ,  -- 競馬場コード
-            Kaiji                          SMALLINT            ,  -- 開催回
-            Nichiji                        SMALLINT            ,  -- 開催日目
-            RaceNum                        SMALLINT            ,  -- レース番号
+            Year                           SMALLINT NOT NULL   ,  -- 年(4桁)
+            MonthDay                       SMALLINT NOT NULL   ,  -- 月日(MMDD)
+            JyoCD                          CHAR(2) NOT NULL    ,  -- 競馬場コード
+            Kaiji                          SMALLINT NOT NULL   ,  -- 開催回
+            Nichiji                        SMALLINT NOT NULL   ,  -- 開催日目
+            RaceNum                        SMALLINT NOT NULL   ,  -- レース番号
             HappyoTime                     VARCHAR(8)          ,  -- 発表月日時分(MMDDhhmm)
             TorokuTosu                     SMALLINT            ,  -- 登録頭数
             SyussoTosu                     SMALLINT            ,  -- 出走頭数
@@ -1013,15 +1013,15 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
     "ODDS_UMAREN": """
         CREATE TABLE IF NOT EXISTS ODDS_UMAREN (
             MakeDate                       DATE                ,  -- YYYYMMDD形式の日付
-            Year                           SMALLINT            ,  -- 年(4桁)
-            MonthDay                       SMALLINT            ,  -- 月日(MMDD)
-            JyoCD                          CHAR(2)             ,  -- 競馬場コード
-            Kaiji                          SMALLINT            ,  -- 開催回
-            Nichiji                        SMALLINT            ,  -- 開催日目
-            RaceNum                        SMALLINT            ,  -- レース番号
-            Kumi                           VARCHAR(4)          ,  -- 文字列(4)
-            Odds                           DECIMAL(6,1)        ,  -- オッズ
-            Ninki                          SMALLINT              -- 人気
+            Year                           SMALLINT NOT NULL   ,  -- 年(4桁)
+            MonthDay                       SMALLINT NOT NULL   ,  -- 月日(MMDD)
+            JyoCD                          CHAR(2) NOT NULL    ,  -- 競馬場コード
+            Kaiji                          SMALLINT NOT NULL   ,  -- 開催回
+            Nichiji                        SMALLINT NOT NULL   ,  -- 開催日目
+            RaceNum                        SMALLINT NOT NULL   ,  -- レース番号
+            Kumi                           VARCHAR(4) NOT NULL ,  -- 文字列(4)
+            Odds                           VARCHAR(6)          ,  -- オッズ
+            Ninki                          VARCHAR(3)            -- 人気
         )
     """,
     "ODDS_UMAREN_HEAD": """
@@ -1029,12 +1029,12 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             RecordSpec                     CHAR(2)             ,  -- レコード種別ID
             DataKubun                      CHAR(1)             ,  -- データ区分
             MakeDate                       DATE                ,  -- YYYYMMDD形式の日付
-            Year                           SMALLINT            ,  -- 年(4桁)
-            MonthDay                       SMALLINT            ,  -- 月日(MMDD)
-            JyoCD                          CHAR(2)             ,  -- 競馬場コード
-            Kaiji                          SMALLINT            ,  -- 開催回
-            Nichiji                        SMALLINT            ,  -- 開催日目
-            RaceNum                        SMALLINT            ,  -- レース番号
+            Year                           SMALLINT NOT NULL   ,  -- 年(4桁)
+            MonthDay                       SMALLINT NOT NULL   ,  -- 月日(MMDD)
+            JyoCD                          CHAR(2) NOT NULL    ,  -- 競馬場コード
+            Kaiji                          SMALLINT NOT NULL   ,  -- 開催回
+            Nichiji                        SMALLINT NOT NULL   ,  -- 開催日目
+            RaceNum                        SMALLINT NOT NULL   ,  -- レース番号
             HappyoTime                     VARCHAR(8)          ,  -- 発表月日時分(MMDDhhmm)
             TorokuTosu                     SMALLINT            ,  -- 登録頭数
             SyussoTosu                     SMALLINT            ,  -- 出走頭数
@@ -1045,15 +1045,15 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
     "ODDS_UMATAN": """
         CREATE TABLE IF NOT EXISTS ODDS_UMATAN (
             MakeDate                       DATE                ,  -- YYYYMMDD形式の日付
-            Year                           SMALLINT            ,  -- 年(4桁)
-            MonthDay                       SMALLINT            ,  -- 月日(MMDD)
-            JyoCD                          CHAR(2)             ,  -- 競馬場コード
-            Kaiji                          SMALLINT            ,  -- 開催回
-            Nichiji                        SMALLINT            ,  -- 開催日目
-            RaceNum                        SMALLINT            ,  -- レース番号
-            Kumi                           VARCHAR(4)          ,  -- 文字列(4)
-            Odds                           DECIMAL(6,1)        ,  -- オッズ
-            Ninki                          SMALLINT              -- 人気
+            Year                           SMALLINT NOT NULL   ,  -- 年(4桁)
+            MonthDay                       SMALLINT NOT NULL   ,  -- 月日(MMDD)
+            JyoCD                          CHAR(2) NOT NULL    ,  -- 競馬場コード
+            Kaiji                          SMALLINT NOT NULL   ,  -- 開催回
+            Nichiji                        SMALLINT NOT NULL   ,  -- 開催日目
+            RaceNum                        SMALLINT NOT NULL   ,  -- レース番号
+            Kumi                           VARCHAR(4) NOT NULL ,  -- 文字列(4)
+            Odds                           VARCHAR(6)          ,  -- オッズ
+            Ninki                          VARCHAR(3)            -- 人気
         )
     """,
     "ODDS_UMATAN_HEAD": """
@@ -1061,12 +1061,12 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             RecordSpec                     CHAR(2)             ,  -- レコード種別ID
             DataKubun                      CHAR(1)             ,  -- データ区分
             MakeDate                       DATE                ,  -- YYYYMMDD形式の日付
-            Year                           SMALLINT            ,  -- 年(4桁)
-            MonthDay                       SMALLINT            ,  -- 月日(MMDD)
-            JyoCD                          CHAR(2)             ,  -- 競馬場コード
-            Kaiji                          SMALLINT            ,  -- 開催回
-            Nichiji                        SMALLINT            ,  -- 開催日目
-            RaceNum                        SMALLINT            ,  -- レース番号
+            Year                           SMALLINT NOT NULL   ,  -- 年(4桁)
+            MonthDay                       SMALLINT NOT NULL   ,  -- 月日(MMDD)
+            JyoCD                          CHAR(2) NOT NULL    ,  -- 競馬場コード
+            Kaiji                          SMALLINT NOT NULL   ,  -- 開催回
+            Nichiji                        SMALLINT NOT NULL   ,  -- 開催日目
+            RaceNum                        SMALLINT NOT NULL   ,  -- レース番号
             HappyoTime                     VARCHAR(8)          ,  -- 発表月日時分(MMDDhhmm)
             TorokuTosu                     SMALLINT            ,  -- 登録頭数
             SyussoTosu                     SMALLINT            ,  -- 出走頭数
@@ -1077,30 +1077,30 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
     "ODDS_WAKU": """
         CREATE TABLE IF NOT EXISTS ODDS_WAKU (
             MakeDate                       DATE                ,  -- YYYYMMDD形式の日付
-            Year                           SMALLINT            ,  -- 年(4桁)
-            MonthDay                       SMALLINT            ,  -- 月日(MMDD)
-            JyoCD                          CHAR(2)             ,  -- 競馬場コード
-            Kaiji                          SMALLINT            ,  -- 開催回
-            Nichiji                        SMALLINT            ,  -- 開催日目
-            RaceNum                        SMALLINT            ,  -- レース番号
-            Kumi                           VARCHAR(2)          ,  -- 文字列(2)
-            Odds                           DECIMAL(6,1)        ,  -- オッズ
-            Ninki                          SMALLINT              -- 人気
+            Year                           SMALLINT NOT NULL   ,  -- 年(4桁)
+            MonthDay                       SMALLINT NOT NULL   ,  -- 月日(MMDD)
+            JyoCD                          CHAR(2) NOT NULL    ,  -- 競馬場コード
+            Kaiji                          SMALLINT NOT NULL   ,  -- 開催回
+            Nichiji                        SMALLINT NOT NULL   ,  -- 開催日目
+            RaceNum                        SMALLINT NOT NULL   ,  -- レース番号
+            Kumi                           VARCHAR(2) NOT NULL ,  -- 文字列(2)
+            Odds                           VARCHAR(5)          ,  -- オッズ
+            Ninki                          VARCHAR(2)            -- 人気
         )
     """,
     "ODDS_WIDE": """
         CREATE TABLE IF NOT EXISTS ODDS_WIDE (
             MakeDate                       DATE                ,  -- YYYYMMDD形式の日付
-            Year                           SMALLINT            ,  -- 年(4桁)
-            MonthDay                       SMALLINT            ,  -- 月日(MMDD)
-            JyoCD                          CHAR(2)             ,  -- 競馬場コード
-            Kaiji                          SMALLINT            ,  -- 開催回
-            Nichiji                        SMALLINT            ,  -- 開催日目
-            RaceNum                        SMALLINT            ,  -- レース番号
-            Kumi                           VARCHAR(4)          ,  -- 文字列(4)
+            Year                           SMALLINT NOT NULL   ,  -- 年(4桁)
+            MonthDay                       SMALLINT NOT NULL   ,  -- 月日(MMDD)
+            JyoCD                          CHAR(2) NOT NULL    ,  -- 競馬場コード
+            Kaiji                          SMALLINT NOT NULL   ,  -- 開催回
+            Nichiji                        SMALLINT NOT NULL   ,  -- 開催日目
+            RaceNum                        SMALLINT NOT NULL   ,  -- レース番号
+            Kumi                           VARCHAR(4) NOT NULL ,  -- 文字列(4)
             OddsLow                        VARCHAR(5)          ,  -- 文字列(5)
             OddsHigh                       VARCHAR(5)          ,  -- 文字列(5)
-            Ninki                          SMALLINT              -- 人気
+            Ninki                          VARCHAR(3)            -- 人気
         )
     """,
     "ODDS_WIDE_HEAD": """
@@ -1108,12 +1108,12 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
             RecordSpec                     CHAR(2)             ,  -- レコード種別ID
             DataKubun                      CHAR(1)             ,  -- データ区分
             MakeDate                       DATE                ,  -- YYYYMMDD形式の日付
-            Year                           SMALLINT            ,  -- 年(4桁)
-            MonthDay                       SMALLINT            ,  -- 月日(MMDD)
-            JyoCD                          CHAR(2)             ,  -- 競馬場コード
-            Kaiji                          SMALLINT            ,  -- 開催回
-            Nichiji                        SMALLINT            ,  -- 開催日目
-            RaceNum                        SMALLINT            ,  -- レース番号
+            Year                           SMALLINT NOT NULL   ,  -- 年(4桁)
+            MonthDay                       SMALLINT NOT NULL   ,  -- 月日(MMDD)
+            JyoCD                          CHAR(2) NOT NULL    ,  -- 競馬場コード
+            Kaiji                          SMALLINT NOT NULL   ,  -- 開催回
+            Nichiji                        SMALLINT NOT NULL   ,  -- 開催日目
+            RaceNum                        SMALLINT NOT NULL   ,  -- レース番号
             HappyoTime                     VARCHAR(8)          ,  -- 発表月日時分(MMDDhhmm)
             TorokuTosu                     SMALLINT            ,  -- 登録頭数
             SyussoTosu                     SMALLINT            ,  -- 出走頭数

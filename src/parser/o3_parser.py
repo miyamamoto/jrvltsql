@@ -102,7 +102,7 @@ class O3Parser(odds_domain.OddsCombinationValidationMixin):
                 )
 
             if rows:
-                return rows
+                return odds_domain.attach_snapshot_metadata(rows)
             # 組合せが1件も無い snapshot（発売なし・レース中止・削除）でも
             # 公式の票数合計は提供される。H1/H6 と同じ sentinel 行で保持する。
             totals_only = dict(base)
@@ -110,7 +110,7 @@ class O3Parser(odds_domain.OddsCombinationValidationMixin):
             totals_only["OddsLow"] = ""
             totals_only["OddsHigh"] = ""
             totals_only["Ninki"] = ""
-            return [totals_only]
+            return odds_domain.attach_snapshot_metadata([totals_only])
 
         except Exception as e:
             self.logger.error(f"O3レコードパース中にエラー: {e}")
