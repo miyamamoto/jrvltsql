@@ -136,7 +136,7 @@ class H1Parser:
 
     @classmethod
     def _require_vote_total(cls, field_name: str, value: object) -> None:
-        if isinstance(value, str) and not value.strip():
+        if value == "":
             # 提供データは合計エリアを空白で送ることがある（parse 後は空文字）。
             return
         cls._require_ascii_digits(field_name, value, cls.VOTE_WIDTH)
@@ -147,7 +147,7 @@ class H1Parser:
 
         if not isinstance(value, str):
             raise ValueError("H1 Ninki must be a provider value")
-        if not value.strip():
+        if value == "":
             return
         text = value.strip()
         if text in {"--", "**"}:

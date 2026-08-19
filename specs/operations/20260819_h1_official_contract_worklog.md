@@ -92,9 +92,9 @@
 
 | 対象 | 結果 |
 | --- | --- |
-| `tests/test_h1_official_contract.py`（SQLite） | 141 passed / 13 skipped |
-| 同（PostgreSQL 16 有効） | 150 passed / 4 skipped |
-| フルスイート（SQLite） | 3903 passed / 464 skipped / 20 subtests |
+| `tests/test_h1_official_contract.py`（SQLite） | 143 passed / 13 skipped |
+| 同（PostgreSQL 16 有効） | 152 passed / 4 skipped |
+| フルスイート（SQLite） | 3905 passed / 466 skipped / 20 subtests |
 
 PostgreSQL は既存の使い捨てコンテナ `jltsql-sk-pg16-8215`
 （`127.0.0.1:32904`）のみを再利用し、新規コンテナは作成していない。テストは
@@ -130,6 +130,18 @@ PostgreSQL は既存の使い捨てコンテナ `jltsql-sk-pg16-8215`
    `test_h1_migration_preflight_covers_the_standard_family` で pin した。
    他レコードの `STRICT_*` は native のみだが、H1 の物理レコードは owner/子に
    跨るため、drift した標準名 table を放置すると消去と置換が壊れる。
+
+## 追加レビュー（CodeRabbit）への対応
+
+| 指摘 | 判定 | 対応 |
+| --- | --- | --- |
+| PostgreSQL の置換キー判定が式 index / 部分 index を公式キーと誤認 | 有効 | `indexprs` / `indpred` / `indisvalid` / `indisready` を確認して fail closed。赤先行 2 件 FAILED → 修正後 pass |
+| SQLite の `PRAGMA index_list.partial` 未検査 | 有効 | 部分 index を拒否。`test_h1_rejects_a_partial_official_key_index` で pin |
+| 取消マーカーが `-` / `---` を通す | 有効 | `{"--", "**"}` の完全一致へ |
+| 空白の許容が空白文字列も通す | 有効 | parse 後の正規形 `""` のみ許可。`test_h1_accepts_only_the_canonical_blank` で pin |
+| 人気順列の列挙漏れ（`HYOSU_TANPUKU`, `HYOSU_UMARENWIDE`） | 有効 | docs / CHANGELOG / RELEASE_NOTES に追記（型変更はなく、以前から文字列列） |
+| `docs/data_support.md` の `#h11` が壊れている | 反証 | 生成 HTML に `id="h11"` が存在し、`mkdocs build --strict` は 0 warning。見出し id は mkdocs の slugify に委ねる既存方針 |
+| `PostgreSQLDatabase._reconnect()` が `search_path` を復元しない | 範囲外 | H1 で導入した挙動ではなく、`SET search_path` を使う contract test は 14 モジュール以上に既存。H1 fixture の cleanup は `DROP SCHEMA <name> CASCADE` を明示名で実行するため search_path に依存しない。共有 handler の変更は別イテレーションで扱う |
 
 ## 残余リスク
 

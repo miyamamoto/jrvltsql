@@ -3066,7 +3066,7 @@ def _verify_h1_standard_replacement_key(
                 str(info.get("name") or "").lower()
                 for info in database.fetch_all(f'PRAGMA index_info("{name}")')
             }
-            if columns != official:
+            if columns != official or int(row.get("partial") or 0) == 1:
                 unexpected.append(name)
         if unexpected:
             raise SchemaMigrationError(
@@ -3081,6 +3081,8 @@ def _verify_h1_standard_replacement_key(
             "index_row.indisprimary AS is_primary, "
             "index_row.indpred IS NOT NULL AS is_partial, "
             "index_row.indexprs IS NOT NULL AS has_expressions, "
+            "index_row.indisvalid AS is_valid, "
+            "index_row.indisready AS is_ready, "
             "ARRAY(SELECT attribute.attname FROM unnest(index_row.indkey) AS key_column "
             "JOIN pg_attribute attribute ON attribute.attrelid = index_row.indrelid "
             "AND attribute.attnum = key_column) AS key_columns "
@@ -3100,6 +3102,8 @@ def _verify_h1_standard_replacement_key(
                 not bool(row.get("is_exclusion"))
                 and not bool(row.get("is_partial"))
                 and not bool(row.get("has_expressions"))
+                and bool(row.get("is_valid"))
+                and bool(row.get("is_ready"))
                 and columns == official
             ):
                 continue

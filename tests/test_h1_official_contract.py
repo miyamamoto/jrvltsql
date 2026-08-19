@@ -317,6 +317,37 @@ def test_h1_standard_family_accepts_only_the_official_key_index(
             verify_h1_storage_schema(database, table_name)
 
 
+def test_h1_rejects_a_partial_official_key_index(tmp_path: Path) -> None:
+    """A predicate means the official key is not unique for every race."""
+
+    database = SQLiteDatabase({"path": str(tmp_path / "partial.db")})
+    with database:
+        for created in STANDARD_TABLES:
+            database.execute(_canonical(created))
+        database.execute(
+            "CREATE UNIQUE INDEX jltsql_h1_partial ON HYOSU "
+            "(Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum) WHERE Kaiji = 1"
+        )
+        database.commit()
+        with pytest.raises(SchemaMigrationError):
+            verify_h1_storage_schema(database, "HYOSU")
+
+
+def test_h1_accepts_only_the_canonical_blank(tmp_path: Path) -> None:
+    """Only the parsed blank (empty string) is a provider blank."""
+
+    assert validate_h1_record(h1_row(Ninki="", Hyo="00000000000"), "NL_H1") is True
+    for malformed in (" ", "  ", "\t"):
+        with pytest.raises(SchemaMigrationError):
+            validate_h1_record(h1_row(Ninki=malformed, Hyo="00000000000"), "NL_H1")
+    total = next(row for row in h1_rows() if row.get("BetType") == "Total")
+    total["TanHyoTotal"] = ""
+    assert validate_h1_record(total, "NL_H1") is True
+    total["TanHyoTotal"] = " "
+    with pytest.raises(SchemaMigrationError):
+        validate_h1_record(total, "NL_H1")
+
+
 def _drop_not_null(schema: str, column: str) -> str:
     pattern = re.compile(rf"^(\s+{column}\s+\S+) NOT NULL", re.MULTILINE)
     patched, count = pattern.subn(r"\1", schema)
