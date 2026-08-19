@@ -26,6 +26,7 @@ from src.database.schema_jravan import JRAVAN_SCHEMAS
 from src.database.sqlite_handler import SQLiteDatabase
 from src.importer.importer import DataImporter
 from src.importer.importer_optimized import OptimizedDataImporter
+from src.realtime.updater import RealtimeUpdater
 from src.parser.o1_parser import O1Parser
 from src.parser.o2_parser import O2Parser
 from src.parser.o3_parser import O3Parser
@@ -709,3 +710,28 @@ def test_sqlite_status_zero_erases_the_snapshot_without_a_tombstone(
             assert (
                 database.fetch_one(f"SELECT COUNT(*) AS cnt FROM {table_name}")["cnt"] == 0
             )
+
+
+@pytest.mark.parametrize("record_type", ALL_RECORD_TYPES)
+def test_realtime_keeps_every_official_no_vote_combination(
+    tmp_path: Path,
+    record_type: str,
+) -> None:
+    """速報経路でも無投票（`0` の並び）の組合せを捨てない。"""
+
+    layout = LAYOUTS[record_type]
+    table_name = f"RT_{record_type}"
+    assert RealtimeUpdater.RECORD_TYPE_TABLE[record_type] == table_name
+    database = SQLiteDatabase({"path": str(tmp_path / f"realtime-{record_type}.db")})
+    with database:
+        _create(database, (table_name,))
+        updater = RealtimeUpdater(database)
+        raw = layout.raw(
+            data_kubun="1",
+            filled=3,
+            odds={name: b"0" * width for name, width in layout.odds_fields},
+            favourite=b"-" * layout.favourite_width,
+        )
+        results = updater.process_record(raw)
+        assert results and all(result["success"] for result in results)
+        assert database.fetch_one(f"SELECT COUNT(*) AS cnt FROM {table_name}")["cnt"] == 3

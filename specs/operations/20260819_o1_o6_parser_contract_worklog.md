@@ -121,7 +121,7 @@ SELECT Kumi, Odds, Ninki FROM NL_O2 -> [{'Kumi': '0102', 'Odds': None, 'Ninki': 
 実装後:
 
 ```text
-tests/test_o1_o6_official_contract.py: 256 passed, 12 skipped   （SQLite のみ）
+tests/test_o1_o6_official_contract.py: 261 passed, 12 skipped   （SQLite のみ）
 tests/test_o1_o6_official_contract.py
   + tests/test_expanded_record_storage.py: 337 passed           （PostgreSQL 16 込み）
 ```
@@ -144,6 +144,22 @@ uvx flake8 --isolated --select=E9,F63,F7,F82 src tests scripts tools: pass
 mkdocs build --strict: pass
 git diff --check: pass
 ```
+
+## 独立レビューで見つけた次段の欠陥（この段では直さない）
+
+O1-O6 には H1/H6 のようなレース単位 snapshot 置換が無く、**組合せ数が減った
+snapshot を取り込むと古い組合せの行が残る**。実測（native `NL_O2`、SQLite）:
+
+```text
+filled=3 を取込 -> COUNT(*) = 3
+filled=2 を取込 -> [{'Kumi': '0102'}, {'Kumi': '0103'}, {'Kumi': '0104'}]
+                   （0104 は最新 snapshot に無いのに残る）
+```
+
+速報経路（`RT_O2`）も同様で、組合せを持たない snapshot を受けると合計行 sentinel
+が追加される一方、以前の組合せ行はそのまま残る。`DataKubun=0` の物理 exact erase
+だけは公式どおり動く（実測で 0 行）。この置換契約は次段「O1-O6（無損失
+storage）」で H1/H6 と同じ形に揃える。
 
 ## 実施していないこと
 
