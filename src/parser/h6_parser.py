@@ -139,9 +139,6 @@ class H6Parser:
         for field_name in cls.TOTAL_FIELDS:
             cls._require_vote_total(field_name, record.get(field_name))
 
-        if "SanrentanKumi" not in record and "SanrentanHyo" not in record:
-            # 合計エリアだけを持つ caller row。
-            return
         if record.get("SanrentanKumi") == cls.TOTAL_COMBINATION:
             # 組番のない snapshot の合計行。組番票数と人気順は提供されない。
             if record.get("SanrentanHyo") not in ("", None) or record.get(

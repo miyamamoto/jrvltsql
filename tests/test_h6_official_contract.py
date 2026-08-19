@@ -239,6 +239,16 @@ def test_h6_records_without_a_sold_combination_keep_the_official_totals() -> Non
     assert validate_h6_record(row, "NL_H6") is True
 
 
+def test_h6_rows_must_carry_a_combination_or_the_totals_sentinel() -> None:
+    """組番を持たない caller row は DML 前に拒否する（NOT NULL 違反にしない）。"""
+
+    row = h6_rows(data_kubun="4")[0]
+    del row["SanrentanKumi"]
+    del row["SanrentanHyo"]
+    with pytest.raises(SchemaMigrationError):
+        validate_h6_record(row, "NL_H6")
+
+
 @pytest.mark.parametrize(
     "field_name, value",
     (
