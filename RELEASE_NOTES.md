@@ -9,8 +9,8 @@ What `2.0.0.dev0` is verified against:
 
 - the complete test gate on the frozen release SHA, with SQLite and a real
   PostgreSQL 16 backend
-- a wheel/sdist built from that same SHA, installed into an isolated virtual
-  environment, where `jltsql --version`, `jltsql init`, full schema creation
+- a wheel and an sdist built from that same SHA. The wheel (not the sdist) was
+  installed into an isolated virtual environment, where `jltsql --version`, `jltsql init`, full schema creation
   (80 tables), and an official fixed-width O2 import (complete-snapshot
   replacement plus `------` / `******` / `000000` markers) were exercised
 

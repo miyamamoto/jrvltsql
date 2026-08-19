@@ -36,7 +36,8 @@ O1-O6 parser #226 / O1-O6 storage #227）はすべて merge 済み・CI green �
 4. 同じ SHA から成果物を build した。
    - `jltsql-2.0.0.dev0-py3-none-any.whl`
    - `jltsql-2.0.0.dev0.tar.gz`
-5. 隔離した仮想環境に wheel だけを install して smoke を実施した。
+5. 隔離した仮想環境に wheel だけを install して smoke を実施した（sdist は
+   build のみで、install 検証はしていない）。
    - `jltsql --version` → `jltsql, version 2.0.0.dev0`
    - `jltsql init` → 作業ディレクトリに `config/config.yaml`（SQLite-only）を作成
    - `SchemaManager.create_all_tables()` → 80/80 テーブル作成
