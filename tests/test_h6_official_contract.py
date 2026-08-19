@@ -239,6 +239,23 @@ def test_h6_records_without_a_sold_combination_keep_the_official_totals() -> Non
     assert validate_h6_record(row, "NL_H6") is True
 
 
+@pytest.mark.parametrize(
+    "field_name, value",
+    (
+        ("SanrentanHyo", "00000000101"),
+        ("SanrentanNinki", "0001"),
+        ("SanrentanNinki", "----"),
+    ),
+)
+def test_h6_totals_only_row_rejects_combination_values(field_name: str, value: str) -> None:
+    """合計行は組番票数も人気順も持たないため、提供値があれば拒否する。"""
+
+    row = h6_rows(data_kubun="9", populated=False)[0]
+    row[field_name] = value
+    with pytest.raises(SchemaMigrationError):
+        validate_h6_record(row, "NL_H6")
+
+
 @pytest.mark.parametrize("use_standard", (False, True), ids=("native", "standard"))
 def test_h6_totals_only_snapshot_is_stored_once_per_race(
     tmp_path: Path,

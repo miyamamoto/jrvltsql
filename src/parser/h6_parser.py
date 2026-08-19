@@ -144,9 +144,12 @@ class H6Parser:
             return
         if record.get("SanrentanKumi") == cls.TOTAL_COMBINATION:
             # 組番のない snapshot の合計行。組番票数と人気順は提供されない。
-            if record.get("SanrentanHyo") not in ("", None):
-                raise ValueError("H6 totals-only row must not carry a combination vote")
-            cls._require_favourite(record.get("SanrentanNinki"))
+            if record.get("SanrentanHyo") not in ("", None) or record.get(
+                "SanrentanNinki"
+            ) not in ("", None):
+                raise ValueError(
+                    "H6 totals-only row must not carry a combination vote or favourite order"
+                )
             return
         cls._require_ascii_digits(
             "SanrentanKumi", record.get("SanrentanKumi"), cls.COMBINATION_WIDTH
