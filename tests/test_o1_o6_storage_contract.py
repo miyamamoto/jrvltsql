@@ -26,7 +26,7 @@ from src.importer.importer import (
     verify_odds_storage_schema,
 )
 from src.importer.importer_optimized import OptimizedDataImporter
-from src.parser.odds_domain import TOTAL_COMBINATION
+from src.parser.odds_domain import SNAPSHOT_ROWS_KEY, TOTAL_COMBINATION
 from src.realtime.updater import RealtimeUpdater
 from tests.test_o1_o6_official_contract import (
     ALL_RECORD_TYPES,
@@ -791,3 +791,30 @@ def test_postgresql_snapshot_replacement_removes_withdrawn_combinations(
     finally:
         postgresql_db.execute(f"DROP TABLE IF EXISTS {table_name}")
         postgresql_db.commit()
+
+
+@pytest.mark.parametrize("record_type", ALL_RECORD_TYPES)
+def test_realtime_rejects_a_non_official_snapshot_before_mutation(
+    tmp_path: Path,
+    record_type: str,
+) -> None:
+    """速報経路も公式ドメイン検証を通さない dict を置換 DML へ通さない。"""
+
+    table_name = f"RT_{record_type}"
+    database = SQLiteDatabase({"path": str(tmp_path / f"rt-domain-{record_type}.db")})
+    with database:
+        _create(database, (table_name,))
+        updater = RealtimeUpdater(database)
+        assert updater.process_parsed_records_batch(_rows(record_type, filled=3))[
+            "errors"
+        ] == 0
+        stored = _stored_combinations(database, table_name)
+
+        broken = [dict(row) for row in _rows(record_type, filled=3)]
+        field_name = NATIVE_MARKER_FIELDS[record_type][0][0]
+        for row in broken:
+            row[field_name] = "9"
+            row[SNAPSHOT_ROWS_KEY] = broken
+        with pytest.raises((SchemaMigrationError, ValueError)):
+            updater.process_parsed_records_batch(broken)
+        assert _stored_combinations(database, table_name) == stored

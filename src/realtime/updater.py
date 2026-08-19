@@ -457,12 +457,17 @@ class RealtimeUpdater:
                     from src.importer.importer import (
                         _is_odds_snapshot_follower,
                         _odds_native_snapshot_rows,
+                        validate_odds_record,
                     )
 
                     if _is_odds_snapshot_follower(item, odds_table):
                         continue
                     snapshot_rows = _odds_native_snapshot_rows(item, odds_table)
                     if snapshot_rows is not None:
+                        # 公式ドメイン検証を通さない dict が置換 DML（削除を含む）へ
+                        # 到達しないよう、importer と同じ検査を先に行う。
+                        for snapshot_row in snapshot_rows:
+                            validate_odds_record(snapshot_row, odds_table)
                         results.extend(
                             self._replace_odds_native_snapshot(
                                 item, snapshot_rows, odds_table
@@ -742,6 +747,7 @@ class RealtimeUpdater:
             _is_odds_snapshot_follower,
             _odds_native_snapshot_rows,
             replace_odds_native_snapshot,
+            validate_odds_record,
             verify_odds_storage_schema,
         )
 
@@ -904,7 +910,12 @@ class RealtimeUpdater:
 
             if _is_odds_snapshot_follower(record, table_name):
                 continue
-            if _odds_native_snapshot_rows(record, table_name) is not None:
+            odds_rows = _odds_native_snapshot_rows(record, table_name)
+            if odds_rows is not None:
+                # 公式ドメイン検証を通さない dict が置換 DML（削除を含む）へ
+                # 到達しないよう、importer と同じ検査を先に行う。
+                for snapshot_row in odds_rows:
+                    validate_odds_record(snapshot_row, table_name)
                 odds_snapshots.append((table_name, record))
                 continue
 

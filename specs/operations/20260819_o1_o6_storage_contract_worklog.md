@@ -15,6 +15,18 @@
 ことと、1 物理レコード＝1 レース 1 時点の完全 snapshot という公式の意味を
 storage 側で守ることである。
 
+## STOP 条件
+
+次のいずれかに当たったら、この段の作業を止めて報告する。
+
+- 公式仕様書（JV-Data 4.8.0.2 / 4.9.0.1）で裏を取れない仕様判断が必要になったとき
+- 既存テストの期待値を、公式仕様の裏付け無しに変更する必要が出たとき
+- 実 provider（JV-Link）取得、本番 DB、frozen 研究 DB への書き込みが必要になったとき
+- 1.x 既存 DB の移行が rebuild/reimport では救えないと判明したとき
+- CI が green にならない状態が3回の修正で解消しないとき
+
+次段（2.0.0.dev0）は、この段が merge され CI green になってから着手する。
+
 ## 参照した公式資料
 
 - `/home/keiba/scratch/20260815_jvdata_official_materials/JV-Data4901.pdf`
@@ -100,14 +112,19 @@ storage 側で守ることである。
    返していた（silent fail-open）。追従行も snapshot 全体を保持しているため、
    単独で渡されても完全な snapshot を適用し、件数は先頭行のみで数える形に修正した。
    `test_single_record_follower_row_alone_still_stores_the_whole_snapshot` で固定。
-3. PostgreSQL のレース単位置換テストが無かったため追加した
+3. 速報経路（`RealtimeUpdater.process_parsed_record` / `process_parsed_records_batch`）
+   が置換 DML の前に公式ドメイン検証（`validate_odds_record`）を通していなかった。
+   caller 由来の dict が検証なしで削除＋再投入へ到達し得たため、importer と同じ検査を
+   先に行う形へ修正し、`test_realtime_rejects_a_non_official_snapshot_before_mutation`
+   で固定した（検証を外すと 5 件 RED）。
+4. PostgreSQL のレース単位置換テストが無かったため追加した
    （`test_postgresql_snapshot_replacement_removes_withdrawn_combinations`）。
-4. 合計のみ snapshot の sentinel 行（`Kumi=TOTAL`）は、parser が公式に組合せの
+5. 合計のみ snapshot の sentinel 行（`Kumi=TOTAL`）は、parser が公式に組合せの
    無いことを空文字で表すため、無損失化後は `NULL` ではなく空文字で保存される。
    既存 `tests/test_expanded_record_storage.py` の期待値をこれに合わせた。
 
-追加後の証跡: 焦点テスト SQLite 212 passed / PostgreSQL 16 実機込み 229 passed、
-フルスイート PostgreSQL 16 実機込み **5003 passed**。
+追加後の証跡: 焦点テスト SQLite 217 passed / PostgreSQL 16 実機込み 234 passed、
+フルスイート PostgreSQL 16 実機込み **5008 passed**。
 
 ## この段で扱っていないこと
 
