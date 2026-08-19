@@ -46,7 +46,7 @@ class TestVersionComparison:
     def test_final_release_is_newer_than_its_development_prerelease(self):
         from src.utils.updater import _version_newer
 
-        assert _version_newer("2.0.0", "2.0.0.dev0") is True
+        assert _version_newer("2.0.0", "2.0.0.dev1") is True
 
 
 class TestGetCurrentVersion:
@@ -75,7 +75,7 @@ class TestGetCurrentVersion:
         version = get_current_version()
         # Source metadata is the candidate version; a stale release tag must
         # not make a development checkout report the previous release.
-        assert version == "2.0.0.dev0"
+        assert version == "2.0.0.dev1"
 
     @patch("subprocess.run")
     def test_fallback_to_installed_distribution_metadata(

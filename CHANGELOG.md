@@ -9,6 +9,22 @@
 
 次回リリースは互換性を破る変更を含むため `2.0.0` とする。1.xとしては配布しない。
 
+### 2.0.0.dev1 (開発検証用prerelease)
+
+実登録済みJV-Linkでの実測を反映する。
+
+- 実provider取得→parse→保存を通した（`JVOpen(RACE, 20260810, option=1)`=0、
+  48ファイル、864,827件をSQLiteへ保存、失敗0件）
+- 実データが暴いた契約欠陥2件を修正。H1の人気順取消マーカーは項目幅ぶん埋まる
+  （3桁賭式は`***`）。O1〜O6の発表月日時分は中間オッズのみ設定され、確定オッズは
+  公式初期値の`00000000`。どちらも提供値のまま保存する
+- realtimeの`JVRTOpen`はno-data/error時にも`JVClose`する（次のkeyが`-202`で
+  失敗していた）。当日対象は`NL_RA`に加えて`RT_RA`も見る
+- Wine/Docker実行層（32-bit native bridge・image・entrypoint）と、noVNC上で人が
+  インストールと利用登録を行う手順書を同梱。承認を代行する経路は持たず、
+  JV-Linkのダイアログも既定では人に回す（`JVLINK_AUTO_CLOSE_DIALOGS=1`で明示的に
+  opt-inしたときだけ既知のものを拒否する）
+
 ### Removed
 
 - `JVLinkWrapper.jv_set_service_key` / `JVLinkBridge.jv_set_service_key` と、

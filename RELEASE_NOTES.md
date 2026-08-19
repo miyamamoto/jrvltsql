@@ -1,11 +1,32 @@
 # jrvltsql v2.0.0 Release Notes (unreleased draft)
 
-`2.0.0` is not released yet. `2.0.0.dev0` is a **development-test prerelease**
+`2.0.0` is not released yet. `2.0.0.dev1` is a **development-test prerelease**
 of the official data-contract work. It is **not** a production compatibility
-claim and **not** an acquisition-readiness claim: it is still gated on fresh
-real-provider (JV-Link) validation in a real development environment.
+claim: the 64-bit SDK path, 1.x database migration, and long-run collection are
+still unverified.
 
-What `2.0.0.dev0` is verified against:
+What `2.0.0.dev1` adds over `2.0.0.dev0`, all of it measured against a real
+registered JV-Link on a Linux/Wine development host:
+
+- a first end-to-end acquisition through storage: `JVInit` `0`,
+  `JVOpen(RACE, 20260810, option=1)` `0` with 48 files, then
+  4,447 fetched / 864,827 parsed / 864,827 imported / 0 failed into SQLite
+  (`NL_H6` 319,548, `NL_O6` 319,548, `NL_H1` 112,257, `NL_RA` 144, `NL_SE` 1,934, …)
+- two contract defects that only real provider data exposes, both of which had
+  made whole record families unimportable: H1 cancellation markers fill the
+  field width, so three-character bet types send `***`, and O1-O6 announcement
+  time is set only for interim odds, so final odds carry the official
+  zero-filled `00000000`. Both values are now stored verbatim
+- a realtime `JVRTOpen` that closes on no-data and error, instead of leaving the
+  stream open so the next key fails with `-202`, plus `RT_RA` as a same-day
+  target source next to `NL_RA`
+- the Wine/Docker runtime layer (native 32-bit bridge, image, entrypoint) and
+  the manual noVNC registration runbook. Nothing in it performs an approval:
+  installing JV-Link, agreeing to the terms and entering the service key stay
+  with a person, and JV-Link's own dialogs are left for that person unless
+  `JVLINK_AUTO_CLOSE_DIALOGS=1` is set explicitly
+
+What `2.0.0.dev1` is verified against:
 
 - the complete test gate on the frozen release SHA, with SQLite and a real
   PostgreSQL 16 backend
@@ -16,8 +37,10 @@ What `2.0.0.dev0` is verified against:
 
 What it is **not** verified against:
 
-- real JV-Link acquisition, real provider ordering, or 64-bit SDK execution
+- 64-bit SDK execution, or ARM hosts (JV-Link and the bridge are 32-bit x86)
 - migration of an existing 1.x database (rebuild and reimport are required)
+- sustained multi-day collection, or realtime `JVRTOpen` against a live race day
+  (the measured `JVRTOpen` targets had no data on the days available)
 
 Current migration boundary:
 
