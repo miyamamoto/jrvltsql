@@ -45,6 +45,15 @@
   行の置換前に `SchemaMigrationError` で拒否する（`docs/record_contracts.md` の
   UM 契約どおり。兄弟レコードと同じ検証器を同じ位置で呼ぶだけで、parser の挙動と
   標準名 `UMA` の既存 preflight は変えない）
+- `SK`を公式現行208バイト配置と10桁`KettoNum` identityへ結び付け、native
+  `NL_SK`と標準名`SANKU`でprovider順のstatus 1/2更新、status 0 exact erase、
+  caller validation（実在する`BirthDate`、1/1/2桁の性別/品種/毛色コード、
+  産駒持込区分`0/1/2/3`、4桁輸入年、8桁生産者コード、14個の10桁繁殖登録番号）、
+  SQLite/PostgreSQL/Dualのstrict schema preflightを一致させた。公式に空欄に
+  なり得る`SanchiName`は`NULL`ではなく空文字で保持する。PR #175の208バイト
+  layoutと14個の血統値はそのまま保持し、旧178バイト配置とnullable/keyless/
+  wrong-type/extended tableは自動移行せず、backup・rebuild・`BLDN` reimportを
+  要求する。SKは蓄積系masterだけであり、`RT_SK`を追加しない
 - `HN`を公式現行251バイト配置と10桁`HansyokuNum` identityへ結び付け、native
   `NL_HN`と標準名`HANSYOKU`でprovider順のstatus 1/2更新、status 0 exact erase、
   caller validation、SQLite/PostgreSQLのstrict schema preflightを一致させた。

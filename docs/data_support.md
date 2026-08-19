@@ -203,11 +203,12 @@ jrvltsql は現在、以下 38 種類の JRA レコード種別に対してパ�
 | `JG` | 80 バイト。受付順番を含む 8 列キーで再投票行を共存。`DataKubun` は 0/1 のみ | [JG](record_contracts.md#jg) |
 | `WF` | 7,215 バイト。キーは開催年・開催月日。native は 1 行（`PayoutsJson`）、標準名は `JYUSYOSIKI_HEAD`＋子 `JYUSYOSIKI` 243 行。蓄積系 0/1/2/3/7/9、速報 0/1/2/3/9 | [WF](record_contracts.md#wf-win5) |
 
-**[マスタ系（HN / UM / BT / KS / CH / HS）](record_contracts.md#hn-um-bt-ks-ch-hs)**
+**[マスタ系（HN / SK / UM / BT / KS / CH / HS）](record_contracts.md#hn-sk-um-bt-ks-ch-hs)**
 
 | レコード種別 | 要点 | 詳細 |
 | --- | --- | --- |
 | `HN` | 251 バイト（245 は拒否）。キー `HansyokuNum`。`0` は key だけの exact erase。`RT_HN` なし | [HN](record_contracts.md#hn) |
+| `SK` | 208 バイト（178 は拒否）。キー `KettoNum`（10 桁）。14 個の 3 代血統番号を保持。`0` は key だけの exact erase。`RT_SK` なし | [SK](record_contracts.md#sk) |
 | `UM` | 1609 バイト。キー `KettoNum`（10 桁）。旧標準名 `UMA`（`KettoNum` 列と主キーなし）は停止 | [UM](record_contracts.md#um) |
 | `BT` | 6,889 バイト（6,887 は拒否）。キー `HansyokuNum`。標準名 `KEITO`、旧名 `BLOOD` は読み取り互換のみ | [BT](record_contracts.md#bt) |
 | `KS` | 4173 バイト（旧 772 バイト復元データは受け付けない）。`NL_KS`＋`NL_KS_SEISEKI` / `KISYU`＋`KISYU_SEISEKI` へ原子的に保存 | [KS](record_contracts.md#ks) |

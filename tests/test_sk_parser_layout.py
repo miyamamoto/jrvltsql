@@ -58,7 +58,7 @@ FIELDS = [
     ("KeiroCD", 32, 2, b"04"),
     ("SankuMochiKubun", 34, 1, b"0"),
     ("ImportYear", 35, 4, b"2025"),
-    ("BreederCode", 39, 8, b"BR000039"),
+    ("BreederCode", 39, 8, b"00000039"),
     ("SanchiName", 47, 20, _pad("テスト産地", 20, zenkaku=True)),
 ]
 FIELDS.extend(

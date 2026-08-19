@@ -75,6 +75,7 @@ from src.importer.importer import (
     validate_jc_record,
     validate_jg_record,
     validate_se_record,
+    validate_sk_record,
     validate_tc_record,
     validate_wc_record,
     validate_we_record,
@@ -96,6 +97,7 @@ from src.importer.importer import (
     verify_mining_native_schema,
     verify_rc_storage_schema,
     verify_se_storage_schema,
+    verify_sk_storage_schema,
     verify_tc_storage_schema,
     verify_tk_coupled_tables,
     verify_um_storage_schema,
@@ -147,6 +149,7 @@ class OptimizedDataImporter:
         self._verified_hs_tables: set[str] = set()
         self._verified_hc_tables: set[str] = set()
         self._verified_hn_tables: set[str] = set()
+        self._verified_sk_tables: set[str] = set()
         self._verified_tc_tables: set[str] = set()
         self._verified_cc_tables: set[str] = set()
         self._verified_jc_tables: set[str] = set()
@@ -369,6 +372,7 @@ class OptimizedDataImporter:
                     validate_hs_record(first_record, first_table_name)
                     validate_hc_record(first_record, first_table_name)
                     validate_hn_record(first_record, first_table_name)
+                    validate_sk_record(first_record, first_table_name)
                     validate_jc_record(first_record, first_table_name)
                 records = chain((first_record,), records)
         except Exception:
@@ -470,6 +474,10 @@ class OptimizedDataImporter:
                     if verify_hn_storage_schema(self.database, table_name):
                         self._verified_hn_tables.add(table_name)
                 validate_hn_record(record, table_name)
+                if table_name not in self._verified_sk_tables:
+                    if verify_sk_storage_schema(self.database, table_name):
+                        self._verified_sk_tables.add(table_name)
+                validate_sk_record(record, table_name)
                 if table_name not in self._verified_tc_tables:
                     if verify_tc_storage_schema(self.database, table_name):
                         self._verified_tc_tables.add(table_name)

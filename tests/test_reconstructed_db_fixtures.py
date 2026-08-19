@@ -154,9 +154,12 @@ def load_fixture_records(record_type, record_length):
             if record_type == "SK" and len(chunk) == 78:
                 # This fixture was reconstructed from stored columns through
                 # the obsolete one-pedigree parser. Preserve its core values
-                # as a synthetic current-shape record; the exact 208-byte
-                # contract is covered by test_sk_parser_layout.py.
-                chunk = chunk[:76].ljust(SKParser.RECORD_LENGTH - 2, b" ") + b"\r\n"
+                # (header, key, body, and the first pedigree number) as a
+                # synthetic current-shape record and fill the 13 remaining
+                # ten-digit pedigree slots with their documented initial value
+                # 0; the exact 208-byte contract is covered by
+                # test_sk_parser_layout.py and test_sk_official_contract.py.
+                chunk = chunk[:76] + b"0" * 130 + b"\r\n"
             if record_type == "TK" and len(chunk) == 727:
                 # The historical fixture was reconstructed through the former
                 # one-entry parser. Preserve the position-compatible header and

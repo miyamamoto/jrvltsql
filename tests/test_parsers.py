@@ -20,6 +20,7 @@ from tests.fixtures.record_factory import (
     make_hr_record,
     make_ra_record,
     make_se_record,
+    make_sk_record,
 )
 
 EXPANDED_RECORD_TYPES = {
@@ -121,6 +122,8 @@ class TestIndividualParsers:
                 )
             if record_type == "HN":
                 data = make_hn_record(make_date="20240601")
+            if record_type == "SK":
+                data = make_sk_record(make_date="20240601")
             if record_type == "HS":
                 # HS requires all three official key fields and a complete
                 # current 200-byte body; a blank envelope is not positive.

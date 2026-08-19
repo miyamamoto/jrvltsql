@@ -1314,32 +1314,32 @@ JRAVAN_SCHEMAS: Dict[str, str] = {
     """,
     "SANKU": """
         CREATE TABLE IF NOT EXISTS SANKU (
-            RecordSpec                     CHAR(2)             ,  -- レコード種別ID
-            DataKubun                      CHAR(1)             ,  -- データ区分
-            MakeDate                       DATE                ,  -- YYYYMMDD形式の日付
-            KettoNum                       VARCHAR(10)         ,  -- 血統登録番号
-            BirthDate                      DATE                ,  -- 生年月日
-            SexCD                          VARCHAR(1)          ,  -- 文字列(1)
-            HinsyuCD                       VARCHAR(1)          ,  -- 文字列(1)
-            KeiroCD                        VARCHAR(2)          ,  -- 文字列(2)
-            SankuMochiKubun                VARCHAR(1)          ,  -- 文字列(1)
-            ImportYear                     VARCHAR(4)          ,  -- 文字列(4)
-            BreederCode                    VARCHAR(8)          ,  -- 文字列(8)
-            SanchiName                     VARCHAR(20)         ,  -- 文字列(20)
-            FNum                           VARCHAR(10)         ,  -- 文字列(10)
-            MNum                           VARCHAR(10)         ,  -- 文字列(10)
-            FFNum                          VARCHAR(10)         ,  -- 文字列(10)
-            FMNum                          VARCHAR(10)         ,  -- 文字列(10)
-            MFNum                          VARCHAR(10)         ,  -- 文字列(10)
-            MMNum                          VARCHAR(10)         ,  -- 文字列(10)
-            FFFNum                         VARCHAR(10)         ,  -- 文字列(10)
-            FFMNum                         VARCHAR(10)         ,  -- 文字列(10)
-            FMFNum                         VARCHAR(10)         ,  -- 文字列(10)
-            FMMNum                         VARCHAR(10)         ,  -- 文字列(10)
-            MFFNum                         VARCHAR(10)         ,  -- 文字列(10)
-            MFMNum                         VARCHAR(10)         ,  -- 文字列(10)
-            MMFNum                         VARCHAR(10)         ,  -- 文字列(10)
-            MMMNum                         VARCHAR(10)         ,  -- 文字列(10)
+            RecordSpec                     CHAR(2) NOT NULL    ,  -- レコード種別ID
+            DataKubun                      CHAR(1) NOT NULL    ,  -- データ区分
+            MakeDate                       DATE NOT NULL       ,  -- YYYYMMDD形式の日付
+            KettoNum                       VARCHAR(10) NOT NULL,  -- 血統登録番号
+            BirthDate                      DATE NOT NULL       ,  -- 生年月日
+            SexCD                          VARCHAR(1) NOT NULL ,  -- 性別コード
+            HinsyuCD                       VARCHAR(1) NOT NULL ,  -- 品種コード
+            KeiroCD                        VARCHAR(2) NOT NULL ,  -- 毛色コード
+            SankuMochiKubun                VARCHAR(1) NOT NULL ,  -- 産駒持込区分
+            ImportYear                     VARCHAR(4) NOT NULL ,  -- 輸入年
+            BreederCode                    VARCHAR(8) NOT NULL ,  -- 生産者コード
+            SanchiName                     VARCHAR(20) NOT NULL,  -- 産地名
+            FNum                           VARCHAR(10) NOT NULL,  -- 父 繁殖登録番号
+            MNum                           VARCHAR(10) NOT NULL,  -- 母 繁殖登録番号
+            FFNum                          VARCHAR(10) NOT NULL,  -- 父父 繁殖登録番号
+            FMNum                          VARCHAR(10) NOT NULL,  -- 父母 繁殖登録番号
+            MFNum                          VARCHAR(10) NOT NULL,  -- 母父 繁殖登録番号
+            MMNum                          VARCHAR(10) NOT NULL,  -- 母母 繁殖登録番号
+            FFFNum                         VARCHAR(10) NOT NULL,  -- 父父父 繁殖登録番号
+            FFMNum                         VARCHAR(10) NOT NULL,  -- 父父母 繁殖登録番号
+            FMFNum                         VARCHAR(10) NOT NULL,  -- 父母父 繁殖登録番号
+            FMMNum                         VARCHAR(10) NOT NULL,  -- 父母母 繁殖登録番号
+            MFFNum                         VARCHAR(10) NOT NULL,  -- 母父父 繁殖登録番号
+            MFMNum                         VARCHAR(10) NOT NULL,  -- 母父母 繁殖登録番号
+            MMFNum                         VARCHAR(10) NOT NULL,  -- 母母父 繁殖登録番号
+            MMMNum                         VARCHAR(10) NOT NULL,  -- 母母母 繁殖登録番号
             PRIMARY KEY (KettoNum)
         )
     """,

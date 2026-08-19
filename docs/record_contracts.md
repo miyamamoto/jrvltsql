@@ -691,7 +691,7 @@ cache の変更に入る前に、対応する現行種別名を示して停止�
   別開催を消し得るため拒否します。
 - 検索用の非一意 index は保持できます。
 
-### マスタ系（HN / UM / BT / KS / CH / HS）
+### マスタ系（HN / SK / UM / BT / KS / CH / HS）
 
 #### HN（繁殖馬マスタ）
 
@@ -728,6 +728,53 @@ cache の変更に入る前に、対応する現行種別名を示して停止�
 - 既存の nullable、keyless、wrong-key、wrong-type、容量不足、generated /
   identity 列、追加列または追加 UNIQUE/FK/CHECK を持つ `NL_HN` / `HANSYOKU`
   は自動修復せず、mutation 前に停止します。
+- DB をバックアップして両 table を現行 schema で再作成し、保持中の `BLDN`
+  source から再取込してください。
+
+#### SK（産駒マスタ）
+
+**公式レイアウト:**
+
+- 現行 JV-Data 4.9.0.1 / SDK 5.0.0 の 208 バイト配置（生産者コード 8 桁、
+  3 代血統 14 × 10 桁）だけを受け付け、旧 178 バイト配置は拒否します。
+
+**identity（主キー）:**
+
+- 公式 identity は 10 桁の `KettoNum`（血統登録番号）です。正確な 10 桁 ASCII
+  数字だけを受け付けます。
+
+**保存先:**
+
+- native `NL_SK` と標準名 `SANKU` は同じ列名・同じ `KettoNum` 主キー・必須
+  header/key/body・公式 field capacity を使い、status 1/2 を provider 順に
+  同じ行へ反映します。父・母・父父・父母・母父・母母・父父父・父父母・父母父・
+  父母母・母父父・母父母・母母父・母母母の 14 個の繁殖登録番号（`FNum` 〜
+  `MMMNum`）はすべて個別列で保持します。
+- SK は蓄積系（`BLDN`）master だけであり、`RT_SK` は作成せず、速報経路にも
+  ルーティングしません。
+
+**DataKubun:**
+
+- `DataKubun=0` はこの key だけを使う物理 exact erase です。削除指示の非 key
+  本文を decode しない扱いは HN と同じ project policy です。
+
+**値の扱い（公式 4.9.0.1 の domain）:**
+
+- `BirthDate` は実在する `yyyymmdd`、`SexCD`/`HinsyuCD`/`KeiroCD` は 1/1/2 桁の
+  数字（コード表 2202/2201/2203 の値は将来増え得るため表照合はしません）、
+  産駒持込区分 `SankuMochiKubun` は `0/1/2/3` のみ（`9:その他` は繁殖馬マスタ
+  HN だけの値）、`ImportYear` は 4 桁（内国産の `0000` も有効）、`BreederCode`
+  は 8 桁数字、14 個の繁殖登録番号は 10 桁数字（未設定の `0000000000` も有効）
+  です。
+- 公式に空欄になり得る `SanchiName` は、両 table とも `NULL` ではなく空文字で
+  保持します。欠落した項目や `None` は検証で拒否され、`NULL` として保存されません。
+
+**既存 DB からの移行手順:**
+
+- 既存の nullable、keyless、wrong-key、wrong-type、容量不足、generated /
+  identity 列、追加列または追加 UNIQUE/FK/CHECK を持つ `NL_SK` / `SANKU`
+  は自動修復せず、mutation 前に停止します。旧標準名 `HANSYOKU_UMA` だけがある
+  DB も引き続き拒否します。
 - DB をバックアップして両 table を現行 schema で再作成し、保持中の `BLDN`
   source から再取込してください。
 

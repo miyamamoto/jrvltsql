@@ -122,6 +122,34 @@ def make_hn_record(
     return bytes(data)
 
 
+def make_sk_record(
+    data_kubun="1",
+    make_date="20260101",
+    ketto_num="2020100001",
+    **kwargs,
+) -> bytes:
+    """Create one official current-layout 208-byte SK record."""
+
+    data = bytearray(b" " * 208)
+    data[0:2] = _pad("SK", 2)
+    data[2:3] = _pad(data_kubun, 1)
+    data[3:11] = _pad(make_date, 8)
+    data[11:21] = _pad(ketto_num, 10)
+    data[21:29] = _pad(kwargs.get("birth_date", "20200401"), 8)
+    data[29:30] = _pad(kwargs.get("sex_cd", "1"), 1)
+    data[30:31] = _pad(kwargs.get("hinsyu_cd", "1"), 1)
+    data[31:33] = _pad(kwargs.get("keiro_cd", "03"), 2)
+    data[33:34] = _pad(kwargs.get("mochi_kubun", "0"), 1)
+    data[34:38] = _pad(kwargs.get("import_year", "0000"), 4)
+    data[38:46] = _pad(kwargs.get("breeder_code", "00000001"), 8)
+    data[46:66] = _pad(kwargs.get("sanchi_name", ""), 20)
+    for index in range(14):
+        start = 66 + 10 * index
+        data[start : start + 10] = _pad(kwargs.get("pedigree", "0000000000"), 10)
+    data[206:208] = b"\r\n"
+    return bytes(data)
+
+
 def make_h1_record_full(
     data_kubun="4", make_date="20260101",
     year="2026", month_day="0101", jyo_cd="05",

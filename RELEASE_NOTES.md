@@ -50,6 +50,17 @@ Public API replacements:
 - native and standard schemas now verify primary keys, types, capacities,
   child-table constraints, and cancellation/delete behavior before mutation;
   several record families gained complete child storage or corrected keys
+- SK progeny master storage now validates the current official 208-byte
+  record body (real `BirthDate`, digit sex/breed/coat codes, 産駒持込区分
+  `0/1/2/3`, four-digit import year, eight-digit breeder code, fourteen
+  ten-digit pedigree numbers) and the exact ten-digit `KettoNum` identity.
+  Native `NL_SK` and standard `SANKU` apply provider-ordered status 1/2
+  revisions and a physical exact-key status-0 erase, and reject nullable,
+  keyless, wrong-type, generated, extended, or additionally constrained schemas
+  before mutation. Officially blankable `SanchiName` is stored as an empty
+  string rather than `NULL`. Operators must back up, rebuild, and reimport
+  retained `BLDN` data; the obsolete 178-byte layout is not migrated, and SK
+  remains accumulated-only without an `RT_SK` table
 - HN breeding-horse master storage now accepts only the current official
   251-byte record and exact ten-digit `HansyokuNum` identity. Native `NL_HN`
   and standard `HANSYOKU` apply provider-ordered status 1/2 revisions and a

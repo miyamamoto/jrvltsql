@@ -1857,6 +1857,16 @@ for _hn_table in ("NL_HN", "HANSYOKU"):
         if _column["name"] == "HansyokuNum":
             _column["description"] = "公式10桁の繁殖登録番号（HN identity）"
 
+for _sk_table in ("NL_SK", "SANKU"):
+    TABLE_METADATA[_sk_table]["purpose"] = (
+        "公式現行208バイトSKを10桁血統登録番号の単一キーで保持し、"
+        "3代血統14項目の繁殖登録番号を欠落なく格納。"
+        "status 0は同じキーの物理削除として扱う"
+    )
+    for _column in TABLE_METADATA[_sk_table]["columns"]:
+        if _column["name"] == "KettoNum":
+            _column["description"] = "公式10桁の血統登録番号（SK identity）"
+
 for _hr_table in ("NL_HR", "RT_HR", "HARAI"):
     TABLE_METADATA[_hr_table]["purpose"] = (
         "公式719バイトHRの全払戻repeatを6項目レースキーで保持。"

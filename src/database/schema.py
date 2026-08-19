@@ -1219,32 +1219,32 @@ SCHEMAS = {
     """,
     "NL_SK": """
         CREATE TABLE IF NOT EXISTS NL_SK (
-            RecordSpec TEXT,
-            DataKubun TEXT,
-            MakeDate TEXT,
-            KettoNum TEXT,
-            BirthDate TEXT,
-            SexCD TEXT,
-            HinsyuCD TEXT,
-            KeiroCD TEXT,
-            SankuMochiKubun TEXT,
-            ImportYear INTEGER,
-            BreederCode TEXT,
-            SanchiName TEXT,
-            FNum TEXT,
-            MNum TEXT,
-            FFNum TEXT,
-            FMNum TEXT,
-            MFNum TEXT,
-            MMNum TEXT,
-            FFFNum TEXT,
-            FFMNum TEXT,
-            FMFNum TEXT,
-            FMMNum TEXT,
-            MFFNum TEXT,
-            MFMNum TEXT,
-            MMFNum TEXT,
-            MMMNum TEXT,
+            RecordSpec TEXT NOT NULL,
+            DataKubun TEXT NOT NULL,
+            MakeDate TEXT NOT NULL,
+            KettoNum TEXT NOT NULL,
+            BirthDate TEXT NOT NULL,
+            SexCD TEXT NOT NULL,
+            HinsyuCD TEXT NOT NULL,
+            KeiroCD TEXT NOT NULL,
+            SankuMochiKubun TEXT NOT NULL,
+            ImportYear INTEGER NOT NULL,
+            BreederCode TEXT NOT NULL,
+            SanchiName TEXT NOT NULL,
+            FNum TEXT NOT NULL,
+            MNum TEXT NOT NULL,
+            FFNum TEXT NOT NULL,
+            FMNum TEXT NOT NULL,
+            MFNum TEXT NOT NULL,
+            MMNum TEXT NOT NULL,
+            FFFNum TEXT NOT NULL,
+            FFMNum TEXT NOT NULL,
+            FMFNum TEXT NOT NULL,
+            FMMNum TEXT NOT NULL,
+            MFFNum TEXT NOT NULL,
+            MFMNum TEXT NOT NULL,
+            MMFNum TEXT NOT NULL,
+            MMMNum TEXT NOT NULL,
             RecordDelimiter TEXT,
             PRIMARY KEY (KettoNum)
         )
@@ -2761,6 +2761,7 @@ STRICT_HR_STORAGE_TABLES = frozenset({"NL_HR", "RT_HR"})
 STRICT_HS_STORAGE_TABLES = frozenset({"NL_HS"})
 STRICT_HC_STORAGE_TABLES = frozenset({"NL_HC"})
 STRICT_HN_STORAGE_TABLES = frozenset({"NL_HN"})
+STRICT_SK_STORAGE_TABLES = frozenset({"NL_SK"})
 STRICT_TC_STORAGE_TABLES = frozenset({"NL_TC", "RT_TC"})
 STRICT_CC_STORAGE_TABLES = frozenset({"NL_CC", "RT_CC"})
 STRICT_JC_STORAGE_TABLES = frozenset({"NL_JC", "RT_JC"})
@@ -2798,6 +2799,7 @@ def _verify_existing_strict_storage_targets(db: BaseDatabase) -> None:
         verify_hs_storage_schema,
         verify_jc_storage_schema,
         verify_se_storage_schema,
+        verify_sk_storage_schema,
         verify_tc_storage_schema,
         verify_we_storage_schema,
     )
@@ -2841,6 +2843,9 @@ def _verify_existing_strict_storage_targets(db: BaseDatabase) -> None:
         for table_name in STRICT_HN_STORAGE_TABLES:
             if target.table_exists_strict(table_name):
                 verify_hn_storage_schema(target, table_name)
+        for table_name in STRICT_SK_STORAGE_TABLES:
+            if target.table_exists_strict(table_name):
+                verify_sk_storage_schema(target, table_name)
         for table_name in STRICT_TC_STORAGE_TABLES:
             if target.table_exists_strict(table_name):
                 verify_tc_storage_schema(target, table_name)
@@ -2945,6 +2950,10 @@ class SchemaManager:
                 from src.importer.importer import verify_hn_storage_schema
 
                 verify_hn_storage_schema(self.db, table_name)
+            if table_name in STRICT_SK_STORAGE_TABLES:
+                from src.importer.importer import verify_sk_storage_schema
+
+                verify_sk_storage_schema(self.db, table_name)
             if table_name in STRICT_TC_STORAGE_TABLES:
                 from src.importer.importer import verify_tc_storage_schema
 
@@ -3023,6 +3032,10 @@ class SchemaManager:
                     from src.importer.importer import verify_hn_storage_schema
 
                     verify_hn_storage_schema(self.db, table_name)
+                if table_name in STRICT_SK_STORAGE_TABLES:
+                    from src.importer.importer import verify_sk_storage_schema
+
+                    verify_sk_storage_schema(self.db, table_name)
                 if table_name in STRICT_TC_STORAGE_TABLES:
                     from src.importer.importer import verify_tc_storage_schema
 
@@ -3404,6 +3417,10 @@ def create_all_tables(db: BaseDatabase) -> None:
                 from src.importer.importer import verify_hn_storage_schema
 
                 verify_hn_storage_schema(db, table_name)
+            if table_name in STRICT_SK_STORAGE_TABLES:
+                from src.importer.importer import verify_sk_storage_schema
+
+                verify_sk_storage_schema(db, table_name)
             if table_name in STRICT_TC_STORAGE_TABLES:
                 from src.importer.importer import verify_tc_storage_schema
 
