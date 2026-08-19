@@ -7805,6 +7805,17 @@ def convert_record_types(record: dict, table_name: str) -> dict:
             continue
 
         if (
+            table_name in _ODDS_STORAGE_TABLES
+            and field_name in _ODDS_BLANK_TEXT_FIELDS
+            and isinstance(value, str)
+            and not value.strip()
+        ):
+            # 公式のオッズ・人気順は空白（登録なし）も提供値。NULL に落とすと
+            # 「未提供」や取消と区別できなくなるので、空文字のまま保存する。
+            converted[field_name] = ""
+            continue
+
+        if (
             table_name in _H6_STORAGE_TABLES
             and field_name in _H6_BLANK_TEXT_FIELDS
             and isinstance(value, str)
@@ -9289,8 +9300,9 @@ class DataImporter:
                 self._batches_processed += 1
                 return True
             if _odds_native_snapshot_rows(record, table_name) is not None:
-                if _is_odds_snapshot_follower(record, table_name):
-                    return True
+                # 追従行も snapshot 全体を持つため、単独で渡されても完全な
+                # snapshot を適用する。件数は先頭行のみで数える。
+                follower = _is_odds_snapshot_follower(record, table_name)
                 if auto_commit:
                     self.database.begin_transaction()
                 try:
@@ -9302,7 +9314,7 @@ class DataImporter:
                 except Exception:
                     self.database.rollback()
                     raise
-                self._records_imported += rows
+                self._records_imported += 0 if follower else rows
                 self._batches_processed += 1
                 return True
             if table_name in _STANDARD_VOTE_CONFIG_BY_OWNER:

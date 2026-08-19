@@ -708,3 +708,86 @@ def test_single_record_snapshot_replacement_removes_withdrawn_combinations(
         assert _stored_combinations(database, table_name) == _expected_combinations(
             record_type, 2
         )
+
+
+@pytest.mark.parametrize("record_type", RECORD_TYPES)
+def test_blank_official_values_stay_blank_instead_of_null(
+    tmp_path: Path,
+    record_type: str,
+) -> None:
+    """空白は公式の「登録なし」なので、未提供（NULL）へ落としてはならない。"""
+
+    table_name = _native_table(record_type)
+    rows = _marker_rows(record_type, " ")
+    database = SQLiteDatabase({"path": str(tmp_path / f"blank-{record_type}.db")})
+    with database:
+        _create(database, (table_name,))
+        assert DataImporter(database, batch_size=10).import_records(iter(rows))[
+            "records_failed"
+        ] == 0
+        for field_name, _ in NATIVE_MARKER_FIELDS[record_type]:
+            stored = {
+                row[field_name]
+                for row in database.fetch_all(f"SELECT {field_name} FROM {table_name}")
+            }
+            # O1 は単勝・複勝・枠連の配列が独立なので、その行に無い項目は NULL
+            # （未提供）のままでよい。提供された空白は空白として残る。
+            assert "" in stored, field_name
+            assert stored <= {None, "", *(" " * width for width in range(1, 8))}, field_name
+
+
+@pytest.mark.parametrize("record_type", ALL_RECORD_TYPES)
+def test_single_record_follower_row_alone_still_stores_the_whole_snapshot(
+    tmp_path: Path,
+    record_type: str,
+) -> None:
+    """追従行だけを渡されても、黙って書かずに成功と返してはならない。"""
+
+    table_name = _native_table(record_type)
+    database = SQLiteDatabase({"path": str(tmp_path / f"follower-{record_type}.db")})
+    with database:
+        _create(database, (table_name,))
+        rows = _rows(record_type, filled=3)
+        assert DataImporter(database).import_single_record(rows[-1])
+        assert _stored_combinations(database, table_name) == _expected_combinations(
+            record_type, 3
+        )
+
+
+@pytest.mark.parametrize("record_type", ALL_RECORD_TYPES)
+def test_postgresql_snapshot_replacement_removes_withdrawn_combinations(
+    postgresql_db,
+    record_type: str,
+) -> None:
+    """PostgreSQL でも1レース1時点の完全snapshot置換になる。"""
+
+    table_name = _native_table(record_type)
+    postgresql_db.execute(f"DROP TABLE IF EXISTS {table_name}")
+    postgresql_db.execute(SCHEMAS[table_name])
+    postgresql_db.commit()
+    try:
+        importer = DataImporter(postgresql_db, batch_size=10)
+        assert importer.import_records(iter(_rows(record_type, filled=3)))[
+            "records_failed"
+        ] == 0
+        assert importer.import_records(iter(_rows(record_type, filled=2)))[
+            "records_failed"
+        ] == 0
+        stored = [
+            row["kumi"]
+            for row in postgresql_db.fetch_all(
+                f'SELECT Kumi AS kumi FROM {table_name} ORDER BY Kumi'
+            )
+        ]
+        assert stored == _expected_combinations(record_type, 2)
+
+        assert importer.import_records(
+            iter(_rows(record_type, filled=0, sale_flag=b"1"))
+        )["records_failed"] == 0
+        assert [
+            row["kumi"]
+            for row in postgresql_db.fetch_all(f'SELECT Kumi AS kumi FROM {table_name}')
+        ] == [TOTAL_COMBINATION]
+    finally:
+        postgresql_db.execute(f"DROP TABLE IF EXISTS {table_name}")
+        postgresql_db.commit()

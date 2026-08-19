@@ -347,8 +347,8 @@ def test_sqlite_importer_keeps_the_official_total_of_an_empty_o2_snapshot(sqlite
     assert sqlite_db.fetch_all("SELECT Kumi, Odds, Ninki, Vote FROM NL_O2") == [
         {
             "Kumi": O2Parser.TOTAL_COMBINATION,
-            "Odds": None,
-            "Ninki": None,
+            "Odds": "",
+            "Ninki": "",
             "Vote": 999,
         }
     ]
