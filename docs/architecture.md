@@ -39,10 +39,12 @@ bridge を起動する場合は、外部 runner の実行ファイルを
 `JVLINK_BRIDGE_RUNNER` へ明示し、暗黙の実装選択に依存しないでください。
 
 JV-Link は `JVOpen` / `JVRTOpen` 中にお知らせや DataLab 更新確認を表示し、
-非対話実行を停止させる場合があります。クライアントは既知のダイアログだけを
-安全側へ拒否し、更新を承諾する入力は送りません。この監視を無効にする場合は
-`JVLINK_AUTO_CLOSE_DIALOGS=0`、監視間隔を変える場合は
-`JVLINK_DIALOG_WATCH_INTERVAL_SECONDS` を指定します。未知のダイアログ、応答
+非対話実行を停止させる場合があります。既定ではクライアントは何も押しません。
+提供元の問いかけを人が見て判断できるようにするためで、応答があるまで
+`JVOpen` は戻りません（実測 1,008 秒）。無人運転する場合に限り
+`JVLINK_AUTO_CLOSE_DIALOGS=1` を明示すると、既知のダイアログだけを安全側へ
+拒否します（承諾する入力は送りません）。監視間隔は
+`JVLINK_DIALOG_WATCH_INTERVAL_SECONDS` で変更できます。未知のダイアログ、応答
 timeout、読めない bridge 応答は成功扱いせず、timeout 時は状態不明の bridge
 process を終了します。
 

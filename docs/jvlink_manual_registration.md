@@ -55,16 +55,19 @@ JV-Link が未インストールなら「installed by hand on the noVNC desktop�
 
 ## 3. ブラウザで noVNC を開く
 
+Docker を動かしている箱で作業しているなら、そのまま localhost で開く。
+
 ```text
-http://<ホスト>:6080/vnc.html
+http://localhost:6080/vnc.html
 ```
 
 パスワードは設定していない（`x11vnc -nopw`）。**外部に公開しないこと。**
-リモートホストなら SSH ポート転送を使う。
+別の箱（開発サーバ等）でコンテナを動かしているなら、公開せずに SSH ポート
+転送を使う。
 
 ```bash
-ssh -L 6080:localhost:6080 <ホスト>
-# → http://localhost:6080/vnc.html
+ssh -L 6080:localhost:6080 <コンテナを動かしている箱>
+# → 手元のブラウザで http://localhost:6080/vnc.html
 ```
 
 ## 4. インストーラを実行する（人の操作）
@@ -120,9 +123,12 @@ docker compose exec jltsql jltsql fetch \
 - 更新するなら「はい」。インストーラが動くので、以後の画面も人が進める
 - 「今後表示しない」を付けるかどうかも運用判断（prefix に設定が残る）
 
-無人運転したい場合は、この確認を人が済ませた prefix を使い、`JVOpen` に十分な
-`JVLINK_OPEN_TIMEOUT_SECONDS` を与えること。ダイアログを機械的に閉じる仕組みは
-このリポジトリには置かない。
+既定ではこのダイアログに対して何も押さない。無人運転したい場合は、この確認を
+人が済ませた prefix を使い、`JVOpen` に十分な `JVLINK_OPEN_TIMEOUT_SECONDS` を
+与えること。それでも無人で流したい場合に限り `JVLINK_AUTO_CLOSE_DIALOGS=1` を
+明示すると、既知のダイアログだけを Escape で**拒否**する（更新や規約を承諾する
+入力は送らない。未知のダイアログには触らない）。既定 `0` のままなら、提供元の
+問いかけは必ず人に届く。
 
 ## トラブルシューティング
 

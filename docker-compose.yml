@@ -14,6 +14,10 @@ services:
       JVLINK_WINEARCH: win64
       JVLINK_BRIDGE_EXE: /app/tools/jvlink-bridge/bin/native/JVLinkBridge.exe
       JVLINK_BRIDGE_RUNNER: wine
+      # Nothing answers JV-Link's dialogs unless you opt in here. With 0 the
+      # prompts wait for a person on the noVNC desktop; set 1 to let the client
+      # reject the known ones so an unattended fetch is not blocked.
+      JVLINK_AUTO_CLOSE_DIALOGS: ${JVLINK_AUTO_CLOSE_DIALOGS:-0}
       NOVNC_PUBLIC_PORT: 6080
       VNC_PUBLIC_PORT: 15900
       POSTGRES_HOST: ${POSTGRES_HOST:-postgres}

@@ -272,18 +272,28 @@ class JVLinkBridge:
         return env
 
     def _dialog_watcher_enabled(self) -> bool:
+        """Closing a provider dialog is an operator decision, so opt in for it.
+
+        JV-Link blocks inside ``JVOpen``/``JVRTOpen`` on its own dialogs. The
+        watcher only ever rejects known ones, but rejecting them unattended
+        hides the provider's question (a version update prompt, for example)
+        from the person running the fetch. Set
+        ``JVLINK_AUTO_CLOSE_DIALOGS=1`` to run without a human watching.
+        """
+
         if not self._use_external_runner:
             return False
-        value = os.environ.get("JVLINK_AUTO_CLOSE_DIALOGS", "1").lower()
-        if value in _DISABLED_VALUES:
-            return False
-        if value not in _ENABLED_VALUES and value != "":
+        value = os.environ.get("JVLINK_AUTO_CLOSE_DIALOGS", "0").lower()
+        if value in _ENABLED_VALUES:
+            return bool(os.environ.get("DISPLAY")) and (
+                shutil.which("xdotool") is not None
+            )
+        if value not in _DISABLED_VALUES and value != "":
             logger.warning(
                 "Ignoring invalid JVLINK_AUTO_CLOSE_DIALOGS value",
                 value=value,
             )
-            return False
-        return bool(os.environ.get("DISPLAY")) and shutil.which("xdotool") is not None
+        return False
 
     def _dismiss_known_dialogs_once(self) -> int:
         """Reject only known blocking JV-Link dialogs visible on this X display."""

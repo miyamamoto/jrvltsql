@@ -200,6 +200,50 @@ class TestJVLinkBridgeInit:
             "Escape",
         ]
 
+    def test_dialog_watcher_is_off_unless_requested(self, tmp_path, monkeypatch):
+        """Answering a provider dialog unattended hides its question."""
+
+        exe = tmp_path / "JVLinkBridge.exe"
+        exe.touch()
+        bridge = JVLinkBridge(bridge_path=exe)
+        bridge._use_external_runner = True
+        bridge._runner = "external-runner"
+        monkeypatch.setenv("DISPLAY", ":1")
+        monkeypatch.delenv("JVLINK_AUTO_CLOSE_DIALOGS", raising=False)
+
+        with patch("src.jvlink.bridge.shutil.which", return_value="/usr/bin/xdotool"):
+            assert bridge._dialog_watcher_enabled() is False
+            bridge._ensure_dialog_watcher()
+
+        assert bridge._dialog_watcher_thread is None
+
+    @pytest.mark.parametrize("value", ["1", "true", "yes", "on"])
+    def test_dialog_watcher_runs_when_requested(self, tmp_path, monkeypatch, value):
+        exe = tmp_path / "JVLinkBridge.exe"
+        exe.touch()
+        bridge = JVLinkBridge(bridge_path=exe)
+        bridge._use_external_runner = True
+        bridge._runner = "external-runner"
+        monkeypatch.setenv("DISPLAY", ":1")
+        monkeypatch.setenv("JVLINK_AUTO_CLOSE_DIALOGS", value)
+
+        with patch("src.jvlink.bridge.shutil.which", return_value="/usr/bin/xdotool"):
+            assert bridge._dialog_watcher_enabled() is True
+
+    def test_invalid_dialog_watcher_setting_keeps_dialogs_for_the_operator(
+        self, tmp_path, monkeypatch
+    ):
+        exe = tmp_path / "JVLinkBridge.exe"
+        exe.touch()
+        bridge = JVLinkBridge(bridge_path=exe)
+        bridge._use_external_runner = True
+        bridge._runner = "external-runner"
+        monkeypatch.setenv("DISPLAY", ":1")
+        monkeypatch.setenv("JVLINK_AUTO_CLOSE_DIALOGS", "maybe")
+
+        with patch("src.jvlink.bridge.shutil.which", return_value="/usr/bin/xdotool"):
+            assert bridge._dialog_watcher_enabled() is False
+
     def test_dialog_watcher_can_be_disabled(self, tmp_path, monkeypatch):
         exe = tmp_path / "JVLinkBridge.exe"
         exe.touch()
