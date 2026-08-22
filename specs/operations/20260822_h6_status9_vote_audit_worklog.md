@@ -225,3 +225,53 @@ the runtime image or repeating provider acquisition.
 Next safe action: inspect the four-file diff and worktree hygiene, commit and
 push once, create one draft PR with the red/green evidence, then obtain the
 repository's single native review and exact-head CI/thread/clean gate.
+
+## Native review closure
+
+- Draft PR #243 was published at exact head
+  `ff4d100d41f2efb02092825c9a64dbfb1a67e8db`.  Its initial test, lint and
+  Windows syntax checks all passed.  After the draft was marked ready, the
+  single requested GitHub-native Copilot review, Codex review and CodeRabbit
+  review completed on that same SHA; no review thread was created.
+- The review text nevertheless exposed two concrete unthreaded boundaries,
+  which were reproduced before changing production:
+  1. a fixed-width vote field containing a tab adjacent to ten digits was
+     returned by `H6Parser.parse()` because only the all-whitespace result was
+     compared with the raw bytes; and
+  2. `RT_H6` was absent from `RealtimeUpdater.STRICT_RECORD_TABLES`, so a
+     caller-built live status with `SanrentanHyo=""` returned `success=True`.
+  The extended existing H6 tests on exact `ff4d100d...` produced **2 failed**:
+  the mixed-whitespace parser assertion received three rows, and the realtime
+  assertion observed `True is False`.  This is the red-first evidence for the
+  review correction.  A caller tab already failed in `validate_h6_record`; it
+  was added to the existing malformed set as direct coverage, with no new
+  production exception.
+- The parser now skips unregistered all-space combination slots, then requires
+  every registered vote span to be exactly eleven ASCII digits or, only for
+  status 9, exactly eleven ASCII spaces.  Realtime raw, parsed-record and batch
+  routes now include `RT_H6` in the shared strict validator and strict schema
+  verifier before coercion or DML.  Status-9 blank votes remain accepted and
+  stored as SQL `NULL`.
+- Paired parser/realtime review regression: **2 passed**.
+- Complete SQLite H6 contract after the review correction:
+  **159 passed, 13 skipped**.
+- Complete H6 contract with a fresh disposable PostgreSQL 16:
+  **168 passed, 4 skipped**.  The dedicated container was removed immediately
+  after the run.
+
+Additional bounded checks on the same review-correction content:
+
+- Adjacent expanded H6 storage selection: **9 passed, 4 skipped, 56
+  deselected**.
+- `tests/test_realtime.py -k H6` selected no test and exited with pytest's
+  no-tests-selected status, so it is deliberately not counted as evidence;
+  the raw, single parsed-record and batch realtime paths are exercised in the
+  H6 official-contract module above.
+- Python 3.12 `compileall`: passed.
+- Fatal-only flake8 selection (`E9,F63,F7,F82`): passed.
+- Strict MkDocs build: passed.
+- `git diff --check`: passed.
+
+Next safe action: remove only the generated local test/docs artifacts, commit
+the aggregated review correction, push it to PR #243, and perform the
+exact-head CI/thread/clean gate without requesting another review.

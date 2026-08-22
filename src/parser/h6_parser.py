@@ -216,21 +216,30 @@ class H6Parser:
         for i in range(4896):
             offset = 50 + (21 * i)
             kumi = self.decode_field(data[offset:offset + 6])
-            raw_hyo = data[offset + 6:offset + 17]
-            hyo = self.decode_field(raw_hyo)
-            if hyo == "" and raw_hyo != b" " * self.VOTE_WIDTH:
-                # ``str.strip()`` also removes tabs and other CP932
-                # whitespace.  Only the official fixed-width initial value
-                # may become the canonical empty vote used by status-9
-                # cancellation snapshots.
-                raise ValueError(
-                    "H6 blank SanrentanHyo must be exactly 11 ASCII spaces"
-                )
-            ninki = self.decode_field(data[offset + 17:offset + 21])
 
-            # Skip empty entries
+            # Unregistered fixed-width slots carry an all-space body. They
+            # have no vote value to validate and are not provider rows.
             if not kumi or kumi == "000000":
                 continue
+
+            raw_hyo = data[offset + 6:offset + 17]
+            if raw_hyo == b" " * self.VOTE_WIDTH:
+                if header["DataKubun"] != "9":
+                    raise ValueError(
+                        "H6 blank SanrentanHyo is only valid for DataKubun 9"
+                    )
+                hyo = ""
+            elif not all(0x30 <= value <= 0x39 for value in raw_hyo):
+                # Do not use ``str.strip()`` for the vote span. A tab next to
+                # digits would otherwise become a shorter digit string and
+                # could escape the exact raw fixed-width contract.
+                raise ValueError(
+                    "H6 SanrentanHyo must be exactly 11 ASCII digits or the "
+                    "status-9 initial value"
+                )
+            else:
+                hyo = raw_hyo.decode("ascii")
+            ninki = self.decode_field(data[offset + 17:offset + 21])
 
             row = dict(header)
             row["SanrentanKumi"] = kumi

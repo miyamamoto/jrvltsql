@@ -169,20 +169,26 @@ def test_h6_status_nine_accepts_only_the_provider_blank_vote(tmp_path: Path) -> 
     # Only the official fixed-width initial value (11 ASCII spaces) may
     # become the canonical empty vote.  Other CP932 whitespace must not be
     # collapsed to the same caller-visible value by ``str.strip()``.
-    assert H6Parser().parse(
-        h6_raw(
-            data_kubun="9",
-            hyo=b"\t" * H6Parser.VOTE_WIDTH,
-            ninki=b" " * H6Parser.FAVOURITE_WIDTH,
-        )
-    ) is None
+    for malformed_hyo in (
+        b"\t" * H6Parser.VOTE_WIDTH,
+        b"\t" + b"1" * (H6Parser.VOTE_WIDTH - 1),
+        b"1" * (H6Parser.VOTE_WIDTH - 1) + b"\t",
+        b"1" * 5 + b"\t" + b"1" * 5,
+    ):
+        assert H6Parser().parse(
+            h6_raw(
+                data_kubun="9",
+                hyo=malformed_hyo,
+                ninki=b" " * H6Parser.FAVOURITE_WIDTH,
+            )
+        ) is None
 
     for live_status in ("2", "4", "5"):
         live = dict(cancelled, DataKubun=live_status)
         with pytest.raises(SchemaMigrationError):
             validate_h6_record(live, "NL_H6")
 
-    for malformed in (None, " ", " " * H6Parser.VOTE_WIDTH):
+    for malformed in (None, " ", "\t", " " * H6Parser.VOTE_WIDTH):
         with pytest.raises(SchemaMigrationError):
             validate_h6_record(dict(cancelled, SanrentanHyo=malformed), "NL_H6")
 
@@ -695,6 +701,50 @@ def test_h6_realtime_routing_preserves_the_official_markers(tmp_path: Path) -> N
         assert database.fetch_one("SELECT SanrentanNinki FROM RT_H6") == {
             "SanrentanNinki": "****"
         }
+
+        invalid_caller = h6_row(
+            DataKubun="2",
+            RaceNum="12",
+            SanrentanHyo="",
+            SanrentanNinki="",
+        )
+        rejected_single = updater.process_parsed_record(invalid_caller)
+        assert rejected_single is not None
+        assert rejected_single["success"] is False
+
+        invalid_batch = dict(invalid_caller, RaceNum="13")
+        rejected_batch = updater.process_parsed_records_batch([invalid_batch])
+        assert rejected_batch["success"] is False
+        assert rejected_batch["inserted"] == 0
+
+        rejected_raw = updater.process_record(
+            h6_raw(
+                data_kubun="2",
+                race_num=b"14",
+                hyo=b" " * H6Parser.VOTE_WIDTH,
+                ninki=b" " * H6Parser.FAVOURITE_WIDTH,
+            )
+        )
+        assert rejected_raw is None
+
+        accepted_cancel = updater.process_record(
+            h6_raw(
+                data_kubun="9",
+                race_num=b"15",
+                entries=1,
+                hyo=b" " * H6Parser.VOTE_WIDTH,
+                ninki=b" " * H6Parser.FAVOURITE_WIDTH,
+            )
+        )
+        assert accepted_cancel is not None
+        assert all(result["success"] is True for result in accepted_cancel)
+        assert database.fetch_one(
+            "SELECT SanrentanHyo FROM RT_H6 WHERE RaceNum = 15"
+        ) == {"SanrentanHyo": None}
+
+        assert database.fetch_one(
+            "SELECT COUNT(*) AS count FROM RT_H6 WHERE RaceNum IN (12, 13, 14)"
+        ) == {"count": 0}
 
 
 @pytest.fixture
