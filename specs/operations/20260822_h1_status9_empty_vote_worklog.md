@@ -1,0 +1,70 @@
+# H1 status-9 empty-vote provider contract worklog — 2026-08-22
+
+## Start state and objective
+
+- Objective: close the real five-year JRA setup blocker in which an official
+  `H1` status-9 record has an empty/no-vote body but the importer applies the
+  live-row eleven-digit vote validator and stops the full RACE acquisition.
+- Minimum scope: independently bind the official H1 status-9 body semantics,
+  add one paired red-first regression for the real provider shape and a
+  malformed live-row control, repair the shared parser/importer boundary, run
+  the affected H1 entrypoint/transaction tests, review the exact candidate,
+  and release only the next `2.0.0.dev` prerequisite needed by the development
+  recovery. No database DDL, key, other record-family, production `2.0.0`,
+  Wine identity, or KPS model/strategy change belongs here.
+- Repository: `miyamamoto/jrvltsql`.
+- Dedicated worktree:
+  `/home/keiba/scratch/20260822_jrvltsql_h1_status9_empty_vote`.
+- Branch: `fix/h1-status9-empty-vote-20260822`.
+- Base/start HEAD: `d4830042d326b89f26a761e580e5621452e4b86b`, freshly
+  fetched `origin/master`; the repository uses `master`, not `main`.
+- Related development release: `jltsql 2.0.0.dev3`, whose merge is the base
+  above. Runtime merge/image remains
+  `6ff5f861690b84faad25dfaa6c3a753d9bd0afb4` until a reviewed successor is
+  released and pinned.
+- No open `miyamamoto/jrvltsql` PR existed at start. The older primary checkout
+  `/home/keiba/jrvltsql` is on a separate dirty Devin branch with two tracked
+  modifications; it is user-owned and was not changed.
+
+## Real fail-closed reproduction
+
+- KIR draft PR #167 and its tracked worklog are the operational source of
+  truth. Exactly one `ingestctl jra_setup` RACE option-4 call requested
+  2021-08-20..2026-08-19 and ran on the exact dev3 runtime for about 1 hour 56
+  minutes before exiting 1.
+- The triggering parsed record is `RecordSpec=H1`, `DataKubun=9`,
+  `MakeDate=20240826`, race date 2024-08-25, venue `04`, race `12`, bet type
+  `Tansyo`, and `Hyo=''`. `validate_h1_record()` called
+  `H1Parser.validate_current_fields()` and raised
+  `SchemaMigrationError: H1 Hyo must be exactly 11 ASCII digits`.
+- The dedicated success ledger stayed absent. The operation left no provider,
+  recovery lock or PostgreSQL transaction alive; committed prior batches are
+  retryable exact-key upserts. The development collector was restored to its
+  normal healthy dev3 two-file posture and both collection schedulers remain
+  stopped.
+- Do not copy the full Rich traceback or raw cache into Git. It may disclose
+  broad record bodies and is unnecessary; the non-secret exact header/body
+  fields above are sufficient to reproduce the contract.
+
+## Red-first and STOP contract
+
+1. Read the existing H1 official oracle, parser/importer implementation and
+   official-layout tests before deciding whether status 9 is body-opaque or
+   has a defined no-vote representation. Do not infer a broad exception only
+   from one row.
+2. Extend an existing H1 contract test where possible. The pre-fix base must
+   fail on the exact status-9 empty-vote positive. Keep a status-2/4/5 live-row
+   empty/malformed vote negative green so the fix cannot disable validation
+   generally.
+3. Apply the smallest shared fix before database mutation. Raw parser,
+   DataImporter batch/single and OptimizedDataImporter must agree; status 0
+   erase opacity and other status domains must not regress.
+4. Stop on an official-oracle contradiction, a test that is already green on
+   the base, any transaction/stat/schema mutation before rejection, a broader
+   record-family change, unresolved review finding, dirty worktree, or failed
+   exact-head gate. Do not retry the development provider from an unmerged
+   local candidate.
+
+Next safe action: inspect the existing H1 official worklog/tests and pinned
+oracle references, then add only the minimal status-9 positive/live negative
+test. Run it on this exact base and record the actual red before implementation.
