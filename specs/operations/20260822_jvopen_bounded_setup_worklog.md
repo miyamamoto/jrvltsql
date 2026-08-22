@@ -484,14 +484,38 @@ response budget.
 
 ## Current next safe action
 
-1. finish the corrected docs/worklog and run the wider focused transport,
-   cache, self-repair, transaction, date-filter, CLI, and timeout tests;
-2. commit the corrected implementation as a superseding commit, then run the
-   full/test/package gates on that immutable full SHA;
-3. push the corrected head, rewrite PR #238 title/body so no bounded-download
+### Immutable corrected-candidate gate
+
+The corrected implementation plus the superseding worklog was committed as
+`0cd578e1adcd27c68334a3ddf0f7752d0760f83d`. It was not pushed or used by a
+provider/runtime/database operation before the following gates completed:
+
+- `uv lock --check`: pass;
+- `scripts/validate_test_gate.py`: `TEST GATE PASS`;
+- workflow-equivalent full test selection on Python 3.13.5:
+  **4709 passed, 502 skipped, 14 deselected, 20 subtests passed**;
+- the same full selection in a fresh external Python 3.12.11 environment:
+  **4709 passed, 502 skipped, 14 deselected, 20 subtests passed**;
+- a fresh `git archive 0cd578e...` PEP 517 build produced a wheel and sdist;
+  `check_distribution_contents.py` and `smoke_distribution_init.py` both
+  passed. SHA-256:
+  - wheel: `dedd9cd09a3c154a30e0b0d76f8ee0414ff6a11713afdf06d3ae2bbd24a594b6`;
+  - sdist: `9fdf1ef59571a523edbc3ca1fc666a791e32abb2b1a09ddbe0ebb14f0b28bcee`.
+
+The build directory is disposable and is not release output; the next-dev
+release will build again from merged `master`. The final PR candidate after
+this evidence-only worklog commit must still receive its own focused/fatal
+lint gate, exact-SHA review, GitHub checks, and clean-worktree confirmation.
+The worklog is excluded from distributions, but an old test result will not be
+silently relabelled as evidence for a different production tree.
+
+1. commit this evidence-only worklog update and rerun the focused/fatal lint
+   gate on the resulting final full SHA; because production/package content is
+   unchanged, confirm a fresh build is byte-identical or rerun its gates;
+2. push the corrected head, rewrite PR #238 title/body so no bounded-download
    claim remains, request one independent review, aggregate findings once,
    and merge only with unresolved threads zero and a clean worktree;
-4. create the next `2.0.0.dev*` release from merged `master`, pin that exact
+3. create the next `2.0.0.dev*` release from merged `master`, pin that exact
    artifact in the development runtime, and only then resume the monitored
    single-open RACE setup. Never use the rejected `03db892` artifact or its
    CI as evidence for the corrected candidate.
