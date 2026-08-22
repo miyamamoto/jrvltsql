@@ -88,7 +88,7 @@ whether production/test changes are justified.
   `1792c6b6d3e06b7f782b402e924d61da0a4c8ef5c10b0cc520be35882bd7db57`.
   Section 1.2.2 states that provider data is compressed and encrypted and
   that software receives decrypted records from JV-Link.  The retained
-  provider `H6VM2024089920240902150036.jvd` is consequently recorded only by
+  retained H6 provider object is consequently recorded only by anonymized
   metadata (2,442,161 bytes, SHA-256
   `14e28d4d366e0630b2d243972095f7c021a37c577e3ab4ac030c11cd123318e4`);
   it is not treated as an offline-decodable record source.  Calling
