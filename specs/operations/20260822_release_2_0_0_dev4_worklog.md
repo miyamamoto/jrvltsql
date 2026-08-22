@@ -104,3 +104,36 @@ surface before freezing the candidate.
 Next safe action: commit/push the grouped release metadata, freeze its full
 SHA, run the Python 3.12 full/workflow/release-artifact gates, then add only the
 resulting evidence to this worklog before the one native review.
+
+## Exact release-candidate validation
+
+- Release candidate commit:
+  `67b8ee306ff0df58d794f355f4b9ba1b6b8857a5`, pushed to Draft PR #242.
+- Exact candidate Python 3.12.11 workflow-equivalent suite:
+  **4713 passed, 503 skipped, 14 deselected, 22 subtests passed** in
+  140.16 seconds.
+- Existing gates on the same candidate:
+  - updater/public-version/distribution/installer focused selection:
+    **95 passed**;
+  - `uv lock --check`: pass;
+  - `scripts/validate_test_gate.py`: `TEST GATE PASS`;
+  - workflow fatal flake8 selection over `src tests scripts tools`: **0**;
+  - `python -m compileall -q src tests scripts tools`: pass;
+  - `git diff --check`: pass.
+- A fresh `git archive` of the exact candidate, not the editable worktree, was
+  built with Python 3.12.  Distribution content validation and the isolated
+  wheel `init`/config/version/SQLite schema smoke passed.  Wheel and sdist
+  metadata both report exactly `jltsql 2.0.0.dev4`:
+  - candidate wheel SHA-256
+    `99cfeeaf5491920510f49c21530e3d366f463aaab508800cb1630c0455e859ff`;
+  - candidate sdist SHA-256
+    `9705e8336b904d511113ba9f73a87c357a96e084581bd5118d987cdd40c0cbc8`.
+- These artifacts are candidate-gate evidence only.  They will be removed and
+  must not be uploaded after squash merge; publication artifacts will be
+  rebuilt from the exact merge SHA.
+
+Next safe action: commit/push this evidence-only update, rerun the bounded
+focused/lock/lint/git-archive gates on that final PR head, clean every ignored
+artifact, make PR #242 Ready, and request one GitHub-native review.  Merge only
+with exact-head CI success, concrete findings addressed, unresolved threads
+zero and tracked/ignored worktree clean.
