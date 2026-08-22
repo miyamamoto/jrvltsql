@@ -38,9 +38,11 @@
   present strict H6 caller validator and therefore is not proof that the
   current validator accepts the provider shape.
 - Current `H6Parser.validate_current_fields()` requires every non-total
-  combination `SanrentanHyo` to be exactly eleven ASCII digits.  A totals-only
-  status-9 snapshot is already supported.  No code change is justified until
-  an exact combination-bearing blank-vote provider shape is established.
+  combination `SanrentanHyo` in live statuses `2/4/5/9` to be exactly eleven
+  ASCII digits.  Status 0 intentionally returns after key validation because
+  delete bodies are opaque, and a totals-only status-9 snapshot is already
+  supported.  No code change is justified until an exact combination-bearing
+  blank-vote provider shape is established.
 - Read-only scan of the 110 current `RACE` v2 raw-cache files (135,354
   length-prefixed records) found zero H1 or H6 status-9 records.  This is a
   negative availability result, not evidence that the shape cannot occur.
@@ -80,7 +82,9 @@ whether production/test changes are justified.
   supplied only after prior vote-count data.  These facts establish that an
   eleven-space vote is an official field value, but they do not establish
   that a combination-bearing H6 status-9 row uses that value.
-- The pinned official development guide has SHA-256
+- The pinned official SDK document
+  `JRA-VAN Data Lab.開発ガイド_4.2.2.pdf`, obtained from the official SDK
+  distribution page <https://jra-van.jp/dlb/sdv/sdk.html>, has SHA-256
   `1792c6b6d3e06b7f782b402e924d61da0a4c8ef5c10b0cc520be35882bd7db57`.
   Section 1.2.2 states that provider data is compressed and encrypted and
   that software receives decrypted records from JV-Link.  The retained
@@ -99,9 +103,10 @@ whether production/test changes are justified.
   tracked registered-data replay remains useful proof that one H6 status-9
   record expanded to 4,896 rows, but because its vote-byte distribution was
   not retained it cannot close the present question.
-- Current production still accepts totals-only H6 cancellation snapshots and
-  requires an eleven-digit vote for every combination-bearing row.  No new
-  provider shape contradicts that fail-closed boundary.
+- Current production still accepts totals-only H6 cancellation snapshots,
+  treats status 0 as key-only opaque deletion, and requires an eleven-digit
+  vote for every combination-bearing live-status row.  No new provider shape
+  contradicts that fail-closed boundary.
 
 ## Decision and verification
 
@@ -113,11 +118,12 @@ whether production/test changes are justified.
   provider run returns an H6 status-9 combination with an empty normalized
   vote, that exact failure plus the original raw eleven-byte class is the
   trigger for one paired red-first H6 regression.
-- Candidate at evidence closure:
-  `4f1b4c5c632690f02b8a161ee32985648ba74c26`, based on
-  `1ee2ccb3ee5c104a15177f57281004395e669bb7`.  The only tracked delta is this
-  worklog.  GitHub lint and Windows batch checks passed; the repository test
-  check was still running when this evidence section was written.
+- The pre-closure worklog commit was
+  `4f1b4c5c632690f02b8a161ee32985648ba74c26`; evidence closure was reviewed at
+  `9d184da7e83d93a910aed01390107e7a9790ba17`, both based on
+  `1ee2ccb3ee5c104a15177f57281004395e669bb7`.  The exact final PR head is
+  intentionally recorded in the PR description and GitHub metadata because a
+  tracked file cannot self-reference the commit that contains itself.
 - The first local focused command accidentally selected an external Python
   3.10 `pytest` after `uv` had created a different environment and stopped at
   collection because Python 3.10 has no `enum.StrEnum`; it is not counted as a
