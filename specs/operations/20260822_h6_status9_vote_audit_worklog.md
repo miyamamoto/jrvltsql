@@ -303,3 +303,29 @@ exact-head CI/thread/clean gate without requesting another review.
 Next safe action: commit and push this final thread correction, reply to and
 resolve only the verified GraphQL thread, then perform one exact-head CI,
 thread-zero and clean-worktree gate.  Do not request another automated review.
+
+## Exact-head CI oracle correction
+
+- The status-0 thread repair was pushed as
+  `b5ce4b6ab9e98ad8b1be5cc9792d5ef8bc7cb3ad`; the verified GraphQL thread was
+  replied to with its red/green evidence and resolved.
+- Exact-head GitHub test job executed and failed (therefore it is not waived):
+  **1 failed, 4,714 passed, 503 skipped, 14 deselected, 21 subtests passed**.
+  The sole failure was the pre-existing generic
+  `test_cancellation_status_is_upserted_for_realtime_state_records` subtest,
+  which still classified H6 `DataKubun=0` as retained state and expected an
+  insert.  The H6 official contract and implementation have long defined it
+  as physical exact erase; strict H6 validation merely made the stale oracle
+  observable.  This also explains why the earlier filename selection
+  `tests/test_realtime.py -k H6` selected nothing: the H6 case was hidden under
+  a generic unittest subtest name.
+- Removed only H6 from that generic retained-state matrix.  The real-table H6
+  official test remains the positive exact-erase oracle, including the newly
+  added opaque physical-body case.  No production behavior changed for this
+  CI correction.
+- Corrected generic realtime unittest: **1 passed, 8 subtests passed**.
+- Complete SQLite H6 contract remained **159 passed, 13 skipped**; fatal-only
+  flake8 and diff-check passed.
+
+Next safe action: commit/push once, and require the new exact-head CI plus
+thread-zero/clean gate before merge.

@@ -1580,18 +1580,17 @@ class TestRealtimeUpdater(unittest.TestCase):
         updater = RealtimeUpdater(self.mock_db)
 
         # HR, SE, and WF revalidate their complete official schema/key before any
-        # write, which a MagicMock database cannot satisfy. Their state
-        # retention is covered against real SQLite tables in their official
-        # contract tests.
+        # write, which a MagicMock database cannot satisfy. H6 DataKubun=0 is an
+        # exact erase rather than retained state. Those contracts are covered
+        # against real SQLite tables in their official modules.
         for record_type in (
-            "RA", "H1", "H6",
+            "RA", "H1",
             "O1", "O2", "O3", "O4", "O5", "O6",
         ):
             with self.subTest(record_type=record_type):
                 self.mock_db.reset_mock()
                 expanded_keys = {
                     "H1": {"BetType": "Tansyo", "Kumi": "01"},
-                    "H6": {"SanrentanKumi": "010203"},
                     "O1": {"Kumi": "00"},
                     "O2": {"Kumi": "0102"},
                     "O3": {"Kumi": "0102"},
