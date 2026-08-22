@@ -249,6 +249,18 @@ def test_h6_status_zero_validates_only_the_header_and_race_key() -> None:
         row["SanrentanHyoTotal"] = object()
         assert validate_h6_record(row, "NL_H6") is True
 
+    for opaque_hyo in (
+        b"\t" + b"1" * (H6Parser.VOTE_WIDTH - 1),
+        b"\x81\x20" + b"1" * (H6Parser.VOTE_WIDTH - 2),
+    ):
+        parsed = H6Parser().parse(
+            h6_raw(data_kubun="0", entries=1, hyo=opaque_hyo)
+        )
+        assert parsed is not None
+        assert len(parsed) == 1
+        assert parsed[0]["DataKubun"] == "0"
+        assert parsed[0]["SanrentanKumi"] == H6Parser.TOTAL_COMBINATION
+
 
 @pytest.mark.parametrize("marker", ("----", "****", ""))
 @pytest.mark.parametrize("use_standard", (False, True), ids=("native", "standard"))
@@ -741,6 +753,23 @@ def test_h6_realtime_routing_preserves_the_official_markers(tmp_path: Path) -> N
         assert database.fetch_one(
             "SELECT SanrentanHyo FROM RT_H6 WHERE RaceNum = 15"
         ) == {"SanrentanHyo": None}
+
+        assert updater.process_record(
+            h6_raw(data_kubun="4", race_num=b"16", entries=1)
+        ) is not None
+        opaque_delete = updater.process_record(
+            h6_raw(
+                data_kubun="0",
+                race_num=b"16",
+                entries=1,
+                hyo=b"\t" + b"1" * (H6Parser.VOTE_WIDTH - 1),
+            )
+        )
+        assert opaque_delete is not None
+        assert all(result["success"] is True for result in opaque_delete)
+        assert database.fetch_one(
+            "SELECT COUNT(*) AS count FROM RT_H6 WHERE RaceNum = 16"
+        ) == {"count": 0}
 
         assert database.fetch_one(
             "SELECT COUNT(*) AS count FROM RT_H6 WHERE RaceNum IN (12, 13, 14)"

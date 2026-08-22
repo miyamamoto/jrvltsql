@@ -275,3 +275,31 @@ Additional bounded checks on the same review-correction content:
 Next safe action: remove only the generated local test/docs artifacts, commit
 the aggregated review correction, push it to PR #243, and perform the
 exact-head CI/thread/clean gate without requesting another review.
+
+## Outdated-thread audit after the first repair push
+
+- The first aggregated correction was committed and pushed as
+  `3010910ea54b149769c392df32edf8651fc8212e`.  Exact-head SQLite H6 was
+  **159 passed, 13 skipped**; compileall, fatal-only flake8 and diff-check
+  passed.
+- The authoritative GraphQL thread audit then found one unresolved thread
+  marked outdated.  Its location had moved, but the contract finding was
+  still valid: a physical status-0 erase with a registered combination and a
+  noncanonical vote span was rejected before erase even though every non-key
+  status-0 byte is intentionally opaque.
+- Red-first on exact production `3010910...`, after extending two existing H6
+  tests only: **2 failed**.  Direct parser output was `None`, and the realtime
+  erase result was `None`, leaving the seeded row at risk of remaining stale.
+- The parser now builds a status-0 interpretation view that preserves the
+  exact envelope and six-field race identity while masking bytes 27 through
+  the byte before CRLF.  The central fixed-record/status gate therefore still
+  validates the original type, status, MakeDate, race key, length and CRLF,
+  while neither CP932 decoding nor body validation can suppress the keyed
+  erase.  Live statuses continue to validate the complete physical body.
+- Paired status-0 parser/realtime regression after repair: **2 passed**.
+- Complete SQLite H6 contract after repair: **159 passed, 13 skipped**.
+- Python 3.12 compileall, fatal-only flake8 and diff-check: passed.
+
+Next safe action: commit and push this final thread correction, reply to and
+resolve only the verified GraphQL thread, then perform one exact-head CI,
+thread-zero and clean-worktree gate.  Do not request another automated review.

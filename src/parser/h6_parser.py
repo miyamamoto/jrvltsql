@@ -194,8 +194,22 @@ class H6Parser:
     def parse(self, data: bytes) -> Optional[List[Dict[str, str]]]:
         """Parse one official 102,890-byte H6 physical record."""
         try:
-            validate_fixed_record(data, self.RECORD_TYPE, self.RECORD_LENGTH)
-            return self._parse_full(data)
+            interpreted_data = data
+            if (
+                len(data) == self.RECORD_LENGTH
+                and data[:2] == self.RECORD_TYPE.encode("ascii")
+                and data[2:3] == b"0"
+            ):
+                # A physical deletion is a keyed command. Keep the envelope
+                # and six-field race identity byte-exact, but do not decode or
+                # validate the provider's non-key body before applying erase.
+                delete_view = bytearray(data)
+                delete_view[27:-2] = b" " * (self.RECORD_LENGTH - 29)
+                interpreted_data = bytes(delete_view)
+            validate_fixed_record(
+                interpreted_data, self.RECORD_TYPE, self.RECORD_LENGTH
+            )
+            return self._parse_full(interpreted_data)
         except Exception as e:
             self.logger.error(f"H6レコードパース中にエラー: {e}")
             return None
