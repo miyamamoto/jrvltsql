@@ -9,6 +9,17 @@
 
 次回リリースは互換性を破る変更を含むため `2.0.0` とする。1.xとしては配布しない。
 
+### 2.0.0.dev4 (開発検証用prerelease)
+
+- 実登録済みproviderの5年setupで確認したH1レース中止形に対応する。
+  `DataKubun=9`で既知の組番を保持し、票数欄だけを公式の11バイト空白で
+  返す場合に限り、parserでは`Hyo=""`、native数値票数列ではSQL `NULL`
+  として保存する。`DataKubun=2/4/5`の空値、callerが作った空値、tabなど
+  11 spaces以外の空白は引き続きmutation前に拒否する
+- H6は同様の形を推測で許可しない。公式資料、現行RACE cache、開発DBを
+  独立監査したが組番付きstatus 9の空票数実例を確認できなかったため、
+  組番付きlive rowは11桁数字を要求するfail-closed契約を維持する
+
 ### 2.0.0.dev3 (開発検証用prerelease)
 
 - 公式 option 3/4 の historical setup tail は終了時刻で上限を切れないため、

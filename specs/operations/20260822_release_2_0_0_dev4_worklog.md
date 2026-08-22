@@ -72,3 +72,35 @@
 Next safe action: commit and push this start record, open a Draft PR, then make
 the single grouped version/release-note change and run the focused release
 surface before freezing the candidate.
+
+## Release candidate implementation
+
+- The start record was committed/pushed as
+  `1699b7f334c8f84af7d96005c2b4af5cecebc85a`; Draft PR #242 is the
+  authoritative review surface.
+- Version parity changed from `2.0.0.dev3` to `2.0.0.dev4` in
+  `pyproject.toml`, `src/__init__.py`, the editable project entry in `uv.lock`,
+  and the two current-version updater assertions.  `uv lock` used CPython
+  3.12.11 and reported only
+  `Updated jltsql v2.0.0.dev3 -> v2.0.0.dev4`.
+- CHANGELOG and release notes now name dev4 and describe only the merged H1
+  provider-cancellation contract plus the evidence-based decision not to widen
+  H6.  The unreleased production `2.0.0` warning remains unchanged.
+- No checker or validator is introduced by this metadata-only iteration, so no
+  new red-first test is required.  Existing version parity and PEP 440 tests
+  are updated rather than duplicated.
+- Pre-commit Python 3.12.11 evidence:
+  - updater/public-version/distribution/installer focused selection:
+    **95 passed**;
+  - source and installed editable metadata both report exactly
+    `2.0.0.dev4`;
+  - `uv lock --check`: pass;
+  - `scripts/validate_test_gate.py`: `TEST GATE PASS`;
+  - `git diff --check`: pass.
+- The focused run created only ignored virtualenv/pytest/coverage artifacts in
+  the dedicated worktree.  They remain local during the validation phase and
+  must be removed before the final clean-worktree gate.
+
+Next safe action: commit/push the grouped release metadata, freeze its full
+SHA, run the Python 3.12 full/workflow/release-artifact gates, then add only the
+resulting evidence to this worklog before the one native review.
