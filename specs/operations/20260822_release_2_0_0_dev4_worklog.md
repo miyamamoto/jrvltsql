@@ -1,0 +1,74 @@
+# jrvltsql 2.0.0.dev4 release worklog — 2026-08-22
+
+## Start state and objective
+
+- Objective: publish the merged H1 provider-cancellation repair as the next
+  immutable development-test prerelease required by the registered development
+  collector and five-year recovery.  Stop at a `2.0.0.dev` prerelease; do not
+  declare or publish production `2.0.0`.
+- Minimum scope: version parity, release-facing changelog/notes, lock update,
+  exact-SHA tests, fresh wheel/sdist gates, PR review/merge, annotated tag and
+  GitHub prerelease with exact artifact digests.  Live JV-Link calls, runtime
+  pinning, KIR pinning, database/cache mutation and the provider retry belong
+  to dependent iterations after this release is published.
+- Repository: `miyamamoto/jrvltsql`.
+- Dedicated worktree:
+  `/home/keiba/scratch/20260822_jrvltsql_release_dev4`.
+- Branch: `release/2.0.0.dev4-20260822`.
+- Base/start HEAD: `bda6d4facddba52480d5e75558845c7e846fd154`, exact
+  fetched `origin/master`, the squash merge of audit PR #241.
+- Functional release delta: H1 PR #240, squash merge
+  `1ee2ccb3ee5c104a15177f57281004395e669bb7`.  It accepts only the exact
+  eleven-space provider vote in a combination-bearing H1 `DataKubun=9`
+  physical record, normalizes it to parser `Hyo=""` and SQL `NULL`, and keeps
+  statuses 2/4/5 plus non-space whitespace fail closed.
+- H6 audit PR #241 made no production/test change.  It retained the current
+  strict H6 contract because official space semantics were not accompanied by
+  an available combination-bearing status-9 provider instance.
+- Previous prerelease: tag/release `v2.0.0.dev3` at
+  `d4830042d326b89f26a761e580e5621452e4b86b`; published wheel SHA-256
+  `2e1f0f09844e838acf8b50282bac3f1e6ff64d465ed484d7f8e052ab90e120b2`
+  and sdist SHA-256
+  `8e68800875ab4792a8b93e129458310650396973b0cf31387c68d2859c501a5d`.
+- Dependent runtime merge: `miyamamoto/jrvltsql-wine-runtime` PR #30,
+  `4851ef922bd927b541f8d74d88122181a6b1dcb5`.  Dependent KIR operational
+  evidence remains draft PR #167 and must not retry the provider from this
+  unreleased branch.
+- Implementation is by the primary Codex agent.  No Claude session is used:
+  this iteration changes release metadata and documentation only, and does not
+  implement a new gate, concurrency boundary or cross-repository behavior.
+
+## Planned release contract
+
+1. Bump `pyproject.toml`, `src.__version__`, `uv.lock` and exact current-version
+   tests from `2.0.0.dev3` to `2.0.0.dev4`.
+2. Add a named dev4 changelog/release-note section that describes the bounded
+   H1 status-9 provider shape, parser/database representations and retained H6
+   fail-closed boundary without changing the unreleased production warning.
+3. Prove version parity and PEP 440 prerelease behavior, then run the repository
+   test gate, Python 3.12 workflow-equivalent suite, fatal lint, lock check,
+   and fresh git-archive wheel/sdist content plus isolated install/init/schema
+   smoke.
+4. Push one release candidate and use one GitHub-native review.  Aggregate any
+   concrete findings once; merge only with exact-head checks successful,
+   unresolved threads zero and tracked/ignored worktree clean.
+5. Rebuild artifacts from the squash merge SHA, verify content and installed
+   version, create annotated `v2.0.0.dev4`, publish a GitHub prerelease, and
+   compare GitHub asset digests with the local immutable artifacts.
+
+## STOP conditions
+
+- Stop on any version mismatch, stale dev3 current-release statement, lock
+  drift, failed test/content/install smoke, unresolved finding, non-clean
+  worktree, or tag/release name collision.
+- Do not reuse candidate artifacts after squash merge.  Publication artifacts
+  must be rebuilt from the exact merge/tag target.
+- Do not call JV-Link, mutate the development runtime/database/cache, update a
+  runtime or KIR pin, or claim five-year recovery in this release-code
+  iteration.
+- Do not publish final `2.0.0`.  This is only the development prerelease the
+  user asked to reach before the eventual Devin handoff.
+
+Next safe action: commit and push this start record, open a Draft PR, then make
+the single grouped version/release-note change and run the focused release
+surface before freezing the candidate.
