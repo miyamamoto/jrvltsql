@@ -1,11 +1,11 @@
 # jrvltsql v2.0.0 Release Notes (unreleased draft)
 
-`2.0.0` is not released yet. `2.0.0.dev2` is a **development-test prerelease**
+`2.0.0` is not released yet. `2.0.0.dev3` is a **development-test prerelease**
 of the official data-contract work. It is **not** a production compatibility
 claim: the 64-bit SDK path, 1.x database migration, and long-run collection are
 still unverified.
 
-Changes queued for the next development prerelease after `2.0.0.dev2`:
+What `2.0.0.dev3` adds over `2.0.0.dev2`:
 
 - option 3/4 setup uses one inclusive-start, start-only `JVOpen`. The official
   historical setup tail is all setup data after `fromtime`; an end timestamp
@@ -14,6 +14,10 @@ Changes queued for the next development prerelease after `2.0.0.dev2`:
 - the finite `JVLINK_OPEN_TIMEOUT_SECONDS` ceiling is raised to 86,400 seconds
   for monitored multi-hour setup recovery; the default remains 120 seconds
   and invalid, non-finite, or larger values fail closed
+- NL cache schema v3 invalidates completeness markers built with the old
+  setup start boundary while retaining their v2 raw bytes separately;
+  `cache build/rebuild` also rejects malformed or inverted ranges before
+  cache lookup or clearing
 
 What `2.0.0.dev2` adds over `2.0.0.dev1`:
 

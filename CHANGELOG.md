@@ -9,13 +9,15 @@
 
 次回リリースは互換性を破る変更を含むため `2.0.0` とする。1.xとしては配布しない。
 
-### 次の開発検証用prerelease
+### 2.0.0.dev3 (開発検証用prerelease)
 
 - 公式 option 3/4 の historical setup tail は終了時刻で上限を切れないため、
   setup を年単位に再帰して後続tailを反復しない。要求開始日を包含する
   start-only `JVOpen` を1回だけ使い、`--to` はclient-side filterとして扱う
 - 複数年setupを有限に監視できるよう `JVLINK_OPEN_TIMEOUT_SECONDS` の許容範囲を
   1〜86,400秒へ拡張する（既定120秒は維持、非有限値と範囲外はfail closed）
+- setup開始境界の修正前に作られたNL cache schema-v2完了markerをschema v3で
+  失効する。`cache build/rebuild`も日付範囲をcache lookup/clearより先に検証する
 
 ### 2.0.0.dev2 (開発検証用prerelease)
 

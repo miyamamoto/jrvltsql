@@ -60,3 +60,30 @@
 Next safe action: commit/push this start record, open a Draft PR, then make the
 single version/release-note change and write the minimal parity regression
 before running the focused gate.
+
+## Release candidate implementation
+
+- The start record was committed/pushed as
+  `8fd981e7da7b220bf92d00a4774d9fafc65b754d`; Draft PR #239 is the
+  authoritative review surface.
+- Version parity was changed from `2.0.0.dev2` to `2.0.0.dev3` in
+  `pyproject.toml`, `src/__init__.py`, the editable project entry in `uv.lock`,
+  and the two current-version updater assertions. `uv lock` reported only
+  `Updated jltsql v2.0.0.dev2 -> v2.0.0.dev3`.
+- The merged setup work is now named under the dev3 sections in CHANGELOG and
+  release notes: one official inclusive-start/start-only setup open, finite
+  timeout ceiling 86,400 seconds, NL cache schema-v3 invalidation, and
+  cache-command fail-before-lookup date validation. The final `2.0.0`
+  unreleased/compatibility warning remains unchanged.
+- No new checker was added in this release-only iteration. Existing version
+  parity coverage already compares source, CLI, project metadata and lock;
+  updater PEP 440 coverage compares final 2.0.0 against dev3.
+- Pre-commit focused evidence on Python 3.12.11:
+  - updater/public-version/distribution/installer selection: **95 passed**;
+  - `uv lock --check`: pass;
+  - `scripts/validate_test_gate.py`: `TEST GATE PASS`;
+  - `git diff --check`: pass.
+
+Next safe action: commit/push the one release candidate, run the full Python
+3.12 and git-archive distribution/install gates on that immutable SHA, record
+their evidence once, and mark PR #239 Ready for one exact-head review.
