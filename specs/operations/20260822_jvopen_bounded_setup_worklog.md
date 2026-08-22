@@ -599,3 +599,25 @@ fresh-archive distribution gates on that exact full SHA, push once, update the
 PR evidence, then reply to and resolve both current-head cache threads. Merge
 remains prohibited until checks are green, unresolved threads are zero, and
 the final worktree is clean.
+
+### Cache repair code-commit gate
+
+The aggregated production/test/docs repair was committed as
+`69142ab9a62ca2e9bc45a98f97dfb0ac64ba7e83`. Against that immutable full SHA:
+
+- `uv lock --check`: pass;
+- `scripts/validate_test_gate.py`: `TEST GATE PASS`;
+- Python 3.12.11 full suite: **4726 passed, 508 skipped, 22 subtests
+  passed** in 107.99 seconds;
+- a fresh `git archive` PEP 517 wheel and sdist both passed the distribution
+  content checker, and the wheel passed the isolated installed-init smoke;
+- disposable artifact SHA-256 values (not release artifacts):
+  - wheel: `7e263ce74abbf1398367df7e4ea41cf93ccf4e474528a8f4edbb3bd99dae092b`;
+  - sdist: `186b85b3463073fff2c55b18ef77efc0abce971bac5d7907423f12badc98f35c`.
+
+This evidence update changes only the tracked worklog and therefore does not
+modify the tested production/test tree. Per the no-self-reference rule, its
+resulting commit SHA will be recorded in PR #238 rather than by another
+worklog-only commit. That final PR head still receives one focused/fatal-lint
+and archive gate before push; the full-suite evidence remains explicitly
+bound to the production/test commit above rather than silently relabelled.
