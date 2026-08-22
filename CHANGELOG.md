@@ -14,8 +14,10 @@
 - 実登録済みproviderの5年setupで確認したH1レース中止形に対応する。
   `DataKubun=9`で既知の組番を保持し、票数欄だけを公式の11バイト空白で
   返す場合に限り、parserでは`Hyo=""`、native数値票数列ではSQL `NULL`
-  として保存する。`DataKubun=2/4/5`の空値、callerが作った空値、tabなど
-  11 spaces以外の空白は引き続きmutation前に拒否する
+  として保存する。`DataKubun=2/4/5`の空値とtabなど11 spaces以外の
+  空白は引き続きmutation前に拒否する。既存のexpanded caller契約では
+  `DataKubun=9`の`Hyo=""`もSQL `NULL`として受理するため、raw由来の
+  provenance保証とは表現しない
 - H6は同様の形を推測で許可しない。公式資料、現行RACE cache、開発DBを
   独立監査したが組番付きstatus 9の空票数実例を確認できなかったため、
   組番付きlive rowは11桁数字を要求するfail-closed契約を維持する

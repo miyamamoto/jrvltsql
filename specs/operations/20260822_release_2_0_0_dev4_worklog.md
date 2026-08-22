@@ -137,3 +137,31 @@ focused/lock/lint/git-archive gates on that final PR head, clean every ignored
 artifact, make PR #242 Ready, and request one GitHub-native review.  Merge only
 with exact-head CI success, concrete findings addressed, unresolved threads
 zero and tracked/ignored worktree clean.
+
+## Final-head gate and grouped review response
+
+- Evidence-only commit `d7c61de353b50803aede3a59c5bc181a5073c911`
+  changed only this tracked worklog relative to the production/package
+  candidate.  Its exact-head bounded release surface passed: 95 focused tests,
+  lock check, test gate, fatal flake8 selection (0), compileall, diff check,
+  fresh git-archive wheel/sdist content gate and installed-wheel smoke.  The
+  disposable artifacts were removed and the tracked/ignored worktree was
+  clean.
+- GitHub Actions on that SHA passed test, lint and Windows batch syntax;
+  performance remained the workflow's intentional skip.  Copilot recommended
+  approval with no comments.
+- The one requested Codex review found one concrete P2 documentation error:
+  release notes said caller-created H1 status-9 `Hyo=""` was rejected, while
+  `H1Parser.validate_current_fields()` intentionally accepts the existing
+  expanded caller representation and native storage writes SQL `NULL`.
+- CHANGELOG and release notes now distinguish physical provider provenance
+  from expanded caller mappings.  This is a documentation-only correction;
+  production behavior and tests are unchanged.  The response will be pushed
+  once, the exact thread resolved with evidence, and no broad review rerun will
+  be requested for this bounded wording fix.
+
+Next safe action: run the version/document release selection and static gates,
+commit/push the grouped review response, update the PR evidence to the new full
+SHA, wait for exact-head CI, resolve the single review thread, confirm thread
+count zero and clean worktree, then squash-merge.  Publication artifacts still
+must be rebuilt from the resulting merge SHA.
