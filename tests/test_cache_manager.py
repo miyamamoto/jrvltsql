@@ -145,6 +145,35 @@ class TestNlIndex:
         ]
         assert legacy_path.exists()
 
+    def test_v2_complete_cache_is_invalidated_after_setup_boundary_change(
+        self, tmp_path
+    ):
+        """Pre-fix v2 completeness cannot prove the inclusive setup start."""
+        cm = _make_cache(tmp_path)
+        v2_path = cm._nl_dir("RACE") / "20260401.v2.bin"
+        v2_path.write_bytes(cm.HEADER.pack(6) + b"old-v2")
+        cm._save_index(
+            cm._index_path("RACE"),
+            {
+                "20260401": {
+                    "complete": True,
+                    "schema_version": 2,
+                    "count": 1,
+                }
+            },
+        )
+
+        assert cm.has_nl_range("RACE", "20260401", "20260401") is False
+        assert list(cm.read_nl("RACE", "20260401", "20260401")) == []
+
+        cm.write_nl_record("RACE", "20260401", _raw("fresh"))
+        cm.mark_nl_complete("RACE", "20260401")
+
+        assert list(cm.read_nl("RACE", "20260401", "20260401")) == [
+            _raw("fresh")
+        ]
+        assert v2_path.exists()
+
     def test_mark_nl_complete_empty_date(self, tmp_path):
         cm = _make_cache(tmp_path)
         cm.mark_nl_complete("RACE", "20260402")

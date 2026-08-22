@@ -257,7 +257,8 @@
 - HC/WC を日付なし master として扱わず、時系列の `ChokyoDate` で `--to` filter と
   cache 日付を判定。対応する event date を持たない master 行を検出した場合は完全
   cache marker を付けず、同一取得の部分 cache append も rollback する
-- 旧 cache の完全性 marker を schema v2 で失効させ、legacy raw と active raw を分離
+- setup開始境界の修正前に作成された schema v2 の完全性 marker を schema v3 で
+  失効させ、旧 raw と active raw を分離
 
 ### Changed
 

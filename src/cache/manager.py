@@ -19,14 +19,18 @@ class CacheManager:
     Thread-safe for concurrent RT_ writes.
 
     Directory structure:
-        cache_dir/nl/{SPEC}/{YYYYMMDD}.v2.bin  -- 蓄積系
+        cache_dir/nl/{SPEC}/{YYYYMMDD}.v3.bin  -- 蓄積系
         cache_dir/rt/{SPEC_CODE}/{YYYYMMDD}.bin  -- 速報系
 
     Binary format: [uint32-BE length][raw bytes] per record (length-prefixed)
     """
 
     HEADER = struct.Struct(">I")  # 4-byte big-endian uint32
-    NL_CACHE_SCHEMA_VERSION = 2
+    # v3 invalidates v2 completion markers created before setup requests used
+    # the official exclusive boundary immediately before the requested date.
+    # A v2 marker cannot prove that a provider record stamped at 00:00:00 was
+    # included, so neither its marker nor its raw file may satisfy a new fetch.
+    NL_CACHE_SCHEMA_VERSION = 3
 
     def __init__(self, cache_dir: Path):
         self.cache_dir = Path(cache_dir)

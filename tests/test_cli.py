@@ -413,6 +413,47 @@ jvlink:
             self.assertIsNotNone(result)
 
 
+class TestCacheBuildCommand(unittest.TestCase):
+    """Test fail-before-cache contracts for ``cache build``."""
+
+    def setUp(self):
+        self.runner = CliRunner()
+
+    @patch('src.cache.CacheManager')
+    def test_commands_reject_invalid_dates_before_cache_lookup(
+        self, mock_cache_manager
+    ):
+        example_config = (
+            Path(__file__).resolve().parents[1] / 'config' / 'config.yaml.example'
+        )
+        with self.runner.isolated_filesystem():
+            config_path = Path('config.yaml')
+            config_path.write_text(
+                example_config.read_text(encoding='utf-8'),
+                encoding='utf-8',
+            )
+            for command in ('build', 'rebuild'):
+                with self.subTest(command=command):
+                    mock_cache_manager.reset_mock()
+                    result = self.runner.invoke(
+                        cli,
+                        [
+                            '--config', str(config_path),
+                            'cache', command,
+                            '--spec', 'RACE',
+                            '--from', '20260820',
+                            '--to', '20250820',
+                            '--option', '4',
+                        ],
+                    )
+
+                    self.assertEqual(result.exit_code, 1, result.output)
+                    self.assertIn(
+                        'from_date must not be after to_date', result.output
+                    )
+                    mock_cache_manager.assert_not_called()
+
+
 class TestMonitorCommand(unittest.TestCase):
     """Test monitor command."""
 

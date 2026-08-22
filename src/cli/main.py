@@ -633,7 +633,7 @@ def cache_build(ctx, data_spec, date_from, date_to, jv_option, also_import, db, 
       jltsql cache build --spec DIFN --from 20260101 --to 20260328 --also-import
     """
     from src.cache import CacheManager
-    from src.fetcher.historical import HistoricalFetcher
+    from src.fetcher.historical import HistoricalFetcher, validate_date_range
 
     _reject_invalid_jvopen_combination(data_spec, jv_option)
 
@@ -644,6 +644,11 @@ def cache_build(ctx, data_spec, date_from, date_to, jv_option, also_import, db, 
             "an arbitrary historical range, so the requested date range "
             "cannot be marked complete safely"
         )
+
+    try:
+        validate_date_range(date_from, date_to)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
 
     config = ctx.obj.get("config", {}) if ctx.obj else {}
 
@@ -746,6 +751,13 @@ def cache_rebuild(ctx, data_spec, date_from, date_to, jv_option, cache_dir):
             "an arbitrary historical range, so the requested date range "
             "cannot be marked complete safely"
         )
+
+    from src.fetcher.historical import validate_date_range
+
+    try:
+        validate_date_range(date_from, date_to)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
 
     from src.cache import CacheManager
     mgr = CacheManager(Path(cache_dir))

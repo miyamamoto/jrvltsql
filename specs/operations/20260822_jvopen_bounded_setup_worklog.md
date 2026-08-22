@@ -551,3 +551,51 @@ batch rather than two iterative fixes.
    artifact in the development runtime, and only then resume the monitored
    single-open RACE setup. Never use the rejected `03db892` artifact or its
    CI as evidence for the corrected candidate.
+
+### Exact-head cache-completeness review repair
+
+The next GitHub review pass on exact pushed head
+`2c969926c0ec9a744f1d519f4c44c1d29b4bb40b` found two adjacent cache
+fail-open paths. They were aggregated before changing production code:
+
+- an NL cache marked complete under schema v2 could have been created with
+  the old setup start boundary (`YYYYMMDD000000`). Such a marker cannot prove
+  that a provider record timestamped exactly at midnight was included, but
+  the corrected fetch path still trusted it and skipped JVOpen;
+- `cache build` called `has_nl_range` before the shared date validator. For an
+  inverted interval the cache loop examined zero dates, returned true, and
+  the command exited successfully as `[CACHED]`. The same order also affected
+  `cache rebuild`, which printed `Cleared 0` before the false cache success.
+
+One compact regression was added for each contract and overlaid on an
+immutable detached worktree at the exact old head. The measured red was:
+
+```text
+assert cm.has_nl_range("RACE", "20260401", "20260401") is False
+E AssertionError: assert True is False
+SUBFAILED(command='build'): 0 != 1; [CACHED] ... already in cache
+SUBFAILED(command='rebuild'): 0 != 1; Cleared 0 ... [CACHED]
+3 failed, 1 passed
+```
+
+The repair bumps only the NL raw-cache generation from v2 to v3. Existing v2
+bytes are retained but are neither read nor accepted as completion evidence;
+the first corrected fetch writes a separate v3 file and marker. Both cache
+commands now call the shared calendar/order validator before constructing a
+`CacheManager`, looking up completion, or clearing a file. Malformed input is
+reported as a controlled Click error with nonzero status.
+
+Green evidence in the working tree before its final commit:
+
+- exact two-test regression: **2 passed, 2 subtests passed**;
+- adjacent cache/CLI/transport/batch/failure/retired-spec/public-doc ring:
+  **379 passed, 10 subtests passed**;
+- `git diff --check`: pass.
+
+No provider, runtime, database, release, or actual cache state was touched.
+The temporary detached red-check worktree was removed. Next safe action is to
+commit this single aggregated review repair, run the Python 3.12 full and
+fresh-archive distribution gates on that exact full SHA, push once, update the
+PR evidence, then reply to and resolve both current-head cache threads. Merge
+remains prohibited until checks are green, unresolved threads are zero, and
+the final worktree is clean.

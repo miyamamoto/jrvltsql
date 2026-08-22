@@ -330,8 +330,10 @@ Everything merged since v1.6.9: PR #149, #150, #151, #152, and #153.
   `ChokyoDate` for the `--to` filter and the cache date key. A master row with
   no corresponding event date suppresses the complete-cache marker and rolls
   back the partial cache appended by the same fetch.
-- Invalidates legacy cache completeness markers under schema v2, separating
-  legacy raw from active raw.
+- Invalidates pre-fix cache completeness markers under schema v3, separating
+  schema-v2 raw records from the active cache generation. A v2 marker cannot
+  prove that the corrected inclusive setup start retained a record stamped
+  exactly at midnight.
 - Corrects the `fetch --option 2` note and `--from` help to match the official
   JV-Link specification: `fromtime` manages continuity within the current race
   cycle rather than selecting an arbitrary retained week, and Sunday/Monday can
