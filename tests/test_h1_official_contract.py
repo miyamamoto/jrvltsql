@@ -165,6 +165,44 @@ def test_h1_accepts_every_official_live_status(data_kubun: str) -> None:
         assert validate_h1_record(row, "NL_H1") is True
 
 
+def test_h1_status_nine_accepts_only_the_provider_blank_vote(tmp_path: Path) -> None:
+    """A cancelled-race snapshot may blank a previously registered vote slot."""
+
+    rows = h1_rows(
+        data_kubun="9",
+        tan_hyo=b" " * H1Parser.VOTE_WIDTH,
+        tan_ninki=b"  ",
+    )
+    cancelled = next(
+        row
+        for row in rows
+        if row.get("BetType") == "Tansyo"
+    )
+    assert cancelled["Kumi"] == "01"
+    assert cancelled["Hyo"] == ""
+    assert cancelled["Ninki"] == ""
+    assert validate_h1_record(cancelled, "NL_H1") is True
+
+    for live_status in ("2", "4", "5"):
+        live = dict(cancelled, DataKubun=live_status)
+        with pytest.raises(SchemaMigrationError):
+            validate_h1_record(live, "NL_H1")
+
+    for malformed in (None, " ", " " * H1Parser.VOTE_WIDTH):
+        with pytest.raises(SchemaMigrationError):
+            validate_h1_record(dict(cancelled, Hyo=malformed), "NL_H1")
+
+    database = SQLiteDatabase({"path": str(tmp_path / "status-nine-blank-vote.db")})
+    with database:
+        _create(database, ("NL_H1",))
+        stats = DataImporter(database).import_records(iter(rows))
+        assert stats["records_failed"] == 0
+        assert database.fetch_one(
+            "SELECT DataKubun, Hyo, Ninki FROM NL_H1 "
+            "WHERE BetType = 'Tansyo' AND Kumi = '01'"
+        ) == {"DataKubun": "9", "Hyo": None, "Ninki": ""}
+
+
 @pytest.mark.parametrize(
     "ninki,hyo",
     (
@@ -638,6 +676,22 @@ def test_h1_postgresql_provider_order_and_exact_erase(
         assert rows, table_name
         assert all(str(row["RaceNum"]) == "12" for row in rows), table_name
     postgresql_db.commit()
+
+
+def test_h1_postgresql_accepts_status_nine_provider_blank_vote(postgresql_db) -> None:
+    postgresql_db.execute(SCHEMAS["NL_H1"])
+    postgresql_db.commit()
+    rows = h1_rows(
+        data_kubun="9",
+        tan_hyo=b" " * H1Parser.VOTE_WIDTH,
+        tan_ninki=b"  ",
+    )
+    stats = DataImporter(postgresql_db).import_records(iter(rows))
+    assert stats["records_failed"] == 0
+    assert postgresql_db.fetch_one(
+        'SELECT datakubun AS "DataKubun", hyo AS "Hyo", ninki AS "Ninki" '
+        "FROM NL_H1 WHERE bettype = 'Tansyo' AND kumi = '01'"
+    ) == {"DataKubun": "9", "Hyo": None, "Ninki": ""}
 
 
 @pytest.mark.parametrize("table_name", ("NL_H1", "RT_H1"))

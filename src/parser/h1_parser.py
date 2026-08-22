@@ -206,7 +206,14 @@ class H1Parser:
             cls._require_ascii_digits(
                 "Kumi", record.get("Kumi"), cls.COMBINATION_WIDTHS[bet_type]
             )
-            cls._require_ascii_digits("Hyo", record.get("Hyo"), cls.VOTE_WIDTH)
+            hyo = record.get("Hyo")
+            if not (status == "9" and hyo == ""):
+                # A provider cancellation may retain a registered combination
+                # while returning the fixed-width vote field as spaces.  The
+                # parser's sole canonical representation of that field is the
+                # empty string; live snapshots and all other blank-like values
+                # remain invalid.
+                cls._require_ascii_digits("Hyo", hyo, cls.VOTE_WIDTH)
             cls._require_favourite(record.get("Ninki"), cls.FAVOURITE_WIDTHS[bet_type])
         else:
             raise ValueError("H1 BetType is not an official 賭式")
