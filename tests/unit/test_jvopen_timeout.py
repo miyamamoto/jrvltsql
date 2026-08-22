@@ -35,11 +35,11 @@ def test_open_timeout_defaults_to_two_minutes(monkeypatch, bridge) -> None:
 
 
 def test_open_timeout_follows_the_environment(monkeypatch, bridge) -> None:
-    # A JVOpen that has to answer a JV-Link dialog was measured at 1,008s
-    # against a real provider, so a deployment must be able to wait longer
-    # than the default.
-    monkeypatch.setenv("JVLINK_OPEN_TIMEOUT_SECONDS", "7200")
-    assert _open(bridge) == 7200.0
+    # One year completed in ~1,957s while a two-year official setup remained
+    # legitimately live beyond 7,200s.  The deployment therefore needs a
+    # bounded but substantially larger budget for a five-year rebuild.
+    monkeypatch.setenv("JVLINK_OPEN_TIMEOUT_SECONDS", "43200")
+    assert _open(bridge) == 43200.0
 
 
 def test_open_timeout_treats_an_unset_compose_variable_as_default(monkeypatch, bridge) -> None:
@@ -48,7 +48,7 @@ def test_open_timeout_treats_an_unset_compose_variable_as_default(monkeypatch, b
     assert _open(bridge) == 120.0
 
 
-@pytest.mark.parametrize("value", ["0", "-1", "7201", "later", "1e400", "nan"])
+@pytest.mark.parametrize("value", ["0", "-1", "86401", "later", "1e400", "nan"])
 def test_open_refuses_an_unusable_timeout(monkeypatch, bridge, value: str) -> None:
     monkeypatch.setenv("JVLINK_OPEN_TIMEOUT_SECONDS", value)
     with patch.object(bridge, "_send_command") as send:

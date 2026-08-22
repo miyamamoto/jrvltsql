@@ -46,7 +46,9 @@ JV-Link は `JVOpen` / `JVRTOpen` 中にお知らせや DataLab 更新確認を�
 拒否します（承諾する入力は送りません）。監視間隔は
 `JVLINK_DIALOG_WATCH_INTERVAL_SECONDS` で変更できます。`JVOpen` の応答待ち
 上限は既定 120 秒で、setup 取得や人の応答待ちが長い環境では
-`JVLINK_OPEN_TIMEOUT_SECONDS`（1〜7200 秒）で延ばします。読めない値は既定へ
+`JVLINK_OPEN_TIMEOUT_SECONDS`（1〜86400 秒）で延ばします。前月までのsetup
+dataは終了時刻で上限を切れないため、複数年再構築では配備側が監視可能な有限値を
+指定します。読めない値は既定へ
 落とさず error にします。未知のダイアログ、応答
 timeout、読めない bridge 応答は成功扱いせず、timeout 時は状態不明の bridge
 process を終了します。

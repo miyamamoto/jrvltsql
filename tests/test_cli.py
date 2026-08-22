@@ -338,10 +338,9 @@ class TestFetchCommand(unittest.TestCase):
         self.assertIn('current race-cycle data', help_text)
         self.assertIn('Sunday or Monday may cover two cycles', help_text)
         self.assertIn('ChokyoDate', help_text)
-        # option=3/4 + 終了時刻可の spec では --to が JVOpen 自体を境界付ける
-        self.assertIn('bounds the JVOpen download', help_text)
-        self.assertIn('remain start only', help_text)
-        self.assertIn('bounded calendar-year chunks', help_text)
+        self.assertIn('not a JVOpen end bound', help_text)
+        self.assertIn('historical setup tail', help_text)
+        self.assertIn('single start-only JVOpen', help_text)
 
     @patch('src.importer.batch.BatchProcessor')
     def test_fetch_with_all_args(self, mock_batch_processor):

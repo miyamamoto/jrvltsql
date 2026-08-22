@@ -5,6 +5,16 @@ of the official data-contract work. It is **not** a production compatibility
 claim: the 64-bit SDK path, 1.x database migration, and long-run collection are
 still unverified.
 
+Changes queued for the next development prerelease after `2.0.0.dev2`:
+
+- option 3/4 setup uses one inclusive-start, start-only `JVOpen`. The official
+  historical setup tail is all setup data after `fromtime`; an end timestamp
+  only limits the current-month normal-data portion, so `--to` remains a
+  client-side record filter and calendar-year recursion is not used
+- the finite `JVLINK_OPEN_TIMEOUT_SECONDS` ceiling is raised to 86,400 seconds
+  for monitored multi-hour setup recovery; the default remains 120 seconds
+  and invalid, non-finite, or larger values fail closed
+
 What `2.0.0.dev2` adds over `2.0.0.dev1`:
 
 - `JVOpen` no longer imposes a fixed 120s response budget. A deployment sets

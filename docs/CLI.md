@@ -31,6 +31,13 @@ jltsql fetch --from 20260101 --to 20260417 --spec RACE --option 1
 `option 4` は長期間をまとめて取得するため、一定件数ごとにコミットします。途中で中断しても、
 そこまでに取り込んだぶんは残ります。
 
+`option 3/4` の過去setup dataは公式仕様上 `fromtime` より後の全件が対象です。
+終了時刻を付けても過去setup部分の上限にはならないため、`jltsql` は要求開始日の
+直前1秒を指定したstart-only `JVOpen`を1回だけ使います。`--to` は取得後の
+client-side filterであり、download量を指定範囲へ制限するオプションではありません。
+複数年setupは数時間かかり得るため、配備側では監視可能な有限の
+`JVLINK_OPEN_TIMEOUT_SECONDS`（1〜86,400秒、既定120秒）を指定できます。
+
 主な `spec`:
 
 | spec | 用途 |

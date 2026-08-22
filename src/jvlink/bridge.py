@@ -129,7 +129,11 @@ _DISMISSIBLE_DIALOG_TITLE_PATTERNS = (
     r"^JRA-VANからのお知らせ$",
 )
 _DEFAULT_OPEN_TIMEOUT_SECONDS = 120.0
-_MAX_OPEN_TIMEOUT_SECONDS = 7200.0
+# Official setup can legitimately spend hours inside the blocking JVOpen call
+# before readcount/downloadcount are observable.  Keep a hard one-day ceiling
+# so a deployment can own a five-year rebuild budget without making a stuck
+# bridge unbounded.
+_MAX_OPEN_TIMEOUT_SECONDS = 86400.0
 _ENABLED_VALUES = {"1", "true", "yes", "on"}
 _DISABLED_VALUES = {"0", "false", "no", "off"}
 

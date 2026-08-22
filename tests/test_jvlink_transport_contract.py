@@ -166,33 +166,32 @@ def test_historical_fetcher_reports_setup_cancel_instead_of_no_data():
     jvlink.jv_close.assert_called_once()
 
 
-# --- Official JVOpen fromtime forms (JV-Link仕様書 4.9.0.1(Win) p.17-18) -----
+# --- Official JVOpen setup semantics (JV-Link仕様書 4.9.0.1 p.17-20) --------
 # fromtime は「開始時刻のみ」または「開始-終了」(YYYYMMDDhhmmss-YYYYMMDDhhmmss、
 # 半角ハイフン結合) の2形式のみで、対象条件は「開始時刻より大きく、終了時刻
-# まで」。要求された from_date を包含させるため、セットアップ (option 3/4) は
-# 排他的開始点を前日 23:59:59 に符号化する。終了ポイント時刻を許す dataspec は
-# さらに終了点で要求範囲そのものを提供側で打ち切る。p.18 で終了時刻の指定が
-# 禁止された dataspec (TOKU/DIFF/DIFN/HOSE/HOSN/HOYU/COMM、指定すると -1
-# 「該当データなし」) は開始のみ形式を保つ。
+# まで」。一方 p.20 は option 3/4 について、前月までのセットアップ用データは
+# fromtime より大きい全件を返し、終了時刻が制限するのは今月の通常データ部分
+# だけと明記する。したがって過去年窓を end で分割できるとは扱わず、setup は
+# start-only を1回だけ呼ぶ。要求された from_date を包含させるため、排他的開始点
+# は前日23:59:59に符号化する。option 1/2のcursor契約は変更しない。
 
 
 @pytest.mark.parametrize(
     ("data_spec", "option", "expected_fromtime"),
     [
-        # 終了時刻を許す RACE のセットアップは、from_date を包含する排他的
-        # 開始点 (前日 23:59:59) と終了点で境界付ける
-        ("RACE", 4, "20250819235959-20260819235959"),
-        ("RACE", 3, "20250819235959-20260819235959"),
-        # p.18 の終了時刻禁止リストに載る DIFN は開始のみ。ただし開始点の
-        # 包含符号化は同じ (対になる start-only green)
+        # option 3/4 は、end-capableなRACEを含めてstart-only。p.20上、終了点は
+        # 過去setup dataの上限ではないため、bounded downloadとは主張しない。
+        ("RACE", 4, "20250819235959"),
+        ("RACE", 3, "20250819235959"),
+        # p.18 の終了時刻禁止リストに載る DIFN も同じstart-only形式
         ("DIFN", 4, "20250819235959"),
-        # 複数specのうち1つでも終了時刻禁止なら、連結dataspec全体を開始のみにする
+        # 複数specもsetupはstart-only
         ("RACEDIFN", 4, "20250819235959"),
         # option=1 の差分カーソル契約はこのイテレーションでは変更しない
         ("RACE", 1, "20250820000000"),
     ],
 )
-def test_jvopen_fromtime_bounds_setup_only_for_end_capable_specs(
+def test_jvopen_setup_fromtime_is_start_only_for_the_historical_setup_tail(
     data_spec, option, expected_fromtime
 ):
     jvlink = MagicMock()
@@ -204,25 +203,24 @@ def test_jvopen_fromtime_bounds_setup_only_for_end_capable_specs(
     jvlink.jv_open.assert_called_once_with(data_spec, expected_fromtime, option)
 
 
-def test_adjacent_setup_chunk_opens_tile_exactly_at_the_boundary_second():
-    """隣接チャンクの排他的開始点は直前チャンクの包含終了点に一致すること。
+def test_setup_to_date_does_not_claim_to_bound_the_historical_provider_tail():
+    """to_dateを変えてもsetupのJVOpen引数へ終了点を付けないこと。
 
-    「開始より大きく、終了まで」の公式条件の下で、この一致が隙間ゼロ・
-    重複ゼロの厳密な敷き詰めを与える（深夜0時打刻のファイルも落ちない）。
-    窓は実際に7200秒タイムアウトした本番スコープ 20240820..20260819 の
-    先頭2つの年チャンク。
+    p.20では前月までのsetup dataはfromtime以降の全件が対象で、終了点が効くのは
+    今月の通常dataだけ。年窓ごとに終了点を変えてtailを分割できるという誤契約を
+    作らない。
     """
     jvlink = MagicMock()
     jvlink.jv_open.return_value = (-1, 0, 0, "")
     fetcher = _historical_fetcher(jvlink)
 
     list(fetcher.fetch("RACE", "20240820", "20241231", option=4))
-    list(fetcher.fetch("RACE", "20250101", "20251231", option=4))
+    list(fetcher.fetch("RACE", "20240820", "20260819", option=4))
 
-    first, second = [c.args[1] for c in jvlink.jv_open.call_args_list]
-    assert first == "20240819235959-20241231235959"
-    assert second == "20241231235959-20251231235959"
-    assert second.split("-")[0] == first.split("-")[1]
+    assert [c.args[1] for c in jvlink.jv_open.call_args_list] == [
+        "20240819235959",
+        "20240819235959",
+    ]
 
 
 @pytest.mark.parametrize(

@@ -5,16 +5,13 @@ This module provides utilities for batch processing of JV-Data.
 
 from datetime import datetime, timedelta
 from itertools import islice
-from typing import Iterator, List, Optional, Tuple
+from typing import Iterator, List
 
 from src.database.base import BaseDatabase
 from src.database.schema import create_all_tables
 from src.fetcher.historical import HistoricalFetcher, validate_date_range
 from src.importer.importer import DataImporter, ImporterError
-from src.jvlink.constants import (
-    jvopen_supports_end_timestamp,
-    validate_jvopen_combination,
-)
+from src.jvlink.constants import validate_jvopen_combination
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -23,8 +20,10 @@ logger = get_logger(__name__)
 # one import can run for hours. Held in a single transaction, an interrupted
 # run leaves nothing behind and the retry starts over from the beginning -- a
 # long enough range never gets imported at all. Commit it in bounded record
-# groups instead, and split ranges over a year into end-bounded chunk opens
-# (see _should_split_setup_range) so no single open carries an unbounded tail.
+# groups instead. The official option-3/4 contract keeps the historical setup
+# data tail open after fromtime even when an end timestamp is supplied, so a
+# long request must remain one provider open; calendar chunking would repeat
+# the later tail for every chunk.
 SPLIT_SETUP_OPTION = 4
 SETUP_COMMIT_INTERVAL = 10000
 
@@ -147,17 +146,15 @@ class BatchProcessor:
             ValueError: If data_spec or option violates the JVOpen contract
 
         Note:
-            For setup requests (option 3/4) on specs that permit an official
-            end timestamp, JVOpen is bounded to the requested range; other
-            requests fetch from from_date onwards. In every mode records are
-            filtered client-side to only import those with dates <= to_date.
+            Setup requests (option 3/4) use one start-only JVOpen because the
+            official p.20 contract does not apply an end point to the
+            historical setup tail. In every mode records are filtered
+            client-side to only import those with dates <= to_date.
 
             option=4 commits every SETUP_COMMIT_INTERVAL records rather than
             once for the whole data spec, so an interrupted run keeps what it
-            already imported. Ranges over 370 days on end-capable specs are
-            additionally split into bounded yearly JVOpen chunks; committed
-            chunks survive a later chunk's failure, and with the cache
-            enabled a retry replays completed chunks from local cache.
+            already imported after JVOpen has returned and streaming begins.
+            A failed JVOpen itself has no import progress to commit.
 
         Examples:
             >>> processor = BatchProcessor(database=db)
@@ -175,16 +172,6 @@ class BatchProcessor:
             to_date=to_date,
             option=option,
         )
-
-        if self._should_split_setup_range(data_spec, from_date, to_date, option):
-            return self._process_split_setup_range(
-                data_spec=data_spec,
-                from_date=from_date,
-                to_date=to_date,
-                option=option,
-                auto_commit=auto_commit,
-                ensure_tables=ensure_tables,
-            )
 
         # Ensure tables exist
         if ensure_tables:
@@ -276,138 +263,6 @@ class BatchProcessor:
         failed_records = int(stats.get("records_failed", 0) or 0)
         if failed_records:
             raise ImporterError(f"Import rejected {failed_records} record(s)")
-
-    @staticmethod
-    def _should_split_setup_range(
-        data_spec: str, from_date: str, to_date: str, option: int
-    ) -> bool:
-        # セットアップ (option 3/4) の長期間要求は、終了ポイント時刻を許す
-        # dataspec に限り年単位の境界付き JVOpen に分割する。fetch が公式の
-        # 開始-終了 fromtime を送るため、各チャンクは自分の窓だけを取得し
-        # テールを反復しない。終了時刻禁止 spec（DIFN 等、仕様書 p.18）は
-        # fromtime を閉じられず、分割すると各チャンクが fromtime 以降の
-        # 全データを返す O(n^2) の反復になるため、option を問わず単一
-        # オープンのままにする。
-        if option not in (3, 4):
-            return False
-        if not jvopen_supports_end_timestamp(data_spec):
-            return False
-        start = datetime.strptime(from_date, "%Y%m%d")
-        end = datetime.strptime(to_date, "%Y%m%d")
-        return (end - start).days > 370
-
-    def _iter_year_chunks(self, from_date: str, to_date: str) -> Iterator[Tuple[str, str]]:
-        start = datetime.strptime(from_date, "%Y%m%d")
-        end = datetime.strptime(to_date, "%Y%m%d")
-        year = start.year
-        while year <= end.year:
-            chunk_start = max(start, datetime(year, 1, 1))
-            chunk_end = min(end, datetime(year, 12, 31))
-            yield chunk_start.strftime("%Y%m%d"), chunk_end.strftime("%Y%m%d")
-            year += 1
-
-    def _process_split_setup_range(
-        self,
-        data_spec: str,
-        from_date: str,
-        to_date: str,
-        option: int,
-        auto_commit: bool,
-        ensure_tables: bool,
-    ) -> dict:
-        # 年チャンクは日付レベルで連続する (次チャンクの from = 前チャンクの
-        # to + 1日)。fetch はセットアップの排他的開始点を「チャンク from の
-        # 前日 23:59:59」に符号化するため、隣接チャンクは提供タイムスタンプ
-        # 空間で「次チャンクの排他的開始点 = 直前チャンクの包含終了点」と
-        # なり、秒単位まで正確に・隙間も重複もなく敷き詰められる
-        # （開始は「より大きい」、終了は「まで」）。
-        logger.info(
-            "Splitting setup range into bounded yearly chunks",
-            data_spec=data_spec,
-            from_date=from_date,
-            to_date=to_date,
-            option=option,
-        )
-        if ensure_tables:
-            create_all_tables(self.database)
-
-        if option == SPLIT_SETUP_OPTION:
-            # option=4: 各チャンクの内側の process_date_range がトランザク
-            # ション境界を所有する（auto_commit 時は SETUP_COMMIT_INTERVAL
-            # 毎にコミット、失敗したグループはチャンク内でロールバック）。
-            # 外側でトランザクションを張らないことで所有権の曖昧さを避け、
-            # コミット済みの先行チャンクは後続チャンクの失敗で失われない。
-            # auto_commit=False の場合は従来どおり呼び出し元だけが唯一の
-            # コミット境界を持つ（内側は begin のみ行いコミットしない）。
-            #
-            # 再実行の契約: キャッシュ有効時、完了したチャンクは fetch が
-            # そのチャンク窓の complete マーカーを付けるため、同じ引数での
-            # 再実行は同一分割を再導出し、完了済みチャンクをローカル
-            # キャッシュから再生する（プロバイダ再取得なし・インポートは
-            # 冪等upsert）。キャッシュ無効時は各チャンクの再ダウンロードに
-            # なるが、いずれも境界付きでテールは反復しない。
-            option4_stats: dict = {}
-            for idx, (chunk_from, chunk_to) in enumerate(
-                self._iter_year_chunks(from_date, to_date), start=1
-            ):
-                logger.info(
-                    "Processing bounded setup chunk",
-                    chunk_index=idx,
-                    chunk_from=chunk_from,
-                    chunk_to=chunk_to,
-                    data_spec=data_spec,
-                )
-                chunk_stats = self.process_date_range(
-                    data_spec=data_spec,
-                    from_date=chunk_from,
-                    to_date=chunk_to,
-                    option=option,
-                    auto_commit=auto_commit,
-                    ensure_tables=False,
-                )
-                _accumulate_stats(option4_stats, chunk_stats)
-            return option4_stats
-
-        # option=3: 従来どおり全チャンクを単一トランザクションで所有し、
-        # 全チャンク成功時のみ一括コミットする（部分的な耐久性を作らない）。
-        combined_stats: dict = {}
-        try:
-            begin_transaction = getattr(self.database, "begin_transaction", None)
-            if begin_transaction is not None:
-                begin_transaction()
-
-            for idx, (chunk_from, chunk_to) in enumerate(
-                self._iter_year_chunks(from_date, to_date), start=1
-            ):
-                logger.info(
-                    "Processing setup chunk",
-                    chunk_index=idx,
-                    chunk_from=chunk_from,
-                    chunk_to=chunk_to,
-                    data_spec=data_spec,
-                )
-                chunk_stats = self.process_date_range(
-                    data_spec=data_spec,
-                    from_date=chunk_from,
-                    to_date=chunk_to,
-                    option=option,
-                    auto_commit=False,
-                    ensure_tables=False,
-                )
-                _accumulate_stats(combined_stats, chunk_stats)
-
-            if auto_commit:
-                self.database.commit()
-            return combined_stats
-        except Exception:
-            try:
-                self.database.rollback()
-            except Exception as rollback_error:
-                logger.warning(
-                    "Split setup rollback failed",
-                    error=str(rollback_error),
-                )
-            raise
 
     def process_month(
         self,

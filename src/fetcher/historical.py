@@ -11,7 +11,6 @@ from src.fetcher.base import BaseFetcher, FetcherError
 from src.jvlink.constants import (
     JVOPEN_OPTION_SETUP,
     JVOPEN_OPTION_SETUP_SPLIT,
-    jvopen_supports_end_timestamp,
     validate_jvopen_combination,
 )
 from src.utils.logger import get_logger
@@ -56,29 +55,24 @@ def validate_date_range(from_date: str, to_date: str) -> None:
         )
 
 
-def _jvopen_fromtime(data_spec: str, from_date: str, to_date: str, option: int) -> str:
+def _jvopen_fromtime(from_date: str, option: int) -> str:
     """Build the official JVOpen fromtime for this request.
 
-    公式仕様（4.9.0.1 p.17-18）の対象条件は「開始時刻より大きく、終了時刻
-    まで」。要求された from_date を包含させるため、セットアップ (option 3/4)
-    では排他的開始点を前日 23:59:59 に符号化する。これにより隣接する年
-    チャンクは「次チャンクの排他的開始点 = 直前チャンクの包含終了点」で
-    秒単位まで正確に接続し、深夜0時ちょうどに打刻されたファイルも落とさない。
+    公式仕様（4.9.0.1 p.17-20）の対象条件は開始時刻より大きいデータ。
+    要求された from_date を包含させるため、セットアップ (option 3/4) では
+    排他的開始点を前日23:59:59に符号化する。
 
-    終了ポイント時刻を許す dataspec はさらに ``-{to_date}235959`` で
-    ダウンロード自体を要求範囲で打ち切る。終了時刻指定が禁止された dataspec
-    (TOKU/DIFF/DIFN/HOSE/HOSN/HOYU/COMM, p.18) に終了を付けると -1 が返り
-    正当な「データなし」と区別できないため、開始のみ形式を保つ。
-    option 1 の差分カーソル・option 2 の今週データ契約は変更しない。
+    p.20 は option 3/4 について、前月までのセットアップ用データは fromtime
+    より大きい全件を返し、終了時刻が制限するのは今月の通常データ部分だけと
+    明記する。したがって過去setup dataを ``to_date`` でboundedにできるとは
+    扱わず、setupはstart-onlyを1回だけ呼ぶ。option 1の差分cursor・option 2の
+    今週データ契約は変更しない。
     """
     if option not in (JVOPEN_OPTION_SETUP, JVOPEN_OPTION_SETUP_SPLIT):
         return f"{from_date}000000"
-    start_exclusive = (
+    return (
         datetime.strptime(from_date, "%Y%m%d") - timedelta(seconds=1)
     ).strftime("%Y%m%d%H%M%S")
-    if jvopen_supports_end_timestamp(data_spec):
-        return f"{start_exclusive}-{to_date}235959"
-    return start_exclusive
 
 
 class HistoricalFetcher(BaseFetcher):
@@ -87,12 +81,11 @@ class HistoricalFetcher(BaseFetcher):
     Fetches accumulated (蓄積) data from JV-Link for a specified date range
     and data specification. For setup requests (option 3/4) the requested
     inclusive from_date is encoded as the exclusive fromtime start point
-    (previous day 23:59:59, per the official strictly-greater rule); specs
-    that permit an official end timestamp additionally bound JVOpen with
-    the start-end form, so the provider only serves the requested window,
-    while end-forbidden specs stay start-only. Options 1/2 keep the legacy
-    ``{from_date}000000`` start-only fromtime. In every mode records are
-    additionally filtered client-side based on the end date.
+    (previous day 23:59:59, per the official strictly-greater rule). Setup
+    stays start-only because the official option-3/4 contract does not apply
+    an end timestamp to the historical setup tail. Options 1/2 keep the
+    legacy ``{from_date}000000`` start-only fromtime. In every mode records
+    are filtered client-side based on the end date.
 
     Note:
         Service key must be configured in JRA-VAN DataLab application
@@ -258,17 +251,11 @@ class HistoricalFetcher(BaseFetcher):
             dates up to and including to_date. Records without date fields
             (Year/MonthDay) are always included.
 
-            For option 3/4 the official eligibility rule is "strictly
-            greater than the start point, up to and including the end
-            point", so the requested inclusive from_date is encoded as the
-            exclusive start point ``(from_date - 1 day)235959``. Specs that
-            permit an official end timestamp (e.g. RACE) additionally send
-            ``-{to_date}235959`` so the provider transfer itself is
-            bounded; data *provided* after ``to_date 23:59:59`` (e.g. late
-            corrections) is then not part of this stream and arrives via
-            subsequent option=1 differential updates. Specs on the official
-            end-forbidden list (TOKU/DIFF/DIFN/HOSE/HOSN/HOYU/COMM) remain
-            start-only because an end timestamp makes JVOpen return -1.
+            For option 3/4 the requested inclusive from_date is encoded as
+            the exclusive start point ``(from_date - 1 day)235959``. The
+            official p.20 setup contract returns every historical setup item
+            after that point; ``to_date`` is therefore a client-side record
+            filter, not a provider bound for the historical setup tail.
 
         Examples:
             >>> fetcher = HistoricalFetcher()  # Uses default sid="UNKNOWN"
@@ -308,11 +295,11 @@ class HistoricalFetcher(BaseFetcher):
         cache_write_committed = active_cache_manager is None
         cache_range_complete = True
 
-        # 公式の fromtime 形式をここで決める（仕様書 4.9.0.1 p.17-18）。
-        # セットアップは from_date を包含する排他的開始点（前日 23:59:59）を
-        # 送り、終了時刻を許す spec はさらに終了点で提供側を境界付ける。
-        # それ以外は従来どおり開始のみ + クライアント側 to_date フィルタ。
-        fromtime = _jvopen_fromtime(data_spec, from_date, to_date, option)
+        # 公式の fromtime 形式をここで決める（仕様書 4.9.0.1 p.17-20）。
+        # セットアップは from_date を包含する排他的開始点（前日23:59:59）を
+        # start-onlyで送る。to_dateは過去setup tailのprovider boundにはならず、
+        # 下流のclient-side filterとしてのみ使う。
+        fromtime = _jvopen_fromtime(from_date, option)
 
         try:
             # Info for setup mode (option 3 or 4) - ログのみ、画面表示はしない
@@ -320,7 +307,7 @@ class HistoricalFetcher(BaseFetcher):
                 logger.info(
                     "セットアップモード",
                     option=option,
-                    bounded="-" in fromtime,
+                    provider_tail="start_only",
                 )
 
             # Initialize JV-Link
@@ -349,7 +336,7 @@ class HistoricalFetcher(BaseFetcher):
                     "option=1: 通常データ（差分）; "
                     "option=2: 今週データ; "
                     "option=3/4: セットアップ"
-                    "（fromtime が開始-終了形式なら要求範囲で境界付け）"
+                    "（過去setup tailはstart-only、to_dateはclient filter）"
                 ),
             )
 

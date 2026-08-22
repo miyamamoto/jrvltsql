@@ -1,18 +1,22 @@
-# JVOpen bounded setup worklog — 2026-08-22
+# JVOpen setup recovery worklog — 2026-08-22
 
 ## Objective and minimum scope
 
-Repair the JRA RACE official-setup transport so a requested date range is
-bounded at JVOpen rather than fetched as one unbounded tail. The minimum
-iteration is:
+Repair the JRA RACE official-setup transport without claiming a provider-side
+upper bound that the official option-3/4 contract does not provide. The
+minimum iteration, corrected after reading p.20 in context, is:
 
-1. send the official start/end `fromtime` form for end-capable setup specs;
-2. preserve the official start-only form for specs that forbid an end point;
-3. make long option-4 setup partitioning truly bounded and resumable without
-   weakening transaction, cache-complete, parser-rejection, or failure
-   semantics; and
-4. correct CLI/docs claims so operators do not mistake a client-side filter
-   for a provider download bound.
+1. encode an inclusive requested start as the official exclusive start point
+   `(from_date midnight - 1 second)` and keep setup as one start-only JVOpen;
+2. remove calendar-year setup recursion, which repeats the same later setup
+   tail and grows approximately quadratically;
+3. keep option-4 progress durable in bounded record groups after JVOpen
+   returns, without weakening transaction, cache-complete, parser-rejection,
+   or failure semantics;
+4. keep `to_date` as a client-side record filter and state explicitly that it
+   is not a provider download bound; and
+5. permit a monitored, finite response budget large enough for the measured
+   multi-hour five-year setup, while rejecting non-finite/unbounded values.
 
 Do not change record parsers, schemas, service-key/registration handling,
 provider identity, realtime collection, production release `2.0.0`, or KPS
@@ -50,31 +54,35 @@ the development runtime.
   `JV-Linkインターフェース仕様書_4.9.0.1(Win).pdf`, SHA-256
   `3167d5c98d8db78321a983cd2d897e1b5a9f42f141490f9ba817ca0dcf9d2364`.
   Pages 17--20 define `fromtime` as either one start timestamp or start/end
-  timestamps joined by `-`. RACE is not in the explicit list that forbids an
-  end timestamp. The same section documents options 3/4 and setup
-  interruption/resume.
+  timestamps joined by `-`. The general rule is `> start` and `<= end`, but
+  p.20 narrows the option-3/4 meaning: previous-month setup data is all setup
+  data after `fromtime`; the end timestamp limits only the current-month
+  normal-data portion. RACE accepting an end timestamp therefore does **not**
+  make the historical setup tail bounded.
 - Exact `2.0.0.dev2` constructs only
   `fromtime = f"{from_date}000000"`; `to_date` is a client-side record filter.
   Its option-3 yearly recursion therefore repeats all later provider data, and
-  option 4 is deliberately left as one unbounded open to avoid that O(n^2)
-  repetition. The two-hour failure is consequently not evidence that a
-  bounded yearly setup was attempted.
+  option 4 is deliberately left as one start-only open to avoid that O(n^2)
+  repetition. The two-hour failure is consequently evidence that the finite
+  7,200-second response budget is too short for the requested setup, not that
+  a provider-bounded yearly setup was attempted.
 
 ## Red-first and implementation contract
 
 Before production changes, add the minimum regression coverage and run it on
-this exact base. It must prove at least:
+the then-current candidate. It must prove at least:
 
-- bounded RACE setup calls JVOpen with the inclusive-date encoding
-  `(from_date - 1 second at midnight)-to_date 23:59:59`, for example
-  `20250819235959-20260819235959` for 2025-08-20..2026-08-19 (base must fail
-  because it sends only `20250820000000`);
-- an end-forbidden setup spec such as DIFN remains start-only (paired green);
-- option-4 long ranges partition into exact, nonoverlapping bounded chunks and
-  do not repeat the open tail;
-- a failed later chunk is not recorded complete and cannot silently discard or
-  double-count an already durable earlier chunk; and
-- invalid/missing dates fail before JV-Link or database mutation.
+- RACE option 3/4 calls JVOpen once with the inclusive-date encoding
+  `(from_date midnight - 1 second)`, for example `20250819235959` for
+  2025-08-20, and never appends a historical upper bound;
+- changing `to_date` does not change that provider request (paired proof that
+  it is only a client-side filter);
+- long option-3/4 ranges do not recurse into year windows or repeat the open
+  setup tail;
+- option 3 remains one atomic transaction while option 4 keeps its explicit
+  bounded record-group durability; and
+- invalid/missing dates fail before JV-Link or database mutation, and a finite
+  43,200-second budget is accepted while values above 86,400 are rejected.
 
 Record the exact pre-fix failure in this worklog and in the commit/PR evidence.
 Do not add one test per reviewer hypothesis; extend the existing historical or
@@ -109,6 +117,102 @@ Require it to inspect the official evidence and current tests, run the red
 test against exact base, implement the smallest coherent repair, run focused
 tests, update this worklog, and stop before commit/push/PR so the primary
 agent can inspect the result.
+
+## Superseding oracle correction — 2026-08-22
+
+The first implementation (`b034b4bff1bc71a577999a6a8f7db526f262a6ea`,
+evidence update `03db892ab7c0874d750b71d23af52987c2570a88`) interpreted
+the general start/end rule without the option-3/4 qualifier on p.20. It added
+an end timestamp and calendar-year opens. That interpretation is rejected and
+those commits are **not mergeable**. They remain below as audit history only;
+none of their bounded-provider claims is release evidence.
+
+Draft PR #238 was returned to Draft immediately after this correction. Its
+remote head remains `03db892ab7c0874d750b71d23af52987c2570a88` until the
+corrected candidate is frozen and tested. The public blocker record is
+<https://github.com/miyamamoto/jrvltsql/pull/238#issuecomment-5377091537>.
+No provider, runtime, database, cache, release, or Wine-prefix state was
+changed while correcting the code.
+
+### Corrected official interpretation
+
+Independent `pdftotext` inspection of the pinned p.17--20 establishes both
+facts, which must not be collapsed into one:
+
+- the API accepts start-only and start/end `fromtime` forms, with the general
+  eligibility rule `> start` and `<= end`;
+- for option 3/4, previous-month setup data is nevertheless **all** setup data
+  after `fromtime`; the end timestamp limits only the current-month normal
+  data appended to that setup response.
+
+Therefore an end timestamp cannot partition the historical setup tail. Calling
+one year at a time would repeatedly download later years and recreate the
+pre-existing option-3 O(n^2) behavior. The safe contract is one start-only
+JVOpen, client-side `to_date` filtering, and finite monitored bridge time.
+
+### Corrected red-first evidence
+
+The minimum corrected tests were applied before the corrected production
+implementation and run against the unsafe `03db892` candidate:
+
+```text
+.venv/bin/python -m pytest \
+  tests/test_jvlink_transport_contract.py \
+  tests/test_batch_processor.py \
+  tests/unit/test_jvopen_timeout.py \
+  tests/test_cli.py --no-cov -q
+```
+
+Result: **9 failed, 129 passed, 8 subtests passed**. The failures proved that
+the then-candidate still sent a start/end RACE request, changed the provider
+request with `to_date`, split option 3/4 into three provider/cache calls,
+rejected a finite 43,200-second budget because of the 7,200-second ceiling,
+and advertised the false bounded-download contract in CLI help. This is the
+required `no` evidence; the test does not merely exercise green cases.
+
+### Corrected implementation contract
+
+- `HistoricalFetcher` sends option 3/4 exactly one start-only timestamp at
+  `(from_date midnight - 1 second)`; options 1/2 retain their old cursor form.
+- `BatchProcessor` has no year-splitting decision/helper/path. Option 3 keeps
+  one transaction. Option 4 alone commits each `SETUP_COMMIT_INTERVAL` record
+  group after the provider call returns and streaming begins.
+- `to_date` remains a record filter and cache-scope component. It is never
+  described as a historical provider bound.
+- `JVLINK_OPEN_TIMEOUT_SECONDS` remains 120 seconds by default, must be finite,
+  and accepts 1--86,400 seconds. The development runtime may choose a smaller
+  monitored finite value (for example 43,200); code does not become unbounded.
+- CLI/help/README/architecture/Wine docs state these limits and the setup-tail
+  behavior. Release metadata will be updated in the separate next-dev release
+  iteration after this repair merges.
+
+The first corrected focused run after these production changes was
+**135 passed, 8 subtests passed** with the same command. A wider focused gate,
+full suite, distributions, and independent review are still required on a
+committed immutable SHA; this interim result is not the merge gate.
+
+The wider pre-commit focused gate then covered transport, batch transaction
+ownership, cache write/failure paths, `-402` self-repair, date filtering,
+JVOpen constants, CLI/public setup wording, CLI transport status, and timeout
+validation:
+
+```text
+.venv/bin/python -m pytest \
+  tests/test_jvlink_transport_contract.py tests/test_batch_processor.py \
+  tests/test_historical_cache_failures.py \
+  tests/test_historical_cache_write_through.py tests/test_jvd_self_repair.py \
+  tests/test_date_filtering.py tests/test_jvlink_constants.py \
+  tests/test_cli.py tests/test_public_setup_contract.py \
+  tests/test_quickstart_cli.py tests/unit/test_cli_transport_status.py \
+  tests/unit/test_jvopen_timeout.py --no-cov -q
+```
+
+Result: **246 passed, 8 subtests passed**. `compileall` and the workflow's
+fatal flake8 selection (`E9,F63,F7,F82`) also passed. A broad opt-in Ruff run
+reported the repository's existing style/type-modernization debt; the one
+newly exposed unused import caused by deleting the private split helper was
+removed. The workflow-equivalent lint/full/package gates remain for the
+committed candidate.
 
 ## Implementation record — 2026-08-22, session `ecb0bbe6-e0b1-4923-b214-07698693c5a7`
 
@@ -337,7 +441,11 @@ update does not change production code or tests):
   repair batch if actionable, and unresolved threads must be zero before
   merge. No extra live-provider call is used as a substitute for review.
 
-### Remaining risks and explicitly blocked items
+### Historical risks recorded for rejected `b034b4b` candidate (superseded)
+
+Everything in this subsection through its old "Next safe action" describes
+the rejected start/end/year-chunk hypothesis. It is retained only to make the
+audit trail explain why `03db892` was not merged; it is not the current plan.
 
 - Live-provider behaviour of the bounded setup fromtime is UNVERIFIED here
   (live operations are a STOP condition). The first supervised run must
@@ -363,7 +471,7 @@ update does not change production code or tests):
 - Registry deviation observed, untouched: local option-1 list allows
   MING/COMM although p.20 lists them only under options 3/4.
 
-### Next safe action
+### Historical next action for rejected candidate (superseded)
 
 Primary agent: commit this worklog-only evidence update, rerun the focused
 transport tests and fatal lint on that final full SHA, push both local commits,
@@ -373,3 +481,17 @@ only from a clean exact-SHA gate. Only after merge, a new `2.0.0.dev*` wheel,
 and runtime pinning may a supervised bounded RACE option-4 setup for
 20240820..20260819 be attempted, watching for -112/-113 and the JVOpen
 response budget.
+
+## Current next safe action
+
+1. finish the corrected docs/worklog and run the wider focused transport,
+   cache, self-repair, transaction, date-filter, CLI, and timeout tests;
+2. commit the corrected implementation as a superseding commit, then run the
+   full/test/package gates on that immutable full SHA;
+3. push the corrected head, rewrite PR #238 title/body so no bounded-download
+   claim remains, request one independent review, aggregate findings once,
+   and merge only with unresolved threads zero and a clean worktree;
+4. create the next `2.0.0.dev*` release from merged `master`, pin that exact
+   artifact in the development runtime, and only then resume the monitored
+   single-open RACE setup. Never use the rejected `03db892` artifact or its
+   CI as evidence for the corrected candidate.
