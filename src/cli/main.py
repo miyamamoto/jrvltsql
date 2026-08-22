@@ -443,6 +443,7 @@ def fetch(ctx, date_from, date_to, data_spec, jv_option, db, batch_size, progres
     """
     from src.database import create_database_from_config, DatabaseError
     from src.database.schema import create_all_tables
+    from src.fetcher.historical import validate_date_range
     from src.importer.batch import BatchProcessor
 
     config = ctx.obj.get("config")
@@ -474,6 +475,16 @@ def fetch(ctx, date_from, date_to, data_spec, jv_option, db, batch_size, progres
         console.print(f"[red]Error:[/red] データ種別 '{data_spec}' は option={jv_option} では取得できません")
         valid_specs = JVOPEN_VALID_COMBINATIONS.get(jv_option, [])
         console.print(f"       option={jv_option} で取得可能: {', '.join(valid_specs)}")
+        sys.exit(1)
+
+    # The CLI prepares every table before BatchProcessor runs. Reject the
+    # range here as well so malformed input cannot initialize a database or
+    # apply an additive schema migration before it is diagnosed.
+    try:
+        validate_date_range(date_from, date_to)
+    except ValueError as exc:
+        console.print()
+        console.print(f"[red]Error:[/red] {exc}")
         sys.exit(1)
 
     _print_fetch_guardrail_notes(jv_option)

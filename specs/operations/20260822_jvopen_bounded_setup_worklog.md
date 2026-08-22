@@ -127,9 +127,9 @@ an end timestamp and calendar-year opens. That interpretation is rejected and
 those commits are **not mergeable**. They remain below as audit history only;
 none of their bounded-provider claims is release evidence.
 
-Draft PR #238 was returned to Draft immediately after this correction. Its
-remote head remains `03db892ab7c0874d750b71d23af52987c2570a88` until the
-corrected candidate is frozen and tested. The public blocker record is
+At this correction point, PR #238 was returned to Draft and its remote head
+was still `03db892ab7c0874d750b71d23af52987c2570a88`; this is historical state,
+not the current PR head. The public blocker record is
 <https://github.com/miyamamoto/jrvltsql/pull/238#issuecomment-5377091537>.
 No provider, runtime, database, cache, release, or Wine-prefix state was
 changed while correcting the code.
@@ -509,12 +509,44 @@ lint gate, exact-SHA review, GitHub checks, and clean-worktree confirmation.
 The worklog is excluded from distributions, but an old test result will not be
 silently relabelled as evidence for a different production tree.
 
-1. commit this evidence-only worklog update and rerun the focused/fatal lint
-   gate on the resulting final full SHA; because production/package content is
-   unchanged, confirm a fresh build is byte-identical or rerun its gates;
-2. push the corrected head, rewrite PR #238 title/body so no bounded-download
-   claim remains, request one independent review, aggregate findings once,
-   and merge only with unresolved threads zero and a clean worktree;
+### Exact-head GitHub review repair
+
+After `9e5ec2c274f66927c15f31bbfd3ad2bda23da1f7` was pushed and PR #238 was
+marked Ready, exact-head GitHub review found one actionable code root and one
+documentation-state issue:
+
+- both the Codex connector and CodeRabbit independently observed that the CLI
+  called `create_database_from_config` and `create_all_tables` before
+  `BatchProcessor.process_date_range` could validate dates. This contradicted
+  the fail-before-schema contract even though direct processor tests passed;
+- CodeRabbit also observed that the historical correction paragraph still
+  read like current Draft/head state after the corrected SHA had been pushed.
+
+The CLI regression was written and run before the repair. It failed because
+an inverted range produced a `SchemaMigrationError` from `create_all_tables`
+instead of the date error, and the database factory had already been called:
+
+```text
+FAILED tests/test_cli.py::TestFetchCommand::
+  test_fetch_rejects_invalid_dates_before_database_initialization
+AssertionError: 'from_date must not be after to_date' not found
+```
+
+The repair invokes the shared `validate_date_range` after spec/option
+validation but before guardrail output, database construction, or schema work,
+and renders a controlled CLI error. The new test then passed, and the complete
+corrected focused ring was **247 passed, 8 subtests passed**; workflow fatal
+Flake8 remained zero and `git diff --check` passed. The historical paragraph
+above now explicitly labels the Draft/old-head statement as point-in-time
+history. Both code reviewers identified the same root, so they are one repair
+batch rather than two iterative fixes.
+
+1. commit this aggregated review repair, run the focused/full/package gates on
+   its final full SHA, and push it without another review-per-finding loop;
+2. update PR #238 evidence/current state, reply to and resolve the duplicate
+   date-validation root plus the obsolete `03db892` threads, and merge only
+   after current-head checks pass, independent review is green, unresolved
+   threads are zero, and the worktree is clean;
 3. create the next `2.0.0.dev*` release from merged `master`, pin that exact
    artifact in the development runtime, and only then resume the monitored
    single-open RACE setup. Never use the rejected `03db892` artifact or its
