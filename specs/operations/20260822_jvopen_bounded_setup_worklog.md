@@ -114,8 +114,10 @@ agent can inspect the result.
 
 Model `claude-fable-5` (Fable 5) on Claude Code `2.1.233`, working only in
 this worktree on top of the immutable base (`d7a1523` = worklog only, code
-identical to `3c4650d`). No commit/push/PR/release/provider/database action
-was performed; the diff is left uncommitted for primary-agent review.
+identical to `3c4650d`). The implementation was subsequently inspected and
+committed locally by the primary agent as
+`b034b4bff1bc71a577999a6a8f7db526f262a6ea`. It was not yet pushed,
+released, deployed, or exercised against the live provider at that point.
 
 ### Official oracle verification
 
@@ -197,7 +199,7 @@ exclusive start point equals the previous chunk's inclusive bounded end
 (`…-20241231235959` then `20241231235959-…`), pinned by
 `test_adjacent_setup_chunk_opens_tile_exactly_at_the_boundary_second`.
 
-### Implementation summary (uncommitted)
+### Implementation summary (local commit `b034b4bff1bc71a577999a6a8f7db526f262a6ea`)
 
 - `src/jvlink/constants.py`: `JVOPEN_END_TIME_FORBIDDEN_SPECS` transcribed
   verbatim from p.18 (all seven IDs; DIFF/HOSE additionally remain blocked
@@ -296,6 +298,45 @@ exclusive start point equals the previous chunk's inclusive bounded end
   not treated as gates because the current baseline has unrelated advisory
   style debt and the actual workflow runs fatal Flake8 only.
 
+### Full-suite and distribution evidence for the local code commit
+
+Evidence below is bound to the production/test commit
+`b034b4bff1bc71a577999a6a8f7db526f262a6ea` (this subsequent worklog-only
+update does not change production code or tests):
+
+- Full locked-environment suite:
+  `.venv/bin/python -m pytest --no-cov -q`
+  -> **4732 passed, 508 skipped, 20 subtests passed** in 102.41 seconds.
+- Fatal workflow lint, `compileall`, and `git diff --check` all returned 0.
+- A fresh PEP 517 wheel and sdist were built from the immutable git code,
+  passed `scripts/check_distribution_contents.py`, and the extracted wheel
+  passed the isolated init smoke. The version remains `2.0.0.dev2` here;
+  cutting the next dev release is intentionally a separate post-merge
+  iteration.
+- Build artifact hashes (temporary local artifacts, removed after recording):
+  - wheel `jltsql-2.0.0.dev2-py3-none-any.whl`:
+    `e2191424baacf129feb13ce2e866c830614495d3b124754e3d76797686f6ca07`
+  - sdist `jltsql-2.0.0.dev2.tar.gz`:
+    `c1a16503425a3d2b7506c297f4fcf30d9d65c66c280b17bd07f20148a4f7b501`
+
+### Independent review availability and fallback
+
+- Two complementary read-only Claude Fable review sessions were started on
+  a detached, clean worktree fixed at exact
+  `b034b4bff1bc71a577999a6a8f7db526f262a6ea`:
+  - official transport/oracle: session
+    `59f05180-91c4-48b4-98f2-e81ce0718fe1`;
+  - transaction/cache/rollback: session
+    `23185388-20db-4b58-a04e-3b0594295c28`.
+- Both sessions ended at the external Claude account's session limit before
+  producing a verdict or actionable finding. Their retained JSONL transcripts
+  end with the explicit session-limit message; neither is counted as an
+  independent review pass.
+- Per repository policy, the fallback is one GitHub-native review against the
+  pushed final full SHA. Findings will be aggregated once, addressed in one
+  repair batch if actionable, and unresolved threads must be zero before
+  merge. No extra live-provider call is used as a substitute for review.
+
 ### Remaining risks and explicitly blocked items
 
 - Live-provider behaviour of the bounded setup fromtime is UNVERIFIED here
@@ -324,8 +365,11 @@ exclusive start point equals the previous chunk's inclusive bounded end
 
 ### Next safe action
 
-Primary agent: review this uncommitted diff (10 files), then commit/push and
-update draft PR #238 for this branch per the iteration protocol. Only after review,
-merge, a new `2.0.0.dev*` wheel, and runtime pinning may a supervised
-bounded RACE option-4 setup for 20240820..20260819 be attempted, watching
-for -112/-113 and the JVOpen response budget.
+Primary agent: commit this worklog-only evidence update, rerun the focused
+transport tests and fatal lint on that final full SHA, push both local commits,
+and update draft PR #238 with the red/green/full/package evidence. Request one
+GitHub-native review, aggregate and close every actionable thread, and merge
+only from a clean exact-SHA gate. Only after merge, a new `2.0.0.dev*` wheel,
+and runtime pinning may a supervised bounded RACE option-4 setup for
+20240820..20260819 be attempted, watching for -112/-113 and the JVOpen
+response budget.
