@@ -71,3 +71,36 @@
 Next safe action: commit and push this start record, open one Draft PR, then
 make the grouped version/release-note change and run the focused release
 surface before freezing the candidate.
+
+## Release candidate implementation
+
+- The start record was committed and pushed as
+  `a990c7d4cc14075657bd54466ee0ef8f4ff3328d`; Draft PR #244 is the
+  authoritative review surface.
+- Version parity changed from `2.0.0.dev4` to `2.0.0.dev5` in
+  `pyproject.toml`, `src/__init__.py`, the editable project entry in `uv.lock`,
+  and the two current-version updater assertions. A Python 3.12.11 locked
+  environment reports both source and installed editable metadata as exactly
+  `2.0.0.dev5`; `uv lock --check` passes.
+- CHANGELOG and release notes name dev5 and describe only merged PR #243: the
+  exact physical H6 status-9 eleven-space vote, SQL `NULL` representation,
+  retained strict live-status/caller/raw boundaries, realtime validation, and
+  the status-0 key-only opaque-body erase. The unreleased production `2.0.0`
+  warning remains unchanged.
+- No checker or validator is introduced by this metadata-only iteration, so
+  no new red-first test is required. The merged H6 repair already carries its
+  paired red/green evidence in
+  `specs/operations/20260822_h6_status9_vote_audit_worklog.md`; this release
+  updates existing version assertions rather than adding a duplicate test.
+- Pre-commit Python 3.12.11 evidence:
+  - updater/public-version/distribution/installer focused selection:
+    **95 passed**;
+  - H6 plus adjacent realtime selection: **232 passed, 13 skipped, 8 subtests
+    passed**;
+  - `scripts/validate_test_gate.py`: `TEST GATE PASS`;
+  - source and installed editable version: `2.0.0.dev5`;
+  - `uv lock --check` and `git diff --check`: pass.
+
+Next safe action: commit and push the grouped release metadata, freeze its
+full SHA, run the Python 3.12 workflow/release-artifact gates, and append only
+the resulting evidence before the one native review.

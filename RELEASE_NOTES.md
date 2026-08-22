@@ -1,9 +1,26 @@
 # jrvltsql v2.0.0 Release Notes (unreleased draft)
 
-`2.0.0` is not released yet. `2.0.0.dev4` is a **development-test prerelease**
+`2.0.0` is not released yet. `2.0.0.dev5` is a **development-test prerelease**
 of the official data-contract work. It is **not** a production compatibility
 claim: the 64-bit SDK path, 1.x database migration, and long-run collection are
 still unverified.
+
+What `2.0.0.dev5` adds over `2.0.0.dev4`:
+
+- accepts the exact H6 race-cancellation shape subsequently observed during
+  the registered five-year provider setup: `DataKubun=9` may retain a known
+  trifecta combination while its physical vote field is exactly eleven
+  spaces. The parser exposes `SanrentanHyo=""` and native numeric vote storage
+  uses SQL `NULL`; blank values on live statuses 2/4/5, mixed tab/digit bytes,
+  caller `None`, and caller space-only values remain rejected before mutation.
+  Realtime raw, parsed-record, and batch inputs use the same validation.
+  Existing expanded caller rows with status 9 and `SanrentanHyo=""` remain
+  accepted as SQL `NULL`, so this release does not claim raw-record provenance
+  for caller-created mappings
+- preserves H6 `DataKubun=0` as a key-only physical erase. A noncanonical or
+  undecodable non-key body cannot suppress an exact erase when the type,
+  status, MakeDate, six-field race key, fixed length, and CRLF remain valid;
+  live statuses continue to validate the complete body
 
 What `2.0.0.dev4` adds over `2.0.0.dev3`:
 

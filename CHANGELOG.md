@@ -9,6 +9,20 @@
 
 次回リリースは互換性を破る変更を含むため `2.0.0` とする。1.xとしては配布しない。
 
+### 2.0.0.dev5 (開発検証用prerelease)
+
+- 実登録済みproviderの5年setupで後から確認できたH6レース中止形に対応する。
+  `DataKubun=9`で既知の3連単組番を保持し、票数欄だけを公式の11バイト空白で
+  返す場合に限り、parserでは`SanrentanHyo=""`、native数値票数列ではSQL
+  `NULL`として保存する。`DataKubun=2/4/5`の空値、tabを混ぜた物理値、
+  callerの`None`や空白値はmutation前に拒否する。速報のraw・parsed-record・
+  batch入口にも同じ検証を適用する。既存のexpanded caller契約ではstatus 9の
+  `SanrentanHyo=""`も受理するため、caller-created mappingへraw provenanceを
+  主張しない
+- H6 `DataKubun=0`はkey-onlyの物理eraseであり、非key本文が非canonicalまたは
+  decode不能でもrace key・固定長・CRLFが正しければ本文検証で削除を抑止しない。
+  live statusは引き続き本文全体をstrictに検証する
+
 ### 2.0.0.dev4 (開発検証用prerelease)
 
 - 実登録済みproviderの5年setupで確認したH1レース中止形に対応する。
