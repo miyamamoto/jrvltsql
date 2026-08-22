@@ -282,7 +282,16 @@ class H1Parser:
             for i in range(count):
                 offset = start + (entry_size * i)
                 kumi = self.decode_field(data[offset:offset + kumi_len])
-                hyo = self.decode_field(data[offset + kumi_len:offset + kumi_len + 11])
+                raw_hyo = data[offset + kumi_len:offset + kumi_len + self.VOTE_WIDTH]
+                hyo = self.decode_field(raw_hyo)
+                if hyo == "" and raw_hyo != b" " * self.VOTE_WIDTH:
+                    # ``str.strip()`` also removes tabs and other CP932
+                    # whitespace.  Only the official fixed-width initial
+                    # value (11 ASCII spaces) may become the canonical empty
+                    # vote used by status-9 cancellation snapshots.
+                    raise ValueError(
+                        "H1 blank Hyo must be exactly 11 ASCII spaces"
+                    )
                 ninki = self.decode_field(data[offset + kumi_len + 11:offset + kumi_len + 11 + ninki_len])
 
                 # Skip empty entries (all spaces or zeros)

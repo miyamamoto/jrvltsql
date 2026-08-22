@@ -183,6 +183,17 @@ def test_h1_status_nine_accepts_only_the_provider_blank_vote(tmp_path: Path) -> 
     assert cancelled["Ninki"] == ""
     assert validate_h1_record(cancelled, "NL_H1") is True
 
+    # Only the official fixed-width initial value (11 ASCII spaces) may
+    # become the canonical empty vote.  Other CP932 whitespace must not be
+    # collapsed to the same caller-visible value by ``str.strip()``.
+    assert H1Parser().parse(
+        h1_raw(
+            data_kubun="9",
+            tan_hyo=b"\t" * H1Parser.VOTE_WIDTH,
+            tan_ninki=b"  ",
+        )
+    ) is None
+
     for live_status in ("2", "4", "5"):
         live = dict(cancelled, DataKubun=live_status)
         with pytest.raises(SchemaMigrationError):

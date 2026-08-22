@@ -131,3 +131,37 @@ Next safe action: allow only the canonical parsed empty `Hyo` when
 
 Next safe action: commit and push this four-file repair, update PR #240 with
 the red/green evidence, then perform one exact-head review/check/thread gate.
+
+## Aggregated review repair
+
+- Exact reviewed candidate
+  `55d6c639f7abbfde94d2062d9fca0539119b7181` received two actionable
+  GitHub-native comments.  Copilot correctly noted that the documentation
+  said the canonical empty vote was "saved" even though the numeric native
+  column stores SQL `NULL`.  Codex review identified a separate physical-input
+  gap: `decode_field(...).strip()` collapsed eleven tabs (and potentially
+  other CP932 whitespace) to the same empty string as the official eleven
+  ASCII spaces.
+- The existing paired regression was extended rather than adding another test
+  function.  Before the parser repair, an H1 status-9 physical row containing
+  eleven tab bytes returned a nonempty parsed row list; the assertion
+  `H1Parser().parse(...) is None` failed exactly (`1 failed`).  This is the
+  recorded review red and proves the negative can reject.
+- `_parse_full()` now retains the raw eleven-byte vote span long enough to
+  distinguish the official all-space initial value.  If stripping produces an
+  empty vote but the raw span is not exactly eleven ASCII spaces, parsing
+  fails.  The shared caller validator continues to accept only the parser's
+  canonical `Hyo=""` for status 9, so no raw bytes or provider-only metadata
+  are added to public rows.
+- Documentation now distinguishes parser-boundary acceptance from storage:
+  canonical `Hyo=""` is accepted only for status 9 and is persisted as SQL
+  `NULL`; other statuses, caller whitespace, and non-space physical
+  whitespace remain rejected.
+- Python 3.12.11 verification after the grouped repair:
+  - exact paired regression: `1 passed`;
+  - complete H1 SQLite/non-PostgreSQL module: `159 passed, 14 skipped`;
+  - `git diff --check`: success.
+
+Next safe action: run the changed-file fatal lint and strict documentation
+build, commit/push the grouped review repair once, reply to and resolve both
+threads, then require the new exact-head CI/review/clean gate before merge.
