@@ -84,6 +84,36 @@ before running the focused gate.
   - `scripts/validate_test_gate.py`: `TEST GATE PASS`;
   - `git diff --check`: pass.
 
-Next safe action: commit/push the one release candidate, run the full Python
-3.12 and git-archive distribution/install gates on that immutable SHA, record
-their evidence once, and mark PR #239 Ready for one exact-head review.
+## Exact release-candidate validation
+
+- Release candidate commit: `12e35b4ef788ea0fe3d76e56ccb2ab2f387997f4`.
+  It was pushed as Draft PR #239 before the following checks were run.
+- Exact candidate Python 3.12.11 full suite:
+  **4726 passed, 508 skipped, 22 subtests** in 109.59 seconds.
+- Existing release gates on the same candidate:
+  - updater/public-version/distribution/installer focused selection:
+    **95 passed**;
+  - `uv lock --check`: pass;
+  - `scripts/validate_test_gate.py`: `TEST GATE PASS`;
+  - workflow fatal flake8 selection over `src tests scripts tools`: **0**;
+  - `python -m compileall -q src tests scripts tools`: pass;
+  - `git diff --check`: pass.
+- A fresh `git archive` of the exact candidate was built with Python 3.12,
+  rather than from an editable checkout. Distribution content validation and
+  the isolated wheel smoke both passed. The smoke imported from the extracted
+  wheel, ran `init`, `config --show`, `version`, and SQLite `create-tables`,
+  verified actual tables, blocked optional PostgreSQL drivers, and detected no
+  installed-package mutation.
+- Both built metadata surfaces report exactly `jltsql 2.0.0.dev3`:
+  - wheel `jltsql-2.0.0.dev3-py3-none-any.whl` SHA-256
+    `dc142cc5edc61abaf7f58c7033195e0a7e6335a9bbdfbab309fb46dc7debf89a`;
+  - sdist `jltsql-2.0.0.dev3.tar.gz` SHA-256
+    `594c9bccba9250fce5678d15218049b76bbc4f56774c63375039ecc3c0b1deaf`.
+- These are candidate-gate artifacts only. They must not be uploaded after a
+  squash merge; publication artifacts will be rebuilt from the merge SHA and
+  recorded separately in the GitHub release evidence.
+
+Next safe action: commit/push this evidence-only worklog update, rerun the
+focused/fatal lint/git-archive gates on that final PR head, mark PR #239 Ready,
+request one GitHub-native exact-head review, and merge only with successful
+checks, unresolved threads zero, and a clean tracked/ignored worktree.
