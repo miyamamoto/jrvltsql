@@ -7,6 +7,9 @@ blob が行数ぶん重複する。
 
 from unittest.mock import MagicMock
 
+import pytest
+
+from src.fetcher.base import FetcherError
 from src.fetcher.historical import HistoricalFetcher
 
 H1_BYTES, H1_ROWS = 28_955, 1_485
@@ -106,3 +109,23 @@ def test_rows_filtered_out_by_to_date_do_not_lose_the_buffer():
 
     assert len(_run(f)) == 2, "範囲外の 1 行だけが除外されること"
     assert _written(cache) == [buff], "先頭行が除外されてもバッファは残ること"
+
+
+def test_failed_stream_restores_cache_and_never_marks_complete():
+    """STOP条件のピン: 失敗後にキャッシュ範囲が complete と誤記録されないこと.
+
+    途中で JVRead が失敗したストリームは、追記済みキャッシュをチェック
+    ポイントまで巻き戻し、いかなる日付にも complete マーカーを付けない。
+    """
+    buff = b"R" * 500
+    cache = MagicMock()
+    cache.checkpoint_nl.return_value = None
+    f = _fetcher(cache, [(500, buff, "f1"), (-502, None, None)])
+    f.parser_factory.parse.return_value = _row(0)
+
+    with pytest.raises(FetcherError, match="-502"):
+        _run(f)
+
+    cache.mark_nl_range_complete.assert_not_called()
+    cache.mark_nl_complete.assert_not_called()
+    cache.restore_nl.assert_called_once_with("RACE", "20220110", None)

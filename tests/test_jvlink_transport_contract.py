@@ -166,6 +166,102 @@ def test_historical_fetcher_reports_setup_cancel_instead_of_no_data():
     jvlink.jv_close.assert_called_once()
 
 
+# --- Official JVOpen fromtime forms (JV-Link仕様書 4.9.0.1(Win) p.17-18) -----
+# fromtime は「開始時刻のみ」または「開始-終了」(YYYYMMDDhhmmss-YYYYMMDDhhmmss、
+# 半角ハイフン結合) の2形式のみで、対象条件は「開始時刻より大きく、終了時刻
+# まで」。要求された from_date を包含させるため、セットアップ (option 3/4) は
+# 排他的開始点を前日 23:59:59 に符号化する。終了ポイント時刻を許す dataspec は
+# さらに終了点で要求範囲そのものを提供側で打ち切る。p.18 で終了時刻の指定が
+# 禁止された dataspec (TOKU/DIFF/DIFN/HOSE/HOSN/HOYU/COMM、指定すると -1
+# 「該当データなし」) は開始のみ形式を保つ。
+
+
+@pytest.mark.parametrize(
+    ("data_spec", "option", "expected_fromtime"),
+    [
+        # 終了時刻を許す RACE のセットアップは、from_date を包含する排他的
+        # 開始点 (前日 23:59:59) と終了点で境界付ける
+        ("RACE", 4, "20250819235959-20260819235959"),
+        ("RACE", 3, "20250819235959-20260819235959"),
+        # p.18 の終了時刻禁止リストに載る DIFN は開始のみ。ただし開始点の
+        # 包含符号化は同じ (対になる start-only green)
+        ("DIFN", 4, "20250819235959"),
+        # 複数specのうち1つでも終了時刻禁止なら、連結dataspec全体を開始のみにする
+        ("RACEDIFN", 4, "20250819235959"),
+        # option=1 の差分カーソル契約はこのイテレーションでは変更しない
+        ("RACE", 1, "20250820000000"),
+    ],
+)
+def test_jvopen_fromtime_bounds_setup_only_for_end_capable_specs(
+    data_spec, option, expected_fromtime
+):
+    jvlink = MagicMock()
+    jvlink.jv_open.return_value = (-1, 0, 0, "")
+    fetcher = _historical_fetcher(jvlink)
+
+    assert list(fetcher.fetch(data_spec, "20250820", "20260819", option=option)) == []
+
+    jvlink.jv_open.assert_called_once_with(data_spec, expected_fromtime, option)
+
+
+def test_adjacent_setup_chunk_opens_tile_exactly_at_the_boundary_second():
+    """隣接チャンクの排他的開始点は直前チャンクの包含終了点に一致すること。
+
+    「開始より大きく、終了まで」の公式条件の下で、この一致が隙間ゼロ・
+    重複ゼロの厳密な敷き詰めを与える（深夜0時打刻のファイルも落ちない）。
+    窓は実際に7200秒タイムアウトした本番スコープ 20240820..20260819 の
+    先頭2つの年チャンク。
+    """
+    jvlink = MagicMock()
+    jvlink.jv_open.return_value = (-1, 0, 0, "")
+    fetcher = _historical_fetcher(jvlink)
+
+    list(fetcher.fetch("RACE", "20240820", "20241231", option=4))
+    list(fetcher.fetch("RACE", "20250101", "20251231", option=4))
+
+    first, second = [c.args[1] for c in jvlink.jv_open.call_args_list]
+    assert first == "20240819235959-20241231235959"
+    assert second == "20241231235959-20251231235959"
+    assert second.split("-")[0] == first.split("-")[1]
+
+
+@pytest.mark.parametrize(
+    ("bad_from", "bad_to"),
+    [
+        ("2025-08-20", "20260819"),  # 区切り文字入り
+        ("20250820", "2026-08-19"),  # 区切り文字入り
+        ("20250820", "20260832"),    # 実在しない暦日
+        ("", "20260819"),            # 欠落
+        (None, "20260819"),          # 欠落
+        ("20260819", "20250820"),    # 逆転した範囲
+    ],
+)
+def test_invalid_or_inverted_dates_fail_before_any_jvlink_call(bad_from, bad_to):
+    jvlink = MagicMock()
+    jvlink.jv_open.return_value = (-1, 0, 0, "")
+    fetcher = _historical_fetcher(jvlink)
+
+    with pytest.raises(ValueError):
+        list(fetcher.fetch("RACE", bad_from, bad_to, option=4))
+
+    jvlink.jv_init.assert_not_called()
+    jvlink.jv_open.assert_not_called()
+
+
+def test_inverted_cache_range_fails_before_cache_lookup_or_jvlink_call():
+    cache = MagicMock()
+    jvlink = MagicMock()
+    fetcher = _historical_fetcher(jvlink)
+
+    with pytest.raises(ValueError):
+        list(fetcher.fetch_with_cache(cache, "RACE", "20260819", "20250820", 4))
+
+    cache.has_nl_range.assert_not_called()
+    cache.read_nl.assert_not_called()
+    jvlink.jv_init.assert_not_called()
+    jvlink.jv_open.assert_not_called()
+
+
 def test_native_jvgets_uses_byte_array_size_and_filename_arguments():
     com = ThreeArgumentGetsCom((4, memoryview(b"ABCD"), "RACE.jvd"))
     wrapper = _wrapper(com, is_open=True)

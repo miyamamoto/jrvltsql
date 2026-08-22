@@ -119,6 +119,25 @@ RETIRED_DATA_SPECS = {
 # 仕様変更が行われた年月。拒否メッセージに含める。
 RETIRED_DATA_SPEC_CHANGED_AT = "2023-08"
 
+# JVOpen fromtime の終了ポイント時刻を指定できないデータ種別ID。
+# 出典: JV-Linkインターフェース仕様書 4.9.0.1(Win)（SHA-256
+# 3167d5c98d8db78321a983cd2d897e1b5a9f42f141490f9ba817ca0dcf9d2364）p.18。
+# fromtime は「開始時刻のみ」または「開始-終了」を半角ハイフンで結合した
+# 2形式のみで、以下の ID は「全データを取得するため」終了ポイント時刻を
+# 指定できず、指定すると「戻り値:-1（該当データなし）」が返る。-1 は正当な
+# 「データなし」と区別できないため、送信前にこの登録簿で遮断する。
+# DIFF/HOSE は RETIRED_DATA_SPECS でも入口拒否されるが、公式リストの転記は
+# 完全に保つ（推測で除外しない）。
+JVOPEN_END_TIME_FORBIDDEN_SPECS = frozenset({
+    "TOKU",  # 特別登録馬情報
+    "DIFF",  # 蓄積系ソフト用 蓄積情報（旧仕様）
+    "DIFN",  # 蓄積系ソフト用 蓄積情報
+    "HOSE",  # 競走馬市場取引価格情報（旧仕様）
+    "HOSN",  # 競走馬市場取引価格情報
+    "HOYU",  # 馬名の意味由来情報
+    "COMM",  # 各種解説情報
+})
+
 # リアルタイムデータ種別 (JVRTOpen用)
 # 速報系データ: レース確定情報（結果が確定したら更新）
 # オッズ系データ: レース単位キーで取得する速報オッズ/時系列オッズ
@@ -385,6 +404,26 @@ def _split_jvopen_data_specs(data_spec: str) -> tuple[str, ...]:
     if not isinstance(data_spec, str) or not data_spec or len(data_spec) % 4:
         return ()
     return tuple(data_spec[index:index + 4] for index in range(0, len(data_spec), 4))
+
+
+def jvopen_supports_end_timestamp(data_spec: str) -> bool:
+    """Return True iff every component may take the official start-end form.
+
+    公式仕様 p.17-18 のとおり、終了時刻禁止 ID をひとつでも含む dataspec に
+    終了ポイント時刻を付けると -1 が返り「該当データなし」と区別できない。
+    そのため全構成要素が許す場合に限り True。不正・空の dataspec は False
+    （開始のみ形式へ倒す）とし、そもそも validate_jvopen_combination が先に
+    拒否する。大文字小文字を区別しないのは is_retired_data_spec と同じ理由。
+    """
+    if not isinstance(data_spec, str):
+        return False
+    components = _split_jvopen_data_specs(data_spec.upper())
+    if not components:
+        return False
+    return all(
+        component not in JVOPEN_END_TIME_FORBIDDEN_SPECS
+        for component in components
+    )
 
 
 def _retired_jvopen_components(data_spec: str) -> tuple[tuple[str, str], ...]:

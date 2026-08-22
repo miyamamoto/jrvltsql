@@ -235,9 +235,13 @@ class JVLinkWrapper:
 
         Args:
             data_spec: Data specification code (e.g., "RACE", "DIFN")
-            fromtime: Start time in YYYYMMDDhhmmss format (14 digits)
-                     Example: "20241103000000"
-                     Retrieves data from this timestamp onwards
+            fromtime: Read start point "YYYYMMDDhhmmss" (14 digits), or the
+                     official bounded form
+                     "YYYYMMDDhhmmss-YYYYMMDDhhmmss" (start-end joined by a
+                     half-width hyphen; 仕様書 4.9.0.1 p.17-18).
+                     Specs in JVOPEN_END_TIME_FORBIDDEN_SPECS (TOKU/DIFF/
+                     DIFN/HOSE/HOSN/HOYU/COMM) must use the start-only
+                     form; an end timestamp makes JVOpen return -1.
             option: Option flag:
                     1=通常データ（差分データ取得）
                     2=今週データ（直近のレースのみ）

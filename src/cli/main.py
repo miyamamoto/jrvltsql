@@ -35,14 +35,28 @@ FETCH_NOTE_OPTION2_RANGE = (
     "NL キャッシュは使用・作成しません。"
 )
 FETCH_NOTE_TO_CLIENT_FILTER = (
-    "--to は JVOpen の終端ではなく、取得後のクライアント側フィルタです。"
+    "--to は取得後のクライアント側日付フィルタとして常に適用されます。"
 )
 FETCH_NOTE_TO_SINGLE_OPEN = (
-    "option=1/2/4 では --to を狭めてもサーバからのダウンロード量は減りません。"
+    "option=1/2 では --to は JVOpen の終端にならず、"
+    "狭めてもサーバからのダウンロード量は減りません。"
+)
+FETCH_NOTE_TO_SETUP_BOUNDED = (
+    "この spec のセットアップ (option=3/4) は JVOpen の公式 fromtime "
+    "開始-終了形式で要求され、サーバからのダウンロード自体が "
+    "--from/--to の範囲に制限されます（公式の対象条件「開始より大きく、"
+    "終了まで」に合わせ、排他的開始点は --from 前日の 23:59:59、"
+    "終了点は --to の 23:59:59）。"
+)
+FETCH_NOTE_TO_SETUP_END_FORBIDDEN = (
+    "この spec は公式仕様で終了ポイント時刻の指定が禁止されているため"
+    "（指定すると -1）、セットアップでも JVOpen は開始のみで呼ばれ、"
+    "--to はクライアント側フィルタに留まります。"
 )
 FETCH_NOTE_TO_SETUP_CHUNKS = (
-    "option=3 の370日超の範囲は年単位の JVOpen に分割され、"
-    "--to の延長で年次チャンクが追加される場合に呼び出し回数とダウンロード量が増えます。"
+    "370日超の範囲は年単位の境界付き JVOpen チャンクに分割され、"
+    "各チャンクは自分の窓のデータのみをダウンロードします。"
+    "--to の延長はその分のダウンロード量増加を意味します。"
 )
 FETCH_NOTE_DATE_FIELDS = (
     "--to は Year+MonthDay または ChokyoDate（HC/WC の調教日）で判定します。"
@@ -78,16 +92,28 @@ def _reject_invalid_jvopen_combination(data_spec: str, option: int) -> None:
         sys.exit(1)
 
 
-def _print_fetch_guardrail_notes(jv_option: int) -> None:
-    """Emit option-dependent date-range caveats after input validation."""
+def _print_fetch_guardrail_notes(jv_option: int, data_spec: str) -> None:
+    """Emit option/spec-dependent date-range caveats after input validation."""
+    from src.jvlink.constants import jvopen_supports_end_timestamp
+
     if jv_option in (3, 4):
         err_console.print(f"[yellow]Note:[/yellow] {FETCH_NOTE_SETUP_MODE}")
     if jv_option == 2:
         err_console.print(f"[yellow]Note:[/yellow] {FETCH_NOTE_OPTION2_RANGE}")
 
     err_console.print(f"[yellow]Note:[/yellow] {FETCH_NOTE_TO_CLIENT_FILTER}")
-    if jv_option == 3:
-        err_console.print(f"[yellow]Note:[/yellow] {FETCH_NOTE_TO_SETUP_CHUNKS}")
+    if jv_option in (3, 4):
+        if jvopen_supports_end_timestamp(data_spec):
+            err_console.print(
+                f"[yellow]Note:[/yellow] {FETCH_NOTE_TO_SETUP_BOUNDED}"
+            )
+            err_console.print(
+                f"[yellow]Note:[/yellow] {FETCH_NOTE_TO_SETUP_CHUNKS}"
+            )
+        else:
+            err_console.print(
+                f"[yellow]Note:[/yellow] {FETCH_NOTE_TO_SETUP_END_FORBIDDEN}"
+            )
     else:
         err_console.print(f"[yellow]Note:[/yellow] {FETCH_NOTE_TO_SINGLE_OPEN}")
     err_console.print(f"[yellow]Note:[/yellow] {FETCH_NOTE_DATE_FIELDS}")
@@ -389,10 +415,14 @@ def update(ctx, force):
     "date_from",
     required=True,
     help=(
-        "Start date (YYYYMMDD), passed as JVOpen fromtime for all options. "
-        "With option=2 it manages continuity within the current race-cycle "
-        "data; it does not select an arbitrary historical week, and Sunday "
-        "or Monday may cover two cycles. NL cache is bypassed."
+        "Start date (YYYYMMDD). With option=3/4 it is inclusive: the "
+        "exclusive JVOpen start point is encoded as the previous day "
+        "23:59:59 under the official strictly-greater rule. With option=1/2 "
+        "the existing cursor contract is unchanged and this date is passed "
+        "directly as YYYYMMDD000000. With option=2 it manages continuity "
+        "within the current race-cycle data; it does not select an arbitrary "
+        "historical week, and Sunday or Monday may cover two cycles. NL "
+        "cache is bypassed."
     ),
 )
 @click.option(
@@ -400,11 +430,16 @@ def update(ctx, force):
     "date_to",
     required=True,
     help=(
-        "Client-side end date (YYYYMMDD), not a JVOpen end bound. Filters "
-        "Year+MonthDay and HC/WC ChokyoDate; records without either date are "
-        "kept and prevent a complete-cache marker. With option=3, ranges over "
-        "370 days are split into calendar-year chunks; extending --to increases "
-        "downloads only when it adds another chunk."
+        "End date (YYYYMMDD). Always filters Year+MonthDay and HC/WC "
+        "ChokyoDate client-side; records without either date are kept and "
+        "prevent a complete-cache marker. With option=3/4 on a spec that "
+        "permits an official end timestamp (e.g. RACE), it also bounds the "
+        "JVOpen download itself via the fromtime start-end form; specs that "
+        "forbid an end timestamp "
+        "(TOKU/DIFF/DIFN/HOSE/HOSN/HOYU/COMM) remain start only. "
+        "Setup ranges over 370 days on end-capable specs are split into "
+        "bounded calendar-year chunks, so downloads scale with the range. "
+        "With option=1/2, --to is not a JVOpen end bound."
     ),
 )
 @click.option("--spec", "data_spec", required=True, help="Data specification (RACE, DIFN, etc.)")
@@ -469,7 +504,7 @@ def fetch(ctx, date_from, date_to, data_spec, jv_option, db, batch_size, progres
         console.print(f"       option={jv_option} で取得可能: {', '.join(valid_specs)}")
         sys.exit(1)
 
-    _print_fetch_guardrail_notes(jv_option)
+    _print_fetch_guardrail_notes(jv_option, data_spec)
     console.print()
 
     try:
