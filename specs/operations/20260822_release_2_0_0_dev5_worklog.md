@@ -104,3 +104,42 @@ surface before freezing the candidate.
 Next safe action: commit and push the grouped release metadata, freeze its
 full SHA, run the Python 3.12 workflow/release-artifact gates, and append only
 the resulting evidence before the one native review.
+
+## Exact release-candidate validation
+
+- Release candidate commit:
+  `c18179e9efd2a2a11cda472195a8709c1ada3a36`, pushed to Draft PR #244.
+- Exact candidate GitHub Python 3.12 workflow suite:
+  **4,714 passed, 503 skipped, 14 deselected, 21 subtests passed**. The test
+  job also rebuilt both distributions, passed the content checker and passed
+  the isolated wheel init smoke. Lint and Windows batch syntax passed;
+  performance remained the workflow's intentional pull-request skip. Codecov
+  tokenless upload warnings were non-gating and the job concluded success.
+- The local Python 3.12.11 workflow selection executed the same 5,217 selected
+  nodes, produced coverage XML and left an empty `lastfailed` cache. Existing
+  gates on the same exact candidate also passed:
+  - updater/public-version/distribution/installer focused selection:
+    **95 passed**;
+  - H6 plus adjacent realtime selection: **232 passed, 13 skipped, 8 subtests
+    passed**;
+  - `uv lock --check` and `scripts/validate_test_gate.py`;
+  - fatal-only Flake8 selection over `src tests scripts tools`: **0**;
+  - `python -m compileall -q src tests scripts tools`;
+  - strict MkDocs build and `git diff --check`.
+- A fresh `git archive` of exact candidate `c18179e9...`, not the editable
+  worktree, was built with Python 3.12. Distribution content validation and
+  isolated wheel `init`/config/version/SQLite schema smoke passed. Wheel and
+  sdist metadata both report exactly `jltsql 2.0.0.dev5`:
+  - candidate wheel SHA-256
+    `65cb2aee23d8e80ce1336e122da39f0513973c11e9177f5216522e99ede5104d`;
+  - candidate sdist SHA-256
+    `740fcece73f2bc9de3d8d93880d8492e75098845b9a55135496a32cdefcb4d48`.
+- These artifacts are candidate evidence only. They must be removed and must
+  not be uploaded after squash merge; publication artifacts will be rebuilt
+  from the exact merge SHA.
+
+Next safe action: commit and push this evidence-only update, rerun the bounded
+focused/lock/lint/git-archive gates on that final PR head, remove generated
+candidate/worktree artifacts, mark PR #244 Ready and obtain one GitHub-native
+review. Merge only with exact-head CI success, concrete findings addressed,
+unresolved threads zero and tracked/ignored worktree clean.
