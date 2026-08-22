@@ -151,7 +151,14 @@ class H6Parser:
         cls._require_ascii_digits(
             "SanrentanKumi", record.get("SanrentanKumi"), cls.COMBINATION_WIDTH
         )
-        cls._require_ascii_digits("SanrentanHyo", record.get("SanrentanHyo"), cls.VOTE_WIDTH)
+        hyo = record.get("SanrentanHyo")
+        if not (status == "9" and hyo == ""):
+            # A provider cancellation may retain a registered combination
+            # while returning the fixed-width vote field as spaces.  The
+            # parser's sole canonical representation of that field is the
+            # empty string; live snapshots and all other blank-like values
+            # remain invalid.
+            cls._require_ascii_digits("SanrentanHyo", hyo, cls.VOTE_WIDTH)
         cls._require_favourite(record.get("SanrentanNinki"))
 
     def __init__(self):
@@ -209,7 +216,16 @@ class H6Parser:
         for i in range(4896):
             offset = 50 + (21 * i)
             kumi = self.decode_field(data[offset:offset + 6])
-            hyo = self.decode_field(data[offset + 6:offset + 17])
+            raw_hyo = data[offset + 6:offset + 17]
+            hyo = self.decode_field(raw_hyo)
+            if hyo == "" and raw_hyo != b" " * self.VOTE_WIDTH:
+                # ``str.strip()`` also removes tabs and other CP932
+                # whitespace.  Only the official fixed-width initial value
+                # may become the canonical empty vote used by status-9
+                # cancellation snapshots.
+                raise ValueError(
+                    "H6 blank SanrentanHyo must be exactly 11 ASCII spaces"
+                )
             ninki = self.decode_field(data[offset + 17:offset + 21])
 
             # Skip empty entries

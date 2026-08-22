@@ -6,8 +6,9 @@ This module owns the storage contract on top of that layout: the official
 ``DataKubun`` domain (``0``/``2``/``4``/``5``/``9``), the official sale-flag
 domain (``0``/``1``/``3``/``7``), the 18 positional refund flags, the non-numeric
 人気順 markers (``----`` 発売前取消 / ``****`` 発売後取消 / spaces 登録なし),
-caller body validation, status-0 physical erase across every H6 table, the strict
-native/standard/realtime schema contract, and realtime routing to ``RT_H6``.
+the provider's status-9 blank vote, caller body validation, status-0 physical
+erase across every H6 table, the strict native/standard/realtime schema contract,
+and realtime routing to ``RT_H6``.
 """
 
 import os
@@ -149,6 +150,51 @@ def test_h6_caller_values_are_rejected_before_coercion(change: dict) -> None:
 def test_h6_accepts_every_official_live_status(data_kubun: str) -> None:
     for row in h6_rows(data_kubun=data_kubun):
         assert validate_h6_record(row, "NL_H6") is True
+
+
+def test_h6_status_nine_accepts_only_the_provider_blank_vote(tmp_path: Path) -> None:
+    """A cancelled-race snapshot may blank a registered combination vote."""
+
+    rows = h6_rows(
+        data_kubun="9",
+        hyo=b" " * H6Parser.VOTE_WIDTH,
+        ninki=b" " * H6Parser.FAVOURITE_WIDTH,
+    )
+    cancelled = rows[0]
+    assert cancelled["SanrentanKumi"] == "010203"
+    assert cancelled["SanrentanHyo"] == ""
+    assert cancelled["SanrentanNinki"] == ""
+    assert validate_h6_record(cancelled, "NL_H6") is True
+
+    # Only the official fixed-width initial value (11 ASCII spaces) may
+    # become the canonical empty vote.  Other CP932 whitespace must not be
+    # collapsed to the same caller-visible value by ``str.strip()``.
+    assert H6Parser().parse(
+        h6_raw(
+            data_kubun="9",
+            hyo=b"\t" * H6Parser.VOTE_WIDTH,
+            ninki=b" " * H6Parser.FAVOURITE_WIDTH,
+        )
+    ) is None
+
+    for live_status in ("2", "4", "5"):
+        live = dict(cancelled, DataKubun=live_status)
+        with pytest.raises(SchemaMigrationError):
+            validate_h6_record(live, "NL_H6")
+
+    for malformed in (None, " ", " " * H6Parser.VOTE_WIDTH):
+        with pytest.raises(SchemaMigrationError):
+            validate_h6_record(dict(cancelled, SanrentanHyo=malformed), "NL_H6")
+
+    database = SQLiteDatabase({"path": str(tmp_path / "status-nine-blank-vote.db")})
+    with database:
+        _create(database, ("NL_H6",))
+        stats = DataImporter(database).import_records(iter(rows))
+        assert stats["records_failed"] == 0
+        assert database.fetch_one(
+            "SELECT DataKubun, SanrentanHyo, SanrentanNinki FROM NL_H6 "
+            "WHERE SanrentanKumi = '010203'"
+        ) == {"DataKubun": "9", "SanrentanHyo": None, "SanrentanNinki": ""}
 
 
 @pytest.mark.parametrize("sale_flag", ("0", "1", "3", "7"))

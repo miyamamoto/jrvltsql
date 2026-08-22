@@ -138,3 +138,90 @@ exact candidate, make it ready for the repository's one native review, and
 merge only after CI, review, unresolved-thread count and clean-worktree gates
 are green.  Then release the next `2.0.0.dev` from the resulting master before
 retrying the development provider through `ingestctl`.
+
+## Provider-triggered repair continuation
+
+- The audit-only decision above was merged as PR #241.  A subsequent real
+  five-year development `RACE` setup supplied the exact missing evidence and
+  therefore triggered the bounded repair contemplated by the STOP contract.
+- Repository/worktree/branch:
+  `miyamamoto/jrvltsql`,
+  `/home/keiba/scratch/20260822_jrvltsql_h6_status9`,
+  `fix/h6-status9-empty-votes-20260822`.
+- Fresh fetched base/start HEAD:
+  `18ddb16f664750e35b31527ae85ba09e540ca0a5`, the `v2.0.0.dev4` release
+  commit on `origin/master`.
+- Runtime under test reported `src.__version__ == 2.0.0.dev4` and used the
+  same `src/parser/h6_parser.py` SHA-256 as this base,
+  `9ccbc2cf8eca16a7b8a764d189ea989b7d521b708f2d0854eb2e8919ea8f57f8`.
+- The real setup reached a combination-bearing H6 `DataKubun=9` row whose
+  parser-normalized `SanrentanHyo` was `""`.  The importer then failed closed
+  with `H6 SanrentanHyo must be exactly 11 ASCII digits`; no subsequent setup
+  stage was started.  The sanitized local log is 76,748 bytes with SHA-256
+  `2d40a17cf03d01899ad1a3fd36a83225f146dfb1a19794fc80b242922897e267`.
+  Race identity and provider body bytes are intentionally not recorded.
+- The failed fetch rolled back its incomplete raw-cache write, so the exact
+  physical record is not retained in the public cache.  The paired regression
+  must therefore combine the observed canonical provider value with the
+  pinned official eleven-space initial value and must reject non-space
+  whitespace at the parser boundary, as the merged H1 repair does.
+- Minimum implementation scope: extend the existing H6 official-contract test
+  once, prove the status-9 provider blank red on this exact base, permit only
+  the canonical empty vote for combination-bearing status 9, reject the same
+  value for statuses 2/4/5 and reject `None`/caller whitespace/non-space raw
+  whitespace, preserve storage as SQL `NULL`, update the H6 public contract,
+  and rerun the bounded H6 suite.  Schema/key/snapshot semantics and every
+  other record family remain out of scope.
+- Implementation agent: primary Codex.  No Claude session is used because the
+  H1 implementation is already a reviewed same-contract reference and this is
+  a two-boundary parser/validator parity repair rather than a new gate design.
+
+Next safe action: add the paired H6 regression only, run it against this
+unchanged base and record the exact red, then change production and docs.
+
+## Red-first evidence and implementation
+
+- Added one paired regression to the existing H6 official-contract module and
+  ran only that test before changing production.  On exact base
+  `18ddb16f664750e35b31527ae85ba09e540ca0a5` it failed once at the intended
+  assertion: `validate_h6_record(cancelled, "NL_H6")` raised
+  `SchemaMigrationError: H6 SanrentanHyo must be exactly 11 ASCII digits`
+  (`1 failed`).
+- The same test binds the positive and negative boundaries: physical eleven
+  ASCII spaces become `SanrentanHyo=""` only for status 9; physical tabs are
+  rejected; statuses 2/4/5 reject the canonical empty value; caller `None`,
+  one space and eleven spaces are rejected; and successful native storage must
+  retain the status/combination while writing SQL `NULL` for the numeric vote.
+- Production now mirrors the reviewed H1 contract.  The physical parser
+  compares the original eleven bytes before `strip()` can erase their class,
+  and the caller validator permits the empty canonical form only when
+  `DataKubun=9`.  No schema, identity, snapshot or transaction code changed.
+
+Next safe action: run the paired green, the complete bounded H6 module and
+strict docs/lint checks, then commit and publish one repair PR before rebuilding
+the runtime image or repeating provider acquisition.
+
+## Local verification before publication
+
+- Python 3.13.5 paired regression after production change: `1 passed`.
+- Complete H6 module without PostgreSQL opt-in: `159 passed, 13 skipped`.
+- The same complete H6 module against a fresh disposable PostgreSQL 16:
+  `168 passed, 4 skipped`.
+- Independent PostgreSQL 16 storage probe for the new provider shape imported
+  three expanded status-9 combinations with `records_imported=3`,
+  `records_failed=0`; all three `SanrentanHyo` values were SQL `NULL`, the
+  stored status remained `9`, and no transaction was pending on return.
+- Adjacent H6 parser/expanded-storage selection:
+  `21 passed, 4 skipped, 96 deselected`.
+- Workflow-equivalent fatal flake8 selection returned zero findings;
+  `mkdocs build --strict`, `python -m compileall`, and `git diff --check`
+  succeeded.  Ruff's repository-wide pyupgrade/style debt is advisory in the
+  current workflow and predates this four-file delta; it is not represented as
+  a release gate.
+- The dedicated PostgreSQL container, pytest/coverage/cache artifacts and
+  strict-documentation output were removed.  No provider retry, runtime image
+  rebuild or subsequent acquisition stage was started.
+
+Next safe action: inspect the four-file diff and worktree hygiene, commit and
+push once, create one draft PR with the red/green evidence, then obtain the
+repository's single native review and exact-head CI/thread/clean gate.
