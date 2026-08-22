@@ -66,3 +66,69 @@ Next safe action: inspect the pinned H6 layout fixture/workbook-derived oracle,
 the registered-data replay history, and local immutable provider/cache sources
 for an anonymized status-9 vote-byte distribution.  Then decide explicitly
 whether production/test changes are justified.
+
+## Read-only evidence closure
+
+- The pinned current workbook
+  `JV-Data仕様書_4.9.0.1.xlsx` has SHA-256
+  `23bafd375f704acbdd696b5032ac1619f17d47e882587d6e7954b610527a8234`.
+  Its H6 format rows 370 and 382--385 independently confirm status
+  `0/2/4/5/9`, 4,896 21-byte trifecta slots, a six-byte combination, an
+  eleven-byte vote and a four-byte favourite order.  The vote description
+  distinguishes `ALL0` (pre-sale cancellation/no votes) from spaces
+  (unregistered).  Special-note rows 255 and 276 say H1/H6 status 9 is
+  supplied only after prior vote-count data.  These facts establish that an
+  eleven-space vote is an official field value, but they do not establish
+  that a combination-bearing H6 status-9 row uses that value.
+- The pinned official development guide has SHA-256
+  `1792c6b6d3e06b7f782b402e924d61da0a4c8ef5c10b0cc520be35882bd7db57`.
+  Section 1.2.2 states that provider data is compressed and encrypted and
+  that software receives decrypted records from JV-Link.  The retained
+  provider `H6VM2024089920240902150036.jvd` is consequently recorded only by
+  metadata (2,442,161 bytes, SHA-256
+  `14e28d4d366e0630b2d243972095f7c021a37c577e3ab4ac030c11cd123318e4`);
+  it is not treated as an offline-decodable record source.  Calling
+  `JVOpen`/`JVRead` merely to inspect it would violate this iteration's
+  no-provider-acquisition/read-state-mutation boundary.
+- A second read-only scan of every current local `RACE` cache member found
+  110 v2 files, 135,354 well-formed length-prefixed records, zero malformed
+  files, zero H1 status-9 records and zero H6 status-9 records.  No raw body or
+  race identity was emitted.
+- A read-only query of the active development PostgreSQL tables found zero
+  `DataKubun=9` rows in both `public.nl_h6` and `public.rt_h6`.  The older
+  tracked registered-data replay remains useful proof that one H6 status-9
+  record expanded to 4,896 rows, but because its vote-byte distribution was
+  not retained it cannot close the present question.
+- Current production still accepts totals-only H6 cancellation snapshots and
+  requires an eleven-digit vote for every combination-bearing row.  No new
+  provider shape contradicts that fail-closed boundary.
+
+## Decision and verification
+
+- This iteration is audit-only.  No parser, importer, schema or test is
+  changed.  Permitting blank combination votes would broaden accepted input
+  on an official possibility without the required provider instance; that is
+  specifically disallowed by the STOP contract.  H6 therefore remains strict.
+- This is not evidence that H6 can never emit the H1 shape.  If a future
+  provider run returns an H6 status-9 combination with an empty normalized
+  vote, that exact failure plus the original raw eleven-byte class is the
+  trigger for one paired red-first H6 regression.
+- Candidate at evidence closure:
+  `4f1b4c5c632690f02b8a161ee32985648ba74c26`, based on
+  `1ee2ccb3ee5c104a15177f57281004395e669bb7`.  The only tracked delta is this
+  worklog.  GitHub lint and Windows batch checks passed; the repository test
+  check was still running when this evidence section was written.
+- The first local focused command accidentally selected an external Python
+  3.10 `pytest` after `uv` had created a different environment and stopped at
+  collection because Python 3.10 has no `enum.StrEnum`; it is not counted as a
+  candidate test result.  All generated environment/coverage/cache artifacts
+  were removed.  Re-running from the existing repository Python 3.13.5
+  environment with the current worktree on `PYTHONPATH` passed the bounded H6
+  contract: `158 passed, 13 skipped` (PostgreSQL opt-in cases excluded).  No
+  ignored artifact remained in this worktree.
+
+Next safe action: commit and push this audit conclusion, update PR #241 to the
+exact candidate, make it ready for the repository's one native review, and
+merge only after CI, review, unresolved-thread count and clean-worktree gates
+are green.  Then release the next `2.0.0.dev` from the resulting master before
+retrying the development provider through `ingestctl`.
