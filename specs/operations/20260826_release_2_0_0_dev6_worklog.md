@@ -100,3 +100,37 @@ lock, run the focused release surface and freeze one release candidate.
 Next safe action: commit and push one grouped release candidate, run the full
 Python 3.12 workflow and fresh git-archive artifact gates on its exact SHA,
 then obtain the repository-native review before merge.
+
+## Exact release-candidate validation
+
+- Release candidate commit:
+  `e6b190d966345fc77ca382aa7d2defb455efa0e5`, pushed to PR #247.
+- Exact-candidate Python 3.12.11 workflow-equivalent suite:
+  **4,780 passed, 503 skipped, 14 deselected, 21 subtests passed** in
+  123.73 seconds; no failures. PostgreSQL/live-provider tests retain their
+  normal opt-in skip boundary.
+- The same exact candidate passed:
+  - updater/public setup/distribution/CLI focused selection:
+    **101 passed, 10 subtests passed**;
+  - `scripts/validate_test_gate.py`, `uv lock --check`, fatal-only Flake8 over
+    `src tests scripts tools`, `python -m compileall -q`, strict MkDocs build
+    and `git diff --check`;
+  - source/editable metadata/updater parity at exact `2.0.0.dev6`, with final
+    `2.0.0` comparing newer.
+- A fresh `git archive` of exact candidate `e6b190d...`, not the editable
+  worktree, built a wheel and sdist. Distribution content validation and the
+  isolated wheel init/config/version/SQLite schema smoke passed; both artifact
+  metadata records report `jltsql 2.0.0.dev6`:
+  - candidate wheel SHA-256
+    `1dd99dc4cc41be5a594233785f1f9cc5bcb1f6101c53db0935851dec96eab712`;
+  - candidate sdist SHA-256
+    `e678e935d57a39233a9d33e48c4e62425a0803a73856b94ae48eba3d0e66d86a`.
+- Candidate artifacts and temporary documentation/build trees were removed.
+  These hashes are validation evidence only and must not be uploaded after a
+  squash merge; publication artifacts will be rebuilt from the exact merge
+  and tag target.
+
+Next safe action: commit/push this evidence-only worklog update, run the
+bounded version/lock/content gates on the final PR head, request one native
+review and merge only after exact-head checks and unresolved-thread count are
+acceptable under repository policy.
