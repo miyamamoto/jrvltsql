@@ -9,6 +9,19 @@
 
 次回リリースは互換性を破る変更を含むため `2.0.0` とする。1.xとしては配布しない。
 
+### 2.0.0.dev6 (開発検証用prerelease)
+
+- pywin32がCOMのbinary bufferを文字列として返す経路で、Latin-1相当・CP1252・
+  CP932の各投影から元のbyte列を復元する。末尾のCOM NULだけを除去し、期待長と
+  完全一致する候補同士が一致した場合だけ採用する。oversized prefixや複数候補が
+  異なる曖昧なbufferはfail closedで拒否し、公式fixed-width recordを文字化けした
+  byte列としてparserへ渡さない
+- 実providerでrange引数が有効と確認できた`RACE` option 1だけを暦年単位の
+  `JVOpen`へ分割し、長期間取得を有限なchunkとして実行する。各chunkは次へ進む前に
+  必ずcloseし、primary処理とcloseが同時に失敗した場合はprimary例外を保持する。
+  provider `-402`からの再開はactive chunkですでに送出したprefixだけを再生する。
+  option 2とsetup option 3/4、および未検証data specは従来どおりstart-onlyとする
+
 ### 2.0.0.dev5 (開発検証用prerelease)
 
 - 実登録済みproviderの5年setupで後から確認できたH6レース中止形に対応する。

@@ -1,9 +1,24 @@
 # jrvltsql v2.0.0 Release Notes (unreleased draft)
 
-`2.0.0` is not released yet. `2.0.0.dev5` is a **development-test prerelease**
+`2.0.0` is not released yet. `2.0.0.dev6` is a **development-test prerelease**
 of the official data-contract work. It is **not** a production compatibility
 claim: the 64-bit SDK path, 1.x database migration, and long-run collection are
 still unverified.
+
+What `2.0.0.dev6` adds over `2.0.0.dev5`:
+
+- preserves the exact COM buffer bytes when pywin32 projects a binary provider
+  buffer as text. The recovery accepts supported Latin-1-like, CP1252 and
+  CP932 projections, removes only the trailing COM NUL, and requires all
+  exact-length recovery candidates to agree. Ambiguous or oversized-prefix
+  payloads fail closed instead of sending corrupted fixed-width bytes to a
+  parser
+- partitions only the live-evidenced bounded `RACE` option-1 fetch into
+  calendar-year `JVOpen` chunks. Every chunk is closed before the next begins;
+  a primary processing error remains primary when close also fails, and
+  provider `-402` recovery replays only the prefix emitted by the active
+  chunk. Option 2, setup options 3/4, and data specs without verified bounded
+  range behavior remain start-only
 
 What `2.0.0.dev5` adds over `2.0.0.dev4`:
 
