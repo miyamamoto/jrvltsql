@@ -8888,11 +8888,11 @@ class DataImporter:
             # physical upserts. Batch failures take the per-record fallback below.
             rows = len(converted_batch)
 
-            self._records_imported += rows
-            self._batches_processed += 1
-
             if auto_commit:
                 self.database.commit()
+
+            self._records_imported += rows
+            self._batches_processed += 1
 
             logger.debug(
                 "Batch inserted",

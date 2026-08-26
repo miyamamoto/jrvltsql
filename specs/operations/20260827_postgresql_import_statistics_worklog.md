@@ -148,3 +148,60 @@ the final test result in the PR evidence (avoiding a worklog self-reference
 commit loop). Resolve all actionable review threads before merge. After merge,
 refresh the draft `2.0.0` final branch from the new `master` and repeat only the
 provider/import statistics and package/runtime gates affected by this fix.
+
+## Aggregated review corrections
+
+The first candidate was `108ee0e2267f81dc5faa16845503f9fddc1804a0`.
+The non-slow local suite on that immutable candidate completed with:
+
+```text
+4796 passed, 507 skipped, 14 deselected, 21 subtests passed
+```
+
+Native review then identified one real adjacent failure boundary: the generic
+batch counters were updated before an auto-commit. If that commit failed, the
+existing per-record fallback retried the same provider operations and counted
+the fallback outcome on top of the failed batch. A minimal regression injects
+two commit failures so the batch commit fails, the first individual retry
+fails, and the second retry succeeds durably. Before the correction it produced
+the required red evidence:
+
+```text
+DataImporter:          records_imported=3, expected 1
+OptimizedDataImporter: records_imported=4, expected 1
+```
+
+The correction moves successful batch counters, and the optimized individual
+counter, after the applicable commit succeeds. The same regression is now
+green for both importers (`2 passed`), with one durable later revision,
+`records_imported=1`, `records_failed=1`, and `batches_processed=0`. This does
+not change caller-owned transaction behavior because those paths do not commit
+inside the importer.
+
+The PostgreSQL fixture cleanup was also made unconditional with `finally` so a
+schema cleanup failure cannot leak the test connection. A request to write the
+eventual candidate SHA into its own tracked commit is intentionally not
+followed: repository policy forbids self-reference commit loops. Exact final
+SHA and immutable test evidence are instead recorded on the PR and in GitHub
+check metadata.
+
+## Next safe action after review correction
+
+The complete BN contract and the bounded shared-path selection were run on
+SQLite plus a fresh disposable PostgreSQL 16 instance after the correction:
+
+```text
+tests/test_bn_official_contract.py
+tests/test_importer.py
+tests/test_importer_clean_record.py
+tests/test_dual_handler_transactions.py
+tests/test_postgresql.py
+tests/test_cc_official_contract.py: 176 passed
+```
+
+The disposable container was removed. `uv lock --check`, the repository test
+gate, fatal flake8 (`E9,F63,F7,F82`, count 0), compileall, and `git diff
+--check` also pass. Commit and push this one aggregated correction, run the
+non-slow suite on its immutable SHA, record that evidence on the PR, and
+resolve the review threads. Do not merge until required `lint` and `test`
+checks have executed successfully and the worktree is clean.

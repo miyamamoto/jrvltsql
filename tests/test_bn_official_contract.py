@@ -7,6 +7,7 @@ from uuid import uuid4
 
 import pytest
 
+from src.database.base import DatabaseError
 from src.database.migration import SchemaMigrationError, migrate_table_if_needed
 from src.database.schema import SCHEMAS
 from src.database.schema_jravan import JRAVAN_SCHEMAS
@@ -209,9 +210,21 @@ def bn_statistics_database(request, tmp_path):
             database.rollback()
         except Exception:
             pass
-        database.execute(f"DROP SCHEMA IF EXISTS {schema_name} CASCADE")
-        database.commit()
-        database.disconnect()
+        try:
+            database.execute(f"DROP SCHEMA IF EXISTS {schema_name} CASCADE")
+            database.commit()
+        finally:
+            database.disconnect()
+
+
+def _same_key_provider_revisions() -> tuple[dict, dict]:
+    first = BNParser().parse(build_record())
+    assert first is not None
+    second_raw = bytearray(build_record())
+    second_raw[81:145] = _pad("Updated Owner Sentinel", 64)
+    second = BNParser().parse(bytes(second_raw))
+    assert second is not None
+    return first, second
 
 
 @pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
@@ -221,12 +234,7 @@ def test_bn_same_key_provider_revisions_count_as_two_operations(
     database = bn_statistics_database
     database.execute(SCHEMAS["NL_BN"])
     database.commit()
-    first = BNParser().parse(build_record())
-    assert first is not None
-    second_raw = bytearray(build_record())
-    second_raw[81:145] = _pad("Updated Owner Sentinel", 64)
-    second = BNParser().parse(bytes(second_raw))
-    assert second is not None
+    first, second = _same_key_provider_revisions()
 
     stats = importer_class(database).import_records(iter([first, second]), auto_commit=True)
     stored = database.fetch_all(
@@ -235,6 +243,41 @@ def test_bn_same_key_provider_revisions_count_as_two_operations(
 
     assert stats["records_imported"] == 2
     assert stats["records_failed"] == 0
+    assert stored == [
+        {"BanusiCode": EXPECTED["BanusiCode"], "BanusiName": "Updated Owner Sentinel"}
+    ]
+
+
+class _TwoCommitFailuresSQLite(SQLiteDatabase):
+    remaining_commit_failures = 0
+
+    def commit(self) -> None:
+        if self.remaining_commit_failures:
+            self.remaining_commit_failures -= 1
+            self.rollback()
+            raise DatabaseError("injected commit failure")
+        super().commit()
+
+
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_bn_commit_failures_count_only_durable_individual_retries(
+    tmp_path, importer_class
+) -> None:
+    database = _TwoCommitFailuresSQLite({"path": str(tmp_path / "bn-commit-failure.db")})
+    with database:
+        database.execute(SCHEMAS["NL_BN"])
+        database.commit()
+        database.remaining_commit_failures = 2
+        first, second = _same_key_provider_revisions()
+
+        stats = importer_class(database).import_records(iter([first, second]), auto_commit=True)
+        stored = database.fetch_all(
+            'SELECT BanusiCode AS "BanusiCode", BanusiName AS "BanusiName" FROM NL_BN'
+        )
+
+    assert stats["records_imported"] == 1
+    assert stats["records_failed"] == 1
+    assert stats["batches_processed"] == 0
     assert stored == [
         {"BanusiCode": EXPECTED["BanusiCode"], "BanusiName": "Updated Owner Sentinel"}
     ]

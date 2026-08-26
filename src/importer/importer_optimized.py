@@ -1104,12 +1104,12 @@ class OptimizedDataImporter:
             # Batch failures take the per-record fallback below.
             rows = len(batch)
 
-            self._records_imported += rows
-            self._batches_processed += 1
-
             # Only commit if not in a larger transaction
             if commit_batch:
                 self.database.commit()
+
+            self._records_imported += rows
+            self._batches_processed += 1
 
             logger.debug(
                 "Batch inserted",
@@ -1135,10 +1135,11 @@ class OptimizedDataImporter:
             for record in batch:
                 try:
                     self.database.insert(table_name, record)
-                    self._records_imported += 1
 
                     if commit_batch:
                         self.database.commit()
+
+                    self._records_imported += 1
 
                 except DatabaseError as e:
                     self._records_failed += 1
