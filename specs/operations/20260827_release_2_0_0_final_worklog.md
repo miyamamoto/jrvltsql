@@ -244,3 +244,48 @@ provider process/transaction/lock, candidate identity or image/version drift,
 or any non-JRA container lifecycle mutation. Retain the complete non-secret
 command output outside the repository and do not retry merely to obtain a
 different result.
+
+### 2026-08-27 — real RACE differential read and two-backend reconciliation
+
+- The exact admitted `ingestctl` command ran once and exited zero. Its progress
+  binds `jra_cache=completed` to `RACE`, option 1,
+  `20260824..20260830`. Retained command output is 4,196 bytes at
+  `/home/keiba/backups/rebuild-20260820/ingestctl_jra_cache_final_candidate_20260824_30.log`,
+  SHA-256 `ddb901969fae07eff7956b38f1dc16d030be937e516d40a6e34e6eb1172bb1d4`.
+- Candidate runtime reported **1,665 physical records fetched, 408,388 parsed,
+  408,388 imported, 0 failed, 641 batches**. The log delta contains exactly one
+  JVOpen/stream-open, one provider EOF (`Read complete - no more data`), one
+  successful stream close, one fetch completion and one import completion;
+  error-level entries are zero. Open diagnostics were `read_count=23` and
+  `download_count=0`.
+- Application raw cache changed from 8,844 files / 6,428,646,328 bytes to
+  8,846 files / 6,446,407,186 bytes. Three paths changed after the baseline:
+  two framed binary files and the RACE index. The two binaries contain exactly
+  the 1,665 physical records above, aggregated by record ID as
+  `H1=72,H6=72,HR=72,O1..O6=72 each,RA=72,SE=943,WF=2`.
+- The requested future dates have no RA/SE/HR rows. The new binaries are actual
+  race dates 2026-08-22/23 delivered as differential corrections/reprovision;
+  this explains why the provider start can be 2026-08-24 while client-filtered
+  race identities remain the preceding meeting. No future-card claim is made.
+- PostgreSQL retained the exact official-key result for those two days. A fresh
+  SQLite database built only from the two new framed binaries through the exact
+  candidate parser and importer produced the same per-table cardinalities:
+  `NL_RA=72, NL_SE=943, NL_HR=72, NL_H1=53,431, NL_H6=150,726,
+  NL_O1=3,095, NL_O2=6,050, NL_O3=6,050, NL_O4=12,100,
+  NL_O5=25,121, NL_O6=150,726, NL_WF=2`.
+- The SQLite replay independently measured 1,665 raw, 408,388 parsed/imported,
+  zero parse/import failures, 641 batches, `PRAGMA integrity_check=ok`, no
+  pending transaction before close or after reopen. The retained disposable DB
+  is 50,511,872 bytes, SHA-256
+  `034550a9b773a279c66d3d2ab5b3532af50c5b1f531c81fcf1d7661334cd2548`,
+  at `/home/keiba/scratch/20260827_jrvltsql_final_sqlite/provider_fresh.db`.
+- PostgreSQL duplicate groups for executable RA/SE/HR primary keys remain zero;
+  no non-idle transaction remains. Candidate identity/version/health, both
+  locks, scheduler stop and provider-process absence remain correct.
+
+Classification: this is strong real JV-Link open/read/EOF/close evidence and
+byte-identical logical reconciliation across PostgreSQL and fresh SQLite. It is
+not an SDK-network-download result because `download_count=0`; the provider's
+own JVD cache already held the 23 files. One different, bounded current
+dataspec may be admitted to seek `download_count>0`; do not repeat RACE or
+delete provider-managed JVD files to manufacture a download.
