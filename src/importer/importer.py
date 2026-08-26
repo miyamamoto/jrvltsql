@@ -987,17 +987,6 @@ _UM_LOSSLESS_TEXT_WIDTHS = {
     "NL_UM": _UM_NATIVE_LOSSLESS_TEXT_WIDTHS,
     "UMA": _UM_STANDARD_LOSSLESS_TEXT_WIDTHS,
 }
-_PROVIDER_OPERATION_COUNT_STORAGE_TABLES = (
-    _AV_STORAGE_TABLES
-    | _HR_STORAGE_TABLES
-    | _HS_STORAGE_TABLES
-    | _HC_STORAGE_TABLES
-    | _HN_STORAGE_TABLES
-    | _SK_STORAGE_TABLES
-    | _TC_STORAGE_TABLES
-    | _CC_STORAGE_TABLES
-    | _UM_ERASE_STORAGE_TABLES
-)
 _JC_STORAGE_TABLES = frozenset({"NL_JC", "RT_JC", "KISYU_CHANGE"})
 _JC_KEY_COLUMNS = (
     "Year",
@@ -8892,14 +8881,12 @@ class DataImporter:
                 return
 
             # Insert batch using INSERT OR REPLACE
-            affected_rows = self.database.insert_many(table_name, converted_batch, use_replace=True)
+            self.database.insert_many(table_name, converted_batch, use_replace=True)
             # PostgreSQL collapses same-key replacement operations before one upsert.
-            # Statistics count accepted provider operations, not final rows.
-            rows = (
-                len(converted_batch)
-                if table_name in _PROVIDER_OPERATION_COUNT_STORAGE_TABLES
-                else affected_rows
-            )
+            # A successful generic batch accepted every converted input row, so
+            # statistics count provider operations rather than deduplicated
+            # physical upserts. Batch failures take the per-record fallback below.
+            rows = len(converted_batch)
 
             self._records_imported += rows
             self._batches_processed += 1
