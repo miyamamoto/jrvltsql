@@ -255,3 +255,25 @@ the disposable container was removed. GitHub's official status simultaneously
 reported a major partial outage with an unresolved Actions incident. No missing
 required check is treated as a pass; the PR remains blocked until real `test`
 and `lint` jobs execute successfully after recovery.
+
+## Click 8.5 CI dependency resolved
+
+The replacement PR eventually received a real GitHub Actions run. Its importer
+logic `lint` and Windows jobs passed, while the `test` job executed and exposed
+47 warning-as-error failures caused solely by Click 8.5.0 deprecating the test
+suite's filesystem helper. Because that job executed real steps and failed, it
+was not exempted as an Actions-delivery incident.
+
+The independent test-infrastructure repair was completed as PR `#252` and
+squash-merged at
+`beee9df5427de3a07b33d40686322096d097bfca`. Its final candidate passed the
+local non-slow suite (`4795 passed, 505 skipped, 14 deselected, 21 subtests
+passed`) and GitHub Actions `test`, `lint`, and Windows jobs, with unresolved
+review threads zero. No importer or production source changed in that PR.
+
+This statistics branch was clean at
+`23febb699e97ca10b2193162a60925c27108c6dd` before refresh. The next safe action
+is to rebase onto the new `origin/master`, rerun the affected importer/Click
+selection and required local gates on the rebased candidate, then update PR
+`#251` with `--force-with-lease`. Do not merge until the replacement candidate
+receives a fresh successful GitHub Actions run.
