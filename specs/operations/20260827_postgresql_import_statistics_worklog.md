@@ -89,3 +89,62 @@ deduplication.
 Extend one existing DIFN official-contract test with a two-revision same-key
 batch, run it unchanged against this base to capture the red result, then make
 the smallest shared statistics correction in both importer implementations.
+
+## Red proof on the base implementation
+
+The compact BN regression was added without changing production code and run
+against a fresh disposable PostgreSQL 16 instance plus SQLite:
+
+```text
+tests/test_bn_official_contract.py: 2 failed, 48 passed
+PostgreSQL DataImporter:          assert 1 == 2
+PostgreSQL OptimizedDataImporter: assert 1 == 2
+SQLite regular/optimized controls: passed
+```
+
+Both PostgreSQL failures stored exactly one final row with the later body and
+reported zero failures. This matches the real DIFN setup evidence: data and
+provider order are correct, while accepted-operation statistics are
+under-counted after same-key batch compaction.
+
+## Implementation and focused green evidence
+
+- Removed the record-family allowlist from the two generic batch writers.
+- After a successful generic batch, `DataImporter` now counts
+  `len(converted_batch)` and `OptimizedDataImporter` counts `len(batch)`.
+- No error, fallback, commit, rollback, conversion, validation, or physical
+  upsert branch changed. A failed auto-commit batch still retries and counts
+  each individual result; a failed caller-owned batch still propagates.
+- The regression uses two independently parsed, official-length 477-byte BN
+  records with one key and distinct owner names. It verifies the later body is
+  durable as one row while both accepted provider operations are counted.
+
+Fresh disposable PostgreSQL 16 plus SQLite:
+
+```text
+tests/test_bn_official_contract.py: 50 passed
+tests/test_importer.py
+tests/test_importer_clean_record.py
+tests/test_dual_handler_transactions.py
+tests/test_postgresql.py
+tests/test_cc_official_contract.py: 124 passed
+```
+
+The second selection retains the previously reviewed same-key CC PostgreSQL
+contract and the generic batch-error/transaction coverage. No record failure,
+row divergence, or pending transaction was observed.
+
+Local workflow-equivalent static gates also pass: `uv lock --check`,
+`scripts/validate_test_gate.py`, fatal flake8 (`E9,F63,F7,F82`, count 0),
+Python 3.13 compileall, and `git diff --check`. The repository's advisory
+Black/Ruff debt predates this delta and is not a workflow merge gate; no
+unrelated formatting rewrite is included.
+
+## Handoff / next safe action
+
+Commit and push this bounded four-file delta, run the non-slow local suite on
+that exact candidate SHA, open one PR, and record the candidate full SHA plus
+the final test result in the PR evidence (avoiding a worklog self-reference
+commit loop). Resolve all actionable review threads before merge. After merge,
+refresh the draft `2.0.0` final branch from the new `master` and repeat only the
+provider/import statistics and package/runtime gates affected by this fix.

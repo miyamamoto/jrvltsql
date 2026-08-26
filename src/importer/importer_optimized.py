@@ -17,7 +17,6 @@ from src.importer.importer import (
     _PREPARED_CH_SEISEKI_ROWS_KEY,
     _PREPARED_CK_ROWS_KEY,
     _PREPARED_KS_SEISEKI_ROWS_KEY,
-    _PROVIDER_OPERATION_COUNT_STORAGE_TABLES,
     _RC_STORAGE_TABLES,
     _STANDARD_ODDS_CONFIG_BY_OWNER,
     _STANDARD_VOTE_CONFIG_BY_OWNER,
@@ -1094,18 +1093,16 @@ class OptimizedDataImporter:
             # Use optimized insert if available
             if hasattr(self.database, "insert_many_optimized"):
                 # Optimized path
-                affected_rows = self.database.insert_many_optimized(table_name, batch)
+                self.database.insert_many_optimized(table_name, batch)
             else:
                 # Standard insert_many
-                affected_rows = self.database.insert_many(table_name, batch)
+                self.database.insert_many(table_name, batch)
 
             # PostgreSQL collapses same-key replacement operations before one upsert.
-            # Statistics count accepted provider operations, not final rows.
-            rows = (
-                len(batch)
-                if table_name in _PROVIDER_OPERATION_COUNT_STORAGE_TABLES
-                else affected_rows
-            )
+            # A successful generic batch accepted every input row, so statistics
+            # count provider operations rather than deduplicated physical upserts.
+            # Batch failures take the per-record fallback below.
+            rows = len(batch)
 
             self._records_imported += rows
             self._batches_processed += 1
