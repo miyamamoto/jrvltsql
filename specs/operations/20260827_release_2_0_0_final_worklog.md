@@ -81,3 +81,34 @@
 - `scripts/validate_test_gate.py`, `uv lock --check`, `compileall`, workflow fatal Flake8 (`E9,F63,F7,F82`) and `git diff --check`: pass. The first Flake8 invocation only reported that Flake8 was not part of the project venv; the workflow-equivalent standalone `uvx flake8` run returned zero.
 
 Next safe action: inspect the diff, commit/push the grouped final-candidate metadata, then build wheel/sdist from that immutable SHA. Do not install it into the development collector until artifact gates and a protected-identity candidate-image plan are recorded.
+
+### 2026-08-27 — immutable candidate artifact and PostgreSQL gate
+
+- Final-candidate metadata commit `1f9f4fc8c77bbe88d398b6263ffa05c64f66eead` was pushed. Its tracked worktree was clean at freeze.
+- A fresh source tree was extracted from `git archive` of that exact commit into `/home/keiba/scratch/20260827_jrvltsql_2_0_0_final_artifacts/source`; no editable-worktree files were used for the build.
+- The build produced exact metadata `Name: jltsql`, `Version: 2.0.0`, `Requires-Python: >=3.12`:
+  - wheel `jltsql-2.0.0-py3-none-any.whl`, SHA-256 `7475450026d731fc338714506c25ea42ddea65d5b52fe12991405273336dee2b`;
+  - sdist `jltsql-2.0.0.tar.gz`, SHA-256 `a74fa0a9512890e3fbf895e8c82001f5df781083acfd2dd8861820cbc4336a4d`.
+- Distribution content scanning passed for both artifacts. The extracted-wheel isolated `init`, config/version, and SQLite table-creation smoke passed.
+- Fresh disposable PostgreSQL 16 plus SQLite ran the exact candidate's SE MakeDate, official, schema-migration, and canonical selection: **129 passed**. This covers lossless `00000000`, real dates, malformed-date rejection, `UMA_RACE VARCHAR(8)`, and pre-DML rejection of legacy `DATE` storage.
+- The dedicated PostgreSQL container `jltsql-final-1f9f4fc-pg16` was removed after the successful run; no volume or persistent database was retained.
+- These artifacts are unpublished validation inputs only. They must not become release assets after any later candidate or squash-merge SHA change.
+
+Next safe action: derive a temporary development image from exact runtime dev7 plus this exact wheel, and record an identity-preserving Compose plan before rotating only the JRA collector. Stop before mutation if the runtime build requires any service-key, registration, Wine-prefix, hostname/MAC, database, or non-JRA change.
+
+### 2026-08-27 — candidate runtime image and pre-mutation admission
+
+- An untracked, temporary derivation context was created at `/home/keiba/scratch/20260827_jrvltsql_final_runtime_image`. It uses exact wrapper base image `kps-jra-collector-dev:806445a0fad7ac27669f7a0bef7d6cbb4f86d7f8` (image ID `sha256:68db68a1c669d9e1ac7006dec59d5b95103413dd2f0e3ab0bc6384477b464828`) and force-reinstalls only the candidate wheel whose hash is recorded above.
+- Built candidate image `kps-jra-collector-dev:jltsql-1f9f4fc8c77bbe88d398b6263ffa05c64f66eead`, image ID `sha256:94ebb91ecc110718fdff5c14c4a8d24d48735fd679f33fe2222f4c018d201a3a`. OCI labels bind candidate source `1f9f4fc8c77bbe88d398b6263ffa05c64f66eead`, wrapper base `806445a0fad7ac27669f7a0bef7d6cbb4f86d7f8`, and `2.0.0-final-candidate`.
+- A network-disabled, read-only container smoke reports installed metadata and `src.__version__` both exactly `2.0.0`.
+- A temporary Compose override changes only candidate image, expected upstream version, the three registration-write/reset controls, auto-install, and the already-running 86,400-second timeout. It does not contain credentials or identity values.
+- Two plan defects were caught before runtime mutation:
+  1. the first override draft inverted the running dialog controls; those keys were removed so the existing setup override continues to provide `AUTO_DISMISS_JVLINK_DIALOGS=1` and `JVLINK_AUTO_CLOSE_DIALOGS=0`;
+  2. rendering from `.env` alone produced 7,200 seconds, while the actual admitted container uses 86,400; the candidate now pins the actual 86,400-second value.
+- A canonical full-service projection (including one-way representations of environment data, never printed values) is byte-identical between the reconstructed current plan and candidate plan after removing only `build`, `image`, and `JRA_COLLECTOR_EXPECTED_VERSION`: SHA-256 `5b6e8c082abd36a358ac010e294fefacb30e1d0c15c3181caf284f75c5f1cd58` for both.
+- Candidate safety values are exact: service-key write/reset/forced reset/auto-install `0`; entrypoint dismissal `1`; client auto-close `0`; timeout `86400`; expected upstream `2.0.0`.
+- `scripts/check_nar_identity_guard.sh` passed. The host recovery lock is a regular file and was acquired nonblocking. A direct non-owner service-lock probe correctly failed permission and was not counted; the existing `ingestctl` measured-owner wrapper then validated the Wine-prefix owner and acquired/released `/tmp/jra_collector_service.lock` nonblocking.
+- Both scheduler containers remain exited. No provider/fetch/realtime/daily-update process exists. Raw PostgreSQL reports zero non-idle client backends. The current JRA container remains healthy, full ID `1d9ba0f5fefade2d9e280d7172f172415f18dfba3ae13338438f83d0ef7c4832`, on the exact wrapper dev7 image ID above.
+- Six non-JRA development services were frozen as a name/ID/image/status/health projection with SHA-256 `b093e2f68f751243e3edffd1ba8c705e79bb38fc7567001f19b085a2bbafdb89`. JRDB collector health is already red; it is a pre-existing external condition and must not be changed or hidden by this JRA-only rotation.
+
+Next safe command after this evidence is pushed: recreate exactly `jra-collector` with base Compose + the existing setup-dialog override + the temporary final-candidate override, using `--no-deps --no-build --force-recreate --wait`. Immediately verify exact image/package/runtime versions, health, the same protected-identity projection, the same non-JRA projection, free locks, provider absence, scheduler state and PostgreSQL idle before any provider call.
