@@ -145,3 +145,48 @@ Next safe action: commit/push this no-provider adoption evidence and open a Draf
 - Candidate container log has 25 lines. Mounted `jltsql.log` baseline is 13,572,021 bytes with mtime epoch `1787736980`. PostgreSQL non-idle client count is zero.
 
 Next safe action after this admission is pushed: repeat identity/health/exact-image/locks/provider-absence/schedulers/PostgreSQL-idle/disk gates, then run the exact one-rung command under the nonblocking host recovery lock. Retain a non-secret log outside the repository. Stop on nonzero status/return code, wrong payload, parser/import/schema/transaction error, no positive provider work, incomplete durable dates, lingering process/transaction, or identity/non-JRA drift. Do not rerun merely to recreate logs.
+
+### 2026-08-27 — bounded provider cache replay and post-call audit
+
+- The mutable gates were repeated and the one admitted `results_only` call was
+  executed once under the nonblocking host recovery lock. The retained log is
+  `/home/keiba/backups/rebuild-20260820/jra_final_candidate_1f9f4fc_20260822_23.log`,
+  265 bytes, SHA-256
+  `f3f407a5756b7e982c7d4b3c08e3f4004a2325a0cfaf3466b39af6c5dfd89ca5`.
+  It reports one successful rung from `20260822` and durable maxima
+  `nl_ra=nl_se=nl_hr=20260823`; the command exited zero.
+- PostgreSQL remained exactly idempotent across the call: total rows are
+  `nl_ra=32,584`, `nl_se=391,158`, `nl_hr=17,535`; the target retains
+  `72/72`, `943/943`, and `72/72` rows/distinct official identities,
+  respectively. Duplicate-key groups remain zero and post-call non-idle
+  sessions are zero.
+- The provider cache remained 8,844 files and 6,428,646,328 bytes with the
+  same latest mtime. The mounted `jltsql.log` also had no byte or mtime delta.
+  This is therefore an exact-candidate, real-provider-cache replay and durable
+  PostgreSQL idempotency result; it is **not** evidence of a fresh provider
+  download. Fresh acquisition remains an open release gate.
+- This range contains no persisted `NL_SE.MakeDate=00000000` rows (the whole
+  current PostgreSQL table also has zero). The exact captured-provider fixture
+  exercised against fresh PostgreSQL remains the sentinel evidence; this live
+  call must not be cited as sentinel coverage.
+- Candidate identity, image/package/runtime versions, locks and provider
+  process absence remained correct after the call.
+- The earlier six-service comparison included mutable Docker health text. Its
+  hash changed only because the same JRDB collector
+  `0dbdc263a636063a47464c35bac1c3b18451b1739cc7e55530e228e123c120d4`
+  naturally moved from `unhealthy` to `healthy`. Docker events in the call
+  interval contain health-check `exec_*` events only, with no non-JRA
+  create/start/stop/die/destroy event. A corrected projection excludes health
+  and binds existing non-JRA container names to full container IDs, image IDs,
+  creation/start timestamps, and lifecycle status; its current SHA-256 is
+  `8d2ab4a382161f9aa8a03657b6c9e7af2400f1449a8d53b05025d9a68bbbb9d9`.
+  The old health-inclusive hash is retained as historical evidence but is not
+  an immutable identity gate.
+
+Next safe action: commit/push this audit, then admit one bounded differential
+`RACE` acquisition whose requested current/future window is absent from the
+local cache. Use the existing `ingestctl` runtime-owner/lock path with a fresh
+progress file and the already-completed same-window schema ledger. Freeze the
+exact dry-run command, PostgreSQL/cache/disk baseline, identity and STOP gates
+before `--apply`; do not count another unchanged-cache replay as fresh-download
+evidence.
