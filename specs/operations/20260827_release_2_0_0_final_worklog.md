@@ -352,3 +352,35 @@ positive JVOpen download/status wait, read, EOF, close and durable PostgreSQL
 import. Together with the preceding RACE two-backend replay, this proves real
 provider transport plus PostgreSQL/SQLite parser-storage equivalence without
 conflating an undated master stream with a replayable date-keyed app cache.
+
+### 2026-08-27 — bounded setup/resume admission
+
+- Candidate-specific setup uses `DIFN`, option 4, `20260820..20260827`. RACE
+  is intentionally not selected because its v3 cache is already complete for
+  the current span and would bypass JVOpen; DIFN's documented undated-master
+  behavior guarantees the option-4 provider path is exercised without
+  deleting or invalidating cache.
+- Fresh progress path
+  `/home/keiba/backups/rebuild-20260820/ingestctl_progress_jra_setup_final_candidate_difn_20260820_27.json`
+  is absent. Dry-run returned the expected collector-owned manual result and
+  performed no provider/database action.
+- Exact apply command uses the same arguments and five-year schema completion
+  as the network-fresh call, with `--stage jra_setup`, the fresh setup progress
+  path, `--jra-spec DIFN --jra-from 2026-08-20 --jra-to 2026-08-27`. It is
+  executed once under the host recovery lock. After completion, the exact same
+  apply command is executed once more with the same progress path and must
+  return `skipped/already completed` without a new log/cache/DB/provider delta.
+- Baselines: cache 8,846 files / 6,446,407,186 bytes / latest mtime ns
+  `1787759010634671073`; `jltsql.log` 13,589,951 bytes at epoch `1787759452`;
+  free space 39,562,440,704 bytes. Master counts are
+  `UM=214,140, KS=1,565, CH=1,476, BR=10,764, BN=8,741,
+  HN=11,185, SK=39,690, RC=2,147`; PostgreSQL is idle.
+- Candidate container/image/health and both scheduler stop gates remain exact.
+  Identity, process and both-lock gates must pass immediately before apply.
+
+STOP on any previous provider/storage/identity condition, unexpected setup
+dialog/timeout, setup-source error, missing completion, or a resume call that
+re-enters the provider instead of skipping. The earlier dev5 full five-year
+eleven-spec setup remains background sustained-volume evidence; this bounded
+candidate call proves the exact final code path and does not replace or
+overclaim that older full-range run.
