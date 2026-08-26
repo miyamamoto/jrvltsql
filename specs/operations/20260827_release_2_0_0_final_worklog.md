@@ -126,3 +126,22 @@ Next safe command after this evidence is pushed: recreate exactly `jra-collector
 - The six-service non-JRA projection remains exactly `b093e2f68f751243e3edffd1ba8c705e79bb38fc7567001f19b085a2bbafdb89`. The pre-existing unhealthy JRDB collector and every other non-JRA ID/image/status remain untouched.
 
 Next safe action: commit/push this no-provider adoption evidence and open a Draft release PR. Then use the existing bounded acquisition tooling in dry-run/read-only mode to admit one positive RACE/MING/results scope for the exact candidate. Record PostgreSQL baselines, provider/cache/process/lock state and disk first; do not start a provider call until the exact planned payload and stop gates are frozen.
+
+### 2026-08-27 — Draft PR and bounded provider-call admission
+
+- Opened Draft PR #249: <https://github.com/miyamamoto/jrvltsql/pull/249>. It explicitly blocks merge/tag/publication on provider, sustained/realtime, full-suite, artifact and independent-review gates.
+- The existing `backfill_jra_durable_race.py` was selected rather than a new ad-hoc provider caller. A proposed 2026-08-24 start was rejected by its finalized-date contract before any HTTP/provider access because expected finalized date 2026-08-23 preceded the requested start.
+- Accepted dry-run is one and only one collector payload:
+  - mode `results_only`, from `20260822`, database `postgresql`;
+  - specs exactly `RACE,MING,0B12,0B14,0B15,0B51`;
+  - `skip_if_running=true`, source timeout 7,200 seconds;
+  - expected durable date `20260823`;
+  - one rung (`--step-days 5`), no second provider request.
+- Pre-call PostgreSQL baseline:
+  - `nl_ra=32,584`, `nl_se=391,158`, `nl_hr=17,535`; all max race date `20260823`;
+  - target 2026-08-22/23 identities: `nl_ra=72/72 unique`, `nl_se=943/943 unique`, `nl_hr=72/72 unique`;
+  - duplicate groups under each executable primary key: zero.
+- Provider raw-cache baseline: 8,844 files, 6,428,646,328 bytes, latest mtime ns `1787407590094613760`. Root free space is 39,553,953,792 bytes.
+- Candidate container log has 25 lines. Mounted `jltsql.log` baseline is 13,572,021 bytes with mtime epoch `1787736980`. PostgreSQL non-idle client count is zero.
+
+Next safe action after this admission is pushed: repeat identity/health/exact-image/locks/provider-absence/schedulers/PostgreSQL-idle/disk gates, then run the exact one-rung command under the nonblocking host recovery lock. Retain a non-secret log outside the repository. Stop on nonzero status/return code, wrong payload, parser/import/schema/transaction error, no positive provider work, incomplete durable dates, lingering process/transaction, or identity/non-JRA drift. Do not rerun merely to recreate logs.
