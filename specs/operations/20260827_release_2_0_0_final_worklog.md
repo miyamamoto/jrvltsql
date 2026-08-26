@@ -488,3 +488,72 @@ that exact SHA, repeat artifact/install and affected database gates, then
 rotate only `jra-collector` with preserved Wine identity, mounts, credentials
 and reset/install controls disabled. Perform one bounded provider/log
 reconciliation; do not repeat the already-proven full setup solely for volume.
+
+### 2026-08-27 — carry-forward runtime and bounded PostgreSQL reconciliation
+
+- The exact carry-forward SHA `c0987e9c13890f64c323af73cddd8fc516f3d0bc`
+  differed from the already-tested `b01eaa5...` only by the preceding tracked
+  worklog update. Production/test/package input outside `specs/` was identical.
+- Fresh archive artifacts passed the distribution-content gate. Their hashes
+  were wheel
+  `23fd42a51d2c1d01c41debe8948eb0c1ac668f17e4e14a0b027b1271ecacad1a`
+  and sdist
+  `383e8a538314e54b36525ee33bfd60716667f8a46c028fe5db049f3037bf1e1b`.
+  The first wheel-init invocation used unsupported system Python 3.10 and
+  exited 1 before producing release evidence; the project Python 3.13.5 run
+  passed. The runtime image below independently installed and imported the
+  wheel under Python 3.12.
+- Temporary image
+  `kps-jra-collector-dev:jltsql-c0987e9c13890f64c323af73cddd8fc516f3d0bc`
+  has image ID
+  `sha256:f307bbdf2a6ad86ad4a449c2b9f5bce97fd2c307fa001d1a79b74c70d829f96d`.
+  OCI labels bind source `c0987e9c13890f64c323af73cddd8fc516f3d0bc`,
+  wrapper base `806445a0fad7ac27669f7a0bef7d6cbb4f86d7f8`, and final-candidate
+  version. Network-disabled/read-only smoke reports installed/source 2.0.0
+  from `/opt/venv/lib/python3.12/site-packages`.
+- Rendered Compose projections before/after candidate substitution were exactly
+  equal after removing only image/build/expected-version fields, both SHA-256
+  `5b6e8c082abd36a358ac010e294fefacb30e1d0c15c3181caf284f75c5f1cd58`.
+  Service-key write/reset/force-reset and auto-install remained 0; dialog and
+  86,400-second timeout values remained the admitted existing values.
+- Identity guard, host recovery lock, measured-owner service lock, provider
+  absence and PostgreSQL-idle gates passed. Compose recreated only
+  `jra-collector` using `--no-deps --no-build --force-recreate --wait`.
+  It became healthy as container
+  `14ed882dc50c5c6034840ec2dba0474e8b8cb264498c496357ed60889a01885b`.
+  The protected actual hostname/MAC/environment/mount projection was identical
+  before and after, SHA-256
+  `ba1a2e7bd613667dfde8024ebb0827bfe493ce2d0e3e46ae50f8778f190df6da`.
+  The four non-JRA development container identities remained
+  `2a075bf1e29d91ee0f0a7fdce53e72525ef67f26113952d6fb04dbfa168f9a29`;
+  Docker lifecycle events contained only the JRA replacement.
+- Direct runtime checks agree: installed/source `2.0.0`, wrapper
+  `2.0.0.dev7`, and `/health` on the actual port 8081 reports `status=ok` with
+  both versions. An initial probe used port 8080 and got connection refused;
+  this was a read-only probe-address error, while the configured 8081 listener,
+  healthcheck and logs remained healthy.
+- One bounded DIFN option-1 call (`20260820..20260827`) then exercised the exact
+  candidate through JV-Link and PostgreSQL without repeating the 253,944-row
+  setup. It completed **3,881 fetched / 3,881 parsed / 3,881 imported / 0
+  failed / 10 batches**, with one open, provider EOF, successful close, fetch
+  completion and import completion. `read_count=14`; `download_count=0`, so
+  this is a positive provider-cache read rather than a new SDK download.
+- The retained command log is
+  `/home/keiba/backups/rebuild-20260820/ingestctl_jra_cache_final_c0987e9_difn_20260820_27.log`,
+  SHA-256
+  `5fa7018518c10cccd5fe6b9dfa005327b7cf9f5e0022e0a59dce925fd7e73fb8`.
+  The mounted log delta has zero error-level records; all textual `failed` and
+  `error` markers are zero-valued statistics fields.
+- PostgreSQL master counts remained exactly
+  `UM=214140,KS=1565,CH=1476,BR=10764,BN=8741,HN=11185,SK=39690,RC=2147`.
+  There were zero non-idle client backends and zero open client transactions
+  after completion. The undated-master app cache remained unchanged, matching
+  its documented completeness rule. Candidate health, process cleanup and
+  locks remained correct.
+
+This entry is the final tracked operational update before the release PR. Its
+commit necessarily becomes the final candidate SHA. Rebuild artifacts and the
+temporary runtime image from that exact SHA, prove that the only delta from
+`c0987e9...` is this excluded `specs/` record, and perform post-rotation
+version/health/identity checks. Record the resulting full SHA and checks in PR
+metadata rather than creating a self-referential worklog commit.
