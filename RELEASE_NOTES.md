@@ -1,9 +1,22 @@
-# jrvltsql v2.0.0 Release Notes (unreleased draft)
+# jrvltsql v2.0.0 Release Notes (final candidate)
 
-`2.0.0` is not released yet. `2.0.0.dev6` is a **development-test prerelease**
-of the official data-contract work. It is **not** a production compatibility
-claim: the 64-bit SDK path, 1.x database migration, and long-run collection are
-still unverified.
+This branch builds the final `2.0.0` candidate, but it is not released yet.
+The tag and GitHub release remain blocked until the exact candidate passes the
+real provider, SQLite, PostgreSQL, sustained setup/backfill, live race-day
+realtime, artifact, and independent-review gates. The 64-bit SDK path remains
+outside the supported claim; 1.x and older 2.0 prerelease databases require a
+backup, rebuild, and reimport.
+
+What the final candidate adds over `2.0.0.dev6`:
+
+- accepts the official `SE` cancellation/exclusion initial value
+  `MakeDate=00000000`, while continuing to reject malformed dates. Standard
+  `UMA_RACE.MakeDate` is `VARCHAR(8)` rather than `DATE`, and a legacy `DATE`
+  table fails before DML. Existing databases must be rebuilt and reimported;
+  this is not an in-place migration
+- consolidates the official record, key, schema, transaction, transport, and
+  packaging contracts proven incrementally by `dev0` through `dev6` into one
+  major-version release. The prerelease sections below remain as audit history
 
 What `2.0.0.dev6` adds over `2.0.0.dev5`:
 

@@ -7,7 +7,20 @@
 
 ## [Unreleased]
 
-次回リリースは互換性を破る変更を含むため `2.0.0` とする。1.xとしては配布しない。
+このbranchは最終`2.0.0`候補である。実provider・SQLite・PostgreSQL・長時間setup・
+レース当日realtime・artifact・独立reviewの全gateが完了するまでtag/publishしない。
+互換性を破る変更を含むため1.xとしては配布しない。
+
+### 2.0.0 final candidate
+
+- `SE`（馬毎レース情報）の公式取消・除外レコードで、`MakeDate`の公式初期値
+  `00000000`を受理する。実在日付とexact `00000000`以外は引き続きrejectする。
+  標準名`UMA_RACE.MakeDate`も`DATE`から`VARCHAR(8)`へ揃え、旧`DATE` tableを
+  mutation前に拒否する。1.xまたは旧2.0 prerelease DBはbackup後に
+  rebuild/reimportする
+- 下記`dev0`〜`dev6`で段階検証した公式record、schema、transaction、transport、
+  packaging契約を1つのmajor releaseとして確定する。開発用prereleaseの個別履歴は
+  監査証跡として残す
 
 ### 2.0.0.dev6 (開発検証用prerelease)
 

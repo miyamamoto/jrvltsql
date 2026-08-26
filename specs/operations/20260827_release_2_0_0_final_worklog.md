@@ -59,3 +59,25 @@
 - Created the dedicated clean worktree and branch above.
 - Next safe action: inspect existing release/setup worklogs, repository version contracts, runtime build wiring, and the currently open GitHub/runtime state. No database or runtime mutation has been authorized at this point.
 
+### 2026-08-27 — final-candidate metadata and runtime boundary
+
+- Initial worklog commit `57fe518ff52e496b8802494577a555e2d9205d47` was pushed before implementation so an interruption can resume from tracked evidence.
+- GitHub state at implementation start: no open `jrvltsql` PR; public prereleases end at `v2.0.0.dev6`; stable remains `v1.6.10`.
+- The current Wine runtime source/release is exact `jrvltsql-wine-runtime` merge/tag `806445a0fad7ac27669f7a0bef7d6cbb4f86d7f8` (`v2.0.0.dev7`). Its runtime repair intentionally pins upstream `jltsql 2.0.0.dev5`.
+- The development JRA container is healthy on image `kps-jra-collector-dev:806445a0fad7ac27669f7a0bef7d6cbb4f86d7f8`; direct in-container source and installed metadata both report upstream `2.0.0.dev5`. Mounted Wine prefix and raw cache paths were inspected read-only. No provider/database operation or container change was made.
+- Draft KIR PR #167 is the authoritative operational history for the five-year setup and dev7 runtime adoption. It records a complete eleven-spec five-year setup on dev5 and real PostgreSQL sokuho proof on wrapper dev7, but it does not prove merged `dev6` plus PR #248. The final candidate therefore still needs its own bounded real-provider and storage evidence.
+
+#### Red-first version contract
+
+- Existing exact-version assertions were changed first from `2.0.0.dev6` to `2.0.0` while production metadata was left unchanged.
+- The first attempted run used system Python 3.10 and stopped at missing `tomllib`; it is an environment failure and is not counted as red evidence.
+- The lock-backed worktree environment was then created with `uv` (Python 3.13.5). The two exact tests failed for the intended reason:
+  - updater source fallback: `assert '2.0.0.dev6' == '2.0.0'`;
+  - public project version: `assert '2.0.0.dev6' == '2.0.0'`.
+- Source, project, lock and installed metadata were changed to exact `2.0.0`. The classifier is `Development Status :: 4 - Beta` while this remains an unpublished candidate; a stronger stability classifier must not be asserted before the operational gates.
+- CHANGELOG and release notes now describe a final candidate, add the merged PR #248 `SE MakeDate=00000000`/`UMA_RACE VARCHAR(8)` migration boundary, retain the 32-bit-only scope, and explicitly block tag/publication on the remaining gates.
+- Post-change exact contract: **3 passed**.
+- Release-facing focused selection (`updater`, public setup, distribution contents, CLI): **101 passed, 10 subtests passed**.
+- `scripts/validate_test_gate.py`, `uv lock --check`, `compileall`, workflow fatal Flake8 (`E9,F63,F7,F82`) and `git diff --check`: pass. The first Flake8 invocation only reported that Flake8 was not part of the project venv; the workflow-equivalent standalone `uvx flake8` run returned zero.
+
+Next safe action: inspect the diff, commit/push the grouped final-candidate metadata, then build wheel/sdist from that immutable SHA. Do not install it into the development collector until artifact gates and a protected-identity candidate-image plan are recorded.
