@@ -384,3 +384,42 @@ re-enters the provider instead of skipping. The earlier dev5 full five-year
 eleven-spec setup remains background sustained-volume evidence; this bounded
 candidate call proves the exact final code path and does not replace or
 overclaim that older full-range run.
+
+### 2026-08-27 — bounded setup completion, resume, and statistics finding
+
+- DIFN option 4 completed under both locks with no dialog intervention:
+  `read_count=78`, `download_count=0`, provider EOF and one successful close,
+  zero error-level log entries. CLI totals are **253,944 fetched/parsed,
+  253,529 imported, 0 failed, 275 batches**. The retained 4,322-byte log is
+  `/home/keiba/backups/rebuild-20260820/ingestctl_jra_setup_final_candidate_difn_20260820_27.log`,
+  SHA-256 `6cd89a12ae541fccd65034f2a2fb465547043efc4be5adb86940a9d8ee7a0549`.
+- Option-4 setup committed 26 bounded chunks. Import totals were 10,000 for
+  each of the first 24 chunks, 9,585 for chunk 25, and 3,944 for the final
+  chunk. The parsed/imported difference is therefore exactly 415 accepted
+  input operations inside one PostgreSQL chunk, not a parser failure or an
+  interrupted final tail.
+- Durable master cardinalities are unchanged from the immediately preceding
+  DIFN differential result, as expected for a current full replacement
+  snapshot. PostgreSQL briefly exposed one non-idle session immediately after
+  process exit and returned to zero on the next bounded inspection; there is
+  no lingering process or transaction. Cache remains unchanged by the
+  documented undated-master rule.
+- Re-running the exact apply command with the same progress returned
+  `jra_setup=skipped`, detail `already completed`. `jltsql.log` size/mtime
+  remained exactly `13,615,214 / 1787759786`, proving no JVOpen re-entry. The
+  retained resume output SHA-256 is
+  `eb2868f79d9b8d0e549d38a8c06026a82b6e9a0affdf230f81605368d268cb97`.
+- Existing importer comments define statistics as accepted provider
+  operations, but the generic PostgreSQL `insert_many` deduplicates same-PK
+  rows before one upsert and returns only deduplicated physical operations.
+  A selective table allowlist compensates only reviewed record families. The
+  415-operation setup discrepancy is concrete evidence that an unlisted DIFN
+  route still undercounts while reporting zero failures. Final data is correct,
+  but the CLI/backend statistics contract is not.
+
+Release status: setup transport/chunking/resume gates pass, but publication is
+held on a separate minimal statistics repair. Prove the missing regression red
+against current master with a same-key provider revision in one generic DIFN
+route, make regular and optimized importers count accepted operations
+consistently across SQLite/PostgreSQL without hiding real failures, merge that
+logical PR, then rebuild/rebase this final release candidate from latest master.
