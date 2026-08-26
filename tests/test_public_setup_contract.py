@@ -119,6 +119,14 @@ def test_removed_public_setup_contract_is_recorded_for_2_0() -> None:
 
     assert "2.0.0" in changelog
     assert "## [2.0.0] - 2026-08-27" in changelog
+    assert (
+        "[Unreleased]: https://github.com/miyamamoto/jrvltsql/compare/"
+        "v2.0.0...HEAD"
+    ) in changelog
+    assert (
+        "[2.0.0]: https://github.com/miyamamoto/jrvltsql/compare/"
+        "v1.6.10...v2.0.0"
+    ) in changelog
     assert "final candidate" not in release_notes.lower()
     assert "not released yet" not in release_notes.lower()
     assert "JVLINK_BRIDGE_RUNNER" in changelog

@@ -576,6 +576,11 @@ metadata rather than creating a self-referential worklog commit.
   wording. CHANGELOG leaves `Unreleased` empty and moves the accumulated final
   content under dated `## [2.0.0] - 2026-08-27`. The same exact regression
   then passed.
+- A bounded post-review audit found the CHANGELOG comparison footer still
+  pointed `Unreleased` at `v1.6.10...HEAD`. The same public contract test was
+  extended first and failed on the missing `v2.0.0...HEAD` link. The footer now
+  defines `Unreleased` as `v2.0.0...HEAD` and `2.0.0` as
+  `v1.6.10...v2.0.0`; the paired regression passes.
 - Claude's focused test created ignored `.coverage`/`htmlcov` output; it did
   not change tracked files. Those disposable ignored artifacts are removed
   before the final clean-tree gate.

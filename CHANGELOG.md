@@ -585,7 +585,8 @@
 - quickstart.py 対話形式セットアップウィザード
 - CLI コマンド（fetch, status, monitor, init）
 
-[Unreleased]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.10...HEAD
+[Unreleased]: https://github.com/miyamamoto/jrvltsql/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.10...v2.0.0
 [1.6.10]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.9...v1.6.10
 [1.6.9]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.8...v1.6.9
 [1.6.8]: https://github.com/miyamamoto/jrvltsql/compare/v1.6.7...v1.6.8
