@@ -423,3 +423,30 @@ against current master with a same-key provider revision in one generic DIFN
 route, make regular and optimized importers count accepted operations
 consistently across SQLite/PostgreSQL without hiding real failures, merge that
 logical PR, then rebuild/rebase this final release candidate from latest master.
+
+### 2026-08-27 — release blockers merged
+
+- Click 8.5 exposed 47 warning-as-error failures in the statistics PR's first
+  executed GitHub `test` job. The independent test-infrastructure repair PR
+  `#252` was proven red-first, received one native Copilot review, passed local
+  and GitHub full gates, and squash-merged as
+  `beee9df5427de3a07b33d40686322096d097bfca`.
+- The PostgreSQL provider-operation statistics repair PR `#251` was then
+  rebased onto that merge. Final candidate
+  `ec16949e6599227696a58656b934fec80ce48c0e` passed a fresh PostgreSQL 16 plus
+  SQLite/Click selection (`370 passed, 10 subtests passed`), the non-slow suite
+  (`4799 passed, 507 skipped, 14 deselected, 21 subtests passed`), GitHub
+  `test`/`lint`/Windows jobs, unresolved review threads zero, and a clean-tree
+  gate. It squash-merged as
+  `b722317167c92b893b2753a18b192f9b99569388`.
+- This release branch remains clean at its prior candidate
+  `88d2e03c9e381651469f271ce82f20ba0015991e`; prior artifact and provider
+  evidence is historical evidence for the old code candidate only. Its
+  artifacts and image must not be published as the final merge result.
+
+Next safe action: rebase this branch onto exact latest `origin/master`
+`b722317167c92b893b2753a18b192f9b99569388`, rebuild wheel/sdist from the new
+immutable candidate, and rerun the affected statistics, package/install,
+SQLite/PostgreSQL, exact-runtime, and bounded provider/log reconciliation
+gates. Do not repeat the already-proven full setup solely for volume, and do
+not tag until the release PR merges and the merge SHA passes post-merge smoke.
