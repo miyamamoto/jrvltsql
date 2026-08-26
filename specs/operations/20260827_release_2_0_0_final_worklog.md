@@ -289,3 +289,34 @@ not an SDK-network-download result because `download_count=0`; the provider's
 own JVD cache already held the 23 files. One different, bounded current
 dataspec may be admitted to seek `download_count>0`; do not repeat RACE or
 delete provider-managed JVD files to manufacture a download.
+
+### 2026-08-27 — bounded DIFN network-download admission
+
+- One different scope is admitted: `DIFN`, option 1, provider/client window
+  `20260820..20260827`. `DIFN` is an official option-1 accumulated master
+  dataspec covering UM/KS/CH/BR/BN/HN/SK/RC. It was not part of either final
+  candidate call above.
+- Fresh progress path
+  `/home/keiba/backups/rebuild-20260820/ingestctl_progress_jra_cache_final_candidate_difn_20260820_27.json`
+  is absent. The same dry-run path returned the expected collector-owned
+  `manual` result without provider/database work; the same exact five-year
+  `jra_schema=completed` ledger is required by apply.
+- Exact apply command is identical to the prior `ingestctl` command except for
+  the new progress path and `--jra-spec DIFN --jra-from 2026-08-20
+  --jra-to 2026-08-27`. It will run once under the same host recovery lock and
+  measured-owner service-lock bootstrap.
+- Pre-call cache is 8,846 files / 6,446,407,186 bytes, latest mtime ns
+  `1787759010634671073`; `jltsql.log` baseline is 13,582,563 bytes, mtime epoch
+  `1787759111`; free space is 39,564,820,480 bytes.
+- PostgreSQL representative master baselines are
+  `NL_UM=214,048, NL_KS=1,565, NL_CH=1,476, NL_BR=10,764,
+  NL_BN=8,740, NL_HN=11,185, NL_SK=39,690, NL_RC=2,145`; non-idle sessions are
+  zero. Candidate image/version/identity, health, scheduler stop, both locks and
+  provider-process absence must pass immediately before apply.
+
+STOP on all previous provider/storage/identity conditions. In addition, this
+scope passes the remaining network-fresh gate only if the exact open diagnostic
+reports `download_count>0`, the stream reaches EOF and successful close, no
+parse/import failure occurs, and raw-cache/DB readback is coherent. A zero
+download remains useful real-provider evidence but does not close this gate;
+provider-managed JVD files must not be removed or altered.
