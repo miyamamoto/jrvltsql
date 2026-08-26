@@ -224,3 +224,34 @@ record, the iteration moves to the replacement branch above and a linked
 replacement PR. `#250` must be closed with that reason, not merged. The
 replacement PR must still execute the required `test` and `lint` checks before
 merge.
+
+## Replacement-PR transaction review
+
+The replacement PR received one new concrete review finding. The first commit
+failure regression rolled back inside its injected `commit()` method, masking
+the behavior of database drivers that leave a failed commit transaction
+pending. The test was corrected before production code: it now uses two
+distinct provider keys and injects commit failures without rollback. Both
+importers produced the required red result:
+
+```text
+reported: records_imported=1, records_failed=1
+durable:  both BanusiCode 123456 and 654321 remained
+expected: only the successful 654321 retry remained
+```
+
+The regular importer cleared the failed batch but did not clear a failed
+individual retry. The optimized importer cleared neither. The repair adds one
+shared recovery boundary: inspect whether failed auto-commit work is pending,
+roll it back before retrying, and invalidate plus fail hard if transaction
+state cannot be inspected or rollback cannot be completed. It is applied before
+the generic individual fallback and after each failed individual retry in both
+implementations. Already-rolled-back PostgreSQL errors remain idle and do not
+receive a redundant rollback.
+
+The corrected regression is green (`2 passed`). The complete bounded selection
+on SQLite and a fresh disposable PostgreSQL 16 instance is again `176 passed`;
+the disposable container was removed. GitHub's official status simultaneously
+reported a major partial outage with an unresolved Actions incident. No missing
+required check is treated as a pass; the PR remains blocked until real `test`
+and `lint` jobs execute successfully after recovery.

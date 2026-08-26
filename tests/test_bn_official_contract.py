@@ -227,6 +227,17 @@ def _same_key_provider_revisions() -> tuple[dict, dict]:
     return first, second
 
 
+def _distinct_key_provider_records() -> tuple[dict, dict]:
+    first = BNParser().parse(build_record())
+    assert first is not None
+    second_raw = bytearray(build_record())
+    second_raw[11:17] = b"654321"
+    second_raw[81:145] = _pad("Updated Owner Sentinel", 64)
+    second = BNParser().parse(bytes(second_raw))
+    assert second is not None
+    return first, second
+
+
 @pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
 def test_bn_same_key_provider_revisions_count_as_two_operations(
     bn_statistics_database, importer_class
@@ -254,7 +265,6 @@ class _TwoCommitFailuresSQLite(SQLiteDatabase):
     def commit(self) -> None:
         if self.remaining_commit_failures:
             self.remaining_commit_failures -= 1
-            self.rollback()
             raise DatabaseError("injected commit failure")
         super().commit()
 
@@ -268,7 +278,7 @@ def test_bn_commit_failures_count_only_durable_individual_retries(
         database.execute(SCHEMAS["NL_BN"])
         database.commit()
         database.remaining_commit_failures = 2
-        first, second = _same_key_provider_revisions()
+        first, second = _distinct_key_provider_records()
 
         stats = importer_class(database).import_records(iter([first, second]), auto_commit=True)
         stored = database.fetch_all(
@@ -279,7 +289,7 @@ def test_bn_commit_failures_count_only_durable_individual_retries(
     assert stats["records_failed"] == 1
     assert stats["batches_processed"] == 0
     assert stored == [
-        {"BanusiCode": EXPECTED["BanusiCode"], "BanusiName": "Updated Owner Sentinel"}
+        {"BanusiCode": "654321", "BanusiName": "Updated Owner Sentinel"}
     ]
 
 

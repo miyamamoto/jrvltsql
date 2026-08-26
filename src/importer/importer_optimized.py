@@ -67,6 +67,7 @@ from src.importer.importer import (
     resolve_standard_storage_table_name,
     resolve_standard_table_name,
     rollback_failed_import,
+    rollback_pending_retry_or_raise,
     validate_av_record,
     validate_cc_record,
     validate_hc_record,
@@ -1132,6 +1133,11 @@ class OptimizedDataImporter:
                 error=str(e),
             )
 
+            rollback_pending_retry_or_raise(
+                self.database,
+                context=f"optimized generic batch fallback for {table_name}",
+            )
+
             for record in batch:
                 try:
                     self.database.insert(table_name, record)
@@ -1142,12 +1148,16 @@ class OptimizedDataImporter:
                     self._records_imported += 1
 
                 except DatabaseError as e:
-                    self._records_failed += 1
                     logger.error(
                         "Failed to insert record",
                         table=table_name,
                         error=str(e),
                     )
+                    rollback_pending_retry_or_raise(
+                        self.database,
+                        context=f"optimized individual fallback for {table_name}",
+                    )
+                    self._records_failed += 1
 
     def get_statistics(self) -> Dict[str, Union[int, float]]:
         """Get import statistics."""

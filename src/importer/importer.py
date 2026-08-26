@@ -75,6 +75,25 @@ def inspect_pending_transaction_or_invalidate(database: BaseDatabase, *, context
         ) from inspection_error
 
 
+def rollback_pending_retry_or_raise(database: BaseDatabase, *, context: str) -> None:
+    """Clear failed auto-commit work before retrying on the same connection."""
+    if not inspect_pending_transaction_or_invalidate(database, context=context):
+        return
+    try:
+        database.rollback()
+    except Exception as rollback_error:
+        try:
+            database.invalidate_connection()
+        except Exception as invalidation_error:
+            raise TransactionRecoveryError(
+                f"{context}: rollback failed ({rollback_error}); connection "
+                f"invalidation failed ({invalidation_error})"
+            ) from invalidation_error
+        raise TransactionRecoveryError(
+            f"{context}: rollback failed; connection invalidated"
+        ) from rollback_error
+
+
 def resolve_standard_storage_table_name(native_table_name: str) -> str:
     """Resolve the canonical standard storage owner without database checks."""
     from src.database.table_mappings import (
@@ -8924,23 +8943,10 @@ class DataImporter:
                 error=str(e),
             )
 
-            # PostgreSQLDatabase performs driver-specific rollback when
-            # insert_many() fails. Avoid a second rollback here.
-            try:
-                db_type = self.database.get_db_type()
-            except AttributeError:
-                # Fallback for databases without get_db_type() method
-                db_type = "unknown"
-
-            if db_type != "postgresql":
-                try:
-                    self.database.rollback()
-                except Exception as rollback_error:
-                    logger.debug(
-                        "Rollback failed during batch fallback",
-                        table=table_name,
-                        error=str(rollback_error),
-                    )
+            rollback_pending_retry_or_raise(
+                self.database,
+                context=f"generic batch fallback for {table_name}",
+            )
 
             # Try inserting one by one on batch failure
             success_count = 0
@@ -8967,12 +8973,16 @@ class DataImporter:
                     success_count += 1
 
                 except DatabaseError as record_error:
-                    fail_count += 1
                     logger.error(
                         "Failed to insert record",
                         table=table_name,
                         error=str(record_error),
                     )
+                    rollback_pending_retry_or_raise(
+                        self.database,
+                        context=f"individual batch fallback for {table_name}",
+                    )
+                    fail_count += 1
 
             self._records_imported += success_count
             self._records_failed += fail_count
