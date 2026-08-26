@@ -190,3 +190,57 @@ progress file and the already-completed same-window schema ledger. Freeze the
 exact dry-run command, PostgreSQL/cache/disk baseline, identity and STOP gates
 before `--apply`; do not count another unchanged-cache replay as fresh-download
 evidence.
+
+### 2026-08-27 — fresh differential acquisition admission
+
+- The existing merged `ingestctl` implementation at KIR checkout SHA
+  `c03cc88c6d682c6eb0f48df8cef89e0420e11dfc` was inspected; the checkout is
+  three commits behind `origin/main`, but those three commits do not change
+  `scripts/ingestctl.py` or its focused test. Its only tracked local change is
+  unrelated `scripts/run_jrdb_sync_loop.py`; the admitted command does not use
+  that file.
+- The candidate scope is `RACE`, option 1, provider start `20260824`, client
+  filter end `20260830`, PostgreSQL destination. The five-year recovery window
+  and schema evidence remain `2021-08-20..2026-08-19`; the existing schema
+  ledger has `jra_schema=completed` for exactly that window.
+- New progress path
+  `/home/keiba/backups/rebuild-20260820/ingestctl_progress_jra_cache_final_candidate_20260824_30.json`
+  is absent. The dry run returned `jra_cache=manual`/`nothing to run in a dry
+  run`, as designed for collector-owned acquisition, and made no provider or
+  database call. It also states that no optional outer image-equivalence
+  service was named; stage-local candidate image/version/identity gates below
+  are the binding evidence.
+- Exact apply command after this record is pushed:
+
+  ```text
+  python3 scripts/ingestctl.py rebuild --years 5 --today 2026-08-20
+    --stage jra_cache --apply
+    --progress-file /home/keiba/backups/rebuild-20260820/ingestctl_progress_jra_cache_final_candidate_20260824_30.json
+    --compose-file /home/keiba/kps-ingestion-dev-runtime/docker-compose.ingestion.yml
+    --sources-file /home/keiba/kps-ingestion-dev-runtime/config/collector_sources.json
+    --env-file /home/keiba/kps-ingestion-dev-runtime/.env
+    --jra-container kps_ingestion_dev_jra_collector
+    --jra-schema-completion-file /home/keiba/backups/rebuild-20260820/ingestctl_progress_jra_schema_v2.json
+    --jra-spec RACE --jra-from 2026-08-24 --jra-to 2026-08-30
+  ```
+
+- Candidate runtime remains exact container
+  `7dc00adad73b4b88d3c6f44b8340b2e524237b7c3cbb55b1b6f835f46be8b99b`,
+  image `sha256:94ebb91ecc110718fdff5c14c4a8d24d48735fd679f33fe2222f4c018d201a3a`,
+  installed/source `2.0.0`, wrapper `2.0.0.dev7`, healthy. Identity guard,
+  host recovery lock and measured-owner service-lock probe pass; both kick
+  schedulers are exited; no provider process or non-idle PostgreSQL client is
+  present.
+- Pre-call PostgreSQL totals/maxima remain `NL_RA=32,584/20260823`,
+  `NL_SE=391,158/20260823`, `NL_HR=17,535/20260823`; all three have zero rows
+  for 2026-08-24..30. Cache baseline is 8,844 files, 6,428,646,328 bytes,
+  latest mtime ns `1787407590094613767`; free space is 39,539,838,976 bytes.
+  Mounted `jltsql.log` is 13,572,021 bytes at mtime epoch `1787736980`.
+
+STOP on nonzero stage/collector result, missing or wrong progress completion,
+provider/transport/parser/import/schema/transaction error, zero cache delta,
+no positive future PostgreSQL rows when the provider reports records, lingering
+provider process/transaction/lock, candidate identity or image/version drift,
+or any non-JRA container lifecycle mutation. Retain the complete non-secret
+command output outside the repository and do not retry merely to obtain a
+different result.
