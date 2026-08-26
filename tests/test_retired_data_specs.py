@@ -15,7 +15,6 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
-from click.testing import CliRunner
 
 from src.cli.main import cli
 from src.fetcher.historical import HistoricalFetcher
@@ -34,6 +33,7 @@ from src.jvlink.constants import (
     validate_jvopen_combination,
 )
 from src.jvlink.wrapper import JVLinkWrapper
+from tests.cli_test_support import CliRunner
 
 RETIRED = ("DIFF", "BLOD", "SNAP", "HOSE", "TCOV", "RCOV")
 REPLACEMENTS = ("DIFN", "BLDN", "SNPN", "HOSN", "TCVN", "RCVN")

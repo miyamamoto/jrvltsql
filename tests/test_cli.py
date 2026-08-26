@@ -7,9 +7,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from click.testing import CliRunner
-
 from src.cli.main import cli
+from tests.cli_test_support import CliRunner
 
 
 class TestCLIBasic(unittest.TestCase):
