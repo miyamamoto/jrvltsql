@@ -450,3 +450,41 @@ immutable candidate, and rerun the affected statistics, package/install,
 SQLite/PostgreSQL, exact-runtime, and bounded provider/log reconciliation
 gates. Do not repeat the already-proven full setup solely for volume, and do
 not tag until the release PR merges and the merge SHA passes post-merge smoke.
+
+### 2026-08-27 — blocker-merge carry-forward candidate
+
+- The release branch was rebased without conflict onto exact `origin/master`
+  `b722317167c92b893b2753a18b192f9b99569388`. The resulting immutable code and
+  release-metadata candidate was
+  `b01eaa5d6146cc39f9a567a6aaf24a98b9e2b057`; its worktree was clean.
+- Fresh artifacts were built from a `git archive` of that exact SHA, not from
+  the worktree:
+  - wheel `jltsql-2.0.0-py3-none-any.whl`, SHA-256
+    `e90fe9e823924851107825ea7778166106ae978bb90c502f180a1ebc0088564b`;
+  - sdist `jltsql-2.0.0.tar.gz`, SHA-256
+    `b10ef13b6758075a055e48e2e0e1f3d2105e03c47c11d51de03a52afe47f45f8`.
+- Both distribution-content checks passed. The wheel reports exact metadata
+  `jltsql 2.0.0`, Python `>=3.12`, and contains neither tests nor `specs/`.
+  A fresh isolated Python 3.12 environment and unrelated writable directory
+  passed import-origin/version, `init`, `config --show`, and SQLite
+  `create-tables`; the resulting database contained 80 tables.
+- A fresh disposable PostgreSQL 16 plus SQLite selection covering SE
+  `MakeDate=00000000`, schema migration, BN provider-operation statistics,
+  importer rollback/recovery, and CC passed **299 tests**. The PostgreSQL
+  container was removed after the run.
+- The exact candidate's full non-slow suite passed **4,799 tests**, with 507
+  environment/optional skips, 14 slow deselections, and 21 subtests. Test-gate,
+  fatal Flake8, compile, lock parity, diff and clean-tree checks passed.
+- Read-only recheck before the current runtime gate found no feature-generation
+  or importer process. Draft PR #249 still points to old pre-blocker SHA
+  `88d2e03c9e381651469f271ce82f20ba0015991e` and therefore still displays the
+  old Click failure; it must not be treated as evidence for this candidate.
+  The healthy development JRA collector likewise still runs old candidate
+  `1f9f4fc8c77bbe88d398b6263ffa05c64f66eead`.
+
+This worklog update intentionally creates one final docs-only candidate SHA.
+Next safe action: rebuild artifacts and the temporary JRA runtime image from
+that exact SHA, repeat artifact/install and affected database gates, then
+rotate only `jra-collector` with preserved Wine identity, mounts, credentials
+and reset/install controls disabled. Perform one bounded provider/log
+reconciliation; do not repeat the already-proven full setup solely for volume.
