@@ -63,19 +63,27 @@ python -m pytest tests/test_cli.py tests/test_retired_data_specs.py -q --no-cov
   checks execute successfully; unresolved review threads are zero; worktree is
   clean before merge.
 
-## Uncommitted implementation verification
+## Implementation verification
 
 The minimal test-only compatibility runner was applied with no production
 source, dependency, warning-policy, or assertion changes. Python 3.12.11 with
-Click 8.5.0 now reports:
+Click 8.5.0 at implementation commit
+`e419fb2e342643df18c7f5c0bfed68bfed95908d` reports:
 
 ```text
 193 passed, 10 subtests passed
+4794 passed, 505 skipped, 14 deselected, 21 subtests passed
 ```
 
-The repository fail-closed test-gate validator and `compileall` also pass.
-The next candidate commit must still pass fatal flake8, `uv lock --check`, the
-non-slow full suite, and the required GitHub checks before merge.
+The second line is the complete non-slow local workflow selection. The
+repository fail-closed test-gate validator, fatal flake8, `compileall`,
+`uv lock --check`, and `git diff --check` also pass. The tree contained only
+the intended test helper, two test-module import changes, and this tracked
+worklog.
+
+The final worklog commit itself cannot record its own full SHA. Record that
+candidate SHA and its required GitHub-check results on the PR before merge, as
+required by the repository handoff policy.
 
 ## STOP conditions
 
@@ -86,6 +94,6 @@ non-slow full suite, and the required GitHub checks before merge.
 
 ## Next safe action
 
-Run the remaining local gates, commit the exact candidate, run the non-slow
-full suite against that SHA, then push one PR and complete its required checks
-and single native review before merging.
+Commit this verification evidence, rerun the focused selection on the resulting
+candidate, then push one PR and complete its required checks, single native
+review, unresolved-thread check, and clean-tree gate before merging.
