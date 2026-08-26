@@ -112,3 +112,17 @@ Next safe action: derive a temporary development image from exact runtime dev7 p
 - Six non-JRA development services were frozen as a name/ID/image/status/health projection with SHA-256 `b093e2f68f751243e3edffd1ba8c705e79bb38fc7567001f19b085a2bbafdb89`. JRDB collector health is already red; it is a pre-existing external condition and must not be changed or hidden by this JRA-only rotation.
 
 Next safe command after this evidence is pushed: recreate exactly `jra-collector` with base Compose + the existing setup-dialog override + the temporary final-candidate override, using `--no-deps --no-build --force-recreate --wait`. Immediately verify exact image/package/runtime versions, health, the same protected-identity projection, the same non-JRA projection, free locks, provider absence, scheduler state and PostgreSQL idle before any provider call.
+
+### 2026-08-27 — exact candidate adopted without provider access
+
+- Pre-mutation admission was committed/pushed as `4360b697fb42c48180923bfa1c837dd1977419a1`. Immediately mutable identity, host/service lock, provider absence, scheduler-stop, PostgreSQL-idle and current-container gates passed again.
+- Compose force-recreated only `jra-collector` using base + the existing setup-dialog override + the temporary final-candidate override and `--no-deps --no-build --force-recreate --wait`. It reached healthy. No other service was requested from Compose.
+- New JRA container full ID is `7dc00adad73b4b88d3c6f44b8340b2e524237b7c3cbb55b1b6f835f46be8b99b`; exact image ID is `sha256:94ebb91ecc110718fdff5c14c4a8d24d48735fd679f33fe2222f4c018d201a3a`.
+- Actual container contract matches the candidate plan: hostname, protected MAC, every planned environment key, and the exact mount source/target/read-write set. A non-secret canonical actual identity digest is `71f2aaf6a12029e959ec34bfd93e22ebaa22249d6caebacc3f31366d744303d2`.
+- Direct checks agree: installed distribution `2.0.0`, imported `src.__version__=2.0.0`, wrapper `/app/pyproject.toml=2.0.0.dev7`. `/health` is `{status=ok, kind=jra, runtime.version=2.0.0, runtime.runtime_version=2.0.0.dev7}`.
+- The first health assertion looked for the two version values at the JSON top level and stopped on `None`; the actual API nests them under `runtime`. This was an inspection assertion only. The corrected nested-field assertion passed; no provider or database operation occurred between them.
+- Recreation removed the ephemeral service lock. The existing measured-owner acquisition wrapper recreated/validated it and acquired/released it nonblocking; the host recovery lock is also available.
+- Provider/fetch/realtime/daily-update process count remains zero; raw PostgreSQL has zero non-idle client backends; identity guard passes; startup bad-marker count is zero.
+- The six-service non-JRA projection remains exactly `b093e2f68f751243e3edffd1ba8c705e79bb38fc7567001f19b085a2bbafdb89`. The pre-existing unhealthy JRDB collector and every other non-JRA ID/image/status remain untouched.
+
+Next safe action: commit/push this no-provider adoption evidence and open a Draft release PR. Then use the existing bounded acquisition tooling in dry-run/read-only mode to admit one positive RACE/MING/results scope for the exact candidate. Record PostgreSQL baselines, provider/cache/process/lock state and disk first; do not start a provider call until the exact planned payload and stop gates are frozen.
