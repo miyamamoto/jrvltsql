@@ -320,3 +320,35 @@ reports `download_count>0`, the stream reaches EOF and successful close, no
 parse/import failure occurs, and raw-cache/DB readback is coherent. A zero
 download remains useful real-provider evidence but does not close this gate;
 provider-managed JVD files must not be removed or altered.
+
+### 2026-08-27 — network-fresh DIFN acquisition
+
+- The admitted DIFN command ran once and exited zero. The immutable progress
+  scope is `DIFN`, option 1, `20260820..20260827`, status completed. Retained
+  output is 4,209 bytes at
+  `/home/keiba/backups/rebuild-20260820/ingestctl_jra_cache_final_candidate_difn_20260820_27.log`,
+  SHA-256 `b3d733a437cce5d1a63763f91f04b2ce179011b9f24d00026ab5f439dd8f7616`.
+- Exact open diagnostics are **download_count=8, read_count=14**. The log delta
+  contains one open/stream-open, provider EOF, successful stream close, fetch
+  completion and import completion, with zero error-level entries. The result
+  is **3,881 fetched / 3,881 parsed / 3,881 imported / 0 failed / 10 batches**.
+- PostgreSQL durable master counts changed exactly from the recorded baseline:
+  `NL_UM 214,048 -> 214,140`, `NL_BN 8,740 -> 8,741`,
+  `NL_RC 2,145 -> 2,147`; `NL_KS/NL_CH/NL_BR/NL_HN/NL_SK` retained their
+  prior cardinalities. This is positive downloaded provider data, not a
+  no-data/open-only result. PostgreSQL is idle after completion.
+- Application raw-cache file count, bytes and latest mtime did not change.
+  This is the documented fail-safe behavior for undated DIFN master records:
+  `_extract_record_date` has no Year+MonthDay/ChokyoDate key, so the stream is
+  imported but its partial date-keyed app-cache append is not committed or
+  marked complete. CHANGELOG and release notes already state that undated
+  master rows suppress completeness and roll back partial append. No
+  provider-managed JVD file was altered to obtain this result.
+- Candidate identity/image/version/health, scheduler stop, provider-process
+  cleanup, both locks and non-JRA lifecycle state remain correct.
+
+The network-fresh acquisition gate is now closed: the exact candidate performed
+positive JVOpen download/status wait, read, EOF, close and durable PostgreSQL
+import. Together with the preceding RACE two-backend replay, this proves real
+provider transport plus PostgreSQL/SQLite parser-storage equivalence without
+conflating an undated master stream with a replayable date-keyed app cache.
