@@ -15,7 +15,8 @@ transactions, collector identity, or release metadata.
 
 - Repository: `miyamamoto/jrvltsql`
 - Worktree: `/home/keiba/scratch/20260827_jrvltsql_import_stats`
-- Branch: `fix/postgresql-import-statistics-20260827`
+- Branch: initially `fix/postgresql-import-statistics-20260827`; replacement
+  branch `fix/postgresql-import-statistics-ci-retry-20260827`
 - Base and initial HEAD: `def93638466722e30a12f318baf7da5ec0da9ec2`
 - Base source: freshly fetched `origin/master`
 - Related draft release PR: `#249` (`2.0.0` final; publication held)
@@ -205,3 +206,21 @@ gate, fatal flake8 (`E9,F63,F7,F82`, count 0), compileall, and `git diff
 non-slow suite on its immutable SHA, record that evidence on the PR, and
 resolve the review threads. Do not merge until required `lint` and `test`
 checks have executed successfully and the worktree is clean.
+
+## GitHub Actions delivery incident and replacement PR
+
+PR `#250` received the initial Copilot and CodeRabbit reviews, and all three
+review threads were answered and resolved. However, GitHub did not create a
+single `Tests` workflow run for that PR after its initial open, a normal
+synchronize push, close/reopen, or a content-identical empty trigger commit.
+The branch-protection-required `test` and `lint` contexts therefore remained
+missing rather than failed. Required checks are not bypassed.
+
+The exact content-identical trigger candidate
+`0f42556321f3a0ed13b5dd0001d12c551ee55005` was independently rerun and again
+completed with `4798 passed, 513 skipped, 14 deselected, 21 subtests passed`.
+To obtain a real opened-event check suite while retaining `#250` as the review
+record, the iteration moves to the replacement branch above and a linked
+replacement PR. `#250` must be closed with that reason, not merged. The
+replacement PR must still execute the required `test` and `lint` checks before
+merge.
