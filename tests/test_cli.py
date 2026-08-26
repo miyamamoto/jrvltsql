@@ -53,6 +53,20 @@ class TestCLIBasic(unittest.TestCase):
         self.assertEqual(fetch_result.exit_code, 1)
         self.assertIn('Configuration file not found', fetch_result.output)
 
+    def test_isolated_filesystem_preserves_click_temp_dir_contract(self):
+        """The compatibility runner retains Click's optional parent directory."""
+        original_directory = Path.cwd()
+        with tempfile.TemporaryDirectory() as parent_directory:
+            with self.runner.isolated_filesystem(parent_directory) as isolated:
+                Path("sentinel").write_text("present", encoding="utf-8")
+                self.assertEqual(Path.cwd(), Path(isolated))
+
+            self.assertEqual(Path.cwd(), original_directory)
+            self.assertEqual(
+                (Path(isolated) / "sentinel").read_text(encoding="utf-8"),
+                "present",
+            )
+
 
 class TestInitCommand(unittest.TestCase):
     """Test init command."""
