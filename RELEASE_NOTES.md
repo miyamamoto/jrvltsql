@@ -1,13 +1,12 @@
-# jrvltsql v2.0.0 Release Notes (final candidate)
+# jrvltsql v2.0.0 Release Notes
 
-This branch builds the final `2.0.0` candidate, but it is not released yet.
-The tag and GitHub release remain blocked until the exact candidate passes the
-real provider, SQLite, PostgreSQL, sustained setup/backfill, live race-day
-realtime, artifact, and independent-review gates. The 64-bit SDK path remains
-outside the supported claim; 1.x and older 2.0 prerelease databases require a
-backup, rebuild, and reimport.
+`2.0.0` is the stable major release built from the provider, SQLite,
+PostgreSQL, setup/backfill, realtime, artifact, and independent-review gates
+recorded in the release worklog. The 64-bit SDK path remains outside the
+supported claim; 1.x and older 2.0 prerelease databases require a backup,
+rebuild, and reimport.
 
-What the final candidate adds over `2.0.0.dev6`:
+What `2.0.0` adds over `2.0.0.dev6`:
 
 - accepts the official `SE` cancellation/exclusion initial value
   `MakeDate=00000000`, while continuing to reject malformed dates. Standard

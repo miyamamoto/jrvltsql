@@ -7,11 +7,11 @@
 
 ## [Unreleased]
 
-このbranchは最終`2.0.0`候補である。実provider・SQLite・PostgreSQL・長時間setup・
-レース当日realtime・artifact・独立reviewの全gateが完了するまでtag/publishしない。
-互換性を破る変更を含むため1.xとしては配布しない。
+該当なし。
 
-### 2.0.0 final candidate
+## [2.0.0] - 2026-08-27
+
+### 2.0.0
 
 - `SE`（馬毎レース情報）の公式取消・除外レコードで、`MakeDate`の公式初期値
   `00000000`を受理する。実在日付とexact `00000000`以外は引き続きrejectする。

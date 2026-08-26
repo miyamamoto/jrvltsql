@@ -557,3 +557,32 @@ temporary runtime image from that exact SHA, prove that the only delta from
 `c0987e9...` is this excluded `specs/` record, and perform post-rotation
 version/health/identity checks. Record the resulting full SHA and checks in PR
 metadata rather than creating a self-referential worklog commit.
+
+### 2026-08-27 — independent final review and release-wording repair
+
+- Claude Code `2.1.233` reviewed exact candidate
+  `6a91fbc009f946932dad65dab569873dfc3b0662` read-only with
+  `--model fable --effort high`. Fable was selected because this final gate
+  combines package/version, migration, provider-evidence and publication
+  boundaries. Session ID is `5f41f7d2-5c4a-4b8a-9b25-8f3d9c6a21e0`.
+- The review found no P0/P1 and classified code, security and packaging as
+  green. It found one concrete P2: `RELEASE_NOTES.md` still said the release
+  was unpublished and CHANGELOG kept the final changes under `Unreleased`, so
+  the published tag would contradict its own bundled documentation.
+- The existing public release-contract test was extended first. Against the
+  unmodified candidate it failed exactly because
+  `## [2.0.0] - 2026-08-27` was absent. This is the required red evidence.
+- Release notes now describe the stable release without candidate/unpublished
+  wording. CHANGELOG leaves `Unreleased` empty and moves the accumulated final
+  content under dated `## [2.0.0] - 2026-08-27`. The same exact regression
+  then passed.
+- Claude's focused test created ignored `.coverage`/`htmlcov` output; it did
+  not change tracked files. Those disposable ignored artifacts are removed
+  before the final clean-tree gate.
+
+The commit containing this repair and this worklog entry is the final release
+candidate. Its full SHA, final artifact hashes, exact-head CI and post-rotation
+runtime evidence are recorded in PR #249 metadata to avoid a self-referential
+worklog-only commit loop. Do not request another broad external review merely
+because this documented review finding was fixed; native review and the exact
+release contract/CI must cover the final SHA.
