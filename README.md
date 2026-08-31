@@ -35,18 +35,22 @@ fail closed で止まります。
 ただし、jrvltsql の 64-bit 実行経路は未検証です。x64 SDK の実導入からデータ取得、
 parse、DB保存までの検証が完了するまでは、64-bit 対応済みとは扱いません。
 
-PowerShell でインストールします。
+運用環境では正式リリースtagを固定してインストールします。次は現在の安定版
+`v2.0.0`の例です。採用時には`git rev-parse HEAD`で得たfull SHAと、使用したartifactの
+SHA-256も運用記録へ残してください。
+
+```powershell
+git clone --branch v2.0.0 --depth 1 https://github.com/miyamamoto/jrvltsql.git
+cd jrvltsql
+git rev-parse HEAD
+pip install .
+```
+
+最新の`master`を試す開発環境に限り、次のone-command installerを使用できます。
+このinstallerは既存checkoutも`master`へ更新するため、運用環境では使用しません。
 
 ```powershell
 irm https://raw.githubusercontent.com/miyamamoto/jrvltsql/master/install.ps1 | iex
-```
-
-手動で入れる場合:
-
-```bat
-git clone https://github.com/miyamamoto/jrvltsql.git
-cd jrvltsql
-pip install -e .
 ```
 
 ## 最短手順

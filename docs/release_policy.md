@@ -11,15 +11,17 @@
 2. **release**: 検証済みの不変commitからtagと配布artifactを作る。
 3. **adopt**: 特定の運用環境が、そのreleaseを明示的に採用する。
 
-`master`へのmergeはreleaseでもdeployでもありません。運用環境は`master`、branch名、
-短縮SHA、または`:latest`を追従せず、正式tag、full commit SHA、artifact hashを固定します。
+`master`へのmergeはapplication/runtimeのreleaseでもdeployでもありません。運用環境は
+`master`、branch名、短縮SHA、または`:latest`を追従せず、正式tag、full commit SHA、
+artifact hashを固定します。`docs/**`または`mkdocs.yml`のmergeではGitHub Pagesだけが
+自動更新されます。このdocumentation deployはapplication/runtimeの採用とは区別します。
 
 ## リリース経路
 
 | 経路 | 対象 | 統合先 | 公開単位 |
 | --- | --- | --- | --- |
 | 通常リリース | 機能、性能改善、リファクタ、観測性、緊急でないbug fix | `master` | 複数PRをまとめた予定release |
-| 緊急 hotfix | 運用中releaseの重大な障害に対する最小修正 | 対応する`stable/X.Y` | patch release |
+| 緊急 hotfix | 運用中releaseの重大な障害に対する最小修正 | 採用中tagから作る`release/X.Y.Z` | patch release |
 
 分類が決まらない場合は通常リリースとして扱います。緊急性はテストやレビューを省略する
 理由ではなく、無関係な変更を混ぜずに検証範囲を絞る理由です。
@@ -29,14 +31,14 @@
 | 名前 | 用途 | 規則 |
 | --- | --- | --- |
 | `master` | 通常開発の統合 | release候補品質を保つが、mergeだけでは公開・採用しない |
-| `release/X.Y.Z` | 通常releaseの安定化 | `master`の選定commitから作る一時branch。release blocker以外を追加しない |
-| `stable/X.Y` | 運用中のrelease系列 | 対応するGA tagから作り、承認済みhotfixだけを入れる |
-| `hotfix/X.Y.Z-<name>` | 緊急修正 | 実際に採用中の正確なtagから作る一時branch |
+| `release/X.Y.Z` | 1つのrelease候補の統合 | 通常時は`master`、hotfix時は採用中tagから作る。release blocker以外を追加しない |
+| `stable/X.Y` | 運用中のrelease系列 | 最新の公開済みGA tagと同じcommitを指す。未公開commitを置かない |
+| `hotfix/<next-patch>-<name>` | 緊急修正 | 実際に採用中の正確なtagから作り、同じ起点の`release/X.Y.Z`へPRを出す |
 | `vX.Y.ZrcN` | release candidate | 開発・検証用。運用中releaseを自動更新しない |
 | `vX.Y.Z` | 正式release | merge後の不変commitだけに付ける |
 
-`stable/X.Y`がまだ存在しない系列で初めてhotfixを行う場合は、現在採用中のGA tagから
-作成します。branchの先端ではなく、採用中tagのcommitを起点として記録します。
+`stable/X.Y`がまだ存在しない系列では、GA公開後にそのtagと同じcommitを指すbranchとして
+作成します。`stable/X.Y`は次の未公開候補を準備する場所ではありません。
 
 ## 通常リリース
 
@@ -44,15 +46,20 @@
 予定したrelease単位で次の手順を実行します。
 
 1. 対象PRとscopeを確定し、`master`のfull SHAから`release/X.Y.Z`を作る。
-2. `vX.Y.Zrc1`などのcandidateを作り、wheel/sdistとhashを保存する。
-3. unit/integration test、distribution smoke、SQLite/PostgreSQL、対象変更に応じた
+2. `pyproject.toml`、`src/__init__.py`、`uv.lock`、version-contract testを
+   `X.Y.ZrcN`へ同期し、source、lock、installed metadata、CLIのversion一致を確認する。
+3. `vX.Y.ZrcN`のcandidateを作り、wheel/sdistとhashを保存する。
+4. unit/integration test、distribution smoke、SQLite/PostgreSQL、対象変更に応じた
    JV-Link/provider境界を検証する。
-4. 開発用collectorへcandidateを明示的に導入し、収集・再取込・transaction・再起動を
+5. 開発用collectorへcandidateを明示的に導入し、収集・再取込・transaction・再起動を
    riskに応じて確認する。
-5. release blockerだけを修正する。新機能や無関係な高速化は次の通常releaseへ送る。
-6. cleanなmerge済みfull SHAから正式tagとartifactを作り、GitHub Releaseへ検証結果、
-   既知の制約、移行、rollbackを記載する。
-7. 運用環境は別の採用操作でtag、full SHA、artifact hashを固定する。
+6. release blockerだけを`release/X.Y.Z`へPRで修正し、各repairを`master`へも
+   separate PRでforward-portする。新機能や無関係な高速化は次の通常releaseへ送る。
+7. version metadataを最終`X.Y.Z`へ同期して`release/X.Y.Z`へmergeし、そのmerge SHAから
+   artifactを再構築して必要なgateを再実行する。RC artifactを正式配布へ流用しない。
+8. 検証した`release/X.Y.Z`のfull SHAへ正式tagを付け、`stable/X.Y`を同じcommitへ進める。
+   GitHub Releaseへ検証結果、既知の制約、移行、rollbackを記載する。
+9. 運用環境は別の採用操作でtag、full SHA、artifact hashを固定する。
 
 通常releaseは、月次または明示したmilestone単位を基本とします。変更が揃っていない場合は
 日付だけを理由に公開しません。
@@ -78,14 +85,18 @@
 ### hotfix手順
 
 1. 影響を受ける採用中version、再現条件、severity、回避策の有無を記録する。
-2. 採用中の正確な`vX.Y.Z`から`hotfix/<next-patch>-<name>`を作る
-   （例: `v2.0.0`に対する`hotfix/2.0.1-import-loss`）。
+2. 採用中の正確な`vX.Y.Z`から、次のpatch用`release/X.Y.Z`と
+   `hotfix/<next-patch>-<name>`を作る
+   （例: `v2.0.0`に対する`release/2.0.1`と`hotfix/2.0.1-import-loss`）。
 3. 修正前に最小の回帰testが赤になることを確認し、その失敗をPRへ記録する。
 4. 修正を障害原因と回帰testに必要な範囲へ限定する。schema変更、性能改善、整理を便乗させない。
 5. focused testに加え、影響するDB/provider/transaction/runtime境界を実測する。
-6. unresolved review threadを0件にし、cleanなfull SHAを凍結する。
-7. 対応する`stable/X.Y`へmergeし、patch candidate、smoke、正式patch releaseの順で公開する。
-8. 同じrepairを別PRで`master`へforward-portし、release記録から双方を参照する。
+6. hotfix PRを同じ採用中tagから作った`release/X.Y.Z`へmergeし、unresolved review threadを
+   0件にしてcleanなfull SHAを凍結する。既存の`stable/X.Y`はmerge先にしない。
+7. version metadataをpatch candidateへ同期し、candidate smoke後に最終patch versionへ同期して
+   gateを再実行する。検証した`release/X.Y.Z`のfull SHAへ正式tagを付ける。
+8. 公開後、`stable/X.Y`をそのtagと同じcommitへ進め、hotfixのrepairを別PRで`master`へ
+   forward-portする。release記録からhotfix、stable更新、forward-portを参照する。
 9. 運用環境はrollback可能な状態でpatch releaseを明示採用する。
 
 原因が分からない、再現できない、または修正が複数領域へ広がる場合は、緊急という理由で

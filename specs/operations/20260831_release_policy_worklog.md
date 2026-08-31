@@ -70,4 +70,22 @@
 - Code tests were not expanded because this iteration changes documentation and navigation only. The GitHub workflow will still run the repository test/lint/distribution gates for the exact pushed SHA.
 - Committed the initial documentation candidate as `0ffb8abc69fe975538c3890f2502fbea436aeb3a`, pushed branch `codex/release-policy-20260831`, and opened PR #259: `https://github.com/miyamamoto/jrvltsql/pull/259`.
 - The first `gh pr create` body was passed through an unsafe double-quoted shell string, so Markdown backticks were interpreted as shell substitutions. This did not change repository files or runtime state, but it removed code spans from the initial PR text and repeated the already-safe MkDocs build. The PR body was immediately replaced using a single-quoted literal and read back from GitHub to verify the exact intended content. Future GitHub bodies in this iteration must use a literal or body file, never an interpolated double-quoted string.
-- Next safe action: commit/push this operational record, update the PR's exact candidate SHA, then collect the normal one-time review and CI results without changing the candidate while they run.
+- Committed/pushed that record as candidate `045f5f5786c72336999a36e10e9ad497431409ae` and updated the PR body to bind that exact SHA.
+
+### 2026-08-31 — first review batch
+
+- GitHub workflow on candidate `045f5f5786c72336999a36e10e9ad497431409ae`: test passed in 3m40s, lint passed, Windows launcher checks passed; performance was correctly skipped for this docs-only PR.
+- Codex and Copilot reviewed the original documentation content at `0ffb8abc69fe975538c3890f2502fbea436aeb3a`; CodeRabbit completed the same content review. The later `045f5f5` commit changed only this worklog.
+- Consolidated the reviewer findings before editing. Six distinct findings were accepted:
+  1. hotfix branch naming differed between the table and procedure;
+  2. version metadata synchronization was missing before RC construction;
+  3. normal-release blocker repairs had no explicit forward-port/final-merge boundary;
+  4. the no-deploy statement ignored automatic GitHub Pages publication;
+  5. README installation commands followed mutable `master`, contradicting operational pinning;
+  6. merging a hotfix into a `stable/X.Y` branch ahead of the adopted tag could include unrelated unreleased commits.
+- Duplicate Codex/CodeRabbit findings about normal-release blocker propagation were grouped into item 3 rather than repaired twice.
+- The repair batch makes `stable/X.Y` point only at the latest published GA commit, stages both normal and hotfix releases on isolated `release/X.Y.Z` branches, synchronizes RC/final versions before artifacts, forward-ports repairs explicitly, documents the GitHub Pages exception, and separates pinned operational installation from the master-following development installer.
+- Post-repair `uvx --from mkdocs-material mkdocs build --strict`: pass; the only informational output remained the pre-existing `record_contracts.md` nav note. `git diff --check`: pass.
+- The first focused test invocation omitted the project's `dev` extra and inherited an incompatible system `pytest-cov`, ending with a controlled pytest internal environment error before test evidence. After `uv sync --frozen --extra dev`, `.venv/bin/python -m pytest tests/test_public_setup_contract.py -q` passed **9 tests**.
+- Removed only the ignored artifacts created by that focused run (`.venv`, coverage/pytest output, egg-info, and Python caches) after an exact `git clean -ndX` preview. No tracked or pre-existing shared-checkout file was removed.
+- Next safe action: inspect/commit/push this single grouped repair, reply to and resolve every thread, then perform one final exact-head gate without requesting repeated speculative review loops.
