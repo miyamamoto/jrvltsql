@@ -34,5 +34,6 @@ nav:
   - JV-Link 手動登録: jvlink_manual_registration.md
   - スクリプト一覧: scripts.md
   - アーキテクチャ: architecture.md
+  - リリース運用方針: release_policy.md
 
 copyright: Copyright &copy; 2024 JRVLTSQL コントリビューター

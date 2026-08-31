@@ -178,6 +178,7 @@ setup 取得が 120 秒を超える環境では `JVLINK_OPEN_TIMEOUT_SECONDS`（
 | [PostgreSQL](docs/postgresql.md) | PostgreSQL 保存と日次同期 |
 | [CLI](docs/CLI.md) | CLI リファレンス |
 | [スクリプト一覧](docs/scripts.md) | batch / script の役割 |
+| [リリース運用方針](docs/release_policy.md) | 通常リリース、緊急 hotfix、運用環境への採用を分離する規則 |
 | [アーキテクチャ](docs/architecture.md) | 実装構成 |
 
 ## テスト

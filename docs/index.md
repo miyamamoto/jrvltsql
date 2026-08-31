@@ -19,6 +19,7 @@ Linux で動かす場合は [Wine/Docker](wine_docker.md) と
 7. [JV-Link 手動登録](jvlink_manual_registration.md): noVNC での手作業
 8. [スクリプト一覧](scripts.md): batch / PowerShell の役割
 9. [アーキテクチャ](architecture.md): 実装構成
+10. [リリース運用方針](release_policy.md): 通常リリース、緊急 hotfix、運用採用の分離
 
 ## 実行環境
 
