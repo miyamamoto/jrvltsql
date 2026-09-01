@@ -1,3 +1,19 @@
+# jrvltsql v2.1.1 Release Notes
+
+`2.1.1` is a CLI compatibility hotfix on top of `2.1.0`; no parser, schema,
+storage, provider-registration, or migration contract changes.
+
+What `2.1.1` fixes over `2.1.0`:
+
+- `realtime odds-timeseries` now exposes `--post-time-within-minutes` and
+  `--post-time-not-past-minutes` and forwards them to the generic `timeseries`
+  implementation, so requested filtering cannot silently fall back to
+  whole-day collection
+- the alias exposes `--spec`, defaulting to `0B41,0B42`, while rejecting
+  sokuho (`0B30`-`0B36`) and every other unsupported spec before collection
+- omitting the new options preserves the previous official-spec, unfiltered
+  behavior exactly
+
 # jrvltsql v2.1.0 Release Notes
 
 `2.1.0` is a minor release on top of `2.0.0`. It adds prospective capture of the
@@ -6,7 +22,7 @@ no schema rebuild or reimport is required relative to `2.0.0`.
 
 What `2.1.0` adds over `2.0.0`:
 
-- `realtime odds-timeseries` accepts `--post-time-within-minutes` and
+- generic `realtime timeseries` accepts `--post-time-within-minutes` and
   `--post-time-not-past-minutes`, so a scheduled run can fetch only the races
   whose post time is still ahead instead of the whole day. Post time is resolved
   from `NL_RA`/`RT_RA`; missing, malformed, or ambiguous post times fail closed
