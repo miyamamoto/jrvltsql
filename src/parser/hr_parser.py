@@ -226,6 +226,8 @@ class HRParser:
                     prefix in cls.FLAG_PREFIXES_WITH_RESERVED_SLOT
                     and index == cls.RESERVED_FLAG_SLOT
                 ):
+                    if value is None:
+                        raise ValueError(f"HR {field_name} must preserve its physical byte")
                     cls._require_optional_reserved_text(field_name, value, 1)
                     continue
                 cls._require_bit(field_name, value)

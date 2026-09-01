@@ -456,14 +456,81 @@ def test_wf_rejects_unsupported_status_and_semantically_corrupt_fields(
         pytest.param("Yobi2", "      ", id="blank-reserved2"),
     ),
 )
-def test_wf_keeps_reserved_spans_without_interpreting_them(
-    field_name: str, value: str
-) -> None:
+def test_wf_keeps_reserved_spans_without_interpreting_them(field_name: str, value: str) -> None:
     """The official layout defines no item for these spans, so any content is kept."""
 
     parsed = WFParser().parse(build_record(field_overrides={field_name: value}))
     assert parsed is not None
     assert parsed[field_name] == value.strip()
+
+
+@pytest.mark.parametrize("value", (None, "missing"))
+def test_wf_reserved_spans_cannot_be_absent(value: object) -> None:
+    """A reserved span has opaque content, but its bytes must still be present."""
+
+    record = parsed_record()
+    if value == "missing":
+        record.pop("Yobi1")
+    else:
+        record["Yobi1"] = value
+    database = SQLiteDatabase({"path": ":memory:"})
+    with database:
+        database.create_table("NL_WF", SCHEMAS["NL_WF"])
+        with pytest.raises(SchemaMigrationError):
+            DataImporter(database).import_records(iter([record]))
+        assert database.fetch_one("SELECT COUNT(*) AS count FROM NL_WF") == {"count": 0}
+
+
+@pytest.mark.parametrize("value1,value2", (("XX", "OPAQUE"), ("", "")))
+@pytest.mark.parametrize("standard", (False, True), ids=("native", "standard"))
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_wf_reserved_spans_survive_accumulated_storage(
+    tmp_path,
+    importer_class,
+    standard: bool,
+    value1: str,
+    value2: str,
+) -> None:
+    """Validated WF reserved bytes retain their exact normalized text value."""
+
+    record = parsed_record(field_overrides={"Yobi1": value1, "Yobi2": value2})
+    database = SQLiteDatabase({"path": str(tmp_path / "reserved-wf.db")})
+    with database:
+        if standard:
+            database.create_table("JYUSYOSIKI_HEAD", JRAVAN_SCHEMAS["JYUSYOSIKI_HEAD"])
+            database.create_table("JYUSYOSIKI", JRAVAN_SCHEMAS["JYUSYOSIKI"])
+            table_name = "JYUSYOSIKI_HEAD"
+            columns = ("reserved1", "reserved2")
+        else:
+            database.create_table("NL_WF", SCHEMAS["NL_WF"])
+            table_name = "NL_WF"
+            columns = ("Yobi1", "Yobi2")
+        stats = importer_class(database, use_jravan_schema=standard).import_records(iter([record]))
+        assert stats["records_imported"] == 1
+        assert stats["records_failed"] == 0
+        assert database.fetch_one(f"SELECT {', '.join(columns)} FROM {table_name}") == dict(
+            zip(columns, (value1, value2), strict=True)
+        )
+
+
+@pytest.mark.parametrize("value1,value2", (("XX", "OPAQUE"), ("", "")))
+def test_wf_reserved_spans_survive_realtime_storage(
+    tmp_path,
+    value1: str,
+    value2: str,
+) -> None:
+    record = parsed_record(field_overrides={"Yobi1": value1, "Yobi2": value2})
+    database = SQLiteDatabase({"path": str(tmp_path / "reserved-wf-realtime.db")})
+    with database:
+        database.create_table("RT_WF", SCHEMAS["RT_WF"])
+        result = RealtimeUpdater(database).process_parsed_records_batch([record])
+        assert result["success"] is True
+        assert result["inserted"] == 1
+        assert result["errors"] == 0
+        assert database.fetch_one("SELECT Yobi1, Yobi2 FROM RT_WF") == {
+            "Yobi1": value1,
+            "Yobi2": value2,
+        }
 
 
 def test_wf_accepts_all_official_accumulated_statuses_and_opaque_delete() -> None:

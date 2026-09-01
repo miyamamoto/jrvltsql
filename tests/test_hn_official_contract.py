@@ -184,6 +184,46 @@ def test_hn_blank_optional_text_remains_an_empty_provider_value(
 
 
 @pytest.mark.parametrize("use_standard", (False, True), ids=("native", "standard"))
+@pytest.mark.parametrize("entrypoint", ("data-batch", "optimized-batch", "single"))
+def test_hn_blank_reserved_spans_survive_every_sqlite_import_path(
+    tmp_path,
+    use_standard: bool,
+    entrypoint: str,
+) -> None:
+    """Validated blank reserved bytes stay provider strings, never SQL NULL."""
+
+    table_name = "HANSYOKU" if use_standard else "NL_HN"
+    schema = JRAVAN_SCHEMAS[table_name] if use_standard else SCHEMAS[table_name]
+    raw = official_domain_record()
+    raw[21:29] = b"        "
+    raw[39:40] = b" "
+    record = HNParser().parse(bytes(raw))
+    assert record is not None
+
+    database = SQLiteDatabase({"path": str(tmp_path / f"reserved-{table_name}-{entrypoint}.db")})
+    with database:
+        database.execute(schema)
+        database.commit()
+        if entrypoint == "single":
+            assert DataImporter(database, use_jravan_schema=use_standard).import_single_record(
+                record
+            )
+        else:
+            importer_class = (
+                OptimizedDataImporter if entrypoint == "optimized-batch" else DataImporter
+            )
+            stats = importer_class(database, use_jravan_schema=use_standard).import_records(
+                iter([record])
+            )
+            assert stats["records_imported"] == 1
+            assert stats["records_failed"] == 0
+        assert database.fetch_one(f"SELECT reserved, DelKubun FROM {table_name}") == {
+            "reserved": "",
+            "DelKubun": "",
+        }
+
+
+@pytest.mark.parametrize("use_standard", (False, True), ids=("native", "standard"))
 @pytest.mark.parametrize("auto_commit", (True, False), ids=("owned", "caller-owned"))
 @pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
 def test_hn_batch_erase_is_physical_and_provider_ordered(
