@@ -75,7 +75,7 @@ class TestGetCurrentVersion:
         version = get_current_version()
         # Source metadata is the candidate version; a stale release tag must
         # not make a development checkout report the previous release.
-        assert version == "2.0.0"
+        assert version == "2.1.0"
 
     @patch("subprocess.run")
     def test_fallback_to_installed_distribution_metadata(

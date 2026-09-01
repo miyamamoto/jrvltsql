@@ -135,7 +135,7 @@ def test_removed_public_setup_contract_is_recorded_for_2_0() -> None:
     assert "RECORD_TYPE_O1" in release_notes
     assert "RECORD_TYPE_O6" in release_notes
     assert "uses_external_runner" in release_notes
-    assert project["project"]["version"] == "2.0.0"
+    assert project["project"]["version"] == "2.1.0"
     assert "wrapper.py の JVSetServiceKey 呼び出し箇所" not in constants
     for record_type in range(1, 7):
         assert f"DATA_SPEC_O{record_type} =" not in constants

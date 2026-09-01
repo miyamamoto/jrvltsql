@@ -1,3 +1,24 @@
+# jrvltsql v2.1.0 Release Notes
+
+`2.1.0` is a minor release on top of `2.0.0`. It adds prospective capture of the
+official one-year time-series odds (`0B41`/`0B42`) and fixes capture provenance;
+no schema rebuild or reimport is required relative to `2.0.0`.
+
+What `2.1.0` adds over `2.0.0`:
+
+- `realtime odds-timeseries` accepts `--post-time-within-minutes` and
+  `--post-time-not-past-minutes`, so a scheduled run can fetch only the races
+  whose post time is still ahead instead of the whole day. Post time is resolved
+  from `NL_RA`/`RT_RA`; missing, malformed, or ambiguous post times fail closed
+  rather than being silently kept or dropped
+- time-series odds upserts preserve `CollectedAt` as the first capture time, so a
+  later refetch cannot erase the evidence that a price was held before the
+  decision time. SQLite and PostgreSQL behave identically
+- the sokuho odds primary key is publication identity. Because collapsing
+  existing rows deletes data, the migration is no longer run implicitly at
+  startup or on the write path; it is an explicit operator command that defaults
+  to dry-run and applies only with `--apply`
+
 # jrvltsql v2.0.0 Release Notes
 
 `2.0.0` is the stable major release built from the provider, SQLite,
