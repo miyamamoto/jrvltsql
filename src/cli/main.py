@@ -558,6 +558,118 @@ def fetch(ctx, date_from, date_to, data_spec, jv_option, db, batch_size, progres
 
 
 # ---------------------------------------------------------------------------
+# database maintenance command group
+# ---------------------------------------------------------------------------
+
+
+@cli.group("db")
+def database_maintenance():
+    """Run explicit database maintenance operations."""
+    pass
+
+
+@database_maintenance.command("migrate-sokuho-capture-identity")
+@click.option(
+    "--db",
+    "database_type",
+    type=click.Choice(["sqlite", "postgresql"]),
+    default=None,
+    help="Database type (default: from config)",
+)
+@click.option(
+    "--table",
+    "table_names",
+    type=click.Choice(
+        [f"TS_SOKUHO_O{number}" for number in range(1, 7)],
+        case_sensitive=False,
+    ),
+    multiple=True,
+    help="Restrict migration to this table; repeat for multiple tables",
+)
+@click.option(
+    "--schema",
+    "schema_name",
+    default=None,
+    help="PostgreSQL schema containing the selected tables (default: search path)",
+)
+@click.option(
+    "--apply",
+    is_flag=True,
+    default=False,
+    help="Apply the migration (default: dry-run report only)",
+)
+@click.pass_context
+def migrate_sokuho_capture_identity(ctx, database_type, table_names, schema_name, apply):
+    """Report or explicitly migrate legacy TS_SOKUHO primary keys.
+
+    Dry run is the default. Stop all collectors before using --apply.
+    SQLite is intentionally refused and requires backup plus table rebuild.
+    """
+    from src.database import create_database_from_config, DatabaseError
+    from src.database.migration import (
+        SchemaMigrationError,
+        SOKUHO_CAPTURE_TABLES,
+        apply_sokuho_capture_identity_migration,
+        normalize_sokuho_capture_identity_tables,
+        preview_sokuho_capture_identity_migration,
+        validate_sokuho_capture_identity_operator_backend,
+    )
+
+    config = ctx.obj.get("config")
+    resolved_database_type = database_type or (
+        config.get("database.type", "sqlite") if config else "sqlite"
+    )
+
+    try:
+        requested_tables = tuple(table_name.upper() for table_name in table_names)
+        if schema_name:
+            requested_tables = tuple(
+                f"{schema_name}.{table_name}"
+                for table_name in (requested_tables or SOKUHO_CAPTURE_TABLES)
+            )
+        selected_tables = normalize_sokuho_capture_identity_tables(requested_tables or None)
+        validate_sokuho_capture_identity_operator_backend(
+            resolved_database_type,
+            selected_tables,
+        )
+        database = create_database_from_config(
+            config,
+            db_type_override=resolved_database_type,
+        )
+        with database:
+            if apply:
+                reports = apply_sokuho_capture_identity_migration(
+                    database,
+                    selected_tables,
+                )
+            else:
+                reports = preview_sokuho_capture_identity_migration(
+                    database,
+                    selected_tables,
+                )
+    except (DatabaseError, SchemaMigrationError, ValueError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    click.echo("Sokuho capture-identity migration: " f"{'APPLY' if apply else 'DRY RUN'}")
+    for report in reports:
+        primary_key = ", ".join(report.primary_key) or "(none)"
+        click.echo(f"Table: {report.table_name}")
+        click.echo(f"  Status: {report.status}")
+        click.echo(f"  Current primary key: {primary_key}")
+        click.echo(f"  Total rows: {report.total_rows}")
+        click.echo("  Distinct publication groups: " f"{report.distinct_publication_groups}")
+        click.echo(f"  Rows that would be deleted: {report.rows_to_delete}")
+        click.echo(
+            "  Groups whose CollectedAt would be rewritten to earliest non-NULL: "
+            f"{report.collected_at_rewrite_groups}"
+        )
+    if apply:
+        click.echo("Migration apply completed.")
+    else:
+        click.echo("Dry run only; no changes were applied.")
+
+
+# ---------------------------------------------------------------------------
 # cache command group
 # ---------------------------------------------------------------------------
 

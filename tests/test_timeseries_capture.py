@@ -1,7 +1,6 @@
 """Decision-time provenance contracts for time-series odds writes."""
 
 import os
-from threading import Event, Thread
 from unittest.mock import MagicMock
 from uuid import uuid4
 
@@ -41,6 +40,23 @@ def _sokuho_o2_row(*, collected_at, odds: float = 10.0, kumi: str = "0102") -> d
         **_o2_row(collected_at=collected_at, odds=odds, kumi=kumi),
         "SourceSpec": "0B32",
     }
+
+
+def _raw_insert(database, table_name: str, row: dict) -> None:
+    """Seed legacy schemas without passing through the guarded writer."""
+    columns = list(row)
+    placeholders = ", ".join("?" for _ in columns)
+    database.execute(
+        f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES ({placeholders})",
+        tuple(row[column] for column in columns),
+    )
+
+
+def _legacy_sokuho_schema(table_name: str) -> str:
+    return SCHEMAS[table_name].replace(
+        "HassoTime, SourceSpec)",
+        "HassoTime, SourceSpec, CollectedAt)",
+    )
 
 
 def test_prepare_time_series_odds_table_creates_and_verifies_current_schema(tmp_path):
@@ -157,22 +173,27 @@ def test_sqlite_sokuho_uses_publication_identity_and_keeps_earliest_capture(tmp_
 
 
 def test_sqlite_legacy_sokuho_key_fails_closed_without_schema_or_row_changes(tmp_path):
-    from src.database.migration import SchemaMigrationError, migrate_table_if_needed
+    from src.database.migration import (
+        SchemaMigrationError,
+        apply_sokuho_capture_identity_migration,
+        preview_sokuho_capture_identity_migration,
+    )
 
     database = SQLiteDatabase({"path": str(tmp_path / "legacy-sokuho.db")})
     database.connect()
     try:
         current_schema = SCHEMAS["TS_SOKUHO_O2"]
-        legacy_schema = current_schema.replace(
-            "HassoTime, SourceSpec)",
-            "HassoTime, SourceSpec, CollectedAt)",
-        ).replace("Odds REAL,", "Odds REAL CHECK (Odds >= 0),")
+        legacy_schema = _legacy_sokuho_schema("TS_SOKUHO_O2").replace(
+            "Odds REAL,", "Odds REAL CHECK (Odds >= 0),"
+        )
         database.create_table("TS_SOKUHO_O2", legacy_schema)
-        database.insert(
+        _raw_insert(
+            database,
             "TS_SOKUHO_O2",
             _sokuho_o2_row(collected_at="2026-09-01T09:30:00+09:00", odds=10.0),
         )
-        database.insert(
+        _raw_insert(
+            database,
             "TS_SOKUHO_O2",
             _sokuho_o2_row(collected_at="2026-09-01T01:00:00+00:00", odds=12.5),
         )
@@ -181,8 +202,35 @@ def test_sqlite_legacy_sokuho_key_fails_closed_without_schema_or_row_changes(tmp
             "SELECT sql FROM sqlite_master WHERE name = 'TS_SOKUHO_O2'"
         )["sql"]
 
-        with pytest.raises(SchemaMigrationError, match="TS_SOKUHO_O2.*back up and rebuild"):
-            migrate_table_if_needed(database, "TS_SOKUHO_O2", current_schema)
+        with pytest.raises(SchemaMigrationError) as startup_error:
+            prepare_time_series_odds_table(database, "TS_SOKUHO_O2")
+        assert "TS_SOKUHO_O2 uses the legacy primary key ending in CollectedAt" in str(
+            startup_error.value
+        )
+        assert (
+            "jltsql db migrate-sokuho-capture-identity --db sqlite " "--table TS_SOKUHO_O2 --apply"
+        ) in str(startup_error.value)
+        assert "backup and rebuild" in str(startup_error.value)
+
+        with pytest.raises(SchemaMigrationError) as write_error:
+            database.insert(
+                "TS_SOKUHO_O2",
+                _sokuho_o2_row(
+                    collected_at="2026-09-01T02:00:00+00:00",
+                    odds=15.0,
+                ),
+            )
+        assert str(write_error.value) == str(startup_error.value)
+
+        for operator_function in (
+            preview_sokuho_capture_identity_migration,
+            apply_sokuho_capture_identity_migration,
+        ):
+            with pytest.raises(
+                SchemaMigrationError,
+                match="SQLite migration refused.*back up.*rebuild",
+            ):
+                operator_function(database, ["TS_SOKUHO_O2"])
 
         assert (
             database.fetch_one("SELECT sql FROM sqlite_master WHERE name = 'TS_SOKUHO_O2'")["sql"]
@@ -203,6 +251,111 @@ def test_sqlite_legacy_sokuho_key_fails_closed_without_schema_or_row_changes(tmp
         database.disconnect()
 
 
+def test_dual_write_preflights_legacy_secondary_before_primary_mutation(tmp_path):
+    from src.database.dual_handler import DualDatabase
+    from src.database.migration import SchemaMigrationError
+
+    primary = SQLiteDatabase({"path": str(tmp_path / "primary.db")})
+    secondary = SQLiteDatabase({"path": str(tmp_path / "secondary.db")})
+    database = DualDatabase(primary, secondary)
+    database.connect()
+    try:
+        primary.execute(SCHEMAS["TS_SOKUHO_O2"])
+        secondary.execute(_legacy_sokuho_schema("TS_SOKUHO_O2"))
+        _raw_insert(
+            secondary,
+            "TS_SOKUHO_O2",
+            _sokuho_o2_row(collected_at="2026-09-01T01:00:00+00:00"),
+        )
+        primary.commit()
+        secondary.commit()
+
+        with pytest.raises(
+            SchemaMigrationError,
+            match="TS_SOKUHO_O2.*migrate-sokuho-capture-identity",
+        ):
+            database.insert(
+                "TS_SOKUHO_O2",
+                _sokuho_o2_row(collected_at="2026-09-01T02:00:00+00:00"),
+            )
+
+        assert primary.fetch_one("SELECT COUNT(*) AS count FROM TS_SOKUHO_O2") == {"count": 0}
+        assert secondary.fetch_one("SELECT COUNT(*) AS count FROM TS_SOKUHO_O2") == {"count": 1}
+    finally:
+        database.disconnect()
+
+
+def test_dual_write_names_postgresql_override_for_legacy_postgresql_target(tmp_path):
+    from src.database.dual_handler import DualDatabase
+    from src.database.migration import (
+        SchemaMigrationError,
+        _extract_primary_key_columns,
+    )
+    from src.database.postgresql_handler import PostgreSQLDatabase
+
+    primary = SQLiteDatabase({"path": str(tmp_path / "dual-primary.db")})
+    primary.connect()
+    primary.execute(SCHEMAS["TS_SOKUHO_O2"])
+    primary.commit()
+    secondary = PostgreSQLDatabase({})
+    secondary._connection = object()
+    expected_pk = _extract_primary_key_columns(SCHEMAS["TS_SOKUHO_O2"])
+    assert expected_pk is not None
+    secondary.fetch_all = MagicMock(  # type: ignore[method-assign]
+        return_value=[{"name": column.lower()} for column in [*expected_pk, "CollectedAt"]]
+    )
+    database = DualDatabase(primary, secondary)
+
+    try:
+        with pytest.raises(SchemaMigrationError) as error:
+            database.insert(
+                "TS_SOKUHO_O2",
+                _sokuho_o2_row(collected_at="2026-09-01T02:00:00+00:00"),
+            )
+
+        assert (
+            "jltsql db migrate-sokuho-capture-identity --db postgresql "
+            "--table TS_SOKUHO_O2 --apply"
+        ) in str(error.value)
+        assert primary.fetch_one("SELECT COUNT(*) AS count FROM TS_SOKUHO_O2") == {"count": 0}
+    finally:
+        primary.disconnect()
+        secondary._connection = None
+
+
+@pytest.mark.parametrize("write_method", ["insert", "insert_many"])
+def test_dual_sokuho_startup_and_write_refuse_disconnected_secondary(
+    tmp_path,
+    write_method,
+):
+    from src.database.dual_handler import DualDatabase
+    from src.database.migration import SchemaMigrationError
+
+    primary = SQLiteDatabase({"path": str(tmp_path / f"primary-{write_method}.db")})
+    secondary = SQLiteDatabase({"path": str(tmp_path / f"secondary-{write_method}.db")})
+    primary.connect()
+    primary.execute(SCHEMAS["TS_SOKUHO_O2"].replace("            Odds REAL,\n", ""))
+    primary.commit()
+    database = DualDatabase(primary, secondary)
+
+    try:
+        with pytest.raises(SchemaMigrationError, match="not connected"):
+            prepare_time_series_odds_table(database, "TS_SOKUHO_O2")
+        columns_after_refusal = {
+            row["name"].lower() for row in primary.fetch_all('PRAGMA table_info("TS_SOKUHO_O2")')
+        }
+        assert "odds" not in columns_after_refusal
+
+        row = _sokuho_o2_row(collected_at="2026-09-01T02:00:00+00:00")
+        payload = [row] if write_method == "insert_many" else row
+        with pytest.raises(SchemaMigrationError, match="not connected"):
+            getattr(database, write_method)("TS_SOKUHO_O2", payload)
+
+        assert primary.fetch_one("SELECT COUNT(*) AS count FROM TS_SOKUHO_O2") == {"count": 0}
+    finally:
+        primary.disconnect()
+
+
 def test_schema_qualified_sqlite_timeseries_upsert_uses_unqualified_row_name(tmp_path):
     database = _sqlite_ts_o2(tmp_path)
     try:
@@ -211,6 +364,29 @@ def test_schema_qualified_sqlite_timeseries_upsert_uses_unqualified_row_name(tmp
         assert database.fetch_one("SELECT CollectedAt FROM TS_O2") == {
             "CollectedAt": "2026-09-01T03:00:00+00:00"
         }
+    finally:
+        database.disconnect()
+
+
+@pytest.mark.parametrize("write_method", ["insert", "insert_many"])
+def test_schema_qualified_sqlite_sokuho_write_fails_closed(tmp_path, write_method):
+    from src.database.migration import SchemaMigrationError
+
+    database = SQLiteDatabase({"path": str(tmp_path / f"qualified-{write_method}.db")})
+    database.connect()
+    try:
+        database.execute(_legacy_sokuho_schema("TS_SOKUHO_O2"))
+        row = _sokuho_o2_row(collected_at="2026-09-01T03:00:00+00:00")
+        payload = [row] if write_method == "insert_many" else row
+
+        with pytest.raises(SchemaMigrationError, match="legacy primary key") as startup_error:
+            prepare_time_series_odds_table(database, "main.TS_SOKUHO_O2")
+        with pytest.raises(SchemaMigrationError, match="legacy primary key") as error:
+            getattr(database, write_method)("main.TS_SOKUHO_O2", payload)
+
+        assert str(error.value) == str(startup_error.value)
+        assert "--db sqlite --schema main --table TS_SOKUHO_O2 --apply" in str(error.value)
+        assert database.fetch_one("SELECT COUNT(*) AS count FROM TS_SOKUHO_O2") == {"count": 0}
     finally:
         database.disconnect()
 
@@ -246,6 +422,39 @@ def test_postgresql_timeseries_upsert_normalizes_offsets_and_is_null_safe(table_
     assert "excluded.collectedat::timestamptz" in sql
     assert f"{table_name.lower()}.collectedat::timestamptz" in sql
     assert "odds = excluded.odds" in sql
+
+
+def test_postgresql_sokuho_write_fails_closed_when_primary_key_catalog_is_unreadable():
+    from src.database.base import DatabaseError
+    from src.database.postgresql_handler import PostgreSQLDatabase
+
+    database = PostgreSQLDatabase({})
+    database.fetch_all = MagicMock(  # type: ignore[method-assign]
+        side_effect=DatabaseError("catalog unavailable")
+    )
+    database.execute = MagicMock(return_value=1)  # type: ignore[method-assign]
+
+    with pytest.raises(DatabaseError, match="catalog unavailable"):
+        database.insert(
+            "TS_SOKUHO_O2",
+            _sokuho_o2_row(collected_at="2026-09-01T03:00:00+00:00"),
+        )
+
+    database.execute.assert_not_called()
+
+
+def test_postgresql_schema_qualified_legacy_message_preserves_schema():
+    from src.database.migration import legacy_sokuho_capture_identity_message
+    from src.database.postgresql_handler import PostgreSQLDatabase
+
+    database = PostgreSQLDatabase({})
+    message = legacy_sokuho_capture_identity_message(database, "archive.TS_SOKUHO_O2")
+
+    assert "archive.TS_SOKUHO_O2 uses the legacy primary key" in message
+    assert (
+        "jltsql db migrate-sokuho-capture-identity --db postgresql "
+        "--schema archive --table TS_SOKUHO_O2 --apply"
+    ) in message
 
 
 def test_unrelated_sqlite_table_keeps_replace_behavior(tmp_path):
@@ -363,32 +572,266 @@ def test_postgresql_timeseries_capture_behavior(postgresql_timeseries_db, table_
     ]
 
 
-def test_postgresql_legacy_sokuho_key_migration(postgresql_timeseries_db):
-    from src.database.migration import migrate_table_if_needed
+def _create_postgresql_legacy_sokuho(database, table_name: str) -> None:
+    odds_number = int(table_name.rsplit("O", 1)[1])
+
+    def row(*, collected_at: str, odds: float) -> dict:
+        record = _sokuho_o2_row(collected_at=collected_at, odds=odds)
+        record["RecordSpec"] = f"O{odds_number}"
+        record["SourceSpec"] = f"0B3{odds_number}"
+        if odds_number == 3:
+            record["OddsLow"] = record.pop("Odds")
+            record["OddsHigh"] = odds + 1.0
+        return record
+
+    database.execute(_legacy_sokuho_schema(table_name))
+    _raw_insert(
+        database,
+        table_name,
+        row(
+            collected_at="2026-09-01T09:30:00+09:00",
+            odds=10.0,
+        ),
+    )
+    _raw_insert(
+        database,
+        table_name,
+        row(
+            collected_at="2026-09-01T01:00:00+00:00",
+            odds=12.5,
+        ),
+    )
+    database.commit()
+
+
+def test_postgresql_sokuho_startup_and_write_fail_closed_then_explicit_migration(
+    postgresql_timeseries_db,
+):
+    from src.database.migration import (
+        SchemaMigrationError,
+        apply_sokuho_capture_identity_migration,
+        preview_sokuho_capture_identity_migration,
+    )
 
     database = postgresql_timeseries_db
-    current_schema = SCHEMAS["TS_SOKUHO_O2"]
-    legacy_schema = current_schema.replace(
-        "HassoTime, SourceSpec)",
-        "HassoTime, SourceSpec, CollectedAt)",
+    table_name = "TS_SOKUHO_O2"
+    _create_postgresql_legacy_sokuho(database, table_name)
+    before_rows = database.fetch_all(
+        f"SELECT odds, collectedat FROM {table_name} ORDER BY collectedat"
     )
-    database.execute(legacy_schema)
-    database.commit()
+    database.rollback()
+
+    with pytest.raises(SchemaMigrationError) as startup_error:
+        prepare_time_series_odds_table(database, table_name)
+    assert (
+        "jltsql db migrate-sokuho-capture-identity --db postgresql " "--table TS_SOKUHO_O2 --apply"
+    ) in str(startup_error.value)
+    database.rollback()
+
+    with pytest.raises(SchemaMigrationError) as write_error:
+        database.insert(
+            table_name,
+            _sokuho_o2_row(
+                collected_at="2026-09-01T03:10:00+00:00",
+                odds=15.0,
+            ),
+        )
+    assert str(write_error.value) == str(startup_error.value)
+    database.rollback()
+
+    executed_sql = []
+    original_execute = database.execute
+
+    def tracked_execute(sql, parameters=None):
+        executed_sql.append(sql)
+        return original_execute(sql, parameters)
+
+    database.execute = tracked_execute  # type: ignore[method-assign]
+    try:
+        reports = preview_sokuho_capture_identity_migration(database, [table_name])
+    finally:
+        database.execute = original_execute  # type: ignore[method-assign]
+
+    assert len(reports) == 1
+    report = reports[0]
+    assert report.status == "legacy"
+    assert report.total_rows == 2
+    assert report.distinct_publication_groups == 1
+    assert report.rows_to_delete == 1
+    assert report.collected_at_rewrite_groups == 1
+    assert any("REPEATABLE READ READ ONLY" in sql for sql in executed_sql)
+    assert not any("ACCESS EXCLUSIVE" in sql for sql in executed_sql)
+    assert (
+        database.fetch_all(f"SELECT odds, collectedat FROM {table_name} ORDER BY collectedat")
+        == before_rows
+    )
+    assert database._get_primary_key_columns(table_name)[-1] == "collectedat"
+    database.rollback()
+
+    executed_sql = []
+    database.execute = tracked_execute  # type: ignore[method-assign]
+    try:
+        applied_reports = apply_sokuho_capture_identity_migration(database, [table_name])
+    finally:
+        database.execute = original_execute  # type: ignore[method-assign]
+
+    assert applied_reports[0].applied is True
+    lock_index = next(
+        index for index, sql in enumerate(executed_sql) if sql.startswith("LOCK TABLE")
+    )
+    snapshot_index = next(
+        index for index, sql in enumerate(executed_sql) if sql.startswith("CREATE TEMP TABLE")
+    )
+    assert lock_index < snapshot_index
+    assert database.fetch_all(f"SELECT odds, collectedat FROM {table_name}") == [
+        {"odds": 12.5, "collectedat": "2026-09-01T09:30:00+09:00"}
+    ]
+    assert database._get_primary_key_columns(table_name)[-1] == "sourcespec"
+    assert (
+        database.fetch_all(
+            "SELECT tablename FROM pg_tables "
+            "WHERE schemaname = current_schema() AND tablename LIKE '__jltsql_%'"
+        )
+        == []
+    )
+    database.rollback()
+
     database.insert(
-        "TS_SOKUHO_O2",
+        table_name,
+        _sokuho_o2_row(
+            collected_at="2026-09-01T03:10:00+00:00",
+            odds=15.0,
+        ),
+    )
+    database.commit()
+    assert database.fetch_all(f"SELECT odds, collectedat FROM {table_name}") == [
+        {"odds": 15.0, "collectedat": "2026-09-01T09:30:00+09:00"}
+    ]
+
+
+def test_postgresql_sokuho_migration_table_restriction(postgresql_timeseries_db):
+    from src.database.migration import apply_sokuho_capture_identity_migration
+
+    database = postgresql_timeseries_db
+    _create_postgresql_legacy_sokuho(database, "TS_SOKUHO_O3")
+    _create_postgresql_legacy_sokuho(database, "TS_SOKUHO_O4")
+
+    reports = apply_sokuho_capture_identity_migration(
+        database,
+        ["TS_SOKUHO_O3"],
+    )
+
+    assert [report.table_name for report in reports] == ["TS_SOKUHO_O3"]
+    assert database._get_primary_key_columns("TS_SOKUHO_O3")[-1] == "sourcespec"
+    assert database._get_primary_key_columns("TS_SOKUHO_O4")[-1] == "collectedat"
+
+
+def test_postgresql_sokuho_migration_preserves_schema_qualified_target(
+    postgresql_timeseries_db,
+):
+    from src.database.migration import (
+        apply_sokuho_capture_identity_migration,
+        preview_sokuho_capture_identity_migration,
+    )
+
+    database = postgresql_timeseries_db
+    schema_name = f"jltsql_sokuho_{uuid4().hex}"
+    table_name = f"{schema_name}.TS_SOKUHO_O2"
+    legacy_schema = _legacy_sokuho_schema("TS_SOKUHO_O2").replace(
+        "CREATE TABLE IF NOT EXISTS TS_SOKUHO_O2",
+        f"CREATE TABLE IF NOT EXISTS {table_name}",
+        1,
+    )
+    database.execute(f"CREATE SCHEMA {schema_name}")
+    database.execute(legacy_schema)
+    _raw_insert(
+        database,
+        table_name,
         _sokuho_o2_row(collected_at="2026-09-01T09:30:00+09:00", odds=10.0),
     )
-    database.insert(
-        "TS_SOKUHO_O2",
+    _raw_insert(
+        database,
+        table_name,
         _sokuho_o2_row(collected_at="2026-09-01T01:00:00+00:00", odds=12.5),
     )
     database.commit()
 
-    assert migrate_table_if_needed(database, "TS_SOKUHO_O2", current_schema) is True
-    assert database.fetch_all("SELECT odds, collectedat FROM TS_SOKUHO_O2") == [
-        {"odds": 12.5, "collectedat": "2026-09-01T09:30:00+09:00"}
-    ]
-    assert database._get_primary_key_columns("TS_SOKUHO_O2")[-1] == "sourcespec"
+    try:
+        preview = preview_sokuho_capture_identity_migration(database, [table_name])
+        assert preview[0].table_name == table_name
+        assert preview[0].rows_to_delete == 1
+
+        applied = apply_sokuho_capture_identity_migration(database, [table_name])
+        assert applied[0].table_name == table_name
+        assert database._get_primary_key_columns(table_name)[-1] == "sourcespec"
+        assert database.fetch_all(f"SELECT odds, collectedat FROM {table_name}") == [
+            {"odds": 12.5, "collectedat": "2026-09-01T09:30:00+09:00"}
+        ]
+    finally:
+        database.rollback()
+        database.execute(f"DROP SCHEMA IF EXISTS {schema_name} CASCADE")
+        database.commit()
+
+
+def test_sokuho_apply_rolls_back_if_unlocked_table_becomes_legacy(monkeypatch):
+    import src.database.migration as migration
+
+    database = MagicMock()
+    database.get_db_type.return_value = "postgresql"
+    database.has_pending_transaction.return_value = False
+    expected_pk = migration._expected_sokuho_primary_key("TS_SOKUHO_O2")
+    classifications = iter(
+        [
+            ("current", expected_pk, expected_pk),
+            ("legacy", [*expected_pk, "CollectedAt"], expected_pk),
+        ]
+    )
+    monkeypatch.setattr(
+        migration,
+        "_classify_sokuho_table",
+        lambda _database, _table_name: next(classifications),
+    )
+
+    with pytest.raises(
+        migration.SchemaMigrationError,
+        match="before an ACCESS EXCLUSIVE lock was acquired",
+    ):
+        migration.apply_sokuho_capture_identity_migration(database, ["TS_SOKUHO_O2"])
+
+    database.rollback.assert_called_once_with()
+    database.commit.assert_not_called()
+
+
+def test_postgresql_sokuho_migration_rolls_back_every_table_on_failure(
+    postgresql_timeseries_db,
+):
+    from src.database.migration import (
+        SchemaMigrationError,
+        apply_sokuho_capture_identity_migration,
+    )
+
+    database = postgresql_timeseries_db
+    table_names = ["TS_SOKUHO_O5", "TS_SOKUHO_O6"]
+    for table_name in table_names:
+        _create_postgresql_legacy_sokuho(database, table_name)
+
+    original_execute = database.execute
+
+    def injected_failure(sql, parameters=None):
+        if sql.startswith("ALTER TABLE ts_sokuho_o6 DROP CONSTRAINT"):
+            raise RuntimeError("injected migration failure")
+        return original_execute(sql, parameters)
+
+    database.execute = injected_failure  # type: ignore[method-assign]
+    try:
+        with pytest.raises(SchemaMigrationError, match="injected migration failure"):
+            apply_sokuho_capture_identity_migration(database, table_names)
+    finally:
+        database.execute = original_execute  # type: ignore[method-assign]
+
+    for table_name in table_names:
+        assert database._get_primary_key_columns(table_name)[-1] == "collectedat"
+        assert database.fetch_one(f"SELECT COUNT(*) AS count FROM {table_name}") == {"count": 2}
     assert (
         database.fetch_all(
             "SELECT tablename FROM pg_tables "
@@ -398,107 +841,34 @@ def test_postgresql_legacy_sokuho_key_migration(postgresql_timeseries_db):
     )
 
 
-def test_postgresql_sokuho_migration_locks_out_concurrent_correction(
+def test_postgresql_sokuho_migration_rejects_invalid_collected_at(
     postgresql_timeseries_db,
 ):
-    from scripts.setup_pg_test_db import postgresql_test_config
-    from src.database.migration import migrate_table_if_needed
-    from src.database.postgresql_handler import PostgreSQLDatabase
+    from src.database.migration import (
+        SchemaMigrationError,
+        apply_sokuho_capture_identity_migration,
+        preview_sokuho_capture_identity_migration,
+    )
 
     database = postgresql_timeseries_db
-    current_schema = database.fetch_one("SELECT current_schema() AS name")["name"]
-    current_table_schema = SCHEMAS["TS_SOKUHO_O2"]
-    legacy_schema = current_table_schema.replace(
-        "HassoTime, SourceSpec)",
-        "HassoTime, SourceSpec, CollectedAt)",
-    )
-    database.execute(legacy_schema)
-    database.commit()
-    database.insert(
-        "TS_SOKUHO_O2",
-        _sokuho_o2_row(collected_at="2026-09-01T09:30:00+09:00", odds=10.0),
-    )
-    database.insert(
-        "TS_SOKUHO_O2",
-        _sokuho_o2_row(collected_at="2026-09-01T01:00:00+00:00", odds=12.5),
+    table_name = "TS_SOKUHO_O2"
+    database.execute(_legacy_sokuho_schema(table_name))
+    _raw_insert(
+        database,
+        table_name,
+        _sokuho_o2_row(collected_at="not-an-offset-timestamp"),
     )
     database.commit()
 
-    collector = PostgreSQLDatabase(postgresql_test_config())
-    collector.connect()
-    collector.execute(f"SET search_path TO {current_schema}")
-    collector.commit()
-    lock_acquired = Event()
-    release_migration = Event()
-    correction_started = Event()
-    correction_finished = Event()
-    errors = []
-    original_execute = database.execute
+    for operator_function in (
+        preview_sokuho_capture_identity_migration,
+        apply_sokuho_capture_identity_migration,
+    ):
+        with pytest.raises(
+            SchemaMigrationError,
+            match="invalid offset-aware CollectedAt",
+        ):
+            operator_function(database, [table_name])
 
-    def guarded_execute(sql, parameters=None):
-        result = original_execute(sql, parameters)
-        if sql.startswith("LOCK TABLE"):
-            lock_acquired.set()
-            if not release_migration.wait(5):
-                raise AssertionError("test did not release PostgreSQL migration lock")
-        return result
-
-    def migrate():
-        try:
-            migrate_table_if_needed(database, "TS_SOKUHO_O2", current_table_schema)
-        except Exception as exc:  # pragma: no cover - reported by assertion below
-            errors.append(exc)
-
-    def write_correction():
-        correction_started.set()
-        try:
-            collector.insert(
-                "TS_SOKUHO_O2",
-                _sokuho_o2_row(collected_at="2026-09-01T03:10:00+00:00", odds=15.0),
-            )
-            collector.commit()
-        except Exception as exc:  # pragma: no cover - reported by assertion below
-            errors.append(exc)
-        finally:
-            correction_finished.set()
-
-    database.execute = guarded_execute  # type: ignore[method-assign]
-    migration_thread = Thread(target=migrate)
-    correction_thread = Thread(target=write_correction)
-    try:
-        migration_thread.start()
-        assert lock_acquired.wait(5)
-        correction_thread.start()
-        assert correction_started.wait(5)
-        assert correction_finished.wait(0.25) is False
-        release_migration.set()
-        migration_thread.join(10)
-        correction_thread.join(10)
-        assert migration_thread.is_alive() is False
-        assert correction_thread.is_alive() is False
-        # This writer resolved the old PK before it blocked on the table lock,
-        # so PostgreSQL rejects its now-stale ON CONFLICT target visibly after
-        # the migration. The correction was not silently inserted and deleted.
-        assert len(errors) == 1
-        assert "no unique or exclusion constraint" in str(errors[0])
-        assert database.fetch_all("SELECT odds, collectedat FROM TS_SOKUHO_O2") == [
-            {"odds": 12.5, "collectedat": "2026-09-01T09:30:00+09:00"}
-        ]
-
-        # A normal retry resolves the new identity and applies the correction.
-        collector.insert(
-            "TS_SOKUHO_O2",
-            _sokuho_o2_row(collected_at="2026-09-01T03:10:00+00:00", odds=15.0),
-        )
-        collector.commit()
-        assert database.fetch_all("SELECT odds, collectedat FROM TS_SOKUHO_O2") == [
-            {"odds": 15.0, "collectedat": "2026-09-01T09:30:00+09:00"}
-        ]
-    finally:
-        release_migration.set()
-        if migration_thread.ident is not None:
-            migration_thread.join(10)
-        if correction_thread.ident is not None:
-            correction_thread.join(10)
-        database.execute = original_execute  # type: ignore[method-assign]
-        collector.disconnect()
+    assert database._get_primary_key_columns(table_name)[-1] == "collectedat"
+    assert database.fetch_one(f"SELECT COUNT(*) AS count FROM {table_name}") == {"count": 1}

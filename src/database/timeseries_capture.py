@@ -9,12 +9,19 @@ TIME_SERIES_ODDS_CAPTURE_TABLES = frozenset(
         *(f"TS_SOKUHO_O{number}" for number in range(1, 7)),
     }
 )
+SOKUHO_TIME_SERIES_ODDS_CAPTURE_TABLES = frozenset(f"TS_SOKUHO_O{number}" for number in range(1, 7))
 
 
 def is_time_series_odds_capture_table(table_name: str) -> bool:
     """Return whether CollectedAt is evidence of first possession in this table."""
     unqualified = table_name.rsplit(".", 1)[-1].strip('"`').upper()
     return unqualified in TIME_SERIES_ODDS_CAPTURE_TABLES
+
+
+def is_sokuho_time_series_odds_capture_table(table_name: str) -> bool:
+    """Return whether a write targets a dedicated Sokuho capture table."""
+    unqualified = table_name.rsplit(".", 1)[-1].strip('"`').upper()
+    return unqualified in SOKUHO_TIME_SERIES_ODDS_CAPTURE_TABLES
 
 
 def unqualified_table_name(table_name: str) -> str:

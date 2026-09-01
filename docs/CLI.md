@@ -101,6 +101,51 @@ jltsql realtime odds-sokuho-timeseries --from 20260418 --to 20260419 --db postgr
 jltsql realtime odds-sokuho-timeseries --from 20260418 --to 20260419 --db sqlite --db-path data/keiba.db
 ```
 
+## TS_SOKUHO 主キーの明示移行
+
+旧版で作成した `TS_SOKUHO_O1`〜`TS_SOKUHO_O6` の主キー末尾に
+`CollectedAt` が残っている場合、通常の起動・テーブル準備・時系列オッズ書き込みは
+自動移行せず停止します。エラーには対象テーブルと、実行すべき次のコマンドが表示
+されます。
+
+既定は読み取り専用の dry run です。全テーブルを検査する場合:
+
+```bat
+jltsql db migrate-sokuho-capture-identity --db postgresql
+```
+
+対象を限定するには `--table` を繰り返します。dry run は各テーブルについて、現在の
+主キー、総行数、発表単位の distinct group 数、削除予定行数、保持行の
+`CollectedAt` を最古の非 NULL 値へ書き換える group 数を表示します。読み取り専用
+transaction を使い、`ACCESS EXCLUSIVE` lock は取得しません。
+
+```bat
+jltsql db migrate-sokuho-capture-identity --db postgresql --table TS_SOKUHO_O1 --table TS_SOKUHO_O2
+```
+
+対象が PostgreSQL の search path 外にある場合は schema を明示します。エラーに
+表示される exact command にも `--schema` が含まれます。
+
+```bat
+jltsql db migrate-sokuho-capture-identity --db postgresql --schema archive --table TS_SOKUHO_O2
+```
+
+内容を確認し、すべての collector / writer を停止してから、`--apply` を明示します。
+
+```bat
+jltsql db migrate-sokuho-capture-identity --db postgresql --table TS_SOKUHO_O2 --apply
+```
+
+apply は指定した legacy table を1 transaction で処理し、grouping snapshot より前に
+`ACCESS EXCLUSIVE` lock を取得します。同じ発表の行は、最新 poll の列値と最古の
+非 NULL `CollectedAt` を持つ1行へ統合します。時刻検証、保持行数検証、DDL の
+いずれかが失敗すると全テーブルを rollback し、nonzero で終了します。
+
+SQLite に同じコマンドを実行しても database connection を開かず、in-place 移行は
+行わず nonzero で拒否します。
+SQLite は先に database をバックアップし、現行 schema で対象 table を再構築して
+ください。公式1年時系列の `TS_O1` / `TS_O2` はこの移行の対象外です。
+
 当日ライブ収集で全レースを再取得しない場合は、`timeseries` にレースレコードの
 発走時刻ウィンドウを明示します。次の例は、現在時刻（JST）から30分以内に発走し、
 発走後2分を超えていないレースだけを対象にします。

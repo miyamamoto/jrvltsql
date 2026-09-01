@@ -68,6 +68,176 @@ class TestCLIBasic(unittest.TestCase):
             )
 
 
+class TestDatabaseMaintenanceCommand(unittest.TestCase):
+    def setUp(self):
+        self.runner = CliRunner()
+
+    def test_sokuho_migration_defaults_to_dry_run_and_forwards_table_restriction(self):
+        from src.database.migration import SokuhoCaptureIdentityMigrationReport
+
+        database = MagicMock()
+        database.__enter__.return_value = database
+        database.__exit__.return_value = None
+        report = SokuhoCaptureIdentityMigrationReport(
+            table_name="TS_SOKUHO_O3",
+            status="legacy",
+            primary_key=("year", "collectedat"),
+            total_rows=7,
+            distinct_publication_groups=3,
+            rows_to_delete=4,
+            collected_at_rewrite_groups=2,
+        )
+
+        with self.runner.isolated_filesystem():
+            self.assertEqual(self.runner.invoke(cli, ["init"]).exit_code, 0)
+            with (
+                patch(
+                    "src.database.create_database_from_config",
+                    return_value=database,
+                ),
+                patch(
+                    "src.database.migration.preview_sokuho_capture_identity_migration",
+                    return_value=[report],
+                ) as preview,
+                patch(
+                    "src.database.migration.apply_sokuho_capture_identity_migration"
+                ) as apply_migration,
+                patch("src.cli.main.auto_update_check_notice", return_value=None),
+            ):
+                result = self.runner.invoke(
+                    cli,
+                    [
+                        "db",
+                        "migrate-sokuho-capture-identity",
+                        "--db",
+                        "postgresql",
+                        "--table",
+                        "TS_SOKUHO_O3",
+                    ],
+                )
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        preview.assert_called_once_with(database, ("TS_SOKUHO_O3",))
+        apply_migration.assert_not_called()
+        self.assertIn("DRY RUN", result.output)
+        self.assertIn("Total rows: 7", result.output)
+        self.assertIn("Distinct publication groups: 3", result.output)
+        self.assertIn("Rows that would be deleted: 4", result.output)
+        self.assertIn(
+            "Groups whose CollectedAt would be rewritten to earliest non-NULL: 2",
+            result.output,
+        )
+        self.assertIn("no changes were applied", result.output)
+
+    def test_sokuho_migration_apply_requires_explicit_flag(self):
+        from src.database.migration import SokuhoCaptureIdentityMigrationReport
+
+        database = MagicMock()
+        database.__enter__.return_value = database
+        database.__exit__.return_value = None
+        report = SokuhoCaptureIdentityMigrationReport(
+            table_name="TS_SOKUHO_O2",
+            status="migrated",
+            primary_key=("year", "collectedat"),
+            total_rows=2,
+            distinct_publication_groups=1,
+            rows_to_delete=1,
+            collected_at_rewrite_groups=1,
+            applied=True,
+        )
+
+        with self.runner.isolated_filesystem():
+            self.assertEqual(self.runner.invoke(cli, ["init"]).exit_code, 0)
+            with (
+                patch(
+                    "src.database.create_database_from_config",
+                    return_value=database,
+                ),
+                patch(
+                    "src.database.migration.apply_sokuho_capture_identity_migration",
+                    return_value=[report],
+                ) as apply_migration,
+                patch("src.cli.main.auto_update_check_notice", return_value=None),
+            ):
+                result = self.runner.invoke(
+                    cli,
+                    [
+                        "db",
+                        "migrate-sokuho-capture-identity",
+                        "--db",
+                        "postgresql",
+                        "--table",
+                        "TS_SOKUHO_O2",
+                        "--apply",
+                    ],
+                )
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        apply_migration.assert_called_once_with(database, ("TS_SOKUHO_O2",))
+        self.assertIn("APPLY", result.output)
+        self.assertIn("Migration apply completed", result.output)
+
+    def test_sokuho_migration_sqlite_refusal_is_nonzero(self):
+        with self.runner.isolated_filesystem():
+            self.assertEqual(self.runner.invoke(cli, ["init"]).exit_code, 0)
+            with (
+                patch("src.cli.main.auto_update_check_notice", return_value=None),
+                patch("src.database.create_database_from_config") as create_database,
+            ):
+                result = self.runner.invoke(
+                    cli,
+                    [
+                        "db",
+                        "migrate-sokuho-capture-identity",
+                        "--db",
+                        "sqlite",
+                        "--table",
+                        "TS_SOKUHO_O2",
+                    ],
+                )
+        create_database.assert_not_called()
+
+        self.assertNotEqual(result.exit_code, 0)
+        self.assertIn("SQLite migration refused", result.output)
+        self.assertIn("back up", result.output)
+        self.assertIn("rebuild", result.output)
+
+    def test_sokuho_migration_schema_qualifies_selected_tables(self):
+        database = MagicMock()
+        database.__enter__.return_value = database
+        database.__exit__.return_value = None
+
+        with self.runner.isolated_filesystem():
+            self.assertEqual(self.runner.invoke(cli, ["init"]).exit_code, 0)
+            with (
+                patch(
+                    "src.database.create_database_from_config",
+                    return_value=database,
+                ),
+                patch(
+                    "src.database.migration.preview_sokuho_capture_identity_migration",
+                    return_value=[],
+                ) as preview,
+                patch("src.cli.main.auto_update_check_notice", return_value=None),
+            ):
+                result = self.runner.invoke(
+                    cli,
+                    [
+                        "db",
+                        "migrate-sokuho-capture-identity",
+                        "--db",
+                        "postgresql",
+                        "--schema",
+                        "archive",
+                        "--table",
+                        "TS_SOKUHO_O4",
+                    ],
+                )
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        preview.assert_called_once_with(database, ("archive.TS_SOKUHO_O4",))
+
+
 class TestInitCommand(unittest.TestCase):
     """Test init command."""
 

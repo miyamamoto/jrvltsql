@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
 from src.database.timeseries_capture import (
+    is_sokuho_time_series_odds_capture_table,
     is_time_series_odds_capture_table,
     unqualified_table_name,
 )
@@ -207,6 +208,11 @@ class BaseDatabase(ABC):
         if not data:
             raise DatabaseError("No data provided for insert")
 
+        if is_sokuho_time_series_odds_capture_table(table_name):
+            from src.database.migration import ensure_sokuho_capture_identity_for_write
+
+            ensure_sokuho_capture_identity_for_write(self, table_name)
+
         columns = list(data.keys())
         values = list(data.values())
         placeholders = ", ".join(["?" for _ in columns])
@@ -255,6 +261,11 @@ class BaseDatabase(ABC):
         """
         if not data_list:
             raise DatabaseError("No data provided for insert")
+
+        if is_sokuho_time_series_odds_capture_table(table_name):
+            from src.database.migration import ensure_sokuho_capture_identity_for_write
+
+            ensure_sokuho_capture_identity_for_write(self, table_name)
 
         # Use the union of all row keys.  Expanded JV-Data records such as O1
         # intentionally produce heterogeneous rows (horse odds vs bracket odds).

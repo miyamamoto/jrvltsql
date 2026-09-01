@@ -26,6 +26,7 @@ from src.database.base import BaseDatabase, DatabaseError
 from src.database.schema_types import get_table_column_types
 from src.database.timeseries_capture import (
     earliest_capture_value,
+    is_sokuho_time_series_odds_capture_table,
     is_time_series_odds_capture_table,
     unqualified_table_name,
 )
@@ -148,7 +149,7 @@ class PostgreSQLDatabase(BaseDatabase):
                     result.append(str(row).lower())
             return result
         except Exception as e:
-            if self._transaction_active:
+            if self._transaction_active or is_sokuho_time_series_odds_capture_table(table_name):
                 raise
             logger.warning(f"Could not get primary key for {table_name}: {e}")
             return []
@@ -797,6 +798,13 @@ class PostgreSQLDatabase(BaseDatabase):
         if not data:
             raise DatabaseError("No data provided for insert")
 
+        resolved_pk_columns = None
+        if is_sokuho_time_series_odds_capture_table(table_name):
+            from src.database.migration import ensure_sokuho_capture_identity_for_write
+
+            resolved_pk_columns = self._get_primary_key_columns(table_name)
+            ensure_sokuho_capture_identity_for_write(self, table_name, resolved_pk_columns)
+
         data = self._normalize_insert_data(table_name, data)
         columns = list(data.keys())
         values = list(data.values())
@@ -806,7 +814,11 @@ class PostgreSQLDatabase(BaseDatabase):
 
         if use_replace:
             # Get primary key columns for this table
-            pk_columns = self._get_primary_key_columns(table_name)
+            pk_columns = (
+                resolved_pk_columns
+                if resolved_pk_columns is not None
+                else self._get_primary_key_columns(table_name)
+            )
 
             if pk_columns:
                 # Build ON CONFLICT DO UPDATE clause
@@ -849,6 +861,13 @@ class PostgreSQLDatabase(BaseDatabase):
         if not data_list:
             raise DatabaseError("No data provided for insert")
 
+        resolved_pk_columns = None
+        if is_sokuho_time_series_odds_capture_table(table_name):
+            from src.database.migration import ensure_sokuho_capture_identity_for_write
+
+            resolved_pk_columns = self._get_primary_key_columns(table_name)
+            ensure_sokuho_capture_identity_for_write(self, table_name, resolved_pk_columns)
+
         data_list = [self._normalize_insert_data(table_name, row) for row in data_list]
 
         # Use the union of all row keys. Expanded records can be heterogeneous
@@ -867,7 +886,11 @@ class PostgreSQLDatabase(BaseDatabase):
 
         if use_replace:
             # Get primary key columns for this table
-            pk_columns = self._get_primary_key_columns(table_name)
+            pk_columns = (
+                resolved_pk_columns
+                if resolved_pk_columns is not None
+                else self._get_primary_key_columns(table_name)
+            )
             data_list = self._dedupe_rows_by_primary_key(
                 data_list,
                 pk_columns,

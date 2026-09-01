@@ -73,12 +73,35 @@ jltsql realtime timeseries --spec 0B41 --from 20260901 --to 20260901 --db postgr
 時系列行を再取得した場合、同じ発表行の価格などは最新の訂正値へ更新しますが、
 `CollectedAt` はその発表行を最初に保有した時刻（最も早い非 NULL 値）を維持します。
 UTC オフセットが異なる ISO-8601 表現も同一の時刻軸へ正規化して比較します。
-従来の PostgreSQL `TS_SOKUHO_O*` で `CollectedAt` が主キーに含まれている場合は、
-取得前のスキーマ更新がテーブルをロックし、発表単位の主キーへ移行します。同じ発表
-の複数 poll は、最新 poll の価格などと最初の実取得時刻を組み合わせた1行に統合
-されます。SQLite の従来主キーは自動再構築せず、テーブル名を示して取得前に停止
-します。バックアップ後に現行スキーマで再構築してください。移行またはロールバック
-時はいずれも先に poll を停止し、writer と主キーの版を揃えてから再開してください。
+
+従来の `TS_SOKUHO_O*` で `CollectedAt` が主キー末尾に含まれている場合、PostgreSQL
+と SQLite のどちらも通常の起動・schema 準備・書き込みからは自動移行しません。
+対象 table と次の明示コマンドを表示して fail closed します。
+
+```bat
+jltsql db migrate-sokuho-capture-identity --db postgresql --table TS_SOKUHO_O2
+```
+
+既定は dry run で、現在の主キー、総行数、発表単位 group 数、削除予定行数、最古の
+非 NULL `CollectedAt` へ書き換える group 数を表示します。dry run は読み取り専用
+transaction であり、`ACCESS EXCLUSIVE` lock は取得しません。全テーブルの検査は
+`--table` を省略し、複数 table の限定は `--table` を繰り返します。
+search path 外の PostgreSQL schema は `--schema <SCHEMA>` を付けます。fail-closed
+message は対象 schema を保持した exact command を表示します。
+
+適用時は先にすべての poll / writer を停止し、結果を確認して `--apply` を付けます。
+
+```bat
+jltsql db migrate-sokuho-capture-identity --db postgresql --table TS_SOKUHO_O2 --apply
+```
+
+apply は指定 table 全体を1 transaction とし、全対象の lock を grouping snapshot
+より前に取得します。同じ発表の複数 poll は、最新 poll の価格などと最初の実取得
+時刻を組み合わせた1行に統合します。検証または DDL が失敗すれば全変更を rollback
+します。SQLite は database connection を開く前に dry run / apply のどちらも
+nonzero で拒否するため、database を
+バックアップして現行 schema で対象 table を再構築してください。公式1年時系列の
+`TS_O1` / `TS_O2` は既に発表 identity の主キーを持ち、この移行の対象外です。
 
 ## 重要な制約
 
