@@ -3,6 +3,7 @@
 import os
 from copy import deepcopy
 from pathlib import Path
+from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
@@ -14,6 +15,7 @@ from src.database.schema_jravan import JRAVAN_SCHEMAS
 from src.database.sqlite_handler import SQLiteDatabase
 from src.importer.importer import (
     DataImporter,
+    convert_record_types,
     validate_hn_record,
     validate_import_record_header,
     verify_hn_storage_schema,
@@ -221,6 +223,32 @@ def test_hn_blank_reserved_spans_survive_every_sqlite_import_path(
             "reserved": "",
             "DelKubun": "",
         }
+
+
+def test_hn_blank_reserved_spans_remain_text_in_postgresql_bindings(monkeypatch) -> None:
+    """The PostgreSQL adapter must receive empty provider text, never SQL NULL."""
+
+    import src.database.postgresql_handler as postgresql_handler
+
+    monkeypatch.setattr(postgresql_handler, "DRIVER", "psycopg")
+    raw = official_domain_record()
+    raw[21:29] = b"        "
+    raw[39:40] = b" "
+    record = HNParser().parse(bytes(raw))
+    assert record is not None
+    converted = convert_record_types(record, "NL_HN")
+
+    database = postgresql_handler.PostgreSQLDatabase({})
+    database._connection = MagicMock()
+    database._cursor = MagicMock()
+    database._get_primary_key_columns = MagicMock(return_value=["hansyokunum"])
+
+    assert database.insert_many("NL_HN", [converted]) == 1
+
+    _, values = database._cursor.execute.call_args.args
+    bound = dict(zip(converted, values, strict=True))
+    assert bound["reserved"] == ""
+    assert bound["DelKubun"] == ""
 
 
 @pytest.mark.parametrize("use_standard", (False, True), ids=("native", "standard"))
