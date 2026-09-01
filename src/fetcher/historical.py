@@ -716,18 +716,17 @@ class HistoricalFetcher(BaseFetcher):
                 try:
                     parsed = self.parser_factory.parse(raw)
                     if not parsed:
-                        self._records_failed += 1
-                        self._log_failed_record(raw, f"cache:{data_spec}", error=None)
-                        continue
+                        self._raise_failed_record(raw, f"cache:{data_spec}", error=None)
 
                     records = parsed if isinstance(parsed, list) else [parsed]
                     for record in records:
                         self._records_parsed += 1
                         record["_raw"] = raw
                         yield record
+                except FetcherError:
+                    raise
                 except Exception as error:
-                    self._records_failed += 1
-                    self._log_failed_record(raw, f"cache:{data_spec}", error=error)
+                    self._raise_failed_record(raw, f"cache:{data_spec}", error=error)
         else:
             # Cache miss: fetch from JV-Link, write to cache
             self.cache_manager = cache_manager

@@ -10,14 +10,17 @@
 
 from __future__ import annotations
 
-import base64
-from unittest.mock import MagicMock
+import os
+from unittest.mock import MagicMock, patch
 
+import pytest
 import structlog
 
+from src.fetcher.base import FetcherError
 from src.fetcher.historical import HistoricalFetcher
 from src.parser.factory import ParserFactory
 from tests.fixtures.record_factory import make_se_record
+from tests.test_h1_official_contract import h1_raw
 
 JV_READ_COMPLETE = 0
 FAILED_RECORD_EVENT = "Failed to parse record"
@@ -45,19 +48,26 @@ def _fetcher(jv_read_results) -> HistoricalFetcher:
     return f
 
 
-def _failures(records: list[tuple[bytes, str]]) -> list[dict]:
+def _failures(
+    records: list[tuple[bytes, str]], artifact_dir
+) -> tuple[list[dict], HistoricalFetcher]:
     reads = [(len(buff), buff, filename) for buff, filename in records]
     reads.append((JV_READ_COMPLETE, None, None))
     fetcher = _fetcher(reads)
-    with structlog.testing.capture_logs() as logs:
+    with (
+        patch.dict(os.environ, {"JLTSQL_FAILED_RECORD_DIR": str(artifact_dir)}),
+        structlog.testing.capture_logs() as logs,
+        pytest.raises(FetcherError),
+    ):
         list(fetcher.fetch("RACE", "20220101", "20221231", option=4))
-    return [entry for entry in logs if entry.get("event") == FAILED_RECORD_EVENT]
+    failures = [entry for entry in logs if entry.get("event") == FAILED_RECORD_EVENT]
+    return failures, fetcher
 
 
-def test_a_failed_record_names_the_file_it_arrived_in() -> None:
+def test_a_failed_record_names_the_file_it_arrived_in(tmp_path) -> None:
     record = make_se_record(month_day="0231")
 
-    failure = _failures([(record, "SEVM2003129920230808162730.jvd")])[0]
+    failure = _failures([(record, "SEVM2003129920230808162730.jvd")], tmp_path)[0][0]
 
     assert failure["jvd_file"] == "SEVM2003129920230808162730.jvd"
     assert failure["record_num"] == 1
@@ -65,35 +75,28 @@ def test_a_failed_record_names_the_file_it_arrived_in() -> None:
     assert failure["log_level"] == "error"
 
 
-def test_a_failed_record_carries_its_own_bytes() -> None:
+def test_a_failed_record_carries_its_own_bytes(tmp_path) -> None:
     record = make_se_record(month_day="0231")
 
-    failure = _failures([(record, "f1.jvd")])[0]
+    failure = _failures([(record, "f1.jvd")], tmp_path)[0][0]
 
     assert failure["record_len"] == len(record)
-    assert failure["record_b64_truncated"] is False
-    assert base64.b64decode(failure["record_b64"]) == record
+    assert failure["artifact_id"] == f"sha256:{failure['record_sha256']}"
+    assert (tmp_path / f"{failure['record_sha256']}.jvd").read_bytes() == record
+    assert "record_b64" not in failure
+    assert "artifact_path" not in failure
 
 
-def test_long_records_are_truncated_visibly() -> None:
-    record = make_se_record(month_day="0231") + b"X" * 8192
-
-    failure = _failures([(record, "f1.jvd")])[0]
-
-    assert failure["record_len"] == len(record)
-    assert failure["record_b64_truncated"] is True
-    assert base64.b64decode(failure["record_b64"]) == record[:4096]
-
-
-def test_every_failed_record_is_logged_separately() -> None:
+def test_a_bad_feed_stops_after_one_bounded_failure_log(tmp_path) -> None:
     records = [(make_se_record(month_day="0231", umaban=f"{n:02d}"), "f1.jvd") for n in (1, 2)]
 
-    failures = _failures(records)
+    failures, fetcher = _failures(records, tmp_path)
 
-    assert [f["record_num"] for f in failures] == [1, 2]
+    assert [failure["record_num"] for failure in failures] == [1]
+    assert fetcher.jvlink.jv_read.call_count == 1
 
 
-def test_cached_records_are_logged_the_same_way() -> None:
+def test_cached_records_are_logged_the_same_way(tmp_path, monkeypatch) -> None:
     """キャッシュ再生経路も同じ失敗で、同じ困り方をする."""
     record = make_se_record(month_day="0231")
     cache = MagicMock()
@@ -101,23 +104,67 @@ def test_cached_records_are_logged_the_same_way() -> None:
     cache.read_nl.return_value = iter([record])
     fetcher = _fetcher([(JV_READ_COMPLETE, None, None)])
 
-    with structlog.testing.capture_logs() as logs:
+    monkeypatch.setenv("JLTSQL_FAILED_RECORD_DIR", str(tmp_path))
+    with structlog.testing.capture_logs() as logs, pytest.raises(FetcherError):
         list(fetcher.fetch_with_cache(cache, "RACE", "20220101", "20221231", option=4))
 
     failure = [e for e in logs if e.get("event") == FAILED_RECORD_EVENT][0]
     assert failure["jvd_file"] == "cache:RACE"
-    assert base64.b64decode(failure["record_b64"]) == record
+    assert (tmp_path / f"{failure['record_sha256']}.jvd").read_bytes() == record
 
 
-def test_an_unexpected_error_keeps_the_record_too() -> None:
+def test_an_unexpected_error_keeps_the_record_without_logging_its_message(
+    tmp_path, monkeypatch
+) -> None:
     record = make_se_record()
-    fetcher = _fetcher([(len(record), record, "f1.jvd"), (JV_READ_COMPLETE, None, None)])
+    fetcher = _fetcher(
+        [
+            (len(record), record, "/service-key-file-secret/f1.jvd"),
+            (JV_READ_COMPLETE, None, None),
+        ]
+    )
     fetcher.parser_factory = MagicMock()
-    fetcher.parser_factory.parse.side_effect = RuntimeError("boom")
+    fetcher.parser_factory.parse.side_effect = RuntimeError("service-key-top-secret")
 
-    with structlog.testing.capture_logs() as logs:
+    monkeypatch.setenv("JLTSQL_FAILED_RECORD_DIR", str(tmp_path))
+    with structlog.testing.capture_logs() as logs, pytest.raises(FetcherError):
         list(fetcher.fetch("RACE", "20220101", "20221231", option=4))
 
     failure = [e for e in logs if e.get("event") == FAILED_RECORD_EVENT][0]
-    assert failure["error"] == "boom"
-    assert base64.b64decode(failure["record_b64"]) == record
+    assert failure["error_type"] == "RuntimeError"
+    assert "service-key-top-secret" not in repr(logs)
+    assert "service-key-file-secret" not in repr(logs)
+    assert failure["jvd_file"] == "f1.jvd"
+    assert (tmp_path / f"{failure['record_sha256']}.jvd").read_bytes() == record
+
+
+def test_long_failures_with_the_same_prefix_are_fatal_and_fully_replayable(
+    monkeypatch, tmp_path
+) -> None:
+    """Tail corruption must yield distinct full artifacts, then stop the feed."""
+
+    monkeypatch.setenv("JLTSQL_FAILED_RECORD_DIR", str(tmp_path))
+    official = h1_raw()
+    assert len(official) == 28955
+    failures = []
+
+    for offset in (5000, 6000):
+        damaged = bytearray(official)
+        damaged[offset : offset + 2] = b"\x81\x30"
+        record = bytes(damaged)
+        fetcher = _fetcher(
+            [(len(record), record, "H1-official.jvd"), (JV_READ_COMPLETE, None, None)]
+        )
+        with structlog.testing.capture_logs() as logs:
+            with pytest.raises(FetcherError):
+                list(fetcher.fetch("RACE", "20220101", "20221231", option=4))
+        failures.append(
+            (record, [entry for entry in logs if entry.get("event") == FAILED_RECORD_EVENT][0])
+        )
+
+    assert failures[0][1]["artifact_id"] != failures[1][1]["artifact_id"]
+    for original, failure in failures:
+        artifact = tmp_path / f"{failure['record_sha256']}.jvd"
+        assert artifact.read_bytes() == original
+        assert failure["record_len"] == len(original)
+        assert "record_b64" not in failure
