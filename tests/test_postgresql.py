@@ -258,6 +258,78 @@ def test_insert_many_binds_one_row_template_through_executemany(monkeypatch):
     assert inserted == 2
 
 
+def test_insert_many_keeps_pg8000_on_bounded_multi_row_statements(monkeypatch):
+    """The pg8000 fallback must not turn one batch into one network call per row."""
+
+    from unittest.mock import MagicMock
+
+    import src.database.postgresql_handler as postgresql_handler
+
+    monkeypatch.setattr(postgresql_handler, "DRIVER", "pg8000")
+    monkeypatch.setattr(
+        postgresql_handler.PostgreSQLDatabase,
+        "_get_primary_key_columns",
+        lambda self, table_name: ["year", "kumi"],
+    )
+
+    database = postgresql_handler.PostgreSQLDatabase({})
+    database._connection = MagicMock()
+    database._connection.row_count = 100
+    rows = [{"Year": 2026, "Kumi": f"{index:05d}", "Odds": index / 10} for index in range(100)]
+
+    assert database.insert_many("test_batch_upsert", rows, use_replace=True) == 100
+
+    assert database._connection.run.call_count == 1
+    sql = database._connection.run.call_args.args[0]
+    params = database._connection.run.call_args.kwargs
+    assert sql.count("VALUES") == 1
+    assert sql.count("(:param") == 100
+    assert "ON CONFLICT (year, kumi) DO UPDATE SET odds = EXCLUDED.odds" in sql
+    assert list(params.values())[:6] == [2026, "00000", 0.0, 2026, "00001", 0.1]
+    assert list(params.values())[-3:] == [2026, "00099", 9.9]
+
+
+def test_insert_many_pg8000_rolls_back_all_chunks_on_late_failure(monkeypatch):
+    """A split pg8000 batch owns one transaction and cannot partially persist."""
+
+    from unittest.mock import MagicMock
+
+    import src.database.postgresql_handler as postgresql_handler
+    from src.database.base import DatabaseError
+
+    monkeypatch.setattr(postgresql_handler, "DRIVER", "pg8000")
+    monkeypatch.setattr(postgresql_handler, "PG8000_MAX_INSERT_PARAMETERS", 6)
+    monkeypatch.setattr(
+        postgresql_handler.PostgreSQLDatabase,
+        "_get_primary_key_columns",
+        lambda self, table_name: ["year", "kumi"],
+    )
+
+    database = postgresql_handler.PostgreSQLDatabase({})
+    database._connection = MagicMock()
+    database._connection.row_count = 3
+    insert_calls = 0
+
+    def run(sql, **params):
+        nonlocal insert_calls
+        if sql.startswith("INSERT"):
+            insert_calls += 1
+            if insert_calls == 2:
+                raise RuntimeError("late constraint failure")
+
+    database._connection.run.side_effect = run
+    rows = [{"Year": 2026, "Kumi": str(index)} for index in range(4)]
+
+    with pytest.raises(DatabaseError, match="late constraint failure"):
+        database.insert_many("test_batch_upsert", rows, use_replace=True)
+
+    commands = [call.args[0] for call in database._connection.run.call_args_list]
+    assert commands[0] == "BEGIN"
+    assert sum(command.startswith("INSERT") for command in commands) == 2
+    assert commands[-1] == "ROLLBACK"
+    assert "COMMIT" not in commands
+
+
 def test_pg8000_explicit_batch_transaction(monkeypatch):
     """The native fallback must not autocommit each batch row."""
     from unittest.mock import MagicMock, call

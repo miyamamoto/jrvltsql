@@ -26,6 +26,8 @@ from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+PG8000_MAX_INSERT_PARAMETERS = 30000
+
 
 class PostgreSQLDatabase(BaseDatabase):
     """PostgreSQL database handler.
@@ -834,16 +836,50 @@ class PostgreSQLDatabase(BaseDatabase):
         else:
             conflict_sql = ""
 
-        # One single-row template for the whole batch. A multi-row
-        # "VALUES (...), (...)" statement exceeded psycopg's cacheable query
-        # limits (4096 bytes / 50 parameters), so every chunk was re-parsed
-        # client side; that re-parsing was 15% of a full import
-        # (keibaai_cloud#280). executemany parses once and pipelines the rows.
+        parameter_rows = [tuple(row.get(col) for col in columns) for row in data_list]
+
+        if DRIVER == "pg8000":
+            # pg8000.native has no batch API: executemany() is this wrapper's
+            # row-by-row compatibility loop. Keep its previous bounded
+            # multi-row VALUES statements so a batch does not become thousands
+            # of network round trips.
+            chunk_size = max(
+                1,
+                PG8000_MAX_INSERT_PARAMETERS // max(1, len(columns)),
+            )
+            chunks = [
+                parameter_rows[start : start + chunk_size]
+                for start in range(0, len(parameter_rows), chunk_size)
+            ]
+            owns_transaction = len(chunks) > 1 and not self.has_pending_transaction()
+            try:
+                if owns_transaction:
+                    self.begin_transaction()
+                for chunk in chunks:
+                    values_sql = ", ".join([row_placeholders] * len(chunk))
+                    sql = (
+                        f"INSERT INTO {table_name} ({', '.join(quoted_columns)}) "
+                        f"VALUES {values_sql}{conflict_sql}"
+                    )
+                    flat_values = tuple(value for row in chunk for value in row)
+                    self.execute(sql, flat_values)
+                if owns_transaction:
+                    self.commit()
+            except Exception:
+                if owns_transaction and self.has_pending_transaction():
+                    self.rollback()
+                raise
+            return len(data_list)
+
+        # psycopg can pipeline a single-row statement through its native
+        # executemany implementation. A multi-row "VALUES (...), (...)"
+        # statement exceeded psycopg's cacheable query limits (4096 bytes / 50
+        # parameters), so every chunk was re-parsed client side; that
+        # re-parsing was 15% of a full import (keibaai_cloud#280).
         sql = (
             f"INSERT INTO {table_name} ({', '.join(quoted_columns)}) "
             f"VALUES {row_placeholders}{conflict_sql}"
         )
-        parameter_rows = [tuple(row.get(col) for col in columns) for row in data_list]
         self.executemany(sql, parameter_rows)
 
         return len(data_list)
