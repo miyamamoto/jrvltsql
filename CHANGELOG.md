@@ -9,6 +9,20 @@
 
 該当なし。
 
+## [2.1.0] - 2026-09-02
+
+### 2.1.0
+
+- `realtime odds-timeseries`に`--post-time-within-minutes` /
+  `--post-time-not-past-minutes`を追加し、発走前のレースだけを対象に公式
+  時系列オッズ（0B41/0B42）を取得できるようにした。発走時刻は`NL_RA`/`RT_RA`
+  から解決し、欠損・不正・曖昧な発走時刻はfail closedする。
+- 時系列オッズtableのupsertで`CollectedAt`を最初の捕捉時刻として保持する
+  （再取得で上書きしない）。SQLiteとPostgreSQLで同一挙動。
+- 速報oddsのPKをpublication identityへ修正。既存行の集約はDELETEを伴うため
+  起動時の暗黙実行をやめ、operator専用コマンド（既定dry-run、`--apply`で適用）
+  に分離した。
+
 ## [2.0.0] - 2026-08-27
 
 ### 2.0.0
