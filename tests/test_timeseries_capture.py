@@ -207,10 +207,9 @@ def test_sqlite_legacy_sokuho_key_fails_closed_without_schema_or_row_changes(tmp
         assert "TS_SOKUHO_O2 uses the legacy primary key ending in CollectedAt" in str(
             startup_error.value
         )
-        assert (
-            "jltsql db migrate-sokuho-capture-identity --db sqlite " "--table TS_SOKUHO_O2 --apply"
-        ) in str(startup_error.value)
         assert "backup and rebuild" in str(startup_error.value)
+        assert "migrate-sokuho-capture-identity" not in str(startup_error.value)
+        assert "--apply" not in str(startup_error.value)
 
         with pytest.raises(SchemaMigrationError) as write_error:
             database.insert(
@@ -272,13 +271,14 @@ def test_dual_write_preflights_legacy_secondary_before_primary_mutation(tmp_path
 
         with pytest.raises(
             SchemaMigrationError,
-            match="TS_SOKUHO_O2.*migrate-sokuho-capture-identity",
-        ):
+            match="TS_SOKUHO_O2.*backup and rebuild",
+        ) as error:
             database.insert(
                 "TS_SOKUHO_O2",
                 _sokuho_o2_row(collected_at="2026-09-01T02:00:00+00:00"),
             )
 
+        assert "migrate-sokuho-capture-identity" not in str(error.value)
         assert primary.fetch_one("SELECT COUNT(*) AS count FROM TS_SOKUHO_O2") == {"count": 0}
         assert secondary.fetch_one("SELECT COUNT(*) AS count FROM TS_SOKUHO_O2") == {"count": 1}
     finally:
@@ -314,8 +314,7 @@ def test_dual_write_names_postgresql_override_for_legacy_postgresql_target(tmp_p
             )
 
         assert (
-            "jltsql db migrate-sokuho-capture-identity --db postgresql "
-            "--table TS_SOKUHO_O2 --apply"
+            "jltsql db migrate-sokuho-capture-identity --db postgresql " "--table TS_SOKUHO_O2."
         ) in str(error.value)
         assert primary.fetch_one("SELECT COUNT(*) AS count FROM TS_SOKUHO_O2") == {"count": 0}
     finally:
@@ -385,7 +384,9 @@ def test_schema_qualified_sqlite_sokuho_write_fails_closed(tmp_path, write_metho
             getattr(database, write_method)("main.TS_SOKUHO_O2", payload)
 
         assert str(error.value) == str(startup_error.value)
-        assert "--db sqlite --schema main --table TS_SOKUHO_O2 --apply" in str(error.value)
+        assert "main.TS_SOKUHO_O2 uses the legacy primary key" in str(error.value)
+        assert "backup and rebuild" in str(error.value)
+        assert "migrate-sokuho-capture-identity" not in str(error.value)
         assert database.fetch_one("SELECT COUNT(*) AS count FROM TS_SOKUHO_O2") == {"count": 0}
     finally:
         database.disconnect()
@@ -453,8 +454,10 @@ def test_postgresql_schema_qualified_legacy_message_preserves_schema():
     assert "archive.TS_SOKUHO_O2 uses the legacy primary key" in message
     assert (
         "jltsql db migrate-sokuho-capture-identity --db postgresql "
-        "--schema archive --table TS_SOKUHO_O2 --apply"
+        "--schema archive --table TS_SOKUHO_O2."
     ) in message
+    assert "read-only dry run (the default; it does not change data)" in message
+    assert "--apply mutates the table" in message
 
 
 def test_unrelated_sqlite_table_keeps_replace_behavior(tmp_path):
@@ -624,7 +627,7 @@ def test_postgresql_sokuho_startup_and_write_fail_closed_then_explicit_migration
     with pytest.raises(SchemaMigrationError) as startup_error:
         prepare_time_series_odds_table(database, table_name)
     assert (
-        "jltsql db migrate-sokuho-capture-identity --db postgresql " "--table TS_SOKUHO_O2 --apply"
+        "jltsql db migrate-sokuho-capture-identity --db postgresql " "--table TS_SOKUHO_O2."
     ) in str(startup_error.value)
     database.rollback()
 

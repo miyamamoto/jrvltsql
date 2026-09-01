@@ -37,13 +37,14 @@ def _filter_race_rows_by_post_time(
     post_time_within_minutes: Optional[int],
     post_time_not_past_minutes: Optional[int],
 ) -> tuple[list[tuple], dict[str, int]]:
-    """Validate, de-duplicate, and filter race rows by NL/RT_RA post time."""
+    """Date-filter, validate, de-duplicate, and post-time-filter race rows."""
     now = _now_jst()
     if now.tzinfo is None or now.utcoffset() is None:
         raise FetcherError("Race post-time window clock must be timezone-aware")
     now = now.astimezone(JST)
 
     grouped: dict[str, list[tuple]] = {}
+    race_dates: dict[str, datetime] = {}
     for row in race_rows:
         if len(row) != 7:
             raise FetcherError(
@@ -53,7 +54,7 @@ def _filter_race_rows_by_post_time(
         year, monthday, jyo_cd, _kaiji, _nichiji, race_num, _post_time = row
         try:
             date_str = f"{int(year):04d}{int(monthday):04d}"
-            datetime.strptime(date_str, "%Y%m%d")
+            race_date = datetime.strptime(date_str, "%Y%m%d").replace(tzinfo=JST)
             jyo_cd_text = str(jyo_cd).strip().zfill(2)
             key = generate_time_series_key(date_str, jyo_cd_text, int(race_num))
         except (TypeError, ValueError) as exc:
@@ -61,10 +62,37 @@ def _filter_race_rows_by_post_time(
                 "Race post-time window cannot name invalid race identity " f"{row[:6]!r}: {exc}"
             ) from exc
         grouped.setdefault(key, []).append(row)
+        race_dates.setdefault(key, race_date)
+
+    latest_allowed = (
+        now + timedelta(minutes=post_time_within_minutes)
+        if post_time_within_minutes is not None
+        else None
+    )
+    earliest_allowed = (
+        now - timedelta(minutes=post_time_not_past_minutes)
+        if post_time_not_past_minutes is not None
+        else None
+    )
+    candidates: dict[str, list[tuple]] = {}
+    dropped_too_far_future = 0
+    dropped_too_far_past = 0
+    skipped_out_of_window_by_date = 0
+    for key, rows in grouped.items():
+        race_date_start = race_dates[key]
+        race_date_end = race_date_start + timedelta(days=1) - timedelta(minutes=1)
+        if latest_allowed is not None and race_date_start > latest_allowed:
+            dropped_too_far_future += 1
+            skipped_out_of_window_by_date += 1
+        elif earliest_allowed is not None and race_date_end < earliest_allowed:
+            dropped_too_far_past += 1
+            skipped_out_of_window_by_date += 1
+        else:
+            candidates[key] = rows
 
     validated: list[tuple[tuple, datetime]] = []
     problems: list[str] = []
-    for key, rows in grouped.items():
+    for key, rows in candidates.items():
         raw_post_times = [row[6] for row in rows]
         normalized_post_times = {
             str(value).strip()
@@ -82,6 +110,7 @@ def _filter_race_rows_by_post_time(
         post_time_text = next(iter(normalized_post_times))
         if (
             len(post_time_text) != 4
+            or not post_time_text.isascii()
             or not post_time_text.isdigit()
             or int(post_time_text[:2]) > 23
             or int(post_time_text[2:]) > 59
@@ -98,8 +127,6 @@ def _filter_race_rows_by_post_time(
         raise FetcherError("Race post-time window rejected keys: " + "; ".join(problems))
 
     kept: list[tuple] = []
-    dropped_too_far_future = 0
-    dropped_too_far_past = 0
     for row, post_time in validated:
         minutes_until_post = (post_time - now).total_seconds() / 60
         if post_time_within_minutes is not None and minutes_until_post > post_time_within_minutes:
@@ -114,9 +141,11 @@ def _filter_race_rows_by_post_time(
 
     stats = {
         "considered_keys": len(grouped),
+        "window_candidate_keys": len(candidates),
         "window_kept_keys": len(kept),
         "dropped_too_far_future": dropped_too_far_future,
         "dropped_too_far_past": dropped_too_far_past,
+        "skipped_out_of_window_by_date": skipped_out_of_window_by_date,
     }
     return kept, stats
 

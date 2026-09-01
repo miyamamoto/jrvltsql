@@ -67,8 +67,11 @@ jltsql realtime timeseries --spec 0B41 --from 20260901 --to 20260901 --db postgr
 `--post-time-within-minutes` は現在時刻（JST）から指定分以内に発走するキーを残し、
 `--post-time-not-past-minutes` は発走後の許容分を超えたキーを除外します。未指定時は
 従来どおり日付範囲の全キーが対象です。フィルターが有効なときは `NL_RA` / `RT_RA`
-のレース発走時刻を検証し、欠損、解釈不能、または同じ JVRTOpen キーで不一致なら、
-該当キーを表示して取得前に停止します。
+の日付だけで有効な bound の完全な範囲外と確定できるキーを先に除外します。残る候補
+だけレース発走時刻を検証し、欠損、strict な4桁 `HHMM` として解釈不能、または同じ
+JVRTOpen キー内で不一致なら、該当キーを表示して取得前に停止します。日付で除外済み
+のキーの発走時刻は解釈しません。window summary は全キー、候補、保持数、未来・過去の
+理由別除外数、日付だけで除外した数を個別に表示します。
 
 時系列行を再取得した場合、同じ発表行の価格などは最新の訂正値へ更新しますが、
 `CollectedAt` はその発表行を最初に保有した時刻（最も早い非 NULL 値）を維持します。
@@ -76,7 +79,10 @@ UTC オフセットが異なる ISO-8601 表現も同一の時刻軸へ正規化
 
 従来の `TS_SOKUHO_O*` で `CollectedAt` が主キー末尾に含まれている場合、PostgreSQL
 と SQLite のどちらも通常の起動・schema 準備・書き込みからは自動移行しません。
-対象 table と次の明示コマンドを表示して fail closed します。
+PostgreSQL は対象 table と、最初に実行する次の読み取り専用 dry-run command を表示して
+fail closed します。runtime message の command に `--apply` は含まれず、データを変更
+しません。SQLite は in-place 移行をサポートしないため command を案内せず、backup と
+現行 schema での table 再構築を指示して fail closed します。
 
 ```bat
 jltsql db migrate-sokuho-capture-identity --db postgresql --table TS_SOKUHO_O2
@@ -87,12 +93,17 @@ jltsql db migrate-sokuho-capture-identity --db postgresql --table TS_SOKUHO_O2
 transaction であり、`ACCESS EXCLUSIVE` lock は取得しません。全テーブルの検査は
 `--table` を省略し、複数 table の限定は `--table` を繰り返します。
 search path 外の PostgreSQL schema は `--schema <SCHEMA>` を付けます。fail-closed
-message は対象 schema を保持した exact command を表示します。
-
-適用時は先にすべての poll / writer を停止し、結果を確認して `--apply` を付けます。
+message は対象 schema を保持した exact dry-run command を表示します。
 
 ```bat
-jltsql db migrate-sokuho-capture-identity --db postgresql --table TS_SOKUHO_O2 --apply
+jltsql db migrate-sokuho-capture-identity --db postgresql --schema archive --table TS_SOKUHO_O2
+```
+
+適用時は先にすべての poll / writer を停止し、dry run の結果を確認して同じ command に
+`--apply` を付けます。データを変更するのは `--apply` を付けた実行だけです。
+
+```bat
+jltsql db migrate-sokuho-capture-identity --db postgresql --schema archive --table TS_SOKUHO_O2 --apply
 ```
 
 apply は指定 table 全体を1 transaction とし、全対象の lock を grouping snapshot

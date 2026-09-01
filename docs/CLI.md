@@ -105,8 +105,10 @@ jltsql realtime odds-sokuho-timeseries --from 20260418 --to 20260419 --db sqlite
 
 旧版で作成した `TS_SOKUHO_O1`〜`TS_SOKUHO_O6` の主キー末尾に
 `CollectedAt` が残っている場合、通常の起動・テーブル準備・時系列オッズ書き込みは
-自動移行せず停止します。エラーには対象テーブルと、実行すべき次のコマンドが表示
-されます。
+自動移行せず停止します。PostgreSQL のエラーには対象テーブルと、最初に実行する
+読み取り専用 dry run の exact command が表示されます。この command に `--apply` は
+含まれず、データを変更しません。SQLite のエラーは in-place 移行コマンドを案内せず、
+backup と現行 schema での table 再構築を指示します。
 
 既定は読み取り専用の dry run です。全テーブルを検査する場合:
 
@@ -124,16 +126,17 @@ jltsql db migrate-sokuho-capture-identity --db postgresql --table TS_SOKUHO_O1 -
 ```
 
 対象が PostgreSQL の search path 外にある場合は schema を明示します。エラーに
-表示される exact command にも `--schema` が含まれます。
+表示される exact dry-run command にも `--schema` が含まれます。
 
 ```bat
 jltsql db migrate-sokuho-capture-identity --db postgresql --schema archive --table TS_SOKUHO_O2
 ```
 
-内容を確認し、すべての collector / writer を停止してから、`--apply` を明示します。
+内容を確認し、すべての collector / writer を停止してから、同じ command に
+`--apply` を明示します。データを変更するのは `--apply` を付けた実行だけです。
 
 ```bat
-jltsql db migrate-sokuho-capture-identity --db postgresql --table TS_SOKUHO_O2 --apply
+jltsql db migrate-sokuho-capture-identity --db postgresql --schema archive --table TS_SOKUHO_O2 --apply
 ```
 
 apply は指定した legacy table を1 transaction で処理し、grouping snapshot より前に
@@ -155,8 +158,13 @@ jltsql realtime timeseries --spec 0B41 --from 20260901 --to 20260901 --db postgr
 ```
 
 両オプションの既定値は無効です。どちらかを指定した場合、`NL_RA` / `RT_RA` の
-`HassoTime`（レースの発走時刻）を使います。欠損、解釈不能、または同じ取得キーに
-複数の発走時刻がある場合は、該当キーを表示して JV-Link を開く前に停止します。
+日付だけで有効な bound の完全な範囲外と確定できるキーを先に除外し、残る候補の
+`HassoTime`（レースの発走時刻）を使います。候補で発走時刻が欠損、strict な4桁
+`HHMM` として解釈不能、または同じ取得キー内で不一致の場合は、該当キーを表示して
+JV-Link を開く前に停止します。日付で除外済みのキーの発走時刻は解釈しません。
+表示する `considered` / `candidates` / `kept` / `future` / `past` / `date_excluded` は
+それぞれ全キー、発走時刻を評価した候補、保持数、理由別除外数、日付だけで除外した
+数です。
 これは取得後のオッズ行にある `HassoTime`（発表時刻）とは別の値です。
 ウィンドウ指定時に `--from` / `--to` を省略した場合の既定日付も JST で決めます。
 

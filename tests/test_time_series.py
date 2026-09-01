@@ -497,14 +497,149 @@ def test_sqlite_race_window_keeps_near_post_and_reports_drop_reasons(tmp_path, m
         "processed_keys": 0,
         "total_keys": 1,
         "considered_keys": 3,
+        "window_candidate_keys": 3,
         "window_kept_keys": 1,
         "dropped_too_far_future": 1,
         "dropped_too_far_past": 1,
+        "skipped_out_of_window_by_date": 0,
         "success_keys": 0,
         "no_data_keys": 0,
         "error_keys": 0,
         "total_records": 0,
     }
+
+
+def test_race_window_skips_malformed_post_time_on_out_of_window_date(tmp_path, monkeypatch):
+    import sqlite3
+    from contextlib import closing
+
+    from src.fetcher.realtime import RealtimeFetcher
+
+    _fixed_window_now(monkeypatch)
+    db_path = tmp_path / "date-excluded.db"
+    with closing(sqlite3.connect(db_path)) as conn:
+        conn.execute("""
+            CREATE TABLE NL_RA (
+                Year INTEGER, MonthDay INTEGER, JyoCD TEXT, Kaiji INTEGER,
+                Nichiji INTEGER, RaceNum INTEGER, HassoTime TEXT
+            )
+            """)
+        conn.executemany(
+            "INSERT INTO NL_RA VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [
+                (2026, 901, "05", 3, 4, 1, "1230"),
+                (2026, 902, "05", 3, 4, 1, "not-a-time"),
+            ],
+        )
+        conn.commit()
+
+    progress = []
+    fetcher = object.__new__(RealtimeFetcher)
+    fetcher.jvlink = _window_jvlink()
+
+    assert (
+        list(
+            fetcher.fetch_time_series_batch_from_db(
+                data_spec="0B41",
+                db_path=str(db_path),
+                from_date="20260901",
+                to_date="20260902",
+                post_time_within_minutes=30,
+                progress_callback=progress.append,
+            )
+        )
+        == []
+    )
+
+    assert fetcher.jvlink.opened == [("0B41", "202609010501")]
+    assert progress[0]["considered_keys"] == 2
+    assert progress[0]["window_candidate_keys"] == 1
+    assert progress[0]["window_kept_keys"] == 1
+    assert progress[0]["dropped_too_far_future"] == 1
+    assert progress[0]["dropped_too_far_past"] == 0
+    assert progress[0]["skipped_out_of_window_by_date"] == 1
+
+
+def test_race_window_boundary_date_is_evaluated_by_post_time(tmp_path, monkeypatch):
+    import sqlite3
+    from contextlib import closing
+    from datetime import datetime
+
+    import src.fetcher.realtime as realtime_module
+    from src.fetcher.realtime import JST, RealtimeFetcher
+
+    monkeypatch.setattr(
+        realtime_module,
+        "_now_jst",
+        lambda: datetime(2026, 9, 1, 0, 0, tzinfo=JST),
+        raising=False,
+    )
+    db_path = tmp_path / "boundary-date.db"
+    with closing(sqlite3.connect(db_path)) as conn:
+        conn.execute("""
+            CREATE TABLE NL_RA (
+                Year INTEGER, MonthDay INTEGER, JyoCD TEXT, Kaiji INTEGER,
+                Nichiji INTEGER, RaceNum INTEGER, HassoTime TEXT
+            )
+            """)
+        conn.executemany(
+            "INSERT INTO NL_RA VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [
+                (2026, 831, "05", 3, 4, 1, "1200"),
+                (2026, 831, "05", 3, 4, 2, "2359"),
+            ],
+        )
+        conn.commit()
+
+    progress = []
+    fetcher = object.__new__(RealtimeFetcher)
+    fetcher.jvlink = _window_jvlink()
+
+    assert (
+        list(
+            fetcher.fetch_time_series_batch_from_db(
+                data_spec="0B41",
+                db_path=str(db_path),
+                from_date="20260831",
+                to_date="20260831",
+                post_time_within_minutes=30,
+                post_time_not_past_minutes=2,
+                progress_callback=progress.append,
+            )
+        )
+        == []
+    )
+
+    assert fetcher.jvlink.opened == [("0B41", "202608310502")]
+    assert progress[0]["considered_keys"] == 2
+    assert progress[0]["window_candidate_keys"] == 2
+    assert progress[0]["window_kept_keys"] == 1
+    assert progress[0]["dropped_too_far_future"] == 0
+    assert progress[0]["dropped_too_far_past"] == 1
+    assert progress[0]["skipped_out_of_window_by_date"] == 0
+
+
+@pytest.mark.parametrize(
+    ("race_row", "within_minutes", "not_past_minutes", "race_key"),
+    [
+        ((2026, 831, "05", 3, 4, 1, "930"), 30, None, "202608310501"),
+        ((2026, 902, "05", 3, 4, 1, "930"), None, 2, "202609020501"),
+    ],
+)
+def test_race_window_disabled_bound_does_not_date_exclude_candidate(
+    monkeypatch, race_row, within_minutes, not_past_minutes, race_key
+):
+    from src.fetcher.base import FetcherError
+    from src.fetcher.realtime import _filter_race_rows_by_post_time
+
+    _fixed_window_now(monkeypatch)
+
+    with pytest.raises(FetcherError, match=rf"{race_key}.*unparsable"):
+        _filter_race_rows_by_post_time(
+            [race_row],
+            post_time_within_minutes=within_minutes,
+            post_time_not_past_minutes=not_past_minutes,
+        )
 
 
 def test_postgresql_race_window_filters_rows_from_pg_source(monkeypatch):
@@ -557,11 +692,14 @@ def test_postgresql_race_window_filters_rows_from_pg_source(monkeypatch):
     ("post_times", "reason"),
     [
         ([None], "missing"),
-        (["not-a-time"], "unparsable"),
+        (["930"], "unparsable"),
+        (["１２３０"], "unparsable"),
         (["1230", "1231"], "ambiguous"),
     ],
 )
-def test_race_window_fails_closed_and_names_bad_race_key(tmp_path, monkeypatch, post_times, reason):
+def test_race_window_candidate_fails_closed_and_names_bad_race_key(
+    tmp_path, monkeypatch, post_times, reason
+):
     import sqlite3
     from contextlib import closing
 

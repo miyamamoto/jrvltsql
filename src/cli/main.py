@@ -2100,9 +2100,12 @@ def timeseries(
                             console.print(
                                 "  Window: "
                                 f"considered={progress.get('considered_keys', 0):,} "
+                                f"candidates={progress.get('window_candidate_keys', 0):,} "
                                 f"kept={progress.get('window_kept_keys', 0):,} "
                                 f"future={progress.get('dropped_too_far_future', 0):,} "
-                                f"past={progress.get('dropped_too_far_past', 0):,}"
+                                f"past={progress.get('dropped_too_far_past', 0):,} "
+                                "date_excluded="
+                                f"{progress.get('skipped_out_of_window_by_date', 0):,}"
                             )
                             return
                         processed = int(progress.get("processed_keys", 0))

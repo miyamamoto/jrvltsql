@@ -815,9 +815,11 @@ auto_update_check: false
                     "processed_keys": 0,
                     "total_keys": 1,
                     "considered_keys": 3,
+                    "window_candidate_keys": 3,
                     "window_kept_keys": 1,
                     "dropped_too_far_future": 1,
                     "dropped_too_far_past": 1,
+                    "skipped_out_of_window_by_date": 0,
                     "success_keys": 0,
                     "no_data_keys": 0,
                     "error_keys": 0,
@@ -873,9 +875,11 @@ auto_update_check: false
         self.assertEqual(call_kwargs["post_time_within_minutes"], 30)
         self.assertEqual(call_kwargs["post_time_not_past_minutes"], 2)
         self.assertIn("considered=3", result.output)
+        self.assertIn("candidates=3", result.output)
         self.assertIn("kept=1", result.output)
         self.assertIn("future=1", result.output)
         self.assertIn("past=1", result.output)
+        self.assertIn("date_excluded=0", result.output)
 
     def test_timeseries_window_implicit_dates_use_jst(self):
         from datetime import datetime as real_datetime

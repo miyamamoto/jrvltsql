@@ -402,7 +402,7 @@ def sokuho_capture_identity_operator_command(
     table_name: str,
     database_type: str = "postgresql",
 ) -> str:
-    """Return the exact explicit command named by startup and write guards."""
+    """Return the exact read-only dry-run command named by write guards."""
     normalized = _normalize_sokuho_table_reference(table_name)
     schema_option = ""
     if "." in normalized:
@@ -410,25 +410,29 @@ def sokuho_capture_identity_operator_command(
         schema_option = f"--schema {schema_name} "
     return (
         f"{SOKUHO_CAPTURE_IDENTITY_MIGRATION_COMMAND} --db {database_type} "
-        f"{schema_option}--table {normalized} --apply"
+        f"{schema_option}--table {normalized}"
     )
 
 
 def legacy_sokuho_capture_identity_message(db: BaseDatabase, table_name: str) -> str:
     """Build the shared actionable refusal for startup and write paths."""
     normalized = _normalize_sokuho_table_reference(table_name)
-    message = (
+    refusal = (
         f"{normalized} uses the legacy primary key ending in CollectedAt; "
-        "startup and time-series odds writes are blocked. Stop all collectors, "
-        "then run exactly: "
-        f"{sokuho_capture_identity_operator_command(normalized, db.get_db_type())}"
+        "startup and time-series odds writes are blocked."
     )
     if db.get_db_type() == "sqlite":
-        message += (
-            ". SQLite cannot migrate this key in place; the command will refuse "
-            "and require a backup and rebuild with the current schema"
+        return (
+            f"{refusal} SQLite cannot migrate this key in place; create a "
+            "backup and rebuild the table with the current schema"
         )
-    return message
+    return (
+        f"{refusal} First run this read-only "
+        "dry run (the default; it does not change data): "
+        f"{sokuho_capture_identity_operator_command(normalized, db.get_db_type())}. "
+        "Review the report, stop all collectors, then rerun the same command with "
+        "--apply; --apply mutates the table"
+    )
 
 
 def _expected_sokuho_primary_key(table_name: str) -> List[str]:
