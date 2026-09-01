@@ -1502,27 +1502,26 @@ class RealtimeUpdater:
             "TS_SOKUHO_O1": [
                 "Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji",
                 "RaceNum", "Umaban", "Kumi", "HassoTime", "SourceSpec",
-                "CollectedAt",
             ],
             "TS_SOKUHO_O2": [
                 "Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji",
-                "RaceNum", "Kumi", "HassoTime", "SourceSpec", "CollectedAt",
+                "RaceNum", "Kumi", "HassoTime", "SourceSpec",
             ],
             "TS_SOKUHO_O3": [
                 "Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji",
-                "RaceNum", "Kumi", "HassoTime", "SourceSpec", "CollectedAt",
+                "RaceNum", "Kumi", "HassoTime", "SourceSpec",
             ],
             "TS_SOKUHO_O4": [
                 "Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji",
-                "RaceNum", "Kumi", "HassoTime", "SourceSpec", "CollectedAt",
+                "RaceNum", "Kumi", "HassoTime", "SourceSpec",
             ],
             "TS_SOKUHO_O5": [
                 "Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji",
-                "RaceNum", "Kumi", "HassoTime", "SourceSpec", "CollectedAt",
+                "RaceNum", "Kumi", "HassoTime", "SourceSpec",
             ],
             "TS_SOKUHO_O6": [
                 "Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji",
-                "RaceNum", "Kumi", "HassoTime", "SourceSpec", "CollectedAt",
+                "RaceNum", "Kumi", "HassoTime", "SourceSpec",
             ],
 
             # Weather and horse-weight tables

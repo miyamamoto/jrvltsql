@@ -5,14 +5,17 @@ Detects schema mismatches in existing tables and applies safe migrations.
 The production PostgreSQL database is used by near-real-time collectors, so
 ``quickstart`` must never wipe tables implicitly. Migrations are additive only:
 missing columns are added with ``ALTER TABLE`` and extra/renamed columns are
-preserved. Primary-key changes fail closed and require an operator-managed
-migration outside these startup paths.
+preserved. Primary-key changes fail closed except for the exact PostgreSQL
+TS_SOKUHO capture-key correction implemented below. Legacy SQLite Sokuho keys
+are rejected without mutation and require an operator-managed rebuild.
 """
 
 import re
 from typing import Dict, List, Optional, Set
+from uuid import uuid4
 
 from src.database.base import BaseDatabase
+from src.database.timeseries_capture import capture_timestamp_epoch_microseconds
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -20,6 +23,9 @@ logger = get_logger(__name__)
 
 class SchemaMigrationError(RuntimeError):
     """Raised when a table cannot satisfy its required schema safely."""
+
+
+_SOKUHO_CAPTURE_TABLES = frozenset(f"TS_SOKUHO_O{number}" for number in range(1, 7))
 
 
 def _migration_targets(db: BaseDatabase) -> tuple[BaseDatabase, ...]:
@@ -307,6 +313,138 @@ def _add_missing_columns(
     return added
 
 
+def _validate_existing_capture_stamps(db: BaseDatabase, table_name: str) -> None:
+    """Reject a legacy Sokuho identity migration if a real stamp is invalid."""
+    table_identifier = _table_identifier(db, table_name)
+    rows = db.fetch_all(
+        f"SELECT DISTINCT CollectedAt AS collectedat FROM {table_identifier} "
+        "WHERE CollectedAt IS NOT NULL"
+    )
+    invalid = []
+    for row in rows:
+        value = row.get("collectedat")
+        try:
+            capture_timestamp_epoch_microseconds(value)
+        except (TypeError, ValueError):
+            invalid.append(repr(value))
+    if invalid:
+        examples = ", ".join(invalid[:5])
+        suffix = " ..." if len(invalid) > 5 else ""
+        raise SchemaMigrationError(
+            f"Cannot migrate {table_name}: invalid offset-aware CollectedAt values "
+            f"[{examples}{suffix}]"
+        )
+
+
+def _is_legacy_sokuho_capture_identity(
+    table_name: str,
+    existing_pk: List[str],
+    expected_pk: List[str],
+) -> bool:
+    """Recognize only the shipped Sokuho key that ended in CollectedAt."""
+    if table_name.upper() not in _SOKUHO_CAPTURE_TABLES:
+        return False
+    existing = [column.lower() for column in existing_pk]
+    expected = [column.lower() for column in expected_pk]
+    return existing == [*expected, "collectedat"]
+
+
+def _postgresql_migrate_sokuho_capture_identity(
+    db: BaseDatabase,
+    table_name: str,
+    expected_pk: List[str],
+    *,
+    commit: bool,
+) -> None:
+    """Collapse legacy PostgreSQL polls and replace the primary key atomically."""
+    table_identifier = _table_identifier(db, table_name)
+    temp_name = f"__jltsql_{table_name.lower()}_capture_pk_{uuid4().hex}"
+    temp_create_identifier = f'"{temp_name}"'
+    temp_identifier = f'pg_temp."{temp_name}"'
+    key_columns = [column.lower() for column in expected_pk]
+    partition = ", ".join(key_columns)
+    grouped_keys = " AND ".join(f"existing.{column} = grouped.{column}" for column in key_columns)
+
+    db.begin_transaction()
+    try:
+        # The DELETE must operate on the same population as the grouping
+        # snapshot. Lock first so a concurrent collector cannot insert a
+        # correction that the migration would then delete unseen.
+        db.execute(f"LOCK TABLE {table_identifier} IN ACCESS EXCLUSIVE MODE")
+        _validate_existing_capture_stamps(db, table_name)
+        constraint = db.fetch_one(
+            "SELECT conname FROM pg_constraint "
+            "WHERE conrelid = to_regclass(?) AND contype = 'p'",
+            (table_name.lower(),),
+        )
+        if not constraint or not constraint.get("conname"):
+            raise SchemaMigrationError(
+                f"Cannot migrate {table_name}: primary key constraint not found"
+            )
+        constraint_identifier = '"' + str(constraint["conname"]).replace('"', '""') + '"'
+        db.execute(
+            f"CREATE TEMP TABLE {temp_create_identifier} ON COMMIT DROP AS "
+            f"SELECT {partition}, "
+            "(ARRAY_AGG(ctid ORDER BY (collectedat IS NULL), "
+            "collectedat::timestamptz DESC, ctid DESC))[1] AS keep_tid, "
+            "(ARRAY_AGG(collectedat ORDER BY (collectedat IS NULL), "
+            "collectedat::timestamptz ASC, ctid ASC))[1] AS earliest_collectedat "
+            f"FROM {table_identifier} GROUP BY {partition}"
+        )
+        db.execute(
+            f"DELETE FROM {table_identifier} AS existing USING {temp_identifier} AS grouped "
+            f"WHERE {grouped_keys} AND existing.ctid <> grouped.keep_tid"
+        )
+        db.execute(
+            f"UPDATE {table_identifier} AS existing "
+            f"SET collectedat = grouped.earliest_collectedat "
+            f"FROM {temp_identifier} AS grouped WHERE existing.ctid = grouped.keep_tid"
+        )
+        db.execute(f"ALTER TABLE {table_identifier} DROP CONSTRAINT {constraint_identifier}")
+        db.execute(f"ALTER TABLE {table_identifier} ALTER COLUMN collectedat DROP NOT NULL")
+        db.execute(f"ALTER TABLE {table_identifier} ADD PRIMARY KEY ({', '.join(key_columns)})")
+        remaining = db.fetch_one(f"SELECT COUNT(*) AS count FROM {table_identifier}")["count"]
+        grouped = db.fetch_one(f"SELECT COUNT(*) AS count FROM {temp_identifier}")["count"]
+        if remaining != grouped:
+            raise SchemaMigrationError(
+                f"Cannot migrate {table_name}: retained {remaining} of {grouped} publication rows"
+            )
+        db.execute(f"DROP TABLE {temp_identifier}")
+        if commit:
+            db.commit()
+    except Exception as exc:
+        db.rollback()
+        if isinstance(exc, SchemaMigrationError):
+            raise
+        raise SchemaMigrationError(f"Failed to migrate {table_name}: {exc}") from exc
+
+
+def _migrate_sokuho_capture_identity(
+    db: BaseDatabase,
+    table_name: str,
+    expected_pk: List[str],
+    *,
+    commit: bool,
+) -> None:
+    """Apply the one approved primary-key correction for Sokuho tables."""
+    if db.get_db_type() != "postgresql":
+        raise SchemaMigrationError(
+            f"Automatic SQLite migration refused for {table_name}: legacy primary key "
+            "includes CollectedAt; back up and rebuild this table with the current "
+            "schema before polling"
+        )
+    logger.warning(
+        f"Migrating {table_name} from poll identity to publication identity; "
+        "latest values and earliest real CollectedAt will be retained"
+    )
+    _postgresql_migrate_sokuho_capture_identity(
+        db,
+        table_name,
+        expected_pk,
+        commit=commit,
+    )
+
+
 def migrate_table_if_needed(
     db: BaseDatabase,
     table_name: str,
@@ -351,6 +489,18 @@ def migrate_table_if_needed(
 
     existing_pk_lower = [column.lower() for column in existing_pk]
     expected_pk_lower = [column.lower() for column in expected_pk]
+    existing_columns_lower = {column.lower() for column in existing_columns}
+    expected_columns_lower = {column.lower() for column in expected_columns}
+    if existing_columns_lower == expected_columns_lower and _is_legacy_sokuho_capture_identity(
+        table_name, existing_pk, expected_pk
+    ):
+        _migrate_sokuho_capture_identity(
+            db,
+            table_name,
+            expected_pk,
+            commit=commit,
+        )
+        return True
     if expected_pk_lower and existing_pk_lower != expected_pk_lower:
         logger.warning(
             f"Primary key mismatch for {table_name}: "
@@ -368,8 +518,8 @@ def migrate_table_if_needed(
     # Without this, every PG run sees a "mismatch" between schema.py's CamelCase
     # column names and information_schema's lowercased names, triggering a DROP+
     # recreate on every call to create_all_tables() — which silently wipes data.
-    existing_lower = {c.lower() for c in existing_columns}
-    expected_lower = {c.lower() for c in expected_columns}
+    existing_lower = existing_columns_lower
+    expected_lower = expected_columns_lower
     if existing_lower == expected_lower:
         return False
 

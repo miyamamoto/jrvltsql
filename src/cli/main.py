@@ -18,7 +18,6 @@ from src.utils.updater import (
     perform_update,
 )
 
-
 # Console for rich output (Windows cp932-safe)
 console = Console(legacy_windows=True)
 err_console = Console(stderr=True, legacy_windows=True)
@@ -132,9 +131,7 @@ def cli(ctx, config, verbose):
     """
     # Store context
     ctx.ensure_object(dict)
-    requested_config_path = (
-        Path(config) if config else Path.cwd() / "config" / "config.yaml"
-    )
+    requested_config_path = Path(config) if config else Path.cwd() / "config" / "config.yaml"
     ctx.obj["config_path"] = requested_config_path
     ctx.obj["config_explicit"] = config is not None
 
@@ -154,8 +151,7 @@ def cli(ctx, config, verbose):
             # Read-only bootstrap commands must work before initialization.
             if ctx.invoked_subcommand not in CONFIG_OPTIONAL_COMMANDS:
                 console.print(
-                    "[red]Error:[/red] Configuration file not found. "
-                    "Run 'jltsql init' first.",
+                    "[red]Error:[/red] Configuration file not found. " "Run 'jltsql init' first.",
                     style="bold",
                 )
                 sys.exit(1)
@@ -173,9 +169,7 @@ def cli(ctx, config, verbose):
             try:
                 setup_logging_from_config(cfg.to_dict())
             except (OSError, TypeError, ValueError) as exc:
-                raise ConfigError(
-                    f"Could not initialize logging ({type(exc).__name__})"
-                ) from exc
+                raise ConfigError(f"Could not initialize logging ({type(exc).__name__})") from exc
 
             # Override log level if verbose
             if verbose:
@@ -236,8 +230,7 @@ def init(ctx, force):
             load_config(config_yaml)
         except ConfigError as exc:
             console.print(
-                f"[red]Configuration Error:[/red] {exc}. "
-                "Repair the file or rerun with --force.",
+                f"[red]Configuration Error:[/red] {exc}. " "Repair the file or rerun with --force.",
                 style="bold",
             )
             ctx.exit(1)
@@ -256,8 +249,7 @@ def init(ctx, force):
     # template that is absent from installed wheels.
     if config_yaml.exists() and not force:
         console.print(
-            f"[yellow]Warning:[/yellow] {config_yaml} already exists. "
-            "Use --force to overwrite."
+            f"[yellow]Warning:[/yellow] {config_yaml} already exists. " "Use --force to overwrite."
         )
     else:
         import yaml
@@ -310,20 +302,18 @@ def version(check):
     commit_str = f" ({commit})" if commit else ""
 
     console.print(f"[bold]JLTSQL[/bold] version {current}{commit_str}")
-    console.print(f"Python: {sys.version.split()[0]} ({'32-bit' if sys.maxsize <= 2**31 else '64-bit'})")
+    console.print(
+        f"Python: {sys.version.split()[0]} ({'32-bit' if sys.maxsize <= 2**31 else '64-bit'})"
+    )
 
     console.print()
     console.print("[bold]対応データソース:[/bold]")
     from src.jvlink import is_jvlink_available
 
     if is_jvlink_available():
-        console.print(
-            "  - JRA-VAN DataLab (JV-Link transport): [green]利用可能[/green]"
-        )
+        console.print("  - JRA-VAN DataLab (JV-Link transport): [green]利用可能[/green]")
     else:
-        console.print(
-            "  - JRA-VAN DataLab (JV-Link transport): [red]未インストール[/red]"
-        )
+        console.print("  - JRA-VAN DataLab (JV-Link transport): [red]未インストール[/red]")
 
     if check:
         console.print()
@@ -369,9 +359,7 @@ def update(ctx, force):
         return
 
     if info and info["update_available"]:
-        console.print(
-            f"[yellow]New version available:[/yellow] {info['latest_version']}"
-        )
+        console.print(f"[yellow]New version available:[/yellow] {info['latest_version']}")
         console.print()
 
     console.print("[bold]Updating...[/bold]")
@@ -427,12 +415,21 @@ def update(ctx, force):
     "jv_option",
     type=int,
     default=1,
-    help="JVOpen option: 1=通常データ（差分）, 2=今週データ, 3=セットアップ（ダイアログ）, 4=分割セットアップ (default: 1)"
+    help="JVOpen option: 1=通常データ（差分）, 2=今週データ, 3=セットアップ（ダイアログ）, 4=分割セットアップ (default: 1)",
 )
-@click.option("--db", type=click.Choice(["sqlite", "postgresql"]), default=None, help="Database type (default: from config)")
+@click.option(
+    "--db",
+    type=click.Choice(["sqlite", "postgresql"]),
+    default=None,
+    help="Database type (default: from config)",
+)
 @click.option("--batch-size", default=1000, help="Batch size for imports (default: 1000)")
-@click.option("--progress/--no-progress", default=True, help="Show progress display (default: enabled)")
-@click.option("--use-cache/--no-cache", default=True, show_default=True, help="Use local cache if available")
+@click.option(
+    "--progress/--no-progress", default=True, help="Show progress display (default: enabled)"
+)
+@click.option(
+    "--use-cache/--no-cache", default=True, show_default=True, help="Use local cache if available"
+)
 @click.pass_context
 def fetch(ctx, date_from, date_to, data_spec, jv_option, db, batch_size, progress, use_cache):
     """Fetch historical data from JRA-VAN DataLab.
@@ -455,7 +452,9 @@ def fetch(ctx, date_from, date_to, data_spec, jv_option, db, batch_size, progres
 
     config = ctx.obj.get("config")
     if not config and not db:
-        console.print("[red]Error:[/red] No configuration found. Run 'jltsql init' first or use --db option.")
+        console.print(
+            "[red]Error:[/red] No configuration found. Run 'jltsql init' first or use --db option."
+        )
         sys.exit(1)
 
     # Determine database type
@@ -477,9 +476,12 @@ def fetch(ctx, date_from, date_to, data_spec, jv_option, db, batch_size, progres
     _reject_retired_data_spec(data_spec)
 
     from src.jvlink.constants import is_valid_jvopen_combination, JVOPEN_VALID_COMBINATIONS
+
     if not is_valid_jvopen_combination(data_spec, jv_option):
         console.print()
-        console.print(f"[red]Error:[/red] データ種別 '{data_spec}' は option={jv_option} では取得できません")
+        console.print(
+            f"[red]Error:[/red] データ種別 '{data_spec}' は option={jv_option} では取得できません"
+        )
         valid_specs = JVOPEN_VALID_COMBINATIONS.get(jv_option, [])
         console.print(f"       option={jv_option} で取得可能: {', '.join(valid_specs)}")
         sys.exit(1)
@@ -516,6 +518,7 @@ def fetch(ctx, date_from, date_to, data_spec, jv_option, db, batch_size, progres
             cache_mgr = None
             if use_cache:
                 from src.cache import CacheManager
+
                 cache_dir = config.get("cache.directory", "data/cache") if config else "data/cache"
                 cache_mgr = CacheManager(Path(cache_dir))
 
@@ -531,10 +534,7 @@ def fetch(ctx, date_from, date_to, data_spec, jv_option, db, batch_size, progres
                 console.print("[bold]Processing data...[/bold]")
 
             result = processor.process_date_range(
-                data_spec=data_spec,
-                from_date=date_from,
-                to_date=date_to,
-                option=jv_option
+                data_spec=data_spec, from_date=date_from, to_date=date_to, option=jv_option
             )
 
             # Show results
@@ -560,6 +560,7 @@ def fetch(ctx, date_from, date_to, data_spec, jv_option, db, batch_size, progres
 # ---------------------------------------------------------------------------
 # cache command group
 # ---------------------------------------------------------------------------
+
 
 @cli.group()
 @click.pass_context
@@ -596,23 +597,29 @@ def cache_info(ctx, cache_dir):
     if info["nl"]:
         click.echo("NL_ (蓄積系) cache:")
         for spec, s in info["nl"].items():
-            click.echo(f"  {spec:8s}  {s['complete_dates']:4}/{s['cached_dates']:4} dates complete"
-                       f"  {s['date_range']:22s}  {s['size_bytes']/1024:.0f} KB")
+            click.echo(
+                f"  {spec:8s}  {s['complete_dates']:4}/{s['cached_dates']:4} dates complete"
+                f"  {s['date_range']:22s}  {s['size_bytes']/1024:.0f} KB"
+            )
     else:
         click.echo("NL_ cache: (empty)")
 
     if info["rt"]:
         click.echo("\nRT_ (速報系) cache:")
         for spec, s in info["rt"].items():
-            click.echo(f"  {spec:6s}  {s['cached_dates']:4} dates"
-                       f"  {s['date_range']:22s}  {s['size_bytes']/1024:.0f} KB")
+            click.echo(
+                f"  {spec:6s}  {s['cached_dates']:4} dates"
+                f"  {s['date_range']:22s}  {s['size_bytes']/1024:.0f} KB"
+            )
     else:
         click.echo("\nRT_ cache: (empty)")
 
 
 @cache.command("build")
 @click.option("--spec", "data_spec", required=True, help="Data spec (RACE, DIFN, etc.)")
-@click.option("--from", "date_from", required=True, help="Start date YYYYMMDD (option=2 is not cacheable)")
+@click.option(
+    "--from", "date_from", required=True, help="Start date YYYYMMDD (option=2 is not cacheable)"
+)
 @click.option(
     "--to",
     "date_to",
@@ -622,10 +629,20 @@ def cache_info(ctx, cache_dir):
         "ChokyoDate prevent the range from being marked complete."
     ),
 )
-@click.option("--option", "jv_option", type=int, default=1, show_default=True,
-              help="JVOpen option: 1=通常, 2=今週, 3=setup, 4=split-setup")
-@click.option("--also-import", is_flag=True, default=False,
-              help="Also import records into DB (default: cache only)")
+@click.option(
+    "--option",
+    "jv_option",
+    type=int,
+    default=1,
+    show_default=True,
+    help="JVOpen option: 1=通常, 2=今週, 3=setup, 4=split-setup",
+)
+@click.option(
+    "--also-import",
+    is_flag=True,
+    default=False,
+    help="Also import records into DB (default: cache only)",
+)
 @click.option("--db", type=click.Choice(["sqlite", "postgresql"]), default=None)
 @click.option("--cache-dir", default="data/cache", show_default=True)
 @click.pass_context
@@ -707,8 +724,10 @@ def cache_build(ctx, data_spec, date_from, date_to, jv_option, also_import, db, 
     # Show updated cache info
     info = mgr.info()
     nl_info = info["nl"].get(data_spec.upper(), {})
-    click.echo(f"Cache: {nl_info.get('complete_dates', 0)} dates, "
-               f"{nl_info.get('size_bytes', 0)/1024:.0f} KB")
+    click.echo(
+        f"Cache: {nl_info.get('complete_dates', 0)} dates, "
+        f"{nl_info.get('size_bytes', 0)/1024:.0f} KB"
+    )
 
 
 @cache.command("clear")
@@ -728,6 +747,7 @@ def cache_clear(ctx, spec, date_str, rt, cache_dir):
       jltsql cache clear --spec RACE --date 20260328
     """
     from src.cache import CacheManager
+
     mgr = CacheManager(Path(cache_dir))
     deleted = mgr.clear(spec=spec, date_str=date_str, rt=rt)
     target = "RT_" if rt else "NL_"
@@ -767,10 +787,12 @@ def cache_rebuild(ctx, data_spec, date_from, date_to, jv_option, cache_dir):
         raise click.ClickException(str(exc)) from exc
 
     from src.cache import CacheManager
+
     mgr = CacheManager(Path(cache_dir))
 
     # Clear first
     from datetime import datetime, timedelta
+
     d = datetime.strptime(date_from, "%Y%m%d").date()
     end = datetime.strptime(date_to, "%Y%m%d").date()
     deleted = 0
@@ -780,18 +802,30 @@ def cache_rebuild(ctx, data_spec, date_from, date_to, jv_option, cache_dir):
     click.echo(f"Cleared {deleted} existing cache files.")
 
     # Rebuild via cache build
-    ctx.invoke(cache_build, data_spec=data_spec, date_from=date_from,
-               date_to=date_to, jv_option=jv_option, also_import=False,
-               db=None, cache_dir=cache_dir)
+    ctx.invoke(
+        cache_build,
+        data_spec=data_spec,
+        date_from=date_from,
+        date_to=date_to,
+        jv_option=jv_option,
+        also_import=False,
+        db=None,
+        cache_dir=cache_dir,
+    )
 
 
 # ---------------------------------------------------------------------------
 # cache s3-setup: configure encrypted S3 credentials
 # ---------------------------------------------------------------------------
 
+
 @cache.command("s3-setup")
-@click.option("--cred-file", default="config/s3_credentials.enc", show_default=True,
-              help="Path to store encrypted credentials")
+@click.option(
+    "--cred-file",
+    default="config/s3_credentials.enc",
+    show_default=True,
+    help="Path to store encrypted credentials",
+)
 @click.pass_context
 def cache_s3_setup(ctx, cred_file):
     """Configure and store encrypted S3/R2 credentials.
@@ -842,6 +876,7 @@ def cache_s3_setup(ctx, cred_file):
     if click.confirm("\nTest connection now?", default=True):
         try:
             from src.cache.s3_sync import S3Syncer
+
             syncer = S3Syncer(cache_dir=Path("data/cache"), credentials=credentials)
             syncer.test_connection()
             click.echo("[OK] Connection successful!")
@@ -854,11 +889,13 @@ def cache_s3_setup(ctx, cred_file):
 # cache sync: upload / download / bidirectional sync with S3
 # ---------------------------------------------------------------------------
 
+
 @cache.command("sync")
 @click.option("--upload", "direction", flag_value="upload", help="Local → S3 only")
 @click.option("--download", "direction", flag_value="download", help="S3 → local only")
-@click.option("--both", "direction", flag_value="both", default=True,
-              help="Bidirectional sync (default)")
+@click.option(
+    "--both", "direction", flag_value="both", default=True, help="Bidirectional sync (default)"
+)
 @click.option("--dry-run", is_flag=True, help="Show what would be transferred (no actual transfer)")
 @click.option("--cache-dir", default="data/cache", show_default=True)
 @click.option("--cred-file", default="config/s3_credentials.enc", show_default=True)
@@ -904,20 +941,26 @@ def cache_sync(ctx, direction, dry_run, cache_dir, cred_file):
             on_progress=on_progress,
         )
 
-        click.echo(f"Bucket: {credentials['bucket_name']}  "
-                   f"Prefix: {credentials.get('prefix', 'jrvltsql-cache')}\n")
+        click.echo(
+            f"Bucket: {credentials['bucket_name']}  "
+            f"Prefix: {credentials.get('prefix', 'jrvltsql-cache')}\n"
+        )
 
         if direction == "upload":
             stats = syncer.upload(dry_run=dry_run)
-            click.echo(f"\nUploaded: {stats['uploaded']:,} files "
-                       f"({stats['bytes']/1024/1024:.1f} MB)  "
-                       f"Skipped: {stats['skipped']:,}  Errors: {stats['errors']:,}")
+            click.echo(
+                f"\nUploaded: {stats['uploaded']:,} files "
+                f"({stats['bytes']/1024/1024:.1f} MB)  "
+                f"Skipped: {stats['skipped']:,}  Errors: {stats['errors']:,}"
+            )
 
         elif direction == "download":
             stats = syncer.download(dry_run=dry_run)
-            click.echo(f"\nDownloaded: {stats['downloaded']:,} files "
-                       f"({stats['bytes']/1024/1024:.1f} MB)  "
-                       f"Skipped: {stats['skipped']:,}  Errors: {stats['errors']:,}")
+            click.echo(
+                f"\nDownloaded: {stats['downloaded']:,} files "
+                f"({stats['bytes']/1024/1024:.1f} MB)  "
+                f"Skipped: {stats['skipped']:,}  Errors: {stats['errors']:,}"
+            )
 
         else:  # both
             stats = syncer.sync(dry_run=dry_run)
@@ -942,7 +985,12 @@ def cache_sync(ctx, direction, dry_run, cache_dir, cred_file):
 @click.option("--daemon", is_flag=True, help="Run in background")
 @click.option("--spec", "data_spec", default="RACE", help="Data specification (default: RACE)")
 @click.option("--interval", default=60, help="Polling interval in seconds (default: 60)")
-@click.option("--db", type=click.Choice(["sqlite", "postgresql"]), default=None, help="Database type (default: from config)")
+@click.option(
+    "--db",
+    type=click.Choice(["sqlite", "postgresql"]),
+    default=None,
+    help="Database type (default: from config)",
+)
 @click.pass_context
 def monitor(ctx, daemon, data_spec, interval, db):
     """Start real-time monitoring.
@@ -958,7 +1006,9 @@ def monitor(ctx, daemon, data_spec, interval, db):
 
     config = ctx.obj.get("config")
     if not config and not db:
-        console.print("[red]Error:[/red] No configuration found. Run 'jltsql init' first or use --db option.")
+        console.print(
+            "[red]Error:[/red] No configuration found. Run 'jltsql init' first or use --db option."
+        )
         sys.exit(1)
 
     # Determine database type
@@ -1011,6 +1061,7 @@ def monitor(ctx, daemon, data_spec, interval, db):
                 # Foreground mode - wait for Ctrl+C
                 try:
                     import time
+
                     while True:
                         time.sleep(1)
                 except KeyboardInterrupt:
@@ -1036,7 +1087,12 @@ def stop(ctx):
 
 
 @cli.command()
-@click.option("--db", type=click.Choice(["sqlite", "postgresql"]), default=None, help="Database type (default: from config)")
+@click.option(
+    "--db",
+    type=click.Choice(["sqlite", "postgresql"]),
+    default=None,
+    help="Database type (default: from config)",
+)
 @click.option("--all", "create_all", is_flag=True, help="Create both NL_ and RT_ tables")
 @click.option("--nl-only", is_flag=True, help="Create only NL_ (Normal Load) tables")
 @click.option("--rt-only", is_flag=True, help="Create only RT_ (Real-Time) tables")
@@ -1058,7 +1114,9 @@ def create_tables(ctx, db, create_all, nl_only, rt_only):
 
     config = ctx.obj.get("config")
     if not config and not db:
-        console.print("[red]Error:[/red] No configuration found. Run 'jltsql init' first or use --db option.")
+        console.print(
+            "[red]Error:[/red] No configuration found. Run 'jltsql init' first or use --db option."
+        )
         sys.exit(1)
 
     # Determine database type
@@ -1081,9 +1139,13 @@ def create_tables(ctx, db, create_all, nl_only, rt_only):
         with database:
             # Determine which tables to create
             if nl_only:
-                tables_to_create = {name: sql for name, sql in SCHEMAS.items() if name.startswith("NL_")}
+                tables_to_create = {
+                    name: sql for name, sql in SCHEMAS.items() if name.startswith("NL_")
+                }
             elif rt_only:
-                tables_to_create = {name: sql for name, sql in SCHEMAS.items() if name.startswith("RT_")}
+                tables_to_create = {
+                    name: sql for name, sql in SCHEMAS.items() if name.startswith("RT_")
+                }
             else:
                 tables_to_create = SCHEMAS
 
@@ -1095,10 +1157,11 @@ def create_tables(ctx, db, create_all, nl_only, rt_only):
             failed_count = 0
 
             with Progress(
-                TextColumn("[progress.description]{task.description}"),
-                console=console
+                TextColumn("[progress.description]{task.description}"), console=console
             ) as progress:
-                task = progress.add_task(f"[cyan]Creating {len(tables_to_create)} tables...", total=len(tables_to_create))
+                task = progress.add_task(
+                    f"[cyan]Creating {len(tables_to_create)} tables...", total=len(tables_to_create)
+                )
 
                 for table_name, schema_sql in tables_to_create.items():
                     progress.update(task, description=f"[cyan]Creating {table_name}...")
@@ -1108,7 +1171,9 @@ def create_tables(ctx, db, create_all, nl_only, rt_only):
                         verify_table_schema(database, table_name, schema_sql)
                         created_count += 1
                     except Exception as e:
-                        console.print(f"[yellow]Warning:[/yellow] Failed to create {table_name}: {e}")
+                        console.print(
+                            f"[yellow]Warning:[/yellow] Failed to create {table_name}: {e}"
+                        )
                         failed_count += 1
 
                     progress.advance(task)
@@ -1118,9 +1183,7 @@ def create_tables(ctx, db, create_all, nl_only, rt_only):
             console.print(f"[green][OK][/green] Created {created_count} tables")
             if failed_count > 0:
                 console.print(f"[yellow][!!][/yellow] Failed to create {failed_count} tables")
-                raise RuntimeError(
-                    f"Schema preparation failed for {failed_count} table(s)"
-                )
+                raise RuntimeError(f"Schema preparation failed for {failed_count} table(s)")
 
             # Show table statistics
             nl_tables = len([n for n in tables_to_create if n.startswith("NL_")])
@@ -1139,7 +1202,12 @@ def create_tables(ctx, db, create_all, nl_only, rt_only):
 
 
 @cli.command()
-@click.option("--db", type=click.Choice(["sqlite", "postgresql"]), default=None, help="Database type (default: from config)")
+@click.option(
+    "--db",
+    type=click.Choice(["sqlite", "postgresql"]),
+    default=None,
+    help="Database type (default: from config)",
+)
 @click.option("--table", help="Create indexes for specific table only")
 @click.pass_context
 def create_indexes(ctx, db, table):
@@ -1163,7 +1231,9 @@ def create_indexes(ctx, db, table):
 
     config = ctx.obj.get("config")
     if not config and not db:
-        console.print("[red]Error:[/red] No configuration found. Run 'jltsql init' first or use --db option.")
+        console.print(
+            "[red]Error:[/red] No configuration found. Run 'jltsql init' first or use --db option."
+        )
         sys.exit(1)
 
     # Determine database type
@@ -1210,13 +1280,19 @@ def create_indexes(ctx, db, table):
                 total_tables = len(results)
 
                 console.print()
-                console.print(f"[green][OK][/green] Created {total_indexes} indexes across {total_tables} tables")
+                console.print(
+                    f"[green][OK][/green] Created {total_indexes} indexes across {total_tables} tables"
+                )
 
                 # Show breakdown
                 console.print()
                 console.print("[bold]Index Statistics:[/bold]")
-                nl_indexes = sum(count for table, count in results.items() if table.startswith("NL_"))
-                rt_indexes = sum(count for table, count in results.items() if table.startswith("RT_"))
+                nl_indexes = sum(
+                    count for table, count in results.items() if table.startswith("NL_")
+                )
+                rt_indexes = sum(
+                    count for table, count in results.items() if table.startswith("RT_")
+                )
 
                 console.print(f"  NL_* tables: {nl_indexes} indexes")
                 console.print(f"  RT_* tables: {rt_indexes} indexes")
@@ -1234,10 +1310,21 @@ def create_indexes(ctx, db, table):
 
 @cli.command()
 @click.option("--table", required=True, help="Table name to export")
-@click.option("--format", "output_format", type=click.Choice(["csv", "json", "parquet"]), default="csv", help="Output format (default: csv)")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["csv", "json", "parquet"]),
+    default="csv",
+    help="Output format (default: csv)",
+)
 @click.option("--output", "-o", required=True, type=click.Path(), help="Output file path")
 @click.option("--where", help="SQL WHERE clause (e.g., '開催年月日 >= 20240101')")
-@click.option("--db", type=click.Choice(["sqlite", "postgresql"]), default=None, help="Database type (default: from config)")
+@click.option(
+    "--db",
+    type=click.Choice(["sqlite", "postgresql"]),
+    default=None,
+    help="Database type (default: from config)",
+)
 @click.pass_context
 def export(ctx, table, output_format, output, where, db):
     """Export data from database to file.
@@ -1260,7 +1347,9 @@ def export(ctx, table, output_format, output, where, db):
 
     config = ctx.obj.get("config")
     if not config and not db:
-        console.print("[red]Error:[/red] No configuration found. Run 'jltsql init' first or use --db option.")
+        console.print(
+            "[red]Error:[/red] No configuration found. Run 'jltsql init' first or use --db option."
+        )
         sys.exit(1)
 
     # Determine database type
@@ -1295,8 +1384,11 @@ def export(ctx, table, output_format, output, where, db):
             # Validate table name to prevent SQL injection
             # Only allow alphanumeric characters and underscores
             import re
-            if not re.match(r'^[A-Za-z0-9_]+$', table):
-                console.print(f"[red]Error:[/red] Invalid table name '{table}'. Only alphanumeric characters and underscores are allowed.")
+
+            if not re.match(r"^[A-Za-z0-9_]+$", table):
+                console.print(
+                    f"[red]Error:[/red] Invalid table name '{table}'. Only alphanumeric characters and underscores are allowed."
+                )
                 sys.exit(1)
 
             # Build query
@@ -1305,16 +1397,18 @@ def export(ctx, table, output_format, output, where, db):
                 # WARNING: The WHERE clause is not parameterized and may be vulnerable to SQL injection.
                 # This feature is intended for CLI/internal use only.
                 # DO NOT expose this to untrusted input or web interfaces.
-                console.print("[yellow]Warning:[/yellow] WHERE clause is not parameterized. Use only with trusted input.")
+                console.print(
+                    "[yellow]Warning:[/yellow] WHERE clause is not parameterized. Use only with trusted input."
+                )
                 sql += f" WHERE {where}"
 
             console.print(f"[dim]Executing: {sql}[/dim]\n")
 
             # Fetch data
             from rich.progress import Progress, TextColumn
+
             with Progress(
-                TextColumn("[progress.description]{task.description}"),
-                console=console
+                TextColumn("[progress.description]{task.description}"), console=console
             ) as progress:
                 task = progress.add_task("[cyan]Fetching data...", total=None)
                 rows = database.fetch_all(sql)
@@ -1330,6 +1424,7 @@ def export(ctx, table, output_format, output, where, db):
 
             if output_format == "csv":
                 import csv
+
                 with open(output_path, "w", newline="", encoding="utf-8") as f:
                     if rows:
                         writer = csv.DictWriter(f, fieldnames=rows[0].keys())
@@ -1338,12 +1433,14 @@ def export(ctx, table, output_format, output, where, db):
 
             elif output_format == "json":
                 import json
+
                 with open(output_path, "w", encoding="utf-8") as f:
                     json.dump(rows, f, ensure_ascii=False, indent=2)
 
             elif output_format == "parquet":
                 try:
                     import pandas as pd
+
                     df = pd.DataFrame(rows)
                     df.to_parquet(output_path, index=False)
                 except ImportError:
@@ -1383,9 +1480,7 @@ def config(ctx, show, set_value, get_key):
 
     # Find config file. The path is captured before the bootstrap command
     # deliberately skips normal configuration loading.
-    config_path = Path(
-        ctx.obj.get("config_path", Path.cwd() / "config" / "config.yaml")
-    )
+    config_path = Path(ctx.obj.get("config_path", Path.cwd() / "config" / "config.yaml"))
     if ctx.obj.get("config"):
         config_obj = ctx.obj["config"]
         config_dict = config_obj.to_dict()
@@ -1406,6 +1501,7 @@ def config(ctx, show, set_value, get_key):
 
         # Pretty print config
         from rich.tree import Tree
+
         tree = Tree("JLTSQL Configuration")
 
         # JV-Link section
@@ -1451,7 +1547,9 @@ def config(ctx, show, set_value, get_key):
 
     # Set value (future implementation)
     elif set_value:
-        console.print("[yellow]Note:[/yellow] Configuration modification via CLI is not yet implemented.")
+        console.print(
+            "[yellow]Note:[/yellow] Configuration modification via CLI is not yet implemented."
+        )
         console.print(f"Please edit {config_path} manually.")
         console.print()
         console.print(f"You wanted to set: {set_value}")
@@ -1484,26 +1582,16 @@ SOKUHO_TIMESERIES_ODDS_SPECS = "0B30"
 
 @realtime.command()
 @click.option(
-    "--specs",
-    default="0B12",
-    help="Comma-separated data specs to monitor (default: 0B12)"
+    "--specs", default="0B12", help="Comma-separated data specs to monitor (default: 0B12)"
 )
 @click.option(
     "--db",
     type=click.Choice(["sqlite", "postgresql"]),
     default=None,
-    help="Database type (default: from config)"
+    help="Database type (default: from config)",
 )
-@click.option(
-    "--batch-size",
-    default=100,
-    help="Batch size for imports (default: 100)"
-)
-@click.option(
-    "--no-create-tables",
-    is_flag=True,
-    help="Don't auto-create missing tables"
-)
+@click.option("--batch-size", default=100, help="Batch size for imports (default: 100)")
+@click.option("--no-create-tables", is_flag=True, help="Don't auto-create missing tables")
 @click.pass_context
 def start(ctx, specs, db, batch_size, no_create_tables):
     """Start realtime monitoring service.
@@ -1569,7 +1657,7 @@ def start(ctx, specs, db, batch_size, no_create_tables):
             data_specs=data_specs,
             sid=config.get("jvlink.sid", "JLTSQL") if config else "JLTSQL",
             batch_size=batch_size,
-            auto_create_tables=not no_create_tables
+            auto_create_tables=not no_create_tables,
         )
 
         # Start monitoring
@@ -1595,6 +1683,7 @@ def start(ctx, specs, db, batch_size, no_create_tables):
             console.print("\nPress Ctrl+C to stop...\n")
             try:
                 import time
+
                 while monitor.status.is_running:
                     time.sleep(2)
                     # Periodically show stats
@@ -1603,7 +1692,7 @@ def start(ctx, specs, db, batch_size, no_create_tables):
                         f"\rImported: {status['records_imported']:,} | "
                         f"Failed: {status['records_failed']:,} | "
                         f"Uptime: {status['uptime_seconds']:.0f}s",
-                        end=""
+                        end="",
                     )
             except KeyboardInterrupt:
                 console.print("\n\n[yellow]Stopping monitoring...[/yellow]")
@@ -1686,6 +1775,18 @@ def realtime_stop(ctx):
     help="End date in YYYYMMDD format (default: today)",
 )
 @click.option(
+    "--post-time-within-minutes",
+    type=click.IntRange(min=0),
+    default=None,
+    help="Keep races whose NL_RA/RT_RA post time is at most N minutes ahead",
+)
+@click.option(
+    "--post-time-not-past-minutes",
+    type=click.IntRange(min=0),
+    default=None,
+    help="Drop races whose NL_RA/RT_RA post time is more than M minutes past",
+)
+@click.option(
     "--db",
     type=click.Choice(["sqlite", "postgresql"]),
     default=None,
@@ -1698,7 +1799,16 @@ def realtime_stop(ctx):
     help="SQLite database path (overrides config)",
 )
 @click.pass_context
-def timeseries(ctx, spec, from_date, to_date, db, db_path):
+def timeseries(
+    ctx,
+    spec,
+    from_date,
+    to_date,
+    post_time_within_minutes,
+    post_time_not_past_minutes,
+    db,
+    db_path,
+):
     """Fetch time series odds data from JV-Link.
 
     Fetches odds time-series data for races already in the database.
@@ -1716,8 +1826,10 @@ def timeseries(ctx, spec, from_date, to_date, db, db_path):
       jltsql realtime timeseries
       jltsql realtime timeseries --spec 0B41,0B42 --from-date 20250426
       jltsql realtime timeseries --spec 0B30 --from-date 20260418
+      jltsql realtime timeseries --spec 0B41 --from-date 20260901 --to-date 20260901 \
+        --post-time-within-minutes 30 --post-time-not-past-minutes 2
     """
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, timezone
     from src.database import create_database_from_config, DatabaseError
     from src.database.sqlite_handler import SQLiteDatabase
     from src.fetcher.realtime import RealtimeFetcher
@@ -1743,20 +1855,41 @@ def timeseries(ctx, spec, from_date, to_date, db, db_path):
     # Resolve path
     database_path = str(Path(database_path).resolve())
 
-    # Default date range (1 year for JVRTOpen)
-    if not from_date:
-        one_year_ago = datetime.now() - timedelta(days=365)
-        from_date = one_year_ago.strftime("%Y%m%d")
-    if not to_date:
-        to_date = datetime.now().strftime("%Y%m%d")
+    # Preserve the legacy host-local defaults when the opt-in window is off.
+    # A live window is explicitly defined in JST, so its implicit dates must
+    # use that same clock (especially during 00:00-08:59 JST on UTC hosts).
+    window_requested = (
+        post_time_within_minutes is not None or post_time_not_past_minutes is not None
+    )
+    if window_requested:
+        default_now = datetime.now(timezone(timedelta(hours=9), name="JST"))
+        if not from_date:
+            from_date = (default_now - timedelta(days=365)).strftime("%Y%m%d")
+        if not to_date:
+            to_date = default_now.strftime("%Y%m%d")
+    else:
+        # Keep the untouched path byte-identical to the pre-window behavior.
+        if not from_date:
+            one_year_ago = datetime.now() - timedelta(days=365)
+            from_date = one_year_ago.strftime("%Y%m%d")
+        if not to_date:
+            to_date = datetime.now().strftime("%Y%m%d")
 
     # Parse multiple specs
     specs_list = [s.strip() for s in spec.split(",")]
 
     console.print("[bold cyan]Fetching time series odds data...[/bold cyan]\n")
     console.print(f"  Data specs:    {', '.join(specs_list)}")
-    console.print(f"  Database:      {database_path if db_type == 'sqlite' else 'PostgreSQL'} ({db_type})")
+    console.print(
+        f"  Database:      {database_path if db_type == 'sqlite' else 'PostgreSQL'} ({db_type})"
+    )
     console.print(f"  Date range:    {from_date} - {to_date}")
+    if post_time_within_minutes is not None or post_time_not_past_minutes is not None:
+        console.print(
+            "  Post window:   "
+            f"within={post_time_within_minutes if post_time_within_minutes is not None else 'off'}m, "
+            f"not-past={post_time_not_past_minutes if post_time_not_past_minutes is not None else 'off'}m"
+        )
     console.print()
 
     try:
@@ -1764,9 +1897,7 @@ def timeseries(ctx, spec, from_date, to_date, db, db_path):
         # timeseries writes to be mirrored, so defer to the shared factory.
         if db_type in ("postgresql", "dual"):
             try:
-                database = create_database_from_config(
-                    config, db_type_override=db_type
-                )
+                database = create_database_from_config(config, db_type_override=db_type)
             except (ValueError, DatabaseError) as exc:
                 console.print(f"[red]Error:[/red] {exc}")
                 sys.exit(1)
@@ -1776,9 +1907,9 @@ def timeseries(ctx, spec, from_date, to_date, db, db_path):
             database = SQLiteDatabase(db_config)
 
         with database:
-            # Ensure official/sokuho time-series tables exist.
-            from src.database.schema import SCHEMAS
-            schema_registry = SCHEMAS
+            # Migrate, create, and verify each target before JV-Link opens.
+            from src.database.timeseries_capture import prepare_time_series_odds_table
+
             for spec_code in specs_list:
                 # Map spec to table name
                 table_map = {
@@ -1803,9 +1934,8 @@ def timeseries(ctx, spec, from_date, to_date, db, db_path):
                 }
                 table_names = table_map.get(spec_code, "")
                 for table_name in [name for name in table_names.split(",") if name]:
-                    if table_name in schema_registry:
-                        database.create_table(table_name, schema_registry[table_name])
-                        console.print(f"  [green][OK][/green] Table {table_name} ready")
+                    prepare_time_series_odds_table(database, table_name)
+                    console.print(f"  [green][OK][/green] Table {table_name} ready")
 
             # PostgreSQL DDL starts a physical transaction. Close the setup
             # boundary so every persistence batch owns and commits only its
@@ -1821,7 +1951,9 @@ def timeseries(ctx, spec, from_date, to_date, db, db_path):
             total_success = 0
             total_errors = 0
             default_save_batch_size = 100 if db_type in ("postgresql", "dual") else 5000
-            save_batch_size = int(os.getenv("JRVLTSQL_TS_SAVE_BATCH_SIZE", str(default_save_batch_size)))
+            save_batch_size = int(
+                os.getenv("JRVLTSQL_TS_SAVE_BATCH_SIZE", str(default_save_batch_size))
+            )
 
             def flush_batch(records_batch):
                 nonlocal total_success, total_errors
@@ -1852,13 +1984,20 @@ def timeseries(ctx, spec, from_date, to_date, db, db_path):
 
                     def report_key_progress(progress):
                         key_progress.update(progress)
+                        if progress.get("status") == "window_filter":
+                            console.print(
+                                "  Window: "
+                                f"considered={progress.get('considered_keys', 0):,} "
+                                f"kept={progress.get('window_kept_keys', 0):,} "
+                                f"future={progress.get('dropped_too_far_future', 0):,} "
+                                f"past={progress.get('dropped_too_far_past', 0):,}"
+                            )
+                            return
                         processed = int(progress.get("processed_keys", 0))
                         total = int(progress.get("total_keys", 0))
                         status = str(progress.get("status", ""))
                         should_print = (
-                            processed == total
-                            or status == "success"
-                            or processed % 25 == 0
+                            processed == total or status == "success" or processed % 25 == 0
                         )
                         if not should_print:
                             return
@@ -1885,6 +2024,8 @@ def timeseries(ctx, spec, from_date, to_date, db, db_path):
                         to_date=to_date,
                         pg_config=pg_config,
                         progress_callback=report_key_progress,
+                        post_time_within_minutes=post_time_within_minutes,
+                        post_time_not_past_minutes=post_time_not_past_minutes,
                     ):
                         # The fetcher already expands O1-O6 arrays into row
                         # dictionaries. Save parsed rows directly to avoid
@@ -1912,7 +2053,9 @@ def timeseries(ctx, spec, from_date, to_date, db, db_path):
                             f"errors={key_progress['error_keys']:,} "
                             f"records={key_progress['total_records']:,}"
                         )
-                    console.print(f"  [green][OK][/green] {spec_code}: {record_count:,} records processed")
+                    console.print(
+                        f"  [green][OK][/green] {spec_code}: {record_count:,} records processed"
+                    )
 
                 except Exception as e:
                     console.print(f"  [red][ERROR][/red] {spec_code}: Error - {e}")

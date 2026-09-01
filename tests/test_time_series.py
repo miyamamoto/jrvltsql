@@ -8,9 +8,12 @@
 import sys
 from pathlib import Path
 
+import pytest
+
 # プロジェクトルートをパスに追加
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
+
 
 def test_key_generation():
     """キー生成関数のテスト"""
@@ -79,8 +82,7 @@ def test_fetch_time_series_batch_from_db_uses_simple_key():
     with tempfile.TemporaryDirectory(dir="/tmp") as temp_dir:
         db_path = Path(temp_dir) / "keiba.db"
         with closing(sqlite3.connect(db_path)) as conn:
-            conn.execute(
-                """
+            conn.execute("""
                 CREATE TABLE NL_RA (
                     Year INTEGER,
                     MonthDay INTEGER,
@@ -89,8 +91,7 @@ def test_fetch_time_series_batch_from_db_uses_simple_key():
                     Nichiji INTEGER,
                     RaceNum INTEGER
                 )
-                """
-            )
+                """)
             conn.execute("INSERT INTO NL_RA VALUES (2025, 1201, '05', 5, 8, 11)")
             conn.commit()
 
@@ -143,8 +144,7 @@ def test_fetch_time_series_batch_from_db_closes_no_data_stream():
     with tempfile.TemporaryDirectory(dir="/tmp") as temp_dir:
         db_path = Path(temp_dir) / "keiba.db"
         with closing(sqlite3.connect(db_path)) as conn:
-            conn.execute(
-                """
+            conn.execute("""
                 CREATE TABLE NL_RA (
                     Year INTEGER,
                     MonthDay INTEGER,
@@ -153,11 +153,11 @@ def test_fetch_time_series_batch_from_db_closes_no_data_stream():
                     Nichiji INTEGER,
                     RaceNum INTEGER
                 )
-                """
-            )
+                """)
             conn.execute("INSERT INTO NL_RA VALUES (2025, 1201, '05', 5, 8, 11)")
 
             conn.commit()
+
         class FakeJVLink:
             def __init__(self):
                 self.opened = []
@@ -208,8 +208,7 @@ def test_fetch_time_series_batch_from_db_discards_partial_key():
     with tempfile.TemporaryDirectory(dir="/tmp") as temp_dir:
         db_path = Path(temp_dir) / "keiba.db"
         with closing(sqlite3.connect(db_path)) as conn:
-            conn.execute(
-                """
+            conn.execute("""
                 CREATE TABLE NL_RA (
                     Year INTEGER,
                     MonthDay INTEGER,
@@ -218,8 +217,7 @@ def test_fetch_time_series_batch_from_db_discards_partial_key():
                     Nichiji INTEGER,
                     RaceNum INTEGER
                 )
-                """
-            )
+                """)
             conn.execute("INSERT INTO NL_RA VALUES (2025, 1201, '05', 5, 8, 11)")
             conn.commit()
 
@@ -418,6 +416,252 @@ def test_fetch_time_series_batch_from_postgres_supports_missing_rt_ra(monkeypatc
     assert "FROM rt_ra" not in captured["query"]
     assert records == [{"RecordSpec": "O2", "_raw": b"O2"}]
 
+
+def _fixed_window_now(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+
+    import src.fetcher.realtime as realtime_module
+
+    now = datetime(2026, 9, 1, 12, 0, tzinfo=timezone(timedelta(hours=9)))
+    monkeypatch.setattr(realtime_module, "_now_jst", lambda: now, raising=False)
+
+
+def _window_jvlink():
+    class FakeJVLink:
+        def __init__(self):
+            self.opened = []
+            self.init_calls = 0
+
+        def jv_init(self):
+            self.init_calls += 1
+            return 0
+
+        def jv_rt_open(self, data_spec, key):
+            self.opened.append((data_spec, key))
+            return -1, 0
+
+        def jv_close(self):
+            return 0
+
+    return FakeJVLink()
+
+
+def test_sqlite_race_window_keeps_near_post_and_reports_drop_reasons(tmp_path, monkeypatch):
+    import sqlite3
+    from contextlib import closing
+
+    from src.fetcher.realtime import RealtimeFetcher
+
+    _fixed_window_now(monkeypatch)
+    db_path = tmp_path / "window.db"
+    with closing(sqlite3.connect(db_path)) as conn:
+        conn.execute("""
+            CREATE TABLE NL_RA (
+                Year INTEGER, MonthDay INTEGER, JyoCD TEXT, Kaiji INTEGER,
+                Nichiji INTEGER, RaceNum INTEGER, HassoTime TEXT
+            )
+            """)
+        conn.executemany(
+            "INSERT INTO NL_RA VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [
+                (2026, 901, "05", 3, 4, 1, "1230"),
+                (2026, 901, "05", 3, 4, 2, "1231"),
+                (2026, 901, "05", 3, 4, 3, "1157"),
+            ],
+        )
+        conn.commit()
+
+    progress = []
+    fetcher = object.__new__(RealtimeFetcher)
+    fetcher.jvlink = _window_jvlink()
+
+    assert (
+        list(
+            fetcher.fetch_time_series_batch_from_db(
+                data_spec="0B41",
+                db_path=str(db_path),
+                from_date="20260901",
+                to_date="20260901",
+                post_time_within_minutes=30,
+                post_time_not_past_minutes=2,
+                progress_callback=progress.append,
+            )
+        )
+        == []
+    )
+
+    assert fetcher.jvlink.opened == [("0B41", "202609010501")]
+    assert progress[0] == {
+        "status": "window_filter",
+        "key": None,
+        "processed_keys": 0,
+        "total_keys": 1,
+        "considered_keys": 3,
+        "window_kept_keys": 1,
+        "dropped_too_far_future": 1,
+        "dropped_too_far_past": 1,
+        "success_keys": 0,
+        "no_data_keys": 0,
+        "error_keys": 0,
+        "total_records": 0,
+    }
+
+
+def test_postgresql_race_window_filters_rows_from_pg_source(monkeypatch):
+    from src.fetcher.realtime import RealtimeFetcher
+
+    _fixed_window_now(monkeypatch)
+    captured = {}
+
+    def fake_pg_rows(query, params, pg_config):
+        captured["query"] = query
+        return [
+            (2026, 901, "05", 3, 4, 1, "1230"),
+            (2026, 901, "05", 3, 4, 2, "1231"),
+            (2026, 901, "05", 3, 4, 3, "1157"),
+        ]
+
+    monkeypatch.setattr(
+        RealtimeFetcher,
+        "_fetch_time_series_race_rows_from_postgres",
+        staticmethod(fake_pg_rows),
+    )
+    monkeypatch.setattr(
+        RealtimeFetcher,
+        "_postgres_table_exists",
+        staticmethod(lambda _config, _table_name: False),
+    )
+    fetcher = object.__new__(RealtimeFetcher)
+    fetcher.jvlink = _window_jvlink()
+
+    assert (
+        list(
+            fetcher.fetch_time_series_batch_from_db(
+                data_spec="0B42",
+                db_path="ignored.sqlite",
+                from_date="20260901",
+                to_date="20260901",
+                pg_config={"host": "localhost", "database": "keiba"},
+                post_time_within_minutes=30,
+                post_time_not_past_minutes=2,
+            )
+        )
+        == []
+    )
+
+    assert "hassotime" in captured["query"].lower()
+    assert fetcher.jvlink.opened == [("0B42", "202609010501")]
+
+
+@pytest.mark.parametrize(
+    ("post_times", "reason"),
+    [
+        ([None], "missing"),
+        (["not-a-time"], "unparsable"),
+        (["1230", "1231"], "ambiguous"),
+    ],
+)
+def test_race_window_fails_closed_and_names_bad_race_key(tmp_path, monkeypatch, post_times, reason):
+    import sqlite3
+    from contextlib import closing
+
+    import pytest
+
+    from src.fetcher.base import FetcherError
+    from src.fetcher.realtime import RealtimeFetcher
+
+    _fixed_window_now(monkeypatch)
+    db_path = tmp_path / f"bad-{reason}.db"
+    with closing(sqlite3.connect(db_path)) as conn:
+        conn.execute("""
+            CREATE TABLE NL_RA (
+                Year INTEGER, MonthDay INTEGER, JyoCD TEXT, Kaiji INTEGER,
+                Nichiji INTEGER, RaceNum INTEGER, HassoTime TEXT
+            )
+            """)
+        conn.executemany(
+            "INSERT INTO NL_RA VALUES (2026, 901, '05', 3, 4, 1, ?)",
+            [(post_time,) for post_time in post_times],
+        )
+        conn.commit()
+
+    fetcher = object.__new__(RealtimeFetcher)
+    fetcher.jvlink = _window_jvlink()
+
+    with pytest.raises(FetcherError, match=rf"202609010501.*{reason}"):
+        list(
+            fetcher.fetch_time_series_batch_from_db(
+                data_spec="0B41",
+                db_path=str(db_path),
+                from_date="20260901",
+                to_date="20260901",
+                post_time_within_minutes=30,
+            )
+        )
+    assert fetcher.jvlink.init_calls == 0
+
+
+def test_race_window_off_leaves_legacy_postgresql_query_and_rows_untouched(monkeypatch):
+    from unittest.mock import MagicMock
+
+    from src.fetcher.realtime import RealtimeFetcher
+
+    captured = {}
+
+    def fake_pg_rows(query, params, pg_config):
+        captured["query"] = query
+        return [(2026, 901, "05", 3, 4, 1)]
+
+    monkeypatch.setattr(
+        RealtimeFetcher,
+        "_fetch_time_series_race_rows_from_postgres",
+        staticmethod(fake_pg_rows),
+    )
+    monkeypatch.setattr(
+        RealtimeFetcher,
+        "_postgres_table_exists",
+        staticmethod(lambda _config, _table_name: False),
+    )
+    monkeypatch.setattr(
+        "src.fetcher.realtime._now_jst",
+        MagicMock(side_effect=AssertionError("off path must not read the clock")),
+        raising=False,
+    )
+    fetcher = object.__new__(RealtimeFetcher)
+    fetcher.jvlink = _window_jvlink()
+
+    list(
+        fetcher.fetch_time_series_batch_from_db(
+            data_spec="0B41",
+            db_path="ignored.sqlite",
+            from_date="20260901",
+            to_date="20260901",
+            pg_config={"host": "localhost", "database": "keiba"},
+        )
+    )
+
+    expected_query = """
+                WITH race_targets AS (
+                    SELECT year, monthday, jyocd, kaiji, nichiji, racenum
+                    FROM nl_ra
+                    <RT_UNION>
+                )
+                SELECT DISTINCT
+                    year, monthday, jyocd, kaiji, nichiji, racenum
+                FROM race_targets
+                WHERE 1=1
+            """.replace("<RT_UNION>", "")
+    expected_query += " AND (year > %s OR (year = %s AND monthday >= %s))"
+    expected_query += " AND (year < %s OR (year = %s AND monthday <= %s))"
+    expected_query += (
+        " AND LPAD(CAST(jyocd AS TEXT), 2, '0') "
+        "IN ('01','02','03','04','05','06','07','08','09','10')"
+    )
+    expected_query += " ORDER BY year, monthday, jyocd, racenum"
+    assert captured["query"] == expected_query
+    assert fetcher.jvlink.opened == [("0B41", "202609010501")]
+
+
 def test_odds_parsers_expand_combination_arrays():
     """O1-O6 parsers should expand embedded odds arrays into row lists."""
     from src.parser.o1_parser import O1Parser
@@ -434,9 +678,30 @@ def test_odds_parsers_expand_combination_arrays():
     assert O4Parser.RECORD_LENGTH == 4031
     assert O5Parser.RECORD_LENGTH == 12293
     assert O6Parser.RECORD_LENGTH == 83285
-    assert "PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban, Kumi)" in SCHEMAS["NL_O1"]
-    assert "PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban, Kumi)" in SCHEMAS["RT_O1"]
-    header_o1 = b"O1" + b"4" + b"20260419" + b"2026" + b"0419" + b"06" + b"03" + b"08" + b"11" + b"04191549" + b"18" + b"18" + b"777" + b"3"
+    assert (
+        "PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban, Kumi)"
+        in SCHEMAS["NL_O1"]
+    )
+    assert (
+        "PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban, Kumi)"
+        in SCHEMAS["RT_O1"]
+    )
+    header_o1 = (
+        b"O1"
+        + b"4"
+        + b"20260419"
+        + b"2026"
+        + b"0419"
+        + b"06"
+        + b"03"
+        + b"08"
+        + b"11"
+        + b"04191549"
+        + b"18"
+        + b"18"
+        + b"777"
+        + b"3"
+    )
     tan = b"01012301" + b"02045602" + b"0" * (26 * 8)
     fuku = b"010010002001" + b"020030004002" + b"0" * (26 * 12)
     wakuren = b"120123401" + b"130567802" + b"0" * (34 * 9)
@@ -451,13 +716,23 @@ def test_odds_parsers_expand_combination_arrays():
     assert rows_o1[-1]["Kumi"] == "13"
     assert rows_o1[-1]["Umaban"] == "0"
 
-    header_combo = b"O2" + b"4" + b"20260419" + b"2026" + b"0419" + b"06" + b"03" + b"08" + b"11" + b"04191549" + b"18" + b"18" + b"7"
+    header_combo = (
+        b"O2"
+        + b"4"
+        + b"20260419"
+        + b"2026"
+        + b"0419"
+        + b"06"
+        + b"03"
+        + b"08"
+        + b"11"
+        + b"04191549"
+        + b"18"
+        + b"18"
+        + b"7"
+    )
     raw_o2 = (
-        header_combo
-        + b"0102000123010"
-        + b"0103000456020"
-        + b"0" * (151 * 13)
-        + b"00000000999\r\n"
+        header_combo + b"0102000123010" + b"0103000456020" + b"0" * (151 * 13) + b"00000000999\r\n"
     )
     assert len(raw_o2) == O2Parser.RECORD_LENGTH
     rows_o2 = O2Parser().parse(raw_o2)
@@ -483,11 +758,7 @@ def test_odds_parsers_expand_combination_arrays():
 
     header_o4 = b"O4" + header_combo[2:]
     raw_o4 = (
-        header_o4
-        + b"0102000123010"
-        + b"0201000456020"
-        + b"0" * (304 * 13)
-        + b"00000000666\r\n"
+        header_o4 + b"0102000123010" + b"0201000456020" + b"0" * (304 * 13) + b"00000000666\r\n"
     )
     assert len(raw_o4) == O4Parser.RECORD_LENGTH
     rows_o4 = O4Parser().parse(raw_o4)
@@ -498,11 +769,7 @@ def test_odds_parsers_expand_combination_arrays():
 
     header_o5 = b"O5" + header_combo[2:]
     raw_o5 = (
-        header_o5
-        + b"010203000123010"
-        + b"010204000456020"
-        + b"0" * (814 * 15)
-        + b"00000000555\r\n"
+        header_o5 + b"010203000123010" + b"010204000456020" + b"0" * (814 * 15) + b"00000000555\r\n"
     )
     assert len(raw_o5) == O5Parser.RECORD_LENGTH
     rows_o5 = O5Parser().parse(raw_o5)
@@ -552,8 +819,16 @@ def test_list_methods():
     print(f"\nlist_data_specs(): {len(all_specs)} specs (速報+時系列)")
 
     assert set(specs) == {
-        "0B20", "0B30", "0B31", "0B32", "0B33",
-        "0B34", "0B35", "0B36", "0B41", "0B42",
+        "0B20",
+        "0B30",
+        "0B31",
+        "0B32",
+        "0B33",
+        "0B34",
+        "0B35",
+        "0B36",
+        "0B41",
+        "0B42",
     }
     assert set(tracks) == {f"{code:02d}" for code in range(1, 11)}
     assert set(specs) <= set(all_specs)
@@ -672,8 +947,7 @@ def test_fetch_time_series_batch_from_db_includes_rt_ra_targets():
         db_path = Path(temp_dir) / "keiba.db"
         with closing(sqlite3.connect(db_path)) as conn:
             for table in ("NL_RA", "RT_RA"):
-                conn.execute(
-                    f"""
+                conn.execute(f"""
                     CREATE TABLE {table} (
                         Year INTEGER,
                         MonthDay INTEGER,
@@ -682,8 +956,7 @@ def test_fetch_time_series_batch_from_db_includes_rt_ra_targets():
                         Nichiji INTEGER,
                         RaceNum INTEGER
                     )
-                    """
-                )
+                    """)
             # Shared in both tables plus one that only the card feed knows.
             conn.execute("INSERT INTO NL_RA VALUES (2025, 1201, '05', 5, 8, 11)")
             conn.execute("INSERT INTO RT_RA VALUES (2025, 1201, '05', 5, 8, 11)")
@@ -734,8 +1007,7 @@ def test_fetch_time_series_batch_from_db_works_without_rt_ra():
     with tempfile.TemporaryDirectory(dir="/tmp") as temp_dir:
         db_path = Path(temp_dir) / "keiba.db"
         with closing(sqlite3.connect(db_path)) as conn:
-            conn.execute(
-                """
+            conn.execute("""
                 CREATE TABLE NL_RA (
                     Year INTEGER,
                     MonthDay INTEGER,
@@ -744,8 +1016,7 @@ def test_fetch_time_series_batch_from_db_works_without_rt_ra():
                     Nichiji INTEGER,
                     RaceNum INTEGER
                 )
-                """
-            )
+                """)
             conn.execute("INSERT INTO NL_RA VALUES (2025, 1201, '05', 5, 8, 11)")
             conn.commit()
 
@@ -807,9 +1078,7 @@ def test_postgres_table_probe_resolves_like_the_query(monkeypatch):
         def close(self):
             pass
 
-    monkeypatch.setattr(
-        "psycopg.connect", lambda **_kwargs: _Connection(), raising=False
-    )
+    monkeypatch.setattr("psycopg.connect", lambda **_kwargs: _Connection(), raising=False)
     assert RealtimeFetcher._postgres_table_exists({}, "rt_ra") is True
     assert "to_regclass" in captured["query"]
     assert "information_schema" not in captured["query"]

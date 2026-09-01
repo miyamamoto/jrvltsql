@@ -101,6 +101,20 @@ jltsql realtime odds-sokuho-timeseries --from 20260418 --to 20260419 --db postgr
 jltsql realtime odds-sokuho-timeseries --from 20260418 --to 20260419 --db sqlite --db-path data/keiba.db
 ```
 
+当日ライブ収集で全レースを再取得しない場合は、`timeseries` にレースレコードの
+発走時刻ウィンドウを明示します。次の例は、現在時刻（JST）から30分以内に発走し、
+発走後2分を超えていないレースだけを対象にします。
+
+```bat
+jltsql realtime timeseries --spec 0B41 --from 20260901 --to 20260901 --db postgresql --post-time-within-minutes 30 --post-time-not-past-minutes 2
+```
+
+両オプションの既定値は無効です。どちらかを指定した場合、`NL_RA` / `RT_RA` の
+`HassoTime`（レースの発走時刻）を使います。欠損、解釈不能、または同じ取得キーに
+複数の発走時刻がある場合は、該当キーを表示して JV-Link を開く前に停止します。
+これは取得後のオッズ行にある `HassoTime`（発表時刻）とは別の値です。
+ウィンドウ指定時に `--from` / `--to` を省略した場合の既定日付も JST で決めます。
+
 ## 範囲指定つき時系列オッズ quickstart
 
 SQLite / PostgreSQL に、指定範囲の通常データと公式1年保持の TS_O1/TS_O2 を投入します。

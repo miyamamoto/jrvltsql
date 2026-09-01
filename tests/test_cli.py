@@ -20,38 +20,38 @@ class TestCLIBasic(unittest.TestCase):
 
     def test_cli_help(self):
         """Test CLI help output."""
-        result = self.runner.invoke(cli, ['--help'])
+        result = self.runner.invoke(cli, ["--help"])
         self.assertEqual(result.exit_code, 0)
-        self.assertIn('JLTSQL', result.output)
-        self.assertIn('init', result.output)
-        self.assertIn('fetch', result.output)
-        self.assertIn('monitor', result.output)
+        self.assertIn("JLTSQL", result.output)
+        self.assertIn("init", result.output)
+        self.assertIn("fetch", result.output)
+        self.assertIn("monitor", result.output)
 
     def test_version_command(self):
         """Version is available before a configuration file exists."""
         with patch("src.cli.main.Path.exists", return_value=False):
-            result = self.runner.invoke(cli, ['version'])
+            result = self.runner.invoke(cli, ["version"])
         self.assertEqual(result.exit_code, 0)
-        self.assertIn('JLTSQL version', result.output)
+        self.assertIn("JLTSQL version", result.output)
         self.assertTrue(
-            'Python version' in result.output or 'Python:' in result.output,
-            f"Expected 'Python version' or 'Python:' in output: {result.output}"
+            "Python version" in result.output or "Python:" in result.output,
+            f"Expected 'Python version' or 'Python:' in output: {result.output}",
         )
 
     def test_status_command(self):
         """Status is available before a configuration file exists; fetch is not."""
         with patch("src.cli.main.Path.exists", return_value=False):
-            result = self.runner.invoke(cli, ['status'])
+            result = self.runner.invoke(cli, ["status"])
             fetch_result = self.runner.invoke(
                 cli,
-                ['fetch', '--from', '2024-01-01', '--to', '2024-01-02', '--spec', 'RACE'],
+                ["fetch", "--from", "2024-01-01", "--to", "2024-01-02", "--spec", "RACE"],
             )
         self.assertEqual(result.exit_code, 0)
-        self.assertIn('JLTSQL Status', result.output)
-        self.assertIn('Version', result.output)
+        self.assertIn("JLTSQL Status", result.output)
+        self.assertIn("Version", result.output)
         # Data-acquiring commands stay behind the configuration gate.
         self.assertEqual(fetch_result.exit_code, 1)
-        self.assertIn('Configuration file not found', fetch_result.output)
+        self.assertIn("Configuration file not found", fetch_result.output)
 
     def test_isolated_filesystem_preserves_click_temp_dir_contract(self):
         """The compatibility runner retains Click's optional parent directory."""
@@ -91,19 +91,19 @@ class TestInitCommand(unittest.TestCase):
     def test_init_with_force(self):
         """Test init with --force flag."""
         with self.runner.isolated_filesystem():
-            config_dir = Path('config')
+            config_dir = Path("config")
             config_dir.mkdir(exist_ok=True)
 
-            example_file = config_dir / 'config.yaml.example'
-            example_file.write_text('# Example')
+            example_file = config_dir / "config.yaml.example"
+            example_file.write_text("# Example")
 
-            config_file = config_dir / 'config.yaml'
-            config_file.write_text('# Existing')
+            config_file = config_dir / "config.yaml"
+            config_file.write_text("# Existing")
 
-            result = self.runner.invoke(cli, ['init', '--force'])
+            result = self.runner.invoke(cli, ["init", "--force"])
 
             self.assertEqual(result.exit_code, 0)
-            self.assertIn('Created configuration file', result.output)
+            self.assertIn("Created configuration file", result.output)
 
     def test_init_rejects_a_global_config_path_instead_of_ignoring_it(self):
         """Init has a CWD target and must not silently ignore --config."""
@@ -170,8 +170,8 @@ class TestCreateTablesCommand(unittest.TestCase):
         """Test create-tables with SQLite."""
         with self.runner.isolated_filesystem():
             # Create config directory and file
-            Path('config').mkdir()
-            Path('config/config.yaml').write_text("""
+            Path("config").mkdir()
+            Path("config/config.yaml").write_text("""
 database:
   type: sqlite
   path: data/test.db
@@ -182,12 +182,9 @@ jvlink:
   service_key: ""
 """)
             # Create data directory
-            Path('data').mkdir()
+            Path("data").mkdir()
 
-            result = self.runner.invoke(cli, [
-                'create-tables',
-                '--db', 'sqlite'
-            ])
+            result = self.runner.invoke(cli, ["create-tables", "--db", "sqlite"])
 
             # Command should execute (may have various exit codes depending on config/environment)
             # Just verify it doesn't crash with exception
@@ -199,8 +196,8 @@ jvlink:
         """Test create-tables with --db flag works."""
         with self.runner.isolated_filesystem():
             # Create config directory and file
-            Path('config').mkdir()
-            Path('config/config.yaml').write_text("""
+            Path("config").mkdir()
+            Path("config/config.yaml").write_text("""
 database:
   type: sqlite
   path: data/test.db
@@ -210,12 +207,9 @@ databases:
 jvlink:
   service_key: ""
 """)
-            Path('data').mkdir()
+            Path("data").mkdir()
 
-            result = self.runner.invoke(cli, [
-                'create-tables',
-                '--db', 'sqlite'
-            ])
+            result = self.runner.invoke(cli, ["create-tables", "--db", "sqlite"])
 
             # Should attempt to execute (may succeed or fail, but command should parse)
             self.assertIsNotNone(result)
@@ -224,8 +218,7 @@ jvlink:
         """Existing RT tables are migrated before CREATE IF NOT EXISTS."""
         with self.runner.isolated_filesystem():
             config_path = Path("config.yaml")
-            config_path.write_text(
-                """
+            config_path.write_text("""
 database:
   type: sqlite
 databases:
@@ -234,18 +227,17 @@ databases:
     path: test.db
 jvlink:
   service_key: ""
-"""
-            )
+""")
             database = MagicMock()
 
-            with patch(
-                "src.database.create_database_from_config",
-                return_value=database,
-            ), patch(
-                "src.database.migration.migrate_all_tables"
-            ) as migrate_all_tables, patch(
-                "src.database.migration.verify_table_schema"
-            ) as verify_table_schema:
+            with (
+                patch(
+                    "src.database.create_database_from_config",
+                    return_value=database,
+                ),
+                patch("src.database.migration.migrate_all_tables") as migrate_all_tables,
+                patch("src.database.migration.verify_table_schema") as verify_table_schema,
+            ):
                 result = self.runner.invoke(
                     cli,
                     [
@@ -271,8 +263,7 @@ jvlink:
     def test_create_tables_fails_when_schema_verification_fails(self):
         with self.runner.isolated_filesystem():
             config_path = Path("config.yaml")
-            config_path.write_text(
-                """
+            config_path.write_text("""
 database:
   type: sqlite
 databases:
@@ -281,18 +272,19 @@ databases:
     path: test.db
 jvlink:
   service_key: ""
-"""
-            )
+""")
             database = MagicMock()
 
-            with patch(
-                "src.database.create_database_from_config",
-                return_value=database,
-            ), patch(
-                "src.database.migration.migrate_all_tables"
-            ), patch(
-                "src.database.migration.verify_table_schema",
-                side_effect=RuntimeError("unsafe schema"),
+            with (
+                patch(
+                    "src.database.create_database_from_config",
+                    return_value=database,
+                ),
+                patch("src.database.migration.migrate_all_tables"),
+                patch(
+                    "src.database.migration.verify_table_schema",
+                    side_effect=RuntimeError("unsafe schema"),
+                ),
             ):
                 result = self.runner.invoke(
                     cli,
@@ -319,89 +311,88 @@ class TestFetchCommand(unittest.TestCase):
 
     def test_fetch_missing_arguments(self):
         """Test fetch command with missing arguments."""
-        result = self.runner.invoke(cli, ['fetch'])
+        result = self.runner.invoke(cli, ["fetch"])
 
         # Should fail due to missing required arguments (--from, --to, --spec)
         self.assertNotEqual(result.exit_code, 0)
         # Check if error message contains missing required option
         self.assertTrue(
-            '--from' in result.output.lower() or
-            '--to' in result.output.lower() or
-            '--spec' in result.output.lower() or
-            result.exception is not None
+            "--from" in result.output.lower()
+            or "--to" in result.output.lower()
+            or "--spec" in result.output.lower()
+            or result.exception is not None
         )
 
     def test_fetch_help_explains_option_dependent_date_semantics(self):
-        example_config = (
-            Path(__file__).resolve().parents[1] / 'config' / 'config.yaml.example'
-        )
+        example_config = Path(__file__).resolve().parents[1] / "config" / "config.yaml.example"
         with self.runner.isolated_filesystem():
-            config_path = Path('config.yaml')
+            config_path = Path("config.yaml")
             config_path.write_text(
-                example_config.read_text(encoding='utf-8'),
-                encoding='utf-8',
+                example_config.read_text(encoding="utf-8"),
+                encoding="utf-8",
             )
             result = self.runner.invoke(
                 cli,
-                ['--config', str(config_path), 'fetch', '--help'],
+                ["--config", str(config_path), "fetch", "--help"],
             )
 
         self.assertEqual(result.exit_code, 0, result.output)
-        help_text = ' '.join(result.output.split())
-        self.assertIn('current race-cycle data', help_text)
-        self.assertIn('Sunday or Monday may cover two cycles', help_text)
-        self.assertIn('ChokyoDate', help_text)
-        self.assertIn('one JVOpen per calendar year', help_text)
-        self.assertIn('live-verified RACE, except option 2', help_text)
-        self.assertIn('opens once from the start point only', help_text)
+        help_text = " ".join(result.output.split())
+        self.assertIn("current race-cycle data", help_text)
+        self.assertIn("Sunday or Monday may cover two cycles", help_text)
+        self.assertIn("ChokyoDate", help_text)
+        self.assertIn("one JVOpen per calendar year", help_text)
+        self.assertIn("live-verified RACE, except option 2", help_text)
+        self.assertIn("opens once from the start point only", help_text)
 
-    @patch('src.database.create_database_from_config')
-    def test_fetch_rejects_invalid_dates_before_database_initialization(
-        self, mock_create_database
-    ):
-        example_config = (
-            Path(__file__).resolve().parents[1] / 'config' / 'config.yaml.example'
-        )
+    @patch("src.database.create_database_from_config")
+    def test_fetch_rejects_invalid_dates_before_database_initialization(self, mock_create_database):
+        example_config = Path(__file__).resolve().parents[1] / "config" / "config.yaml.example"
         with self.runner.isolated_filesystem():
-            config_path = Path('config.yaml')
+            config_path = Path("config.yaml")
             config_path.write_text(
-                example_config.read_text(encoding='utf-8'),
-                encoding='utf-8',
+                example_config.read_text(encoding="utf-8"),
+                encoding="utf-8",
             )
             result = self.runner.invoke(
                 cli,
                 [
-                    '--config', str(config_path),
-                    'fetch',
-                    '--from', '20260820',
-                    '--to', '20250820',
-                    '--spec', 'RACE',
-                    '--db', 'sqlite',
+                    "--config",
+                    str(config_path),
+                    "fetch",
+                    "--from",
+                    "20260820",
+                    "--to",
+                    "20250820",
+                    "--spec",
+                    "RACE",
+                    "--db",
+                    "sqlite",
                 ],
             )
 
         self.assertEqual(result.exit_code, 1, result.output)
-        self.assertIn('from_date must not be after to_date', result.output)
+        self.assertIn("from_date must not be after to_date", result.output)
         mock_create_database.assert_not_called()
 
-    @patch('src.importer.batch.BatchProcessor')
+    @patch("src.importer.batch.BatchProcessor")
     def test_fetch_with_all_args(self, mock_batch_processor):
         """Test fetch command with all arguments."""
         # Setup mocks
         mock_processor_instance = MagicMock()
         mock_processor_instance.process_date_range.return_value = {
-            'records_fetched': 10,
-            'records_parsed': 10,
-            'records_imported': 10,
-            'records_failed': 0,
-            'batches_processed': 1
+            "records_fetched": 10,
+            "records_parsed": 10,
+            "records_imported": 10,
+            "records_failed": 0,
+            "batches_processed": 1,
         }
         mock_batch_processor.return_value = mock_processor_instance
 
         with self.runner.isolated_filesystem():
             # Create config directory and file
-            Path('config').mkdir()
-            Path('config/config.yaml').write_text("""
+            Path("config").mkdir()
+            Path("config/config.yaml").write_text("""
 database:
   type: sqlite
   path: data/test.db
@@ -411,15 +402,22 @@ databases:
 jvlink:
   service_key: test_key
 """)
-            Path('data').mkdir()
+            Path("data").mkdir()
 
-            result = self.runner.invoke(cli, [
-                'fetch',
-                '--from', '20240101',
-                '--to', '20240131',
-                '--spec', 'RACE',
-                '--db', 'sqlite'
-            ])
+            result = self.runner.invoke(
+                cli,
+                [
+                    "fetch",
+                    "--from",
+                    "20240101",
+                    "--to",
+                    "20240131",
+                    "--spec",
+                    "RACE",
+                    "--db",
+                    "sqlite",
+                ],
+            )
 
             # Should execute (may fail due to missing JV-Link, but that's OK for CLI test)
             # Just verify command structure works
@@ -432,38 +430,38 @@ class TestCacheBuildCommand(unittest.TestCase):
     def setUp(self):
         self.runner = CliRunner()
 
-    @patch('src.cache.CacheManager')
-    def test_commands_reject_invalid_dates_before_cache_lookup(
-        self, mock_cache_manager
-    ):
-        example_config = (
-            Path(__file__).resolve().parents[1] / 'config' / 'config.yaml.example'
-        )
+    @patch("src.cache.CacheManager")
+    def test_commands_reject_invalid_dates_before_cache_lookup(self, mock_cache_manager):
+        example_config = Path(__file__).resolve().parents[1] / "config" / "config.yaml.example"
         with self.runner.isolated_filesystem():
-            config_path = Path('config.yaml')
+            config_path = Path("config.yaml")
             config_path.write_text(
-                example_config.read_text(encoding='utf-8'),
-                encoding='utf-8',
+                example_config.read_text(encoding="utf-8"),
+                encoding="utf-8",
             )
-            for command in ('build', 'rebuild'):
+            for command in ("build", "rebuild"):
                 with self.subTest(command=command):
                     mock_cache_manager.reset_mock()
                     result = self.runner.invoke(
                         cli,
                         [
-                            '--config', str(config_path),
-                            'cache', command,
-                            '--spec', 'RACE',
-                            '--from', '20260820',
-                            '--to', '20250820',
-                            '--option', '4',
+                            "--config",
+                            str(config_path),
+                            "cache",
+                            command,
+                            "--spec",
+                            "RACE",
+                            "--from",
+                            "20260820",
+                            "--to",
+                            "20250820",
+                            "--option",
+                            "4",
                         ],
                     )
 
                     self.assertEqual(result.exit_code, 1, result.output)
-                    self.assertIn(
-                        'from_date must not be after to_date', result.output
-                    )
+                    self.assertIn("from_date must not be after to_date", result.output)
                     mock_cache_manager.assert_not_called()
 
 
@@ -474,22 +472,22 @@ class TestMonitorCommand(unittest.TestCase):
         """Set up test fixtures."""
         self.runner = CliRunner()
 
-    @patch('src.realtime.monitor.RealtimeMonitor')
+    @patch("src.realtime.monitor.RealtimeMonitor")
     def test_monitor_daemon_mode(self, mock_monitor):
         """Test monitor command in daemon mode."""
         # Setup mocks
         mock_monitor_instance = MagicMock()
         mock_monitor_instance.get_status.return_value = {
-            'started_at': '2024-01-01 00:00:00',
-            'running': True
+            "started_at": "2024-01-01 00:00:00",
+            "running": True,
         }
         mock_monitor_instance.start.return_value = None
         mock_monitor.return_value = mock_monitor_instance
 
         with self.runner.isolated_filesystem():
             # Create config directory and file
-            Path('config').mkdir()
-            Path('config/config.yaml').write_text("""
+            Path("config").mkdir()
+            Path("config/config.yaml").write_text("""
 database:
   type: sqlite
   path: data/test.db
@@ -499,13 +497,9 @@ databases:
 jvlink:
   service_key: ""
 """)
-            Path('data').mkdir()
+            Path("data").mkdir()
 
-            result = self.runner.invoke(cli, [
-                'monitor',
-                '--daemon',
-                '--db', 'sqlite'
-            ])
+            result = self.runner.invoke(cli, ["monitor", "--daemon", "--db", "sqlite"])
 
             # Should execute (may fail due to config/JV-Link, but command structure should work)
             self.assertIsNotNone(result)
@@ -516,6 +510,11 @@ class TestRealtimeTimeseriesCommand(unittest.TestCase):
 
     def setUp(self):
         self.runner = CliRunner()
+        self.prepare_table_patcher = patch(
+            "src.database.timeseries_capture.prepare_time_series_odds_table"
+        )
+        self.prepare_table = self.prepare_table_patcher.start()
+        self.addCleanup(self.prepare_table_patcher.stop)
 
     def test_timeseries_commits_table_setup_and_fails_closed_on_batch_error(self):
         database = MagicMock()
@@ -543,8 +542,7 @@ class TestRealtimeTimeseriesCommand(unittest.TestCase):
 
         with self.runner.isolated_filesystem():
             config_path = Path("config.yaml")
-            config_path.write_text(
-                """
+            config_path.write_text("""
 database:
   type: postgresql
 databases:
@@ -553,14 +551,11 @@ databases:
 jvlink:
   sid: TEST
 auto_update_check: false
-"""
-            )
-            with patch(
-                "src.database.create_database_from_config", return_value=database
-            ), patch(
-                "src.fetcher.realtime.RealtimeFetcher", return_value=fetcher
-            ), patch(
-                "src.realtime.updater.RealtimeUpdater", return_value=updater
+""")
+            with (
+                patch("src.database.create_database_from_config", return_value=database),
+                patch("src.fetcher.realtime.RealtimeFetcher", return_value=fetcher),
+                patch("src.realtime.updater.RealtimeUpdater", return_value=updater),
             ):
                 result = self.runner.invoke(
                     cli,
@@ -581,9 +576,193 @@ auto_update_check: false
                 )
 
         self.assertEqual(result.exit_code, 1, result.output)
+        self.prepare_table.assert_called_once_with(database, "TS_O1")
         self.assertEqual(pending_at_batch, [False])
         self.assertNotIn("[OK] 0B41", result.output)
         self.assertNotIn("Complete!", result.output)
+
+    def test_timeseries_rejects_unsafe_table_before_fetcher_initialization(self):
+        database = MagicMock()
+        database.__enter__.return_value = database
+        database.__exit__.return_value = None
+        self.prepare_table.side_effect = RuntimeError(
+            "legacy primary key includes CollectedAt; back up and rebuild"
+        )
+
+        with self.runner.isolated_filesystem():
+            config_path = Path("config.yaml")
+            config_path.write_text("""
+database:
+  type: postgresql
+databases:
+  postgresql:
+    enabled: true
+jvlink:
+  sid: TEST
+auto_update_check: false
+""")
+            with (
+                patch("src.database.create_database_from_config", return_value=database),
+                patch("src.fetcher.realtime.RealtimeFetcher") as fetcher_class,
+            ):
+                result = self.runner.invoke(
+                    cli,
+                    [
+                        "--config",
+                        str(config_path),
+                        "realtime",
+                        "timeseries",
+                        "--spec",
+                        "0B32",
+                        "--from",
+                        "20260901",
+                        "--to",
+                        "20260901",
+                        "--db",
+                        "postgresql",
+                    ],
+                )
+
+        self.assertEqual(result.exit_code, 1, result.output)
+        self.prepare_table.assert_called_once_with(database, "TS_SOKUHO_O2")
+        fetcher_class.assert_not_called()
+        database.commit.assert_not_called()
+        self.assertIn("legacy primary key includes CollectedAt", result.output)
+        self.assertNotIn("Table TS_SOKUHO_O2 ready", result.output)
+
+    def test_timeseries_passes_race_window_options_and_reports_selection(self):
+        database = MagicMock()
+        database.__enter__.return_value = database
+        database.__exit__.return_value = None
+        fetcher = MagicMock()
+
+        def fetch_rows(**kwargs):
+            callback = kwargs["progress_callback"]
+            callback(
+                {
+                    "status": "window_filter",
+                    "key": None,
+                    "processed_keys": 0,
+                    "total_keys": 1,
+                    "considered_keys": 3,
+                    "window_kept_keys": 1,
+                    "dropped_too_far_future": 1,
+                    "dropped_too_far_past": 1,
+                    "success_keys": 0,
+                    "no_data_keys": 0,
+                    "error_keys": 0,
+                    "total_records": 0,
+                }
+            )
+            return iter(())
+
+        fetcher.fetch_time_series_batch_from_db.side_effect = fetch_rows
+        updater = MagicMock()
+
+        with self.runner.isolated_filesystem():
+            config_path = Path("config.yaml")
+            config_path.write_text("""
+database:
+  type: postgresql
+databases:
+  postgresql:
+    enabled: true
+jvlink:
+  sid: TEST
+auto_update_check: false
+""")
+            with (
+                patch("src.database.create_database_from_config", return_value=database),
+                patch("src.fetcher.realtime.RealtimeFetcher", return_value=fetcher),
+                patch("src.realtime.updater.RealtimeUpdater", return_value=updater),
+            ):
+                result = self.runner.invoke(
+                    cli,
+                    [
+                        "--config",
+                        str(config_path),
+                        "realtime",
+                        "timeseries",
+                        "--spec",
+                        "0B41",
+                        "--from",
+                        "20260901",
+                        "--to",
+                        "20260901",
+                        "--db",
+                        "postgresql",
+                        "--post-time-within-minutes",
+                        "30",
+                        "--post-time-not-past-minutes",
+                        "2",
+                    ],
+                )
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        call_kwargs = fetcher.fetch_time_series_batch_from_db.call_args.kwargs
+        self.assertEqual(call_kwargs["post_time_within_minutes"], 30)
+        self.assertEqual(call_kwargs["post_time_not_past_minutes"], 2)
+        self.assertIn("considered=3", result.output)
+        self.assertIn("kept=1", result.output)
+        self.assertIn("future=1", result.output)
+        self.assertIn("past=1", result.output)
+
+    def test_timeseries_window_implicit_dates_use_jst(self):
+        from datetime import datetime as real_datetime
+
+        database = MagicMock()
+        database.__enter__.return_value = database
+        database.__exit__.return_value = None
+        fetcher = MagicMock()
+        fetcher.fetch_time_series_batch_from_db.return_value = iter(())
+        updater = MagicMock()
+
+        with self.runner.isolated_filesystem():
+            config_path = Path("config.yaml")
+            config_path.write_text("""
+database:
+  type: postgresql
+databases:
+  postgresql:
+    enabled: true
+jvlink:
+  sid: TEST
+auto_update_check: false
+""")
+            with (
+                patch("src.database.create_database_from_config", return_value=database),
+                patch("src.fetcher.realtime.RealtimeFetcher", return_value=fetcher),
+                patch("src.realtime.updater.RealtimeUpdater", return_value=updater),
+                patch("datetime.datetime") as datetime_mock,
+            ):
+                # 2026-08-31 15:30 UTC is already 2026-09-01 in JST.  The CLI
+                # passes a fixed UTC+09:00 tzinfo to datetime.now().
+                datetime_mock.now.return_value = real_datetime.fromisoformat(
+                    "2026-09-01T00:30:00+09:00"
+                )
+                result = self.runner.invoke(
+                    cli,
+                    [
+                        "--config",
+                        str(config_path),
+                        "realtime",
+                        "timeseries",
+                        "--spec",
+                        "0B41",
+                        "--db",
+                        "postgresql",
+                        "--post-time-within-minutes",
+                        "30",
+                    ],
+                )
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        call_kwargs = fetcher.fetch_time_series_batch_from_db.call_args.kwargs
+        self.assertEqual(call_kwargs["from_date"], "20250901")
+        self.assertEqual(call_kwargs["to_date"], "20260901")
+        window_clock_calls = [call for call in datetime_mock.now.call_args_list if call.args]
+        self.assertEqual(len(window_clock_calls), 1)
+        self.assertEqual(window_clock_calls[0].args[0].utcoffset(None).total_seconds(), 32400)
 
 
 class TestExportCommand(unittest.TestCase):
@@ -595,35 +774,35 @@ class TestExportCommand(unittest.TestCase):
 
     def test_export_missing_table(self):
         """Test export without table argument."""
-        result = self.runner.invoke(cli, ['export', '--output', 'test.csv'])
+        result = self.runner.invoke(cli, ["export", "--output", "test.csv"])
 
         # Should fail due to missing --table
         self.assertNotEqual(result.exit_code, 0)
 
     def test_export_missing_output(self):
         """Test export without output argument."""
-        result = self.runner.invoke(cli, ['export', '--table', 'NL_RA'])
+        result = self.runner.invoke(cli, ["export", "--table", "NL_RA"])
 
         # Should fail due to missing --output
         self.assertNotEqual(result.exit_code, 0)
 
-    @patch('src.database.sqlite_handler.SQLiteDatabase')
+    @patch("src.database.sqlite_handler.SQLiteDatabase")
     def test_export_csv_format(self, mock_db):
         """Test export to CSV format."""
         # Setup mocks
         mock_db_instance = MagicMock()
         mock_db_instance.table_exists.return_value = True
         mock_db_instance.fetch_all.return_value = [
-            {'id': 1, 'name': 'Test1'},
-            {'id': 2, 'name': 'Test2'}
+            {"id": 1, "name": "Test1"},
+            {"id": 2, "name": "Test2"},
         ]
         mock_db.return_value.__enter__ = MagicMock(return_value=mock_db_instance)
         mock_db.return_value.__exit__ = MagicMock(return_value=None)
 
         with self.runner.isolated_filesystem():
             # Create config
-            Path('config').mkdir()
-            Path('config/config.yaml').write_text("""
+            Path("config").mkdir()
+            Path("config/config.yaml").write_text("""
 databases:
   sqlite:
     path: data/test.db
@@ -633,31 +812,26 @@ jvlink:
   service_key: ""
 """)
 
-            result = self.runner.invoke(cli, [
-                'export',
-                '--table', 'NL_RA',
-                '--output', 'test.csv',
-                '--format', 'csv'
-            ])
+            result = self.runner.invoke(
+                cli, ["export", "--table", "NL_RA", "--output", "test.csv", "--format", "csv"]
+            )
 
             # May fail due to config issues but command structure should work
             self.assertIsNotNone(result)
 
-    @patch('src.database.sqlite_handler.SQLiteDatabase')
+    @patch("src.database.sqlite_handler.SQLiteDatabase")
     def test_export_json_format(self, mock_db):
         """Test export to JSON format."""
         # Setup mocks
         mock_db_instance = MagicMock()
         mock_db_instance.table_exists.return_value = True
-        mock_db_instance.fetch_all.return_value = [
-            {'id': 1, 'name': 'Test'}
-        ]
+        mock_db_instance.fetch_all.return_value = [{"id": 1, "name": "Test"}]
         mock_db.return_value.__enter__ = MagicMock(return_value=mock_db_instance)
         mock_db.return_value.__exit__ = MagicMock(return_value=None)
 
         with self.runner.isolated_filesystem():
-            Path('config').mkdir()
-            Path('config/config.yaml').write_text("""
+            Path("config").mkdir()
+            Path("config/config.yaml").write_text("""
 databases:
   sqlite:
     path: data/test.db
@@ -667,12 +841,9 @@ jvlink:
   service_key: ""
 """)
 
-            result = self.runner.invoke(cli, [
-                'export',
-                '--table', 'NL_SE',
-                '--output', 'test.json',
-                '--format', 'json'
-            ])
+            result = self.runner.invoke(
+                cli, ["export", "--table", "NL_SE", "--output", "test.json", "--format", "json"]
+            )
 
             self.assertIsNotNone(result)
 
@@ -680,8 +851,8 @@ jvlink:
         """Test export with WHERE clause."""
         with self.runner.isolated_filesystem():
             # Create config directory and file
-            Path('config').mkdir()
-            Path('config/config.yaml').write_text("""
+            Path("config").mkdir()
+            Path("config/config.yaml").write_text("""
 database:
   type: sqlite
   path: data/test.db
@@ -691,15 +862,22 @@ databases:
 jvlink:
   service_key: ""
 """)
-            Path('data').mkdir()
+            Path("data").mkdir()
 
-            result = self.runner.invoke(cli, [
-                'export',
-                '--table', 'NL_RA',
-                '--where', "開催年月日 >= 20240101",
-                '--output', 'filtered.csv',
-                '--db', 'sqlite'
-            ])
+            result = self.runner.invoke(
+                cli,
+                [
+                    "export",
+                    "--table",
+                    "NL_RA",
+                    "--where",
+                    "開催年月日 >= 20240101",
+                    "--output",
+                    "filtered.csv",
+                    "--db",
+                    "sqlite",
+                ],
+            )
 
             # Should attempt to execute
             self.assertIsNotNone(result)
@@ -715,8 +893,8 @@ class TestConfigCommand(unittest.TestCase):
     def test_config_show(self):
         """Test config --show command."""
         with self.runner.isolated_filesystem():
-            Path('config').mkdir()
-            Path('config/config.yaml').write_text("""
+            Path("config").mkdir()
+            Path("config/config.yaml").write_text("""
 database:
   type: sqlite
   path: data/keiba.db
@@ -733,17 +911,17 @@ logging:
     path: logs/jltsql.log
 """)
 
-            result = self.runner.invoke(cli, ['config', '--show'])
+            result = self.runner.invoke(cli, ["config", "--show"])
 
             # Should show configuration
             self.assertEqual(result.exit_code, 0)
-            self.assertIn('Configuration', result.output)
+            self.assertIn("Configuration", result.output)
 
     def test_config_get_existing_key(self):
         """Test config --get with existing key."""
         with self.runner.isolated_filesystem():
-            Path('config').mkdir()
-            Path('config/config.yaml').write_text("""
+            Path("config").mkdir()
+            Path("config/config.yaml").write_text("""
 databases:
   sqlite:
     path: data/keiba.db
@@ -753,16 +931,16 @@ jvlink:
   service_key: ""
 """)
 
-            result = self.runner.invoke(cli, ['config', '--get', 'databases.sqlite.path'])
+            result = self.runner.invoke(cli, ["config", "--get", "databases.sqlite.path"])
 
             if result.exit_code == 0:
-                self.assertIn('keiba.db', result.output)
+                self.assertIn("keiba.db", result.output)
 
     def test_config_get_nonexistent_key(self):
         """Test config --get with non-existent key."""
         with self.runner.isolated_filesystem():
-            Path('config').mkdir()
-            Path('config/config.yaml').write_text("""
+            Path("config").mkdir()
+            Path("config/config.yaml").write_text("""
 database:
   type: sqlite
 databases:
@@ -772,17 +950,17 @@ databases:
 jvlink: {}
 """)
 
-            result = self.runner.invoke(cli, ['config', '--get', 'nonexistent.key'])
+            result = self.runner.invoke(cli, ["config", "--get", "nonexistent.key"])
 
             # Should fail
             self.assertNotEqual(result.exit_code, 0)
-            self.assertIn('not found', result.output)
+            self.assertIn("not found", result.output)
 
     def test_config_set_shows_warning(self):
         """Test config --set shows not implemented warning."""
         with self.runner.isolated_filesystem():
-            Path('config').mkdir()
-            Path('config/config.yaml').write_text("""
+            Path("config").mkdir()
+            Path("config/config.yaml").write_text("""
 database:
   type: sqlite
 databases:
@@ -792,16 +970,16 @@ databases:
 jvlink: {}
 """)
 
-            result = self.runner.invoke(cli, ['config', '--set', 'database.type=sqlite'])
+            result = self.runner.invoke(cli, ["config", "--set", "database.type=sqlite"])
 
             # Should show not implemented message
-            self.assertIn('not yet implemented', result.output)
+            self.assertIn("not yet implemented", result.output)
 
     def test_config_default_shows_tree(self):
         """Test config without arguments shows tree."""
         with self.runner.isolated_filesystem():
-            Path('config').mkdir()
-            Path('config/config.yaml').write_text("""
+            Path("config").mkdir()
+            Path("config/config.yaml").write_text("""
 database:
   type: sqlite
   path: data/test.db
@@ -815,7 +993,7 @@ logging:
   level: DEBUG
 """)
 
-            result = self.runner.invoke(cli, ['config'])
+            result = self.runner.invoke(cli, ["config"])
 
             # Should show config tree
             self.assertEqual(result.exit_code, 0)
@@ -962,5 +1140,5 @@ auto_update_check: "false"
             self.assertNotIn("Traceback", result.output)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

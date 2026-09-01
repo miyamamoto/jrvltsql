@@ -57,6 +57,29 @@ PostgreSQL も同じ `quickstart_timeseries.bat --db postgresql --from <FROM> --
 公式長期時系列は `TS_O1` / `TS_O2`、開催週速報は
 `TS_SOKUHO_O1`〜`TS_SOKUHO_O6` に分けて保存します。
 
+当日の公式時系列をライブ判断用に小さく取得する場合は、`timeseries` の発走時刻
+ウィンドウを明示します。
+
+```bat
+jltsql realtime timeseries --spec 0B41 --from 20260901 --to 20260901 --db postgresql --post-time-within-minutes 30 --post-time-not-past-minutes 2
+```
+
+`--post-time-within-minutes` は現在時刻（JST）から指定分以内に発走するキーを残し、
+`--post-time-not-past-minutes` は発走後の許容分を超えたキーを除外します。未指定時は
+従来どおり日付範囲の全キーが対象です。フィルターが有効なときは `NL_RA` / `RT_RA`
+のレース発走時刻を検証し、欠損、解釈不能、または同じ JVRTOpen キーで不一致なら、
+該当キーを表示して取得前に停止します。
+
+時系列行を再取得した場合、同じ発表行の価格などは最新の訂正値へ更新しますが、
+`CollectedAt` はその発表行を最初に保有した時刻（最も早い非 NULL 値）を維持します。
+UTC オフセットが異なる ISO-8601 表現も同一の時刻軸へ正規化して比較します。
+従来の PostgreSQL `TS_SOKUHO_O*` で `CollectedAt` が主キーに含まれている場合は、
+取得前のスキーマ更新がテーブルをロックし、発表単位の主キーへ移行します。同じ発表
+の複数 poll は、最新 poll の価格などと最初の実取得時刻を組み合わせた1行に統合
+されます。SQLite の従来主キーは自動再構築せず、テーブル名を示して取得前に停止
+します。バックアップ後に現行スキーマで再構築してください。移行またはロールバック
+時はいずれも先に poll を停止し、writer と主キーの版を揃えてから再開してください。
+
 ## 重要な制約
 
 - JRA-VAN はすべての賭式について長期保持の時系列オッズを提供しているわけではありません。
@@ -64,7 +87,8 @@ PostgreSQL も同じ `quickstart_timeseries.bat --db postgresql --from <FROM> --
   `0B30` または `0B33`〜`0B36` を継続蓄積する必要があります。
 - jrvltsql は raw の時系列オッズを保存します。投資判断時刻は、利用側が
   `HassoTime` から選択してください。
-- `HassoTime` は発表時刻であり、必ずしも発走時刻と一致しません。
+- 時系列オッズ行の `HassoTime` は発表時刻であり、発走時刻ではありません。発走時刻
+  ウィンドウはレースレコード (`NL_RA` / `RT_RA`) 側の `HassoTime` を使います。
 - 過去バージョンで `0B30`〜`0B36` を取得した DB では、速報行が `TS_O*` に
   残っている可能性があります。新規評価では `TS_SOKUHO_O*` を使い、必要に応じて
   公式 `TS_O1` / `TS_O2` を再取得してください。
