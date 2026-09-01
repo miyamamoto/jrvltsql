@@ -1742,7 +1742,7 @@ for _source_table, _target_table in (
             "nullable": False,
         },
     )
-    _metadata["primary_key"] = [*_metadata["primary_key"], "SourceSpec", "CollectedAt"]
+    _metadata["primary_key"] = [*_metadata["primary_key"], "SourceSpec"]
     TABLE_METADATA[_target_table] = _metadata
 
 

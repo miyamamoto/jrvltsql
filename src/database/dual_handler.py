@@ -22,6 +22,7 @@ from typing import Any, Dict, List, Optional
 from src.utils.logger import get_logger
 
 from .base import BaseDatabase, DatabaseError
+from .timeseries_capture import is_sokuho_time_series_odds_capture_table
 
 logger = get_logger(__name__)
 
@@ -130,9 +131,7 @@ class DualDatabase(BaseDatabase):
             try:
                 self._secondary.disconnect()
             except Exception as e:
-                logger.warning(
-                    f"DualDatabase: secondary disconnect failed: {e}"
-                )
+                logger.warning(f"DualDatabase: secondary disconnect failed: {e}")
         self._connection = None
         self._transaction_active = False
 
@@ -163,6 +162,10 @@ class DualDatabase(BaseDatabase):
         if self._secondary.is_connected():
             targets.append(self._secondary)
         return tuple(targets)
+
+    def get_sokuho_guard_targets(self) -> tuple[BaseDatabase, BaseDatabase]:
+        """Return every configured backend for fail-closed Sokuho checks."""
+        return self._primary, self._secondary
 
     # ------------------------------------------------------------------
     # Reads: primary only
@@ -195,15 +198,12 @@ class DualDatabase(BaseDatabase):
                 self._secondary.execute(sql, parameters)
             except Exception as e:
                 logger.warning(
-                    f"DualDatabase: secondary execute failed: {e} "
-                    f"(sql={sql[:80]!r})"
+                    f"DualDatabase: secondary execute failed: {e} " f"(sql={sql[:80]!r})"
                 )
                 self._secondary_errors += 1
                 self._secondary_in_sync = False
                 if self._transaction_active:
-                    raise DatabaseError(
-                        f"DualDatabase: secondary execute failed: {e}"
-                    ) from e
+                    raise DatabaseError(f"DualDatabase: secondary execute failed: {e}") from e
         return result
 
     def executemany(self, sql: str, parameters_list: List[tuple]) -> Any:
@@ -213,25 +213,18 @@ class DualDatabase(BaseDatabase):
                 self._secondary.executemany(sql, parameters_list)
             except Exception as e:
                 logger.warning(
-                    f"DualDatabase: secondary executemany failed: {e} "
-                    f"(sql={sql[:80]!r})"
+                    f"DualDatabase: secondary executemany failed: {e} " f"(sql={sql[:80]!r})"
                 )
                 self._secondary_errors += 1
                 self._secondary_in_sync = False
                 if self._transaction_active:
-                    raise DatabaseError(
-                        f"DualDatabase: secondary executemany failed: {e}"
-                    ) from e
+                    raise DatabaseError(f"DualDatabase: secondary executemany failed: {e}") from e
         return result
 
-    def fetch_one(
-        self, sql: str, parameters: Optional[tuple] = None
-    ) -> Optional[Dict[str, Any]]:
+    def fetch_one(self, sql: str, parameters: Optional[tuple] = None) -> Optional[Dict[str, Any]]:
         return self._primary.fetch_one(sql, parameters)
 
-    def fetch_all(
-        self, sql: str, parameters: Optional[tuple] = None
-    ) -> List[Dict[str, Any]]:
+    def fetch_all(self, sql: str, parameters: Optional[tuple] = None) -> List[Dict[str, Any]]:
         return self._primary.fetch_all(sql, parameters)
 
     def table_exists(self, table_name: str) -> bool:
@@ -272,9 +265,7 @@ class DualDatabase(BaseDatabase):
         try:
             self._secondary.create_table(table_name, schema)
         except Exception as e:
-            logger.warning(
-                f"DualDatabase: secondary create_table failed for {table_name}: {e}"
-            )
+            logger.warning(f"DualDatabase: secondary create_table failed for {table_name}: {e}")
             self._secondary_errors += 1
             self._secondary_in_sync = False
 
@@ -284,13 +275,16 @@ class DualDatabase(BaseDatabase):
         data: Dict[str, Any],
         use_replace: bool = True,
     ) -> int:
+        if is_sokuho_time_series_odds_capture_table(table_name):
+            from .migration import ensure_sokuho_capture_identity_for_write
+
+            for target in self.get_sokuho_guard_targets():
+                ensure_sokuho_capture_identity_for_write(target, table_name)
         rows = self._primary.insert(table_name, data, use_replace)
         try:
             self._secondary.insert(table_name, data, use_replace)
         except Exception as e:
-            logger.warning(
-                f"DualDatabase: secondary insert failed for {table_name}: {e}"
-            )
+            logger.warning(f"DualDatabase: secondary insert failed for {table_name}: {e}")
             self._secondary_errors += 1
             self._secondary_in_sync = False
             if self._transaction_active:
@@ -305,6 +299,11 @@ class DualDatabase(BaseDatabase):
         data_list: List[Dict[str, Any]],
         use_replace: bool = True,
     ) -> int:
+        if is_sokuho_time_series_odds_capture_table(table_name):
+            from .migration import ensure_sokuho_capture_identity_for_write
+
+            for target in self.get_sokuho_guard_targets():
+                ensure_sokuho_capture_identity_for_write(target, table_name)
         rows = self._primary.insert_many(table_name, data_list, use_replace)
         try:
             self._secondary.insert_many(table_name, data_list, use_replace)
