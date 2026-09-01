@@ -6,7 +6,9 @@
 だけ 1 本**にする。並べ替えは呼び出し側の持ち物なので jltsql では行わない。
 """
 
+import os
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import NamedTuple
 from unittest.mock import MagicMock, patch
 
@@ -22,9 +24,7 @@ from src.cli.main import (
 )
 from src.fetcher.base import FetcherError
 
-EXAMPLE_CONFIG = (
-    Path(__file__).resolve().parents[1] / "config" / "config.yaml.example"
-)
+EXAMPLE_CONFIG = Path(__file__).resolve().parents[1] / "config" / "config.yaml.example"
 
 STATS = {
     "records_fetched": 10,
@@ -79,10 +79,10 @@ def _runner():
 class Invocation(NamedTuple):
     """``fetch`` の 1 回の実行と、その途中で使われたモック。"""
 
-    result: object          # click の Result（exit_code / output）
-    batch_processor: MagicMock   # BatchProcessor クラスのモック（生成回数を見る）
-    processor: MagicMock         # その戻り値（process_date_range の呼ばれ方を見る）
-    create_database: MagicMock   # DB 生成に到達したかを見る
+    result: object  # click の Result（exit_code / output）
+    batch_processor: MagicMock  # BatchProcessor クラスのモック（生成回数を見る）
+    processor: MagicMock  # その戻り値（process_date_range の呼ばれ方を見る）
+    create_database: MagicMock  # DB 生成に到達したかを見る
 
 
 def _invoke(specs, *, option=1, side_effect=None, progress=False) -> Invocation:
@@ -103,16 +103,21 @@ def _invoke(specs, *, option=1, side_effect=None, progress=False) -> Invocation:
     args.append("--progress" if progress else "--no-progress")
 
     runner = _runner()
-    with runner.isolated_filesystem():
-        Path("config.yaml").write_text(
-            EXAMPLE_CONFIG.read_text(encoding="utf-8"), encoding="utf-8"
-        )
-        with (
-            patch("src.importer.batch.BatchProcessor", factory),
-            patch("src.database.create_database_from_config", create_database),
-            patch("src.database.schema.create_all_tables"),
-        ):
-            result = runner.invoke(cli, args)
+    previous_cwd = Path.cwd()
+    with TemporaryDirectory() as temp_dir:
+        try:
+            os.chdir(temp_dir)
+            Path("config.yaml").write_text(
+                EXAMPLE_CONFIG.read_text(encoding="utf-8"), encoding="utf-8"
+            )
+            with (
+                patch("src.importer.batch.BatchProcessor", factory),
+                patch("src.database.create_database_from_config", create_database),
+                patch("src.database.schema.create_all_tables"),
+            ):
+                result = runner.invoke(cli, args)
+        finally:
+            os.chdir(previous_cwd)
     return Invocation(result, factory, processor, create_database)
 
 

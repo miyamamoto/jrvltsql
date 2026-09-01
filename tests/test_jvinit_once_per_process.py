@@ -210,6 +210,29 @@ def test_wrapper_jv_init_reuses_the_established_session():
     assert com.count("JVInit") == 1
 
 
+def test_wrapper_jv_init_recreates_com_after_cleanup_released_it():
+    """A cleaned-up wrapper must establish a new, explicit JV-Link session."""
+
+    first_com = RecordingJVLinkCom()
+    second_com = RecordingJVLinkCom()
+    wrapper = _wrapper(first_com)
+    wrapper.cleanup()
+
+    assert wrapper._jvlink is None
+
+    def recreate_com():
+        wrapper._jvlink = second_com
+        wrapper._initialized = False
+
+    wrapper.reinitialize_com = MagicMock(side_effect=recreate_com)
+
+    assert wrapper.jv_init() == 0
+
+    wrapper.reinitialize_com.assert_called_once_with()
+    assert first_com.count("JVInit") == 0
+    assert second_com.count("JVInit") == 1
+
+
 def _bridge(*, init_code=0):
     """``__init__`` を通さない bridge。プロセスは生きている扱いで組む。"""
     bridge = JVLinkBridge.__new__(JVLinkBridge)

@@ -307,6 +307,11 @@ class JVLinkWrapper:
             return JV_RT_SUCCESS
 
         try:
+            # cleanup() deliberately releases the COM object.  Reusing the
+            # wrapper afterwards starts a new explicit session, just as the
+            # bridge transport starts a new process after its cleanup().
+            if self._jvlink is None:
+                self.reinitialize_com()
             result = self._jvlink.JVInit(self.sid)
             if result == JV_RT_SUCCESS:
                 self._initialized = True

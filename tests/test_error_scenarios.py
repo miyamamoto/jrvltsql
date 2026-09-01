@@ -336,8 +336,9 @@ class TestFetcherErrors(unittest.TestCase):
 
         mock_jvlink.jv_status.assert_called_once()
 
-    @patch('src.fetcher.base.JVLinkWrapper')
-    def test_jvlink_init_failure(self, mock_jvlink_class):
+    @patch("src.jvlink.bridge.find_bridge_executable", return_value=None)
+    @patch("src.fetcher.base.JVLinkWrapper")
+    def test_jvlink_init_failure(self, mock_jvlink_class, _mock_find_bridge):
         """A failing JVInit aborts the fetcher before any JVOpen is possible."""
         mock_jvlink = MagicMock()
         mock_jvlink_class.return_value = mock_jvlink
