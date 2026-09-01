@@ -86,6 +86,8 @@ jltsql realtime odds-timeseries --from 20250425 --to 20260425 --db postgresql
 ```
 
 - `odds-timeseries` は `0B41/0B42` を取得し、`TS_O1/TS_O2` に保存します。
+- `--spec` で片方だけを指定できます。公式長期時系列ではない `0B30`〜`0B36` や
+  その他の spec は、この alias では nonzero で拒否します。
 - `0B41/0B42` は公式仕様上の保存期間が 1年間です。
 - 0B30〜0B36 は速報オッズで、公式仕様上の保存期間は 1週間です。
 - コマンドは `NL_RA` に登録済みのレースを対象にし、JVRTOpen に `YYYYMMDDJJRR` 形式のキーを渡します。
@@ -149,12 +151,12 @@ SQLite に同じコマンドを実行しても database connection を開かず�
 SQLite は先に database をバックアップし、現行 schema で対象 table を再構築して
 ください。公式1年時系列の `TS_O1` / `TS_O2` はこの移行の対象外です。
 
-当日ライブ収集で全レースを再取得しない場合は、`timeseries` にレースレコードの
+当日ライブ収集で全レースを再取得しない場合は、`odds-timeseries` にレースレコードの
 発走時刻ウィンドウを明示します。次の例は、現在時刻（JST）から30分以内に発走し、
 発走後2分を超えていないレースだけを対象にします。
 
 ```bat
-jltsql realtime timeseries --spec 0B41 --from 20260901 --to 20260901 --db postgresql --post-time-within-minutes 30 --post-time-not-past-minutes 2
+jltsql realtime odds-timeseries --spec 0B41 --from 20260901 --to 20260901 --db postgresql --post-time-within-minutes 30 --post-time-not-past-minutes 2
 ```
 
 両オプションの既定値は無効です。どちらかを指定した場合、`NL_RA` / `RT_RA` の

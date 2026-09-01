@@ -57,11 +57,11 @@ PostgreSQL も同じ `quickstart_timeseries.bat --db postgresql --from <FROM> --
 公式長期時系列は `TS_O1` / `TS_O2`、開催週速報は
 `TS_SOKUHO_O1`〜`TS_SOKUHO_O6` に分けて保存します。
 
-当日の公式時系列をライブ判断用に小さく取得する場合は、`timeseries` の発走時刻
+当日の公式時系列をライブ判断用に小さく取得する場合は、`odds-timeseries` の発走時刻
 ウィンドウを明示します。
 
 ```bat
-jltsql realtime timeseries --spec 0B41 --from 20260901 --to 20260901 --db postgresql --post-time-within-minutes 30 --post-time-not-past-minutes 2
+jltsql realtime odds-timeseries --spec 0B41 --from 20260901 --to 20260901 --db postgresql --post-time-within-minutes 30 --post-time-not-past-minutes 2
 ```
 
 `--post-time-within-minutes` は現在時刻（JST）から指定分以内に発走するキーを残し、

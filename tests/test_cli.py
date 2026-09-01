@@ -939,6 +939,108 @@ auto_update_check: false
         self.assertEqual(window_clock_calls[0].args[0].utcoffset(None).total_seconds(), 32400)
 
 
+class TestRealtimeOddsTimeseriesAlias(unittest.TestCase):
+    """The official alias must preserve and forward the generic CLI contract."""
+
+    def setUp(self):
+        self.runner = CliRunner()
+
+    def test_default_forwards_official_specs_without_post_time_filtering(self):
+        from src.cli.main import odds_timeseries, timeseries
+
+        with patch.object(timeseries, "callback") as timeseries_callback:
+            result = self.runner.invoke(odds_timeseries)
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        timeseries_callback.assert_called_once_with(
+            spec="0B41,0B42",
+            from_date=None,
+            to_date=None,
+            post_time_within_minutes=None,
+            post_time_not_past_minutes=None,
+            db=None,
+            db_path=None,
+        )
+
+    def test_forwards_spec_dates_database_and_post_time_options(self):
+        from src.cli.main import odds_timeseries, timeseries
+
+        with patch.object(timeseries, "callback") as timeseries_callback:
+            result = self.runner.invoke(
+                odds_timeseries,
+                [
+                    "--spec",
+                    "0B42",
+                    "--from",
+                    "20260901",
+                    "--to",
+                    "20260902",
+                    "--post-time-within-minutes",
+                    "30",
+                    "--post-time-not-past-minutes",
+                    "2",
+                    "--db",
+                    "sqlite",
+                    "--db-path",
+                    "capture.db",
+                ],
+            )
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        timeseries_callback.assert_called_once_with(
+            spec="0B42",
+            from_date="20260901",
+            to_date="20260902",
+            post_time_within_minutes=30,
+            post_time_not_past_minutes=2,
+            db="sqlite",
+            db_path="capture.db",
+        )
+
+    def test_rejects_sokuho_and_other_unsupported_specs(self):
+        from src.cli.main import odds_timeseries, timeseries
+
+        unsupported_specs = (
+            "0B30",
+            "0B31",
+            "0B32",
+            "0B33",
+            "0B34",
+            "0B35",
+            "0B36",
+            "RACE",
+            "0B99",
+            "0B41,0B30",
+        )
+        for unsupported_spec in unsupported_specs:
+            with self.subTest(spec=unsupported_spec):
+                with patch.object(timeseries, "callback") as timeseries_callback:
+                    result = self.runner.invoke(
+                        odds_timeseries,
+                        ["--spec", unsupported_spec],
+                    )
+
+                self.assertNotEqual(result.exit_code, 0, result.output)
+                self.assertIn("only official historical time-series specs", result.output)
+                self.assertIn("unsupported:", result.output)
+                timeseries_callback.assert_not_called()
+
+    def test_reuses_nonnegative_post_time_option_validation(self):
+        from src.cli.main import odds_timeseries, timeseries
+
+        for option in (
+            "--post-time-within-minutes",
+            "--post-time-not-past-minutes",
+        ):
+            with self.subTest(option=option):
+                with patch.object(timeseries, "callback") as timeseries_callback:
+                    result = self.runner.invoke(odds_timeseries, [option, "-1"])
+
+                self.assertNotEqual(result.exit_code, 0, result.output)
+                self.assertIn("x>=0", result.output)
+                timeseries_callback.assert_not_called()
+
+
 class TestExportCommand(unittest.TestCase):
     """Test export command."""
 

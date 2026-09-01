@@ -1690,6 +1690,25 @@ def realtime():
 # source and is kept for current-week/future accumulation.
 HISTORICAL_TIMESERIES_ODDS_SPECS = "0B41,0B42"
 SOKUHO_TIMESERIES_ODDS_SPECS = "0B30"
+OFFICIAL_HISTORICAL_TIMESERIES_ODDS_SPECS = frozenset(HISTORICAL_TIMESERIES_ODDS_SPECS.split(","))
+
+
+def _validate_official_historical_timeseries_specs(ctx, param, value):
+    """Keep the historical alias on official one-year time-series specs."""
+    requested_specs = [spec.strip() for spec in value.split(",")]
+    unsupported_specs = [
+        spec or "<empty>"
+        for spec in requested_specs
+        if spec not in OFFICIAL_HISTORICAL_TIMESERIES_ODDS_SPECS
+    ]
+    if unsupported_specs:
+        raise click.BadParameter(
+            "supports only official historical time-series specs 0B41 and 0B42; "
+            f"unsupported: {', '.join(unsupported_specs)}",
+            ctx=ctx,
+            param=param,
+        )
+    return value
 
 
 @realtime.command()
@@ -2191,6 +2210,13 @@ def timeseries(
 
 @realtime.command("odds-timeseries")
 @click.option(
+    "--spec",
+    "-s",
+    default=HISTORICAL_TIMESERIES_ODDS_SPECS,
+    callback=_validate_official_historical_timeseries_specs,
+    help="Official historical time-series spec (0B41 and/or 0B42)",
+)
+@click.option(
     "--from-date",
     "--from",
     "-f",
@@ -2207,6 +2233,18 @@ def timeseries(
     help="End date in YYYYMMDD format (default: today)",
 )
 @click.option(
+    "--post-time-within-minutes",
+    type=click.IntRange(min=0),
+    default=None,
+    help="Keep races whose NL_RA/RT_RA post time is at most N minutes ahead",
+)
+@click.option(
+    "--post-time-not-past-minutes",
+    type=click.IntRange(min=0),
+    default=None,
+    help="Drop races whose NL_RA/RT_RA post time is more than M minutes past",
+)
+@click.option(
     "--db",
     type=click.Choice(["sqlite", "postgresql"]),
     default=None,
@@ -2219,7 +2257,16 @@ def timeseries(
     help="SQLite database path (overrides config)",
 )
 @click.pass_context
-def odds_timeseries(ctx, from_date, to_date, db, db_path):
+def odds_timeseries(
+    ctx,
+    spec,
+    from_date,
+    to_date,
+    post_time_within_minutes,
+    post_time_not_past_minutes,
+    db,
+    db_path,
+):
     """Fetch official one-year JRA-VAN historical odds time-series.
 
     Official historical time-series odds are available for single/place/bracket
@@ -2227,9 +2274,11 @@ def odds_timeseries(ctx, from_date, to_date, db, db_path):
     """
     ctx.invoke(
         timeseries,
-        spec=HISTORICAL_TIMESERIES_ODDS_SPECS,
+        spec=spec,
         from_date=from_date,
         to_date=to_date,
+        post_time_within_minutes=post_time_within_minutes,
+        post_time_not_past_minutes=post_time_not_past_minutes,
         db=db,
         db_path=db_path,
     )
