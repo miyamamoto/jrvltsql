@@ -2727,10 +2727,7 @@ def _build_sokuho_timeseries_schema(source_table: str, target_table: str) -> str
         "RecordSpec TEXT,\n            SourceSpec TEXT,\n",
         1,
     )
-    return schema_sql.replace(
-        "HassoTime)",
-        "HassoTime, SourceSpec, CollectedAt)",
-    )
+    return schema_sql.replace("HassoTime)", "HassoTime, SourceSpec)")
 
 
 for _source_table, _target_table in (
