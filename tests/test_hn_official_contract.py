@@ -2,6 +2,7 @@
 
 import os
 from copy import deepcopy
+from itertools import batched
 from pathlib import Path
 from unittest.mock import MagicMock
 from uuid import uuid4
@@ -245,10 +246,52 @@ def test_hn_blank_reserved_spans_remain_text_in_postgresql_bindings(monkeypatch)
 
     assert database.insert_many("NL_HN", [converted]) == 1
 
-    _, values = database._cursor.execute.call_args.args
-    bound = dict(zip(converted, values, strict=True))
+    _, parameter_rows = database._cursor.executemany.call_args.args
+    assert len(parameter_rows) == 1
+    bound = dict(zip(converted, parameter_rows[0], strict=True))
     assert bound["reserved"] == ""
     assert bound["DelKubun"] == ""
+
+
+def test_hn_blank_reserved_spans_remain_text_in_pg8000_multi_row_bindings(
+    monkeypatch,
+) -> None:
+    """pg8000's flattened multi-row bindings must retain empty provider text."""
+
+    import src.database.postgresql_handler as postgresql_handler
+
+    monkeypatch.setattr(postgresql_handler, "DRIVER", "pg8000")
+    raw = official_domain_record()
+    raw[21:29] = b"        "
+    raw[39:40] = b" "
+    record = HNParser().parse(bytes(raw))
+    assert record is not None
+    converted = convert_record_types(record, "NL_HN")
+    second = converted.copy()
+    second["HansyokuNum"] = "1234567892"
+
+    database = postgresql_handler.PostgreSQLDatabase({})
+    database._connection = MagicMock()
+    database._get_primary_key_columns = MagicMock(return_value=["hansyokunum"])
+
+    assert database.insert_many("NL_HN", [converted, second]) == 2
+
+    database._connection.run.assert_called_once()
+    flat_values = tuple(database._connection.run.call_args.kwargs.values())
+    row_width = len(converted)
+    assert len(flat_values) == 2 * row_width
+    bound_rows = [
+        dict(zip(converted, row_values, strict=True))
+        for row_values in batched(flat_values, row_width)
+    ]
+    assert [bound["HansyokuNum"] for bound in bound_rows] == [
+        converted["HansyokuNum"],
+        second["HansyokuNum"],
+    ]
+    assert [(bound["reserved"], bound["DelKubun"]) for bound in bound_rows] == [
+        ("", ""),
+        ("", ""),
+    ]
 
 
 @pytest.mark.parametrize("use_standard", (False, True), ids=("native", "standard"))
