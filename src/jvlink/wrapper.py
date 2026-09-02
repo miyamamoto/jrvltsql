@@ -120,16 +120,25 @@ def _recover_com_buffer(value, expected_size: int, method_name: str) -> bytes:
         # これで選ぶ。長さの合った候補だけを採る。
         candidates: list[bytes] = []
         failures: list[str] = []
-        for build in (
-            lambda: value.encode("latin-1"),
-            lambda: value.encode("cp932"),
-            lambda: _decode_via_cp1252_table(value, method_name),
-        ):
+
+        def build_candidate(build) -> bool:
+            """候補を 1 つ作る。作れたら True、作れなければ False。"""
             try:
                 candidates.append(build())
             except UnicodeEncodeError as exc:
                 bad = exc.object[exc.start]
                 failures.append(f"U+{ord(bad):04X}")
+                return False
+            return True
+
+        latin1_built = build_candidate(lambda: value.encode("latin-1"))
+        build_candidate(lambda: value.encode("cp932"))
+        # 表の経路は 1 文字ずつ Python で回るので高い（実走で実時間の 3.8%）。
+        # latin-1 が通った値は符号位置がすべて 0xFF 以下で、表の経路もその範囲を
+        # 1 文字 1 バイトで写すだけなので、同じバイト列にしかならない。候補は集合
+        # として突き合わせるため、作らずに飛ばしても選択も曖昧さの判定も変わらない。
+        if not latin1_built:
+            build_candidate(lambda: _decode_via_cp1252_table(value, method_name))
 
         # 長さがちょうど合うものを最優先する。「以上」だけで選ぶと、CP1252 で
         # marshaling されたバッファに cp932 を当てた結果（1 文字 2 バイトに

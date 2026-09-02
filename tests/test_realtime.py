@@ -1481,7 +1481,7 @@ class TestRealtimeUpdater(unittest.TestCase):
             self.updater._get_primary_keys("TS_SOKUHO_O2"),
             [
                 "Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji",
-                "RaceNum", "Kumi", "HassoTime", "SourceSpec", "CollectedAt",
+                "RaceNum", "Kumi", "HassoTime", "SourceSpec",
             ],
         )
         self.assertEqual(

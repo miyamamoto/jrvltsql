@@ -8,10 +8,12 @@ from typing import Any, Dict, List, Optional
 try:
     import psycopg
     from psycopg.rows import dict_row
+
     DRIVER = "psycopg"
 except ImportError:
     try:
         import pg8000.native
+
         DRIVER = "pg8000"
     except ImportError:
         raise ImportError(
@@ -22,6 +24,12 @@ except ImportError:
 
 from src.database.base import BaseDatabase, DatabaseError
 from src.database.schema_types import get_table_column_types
+from src.database.timeseries_capture import (
+    earliest_capture_value,
+    is_sokuho_time_series_odds_capture_table,
+    is_time_series_odds_capture_table,
+    unqualified_table_name,
+)
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -91,14 +99,9 @@ class PostgreSQLDatabase(BaseDatabase):
             # issued BEGIN, which is represented by _transaction_active.
             return False
         try:
-            return (
-                self._connection.info.transaction_status
-                != psycopg.pq.TransactionStatus.IDLE
-            )
+            return self._connection.info.transaction_status != psycopg.pq.TransactionStatus.IDLE
         except Exception as exc:
-            raise DatabaseError(
-                f"Failed to inspect PostgreSQL transaction state: {exc}"
-            ) from exc
+            raise DatabaseError(f"Failed to inspect PostgreSQL transaction state: {exc}") from exc
 
     def _quote_identifier(self, identifier: str) -> str:
         """Convert identifier to PostgreSQL-compatible form (lowercase, unquoted).
@@ -140,15 +143,15 @@ class PostgreSQLDatabase(BaseDatabase):
             result = []
             for row in rows:
                 if isinstance(row, dict):
-                    result.append(row.get('attname', '').lower())
+                    result.append(row.get("attname", "").lower())
                 elif isinstance(row, (list, tuple)):
                     # pg8000.native returns list of lists
-                    result.append(str(row[0]).lower() if row else '')
+                    result.append(str(row[0]).lower() if row else "")
                 else:
                     result.append(str(row).lower())
             return result
         except Exception as e:
-            if self._transaction_active:
+            if self._transaction_active or is_sokuho_time_series_odds_capture_table(table_name):
                 raise
             logger.warning(f"Could not get primary key for {table_name}: {e}")
             return []
@@ -226,7 +229,7 @@ class PostgreSQLDatabase(BaseDatabase):
 
             logger.info(
                 f"Connected to PostgreSQL database: {self.host}:{self.port}/{self.database}",
-                driver=DRIVER
+                driver=DRIVER,
             )
             self._transaction_active = False
 
@@ -286,7 +289,11 @@ class PostgreSQLDatabase(BaseDatabase):
 
             if DRIVER == "pg8000":
                 # pg8000.native uses connection.run() for execution with dict params
-                self._connection.run(sql, **params) if isinstance(params, dict) else self._connection.run(sql)
+                (
+                    self._connection.run(sql, **params)
+                    if isinstance(params, dict)
+                    else self._connection.run(sql)
+                )
                 return self._connection.row_count
             else:  # psycopg
                 if params:
@@ -323,7 +330,9 @@ class PostgreSQLDatabase(BaseDatabase):
                 total_rows = 0
                 for params in parameters_list:
                     # Convert SQL and parameters for each execution
-                    converted_sql, converted_params = self._convert_placeholders_and_params(sql, params)
+                    converted_sql, converted_params = self._convert_placeholders_and_params(
+                        sql, params
+                    )
                     if isinstance(converted_params, dict):
                         self._connection.run(converted_sql, **converted_params)
                     else:
@@ -371,7 +380,11 @@ class PostgreSQLDatabase(BaseDatabase):
                 if not rows:
                     return None
                 # Get column names from connection.columns
-                columns = [col['name'] for col in self._connection.columns] if self._connection.columns else []
+                columns = (
+                    [col["name"] for col in self._connection.columns]
+                    if self._connection.columns
+                    else []
+                )
                 if columns and rows:
                     return dict(zip(columns, rows[0]))
                 return rows[0] if rows else None
@@ -418,7 +431,11 @@ class PostgreSQLDatabase(BaseDatabase):
                 if not rows:
                     return []
                 # Get column names from connection.columns
-                columns = [col['name'] for col in self._connection.columns] if self._connection.columns else []
+                columns = (
+                    [col["name"] for col in self._connection.columns]
+                    if self._connection.columns
+                    else []
+                )
                 if columns:
                     return [dict(zip(columns, row)) for row in rows]
                 return rows  # Return as-is if no column info
@@ -615,9 +632,7 @@ class PostgreSQLDatabase(BaseDatabase):
                     self._transaction_active = False
                     logger.debug("pg8000 ROLLBACK sent")
                 except Exception as e:
-                    logger.warning(
-                        f"pg8000 ROLLBACK failed ({e}); reconnecting"
-                    )
+                    logger.warning(f"pg8000 ROLLBACK failed ({e}); reconnecting")
                     self._reconnect()
                     self._transaction_active = False
             else:  # psycopg
@@ -697,6 +712,8 @@ class PostgreSQLDatabase(BaseDatabase):
     def _dedupe_rows_by_primary_key(
         rows: List[Dict[str, Any]],
         pk_columns: List[str],
+        *,
+        preserve_earliest_collected_at: bool = False,
     ) -> List[Dict[str, Any]]:
         """Deduplicate one VALUES batch by primary key before PostgreSQL upsert.
 
@@ -707,23 +724,62 @@ class PostgreSQLDatabase(BaseDatabase):
         if not rows or not pk_columns:
             return rows
 
-        column_by_lower = {
-            column.lower(): column
-            for row in rows
-            for column in row.keys()
-        }
+        column_by_lower = {column.lower(): column for row in rows for column in row.keys()}
         resolved_pk_columns = [column_by_lower.get(column.lower()) for column in pk_columns]
         if any(column is None for column in resolved_pk_columns):
             return rows
 
+        capture_column = column_by_lower.get("collectedat")
         deduped: Dict[tuple, Dict[str, Any]] = {}
         order: List[tuple] = []
         for row in rows:
             key = tuple(row.get(column) for column in resolved_pk_columns)
             if key not in deduped:
                 order.append(key)
-            deduped[key] = row
+                deduped[key] = row
+                continue
+            if preserve_earliest_collected_at and capture_column is not None:
+                previous_capture = deduped[key].get(capture_column)
+                merged = row.copy()
+                merged[capture_column] = earliest_capture_value(
+                    previous_capture,
+                    row.get(capture_column),
+                )
+                deduped[key] = merged
+            else:
+                deduped[key] = row
         return [deduped[key] for key in order]
+
+    @staticmethod
+    def _conflict_update_set(
+        table_name: str,
+        quoted_columns: List[str],
+        pk_columns: List[str],
+    ) -> str:
+        """Build conflict assignments without changing unrelated-table SQL."""
+        update_columns = [col for col in quoted_columns if col.lower() not in pk_columns]
+        preserve_capture = is_time_series_odds_capture_table(table_name) and "collectedat" in {
+            column.lower() for column in quoted_columns
+        }
+        assignments = []
+        qualified_table = unqualified_table_name(table_name).lower()
+        for column in update_columns:
+            if not preserve_capture or column.lower() != "collectedat":
+                assignments.append(f"{column} = EXCLUDED.{column}")
+                continue
+
+            stored = f"{qualified_table}.{column}"
+            incoming = f"excluded.{column}"
+            # CollectedAt is TEXT in production. Cast both ISO-8601 values to
+            # timestamptz so different explicit offsets compare as instants.
+            assignments.append(
+                f"{column} = CASE "
+                f"WHEN {incoming} IS NULL THEN {stored} "
+                f"WHEN {stored} IS NULL THEN {incoming} "
+                f"WHEN {incoming}::timestamptz < {stored}::timestamptz "
+                f"THEN {incoming} ELSE {stored} END"
+            )
+        return ", ".join(assignments)
 
     def insert(self, table_name: str, data: Dict[str, Any], use_replace: bool = True) -> int:
         """Insert single row into table.
@@ -744,6 +800,13 @@ class PostgreSQLDatabase(BaseDatabase):
         if not data:
             raise DatabaseError("No data provided for insert")
 
+        resolved_pk_columns = None
+        if is_sokuho_time_series_odds_capture_table(table_name):
+            from src.database.migration import ensure_sokuho_capture_identity_for_write
+
+            resolved_pk_columns = self._get_primary_key_columns(table_name)
+            ensure_sokuho_capture_identity_for_write(self, table_name, resolved_pk_columns)
+
         data = self._normalize_insert_data(table_name, data)
         columns = list(data.keys())
         values = list(data.values())
@@ -753,14 +816,17 @@ class PostgreSQLDatabase(BaseDatabase):
 
         if use_replace:
             # Get primary key columns for this table
-            pk_columns = self._get_primary_key_columns(table_name)
+            pk_columns = (
+                resolved_pk_columns
+                if resolved_pk_columns is not None
+                else self._get_primary_key_columns(table_name)
+            )
 
             if pk_columns:
                 # Build ON CONFLICT DO UPDATE clause
                 # UPDATE all columns except primary key columns
-                update_columns = [col for col in quoted_columns if col.lower() not in pk_columns]
-                if update_columns:
-                    update_set = ", ".join([f"{col} = EXCLUDED.{col}" for col in update_columns])
+                update_set = self._conflict_update_set(table_name, quoted_columns, pk_columns)
+                if update_set:
                     pk_list = ", ".join(pk_columns)
                     sql = f"INSERT INTO {table_name} ({', '.join(quoted_columns)}) VALUES ({placeholders}) ON CONFLICT ({pk_list}) DO UPDATE SET {update_set}"
                 else:
@@ -776,7 +842,9 @@ class PostgreSQLDatabase(BaseDatabase):
 
         return self.execute(sql, tuple(values))
 
-    def insert_many(self, table_name: str, data_list: List[Dict[str, Any]], use_replace: bool = True) -> int:
+    def insert_many(
+        self, table_name: str, data_list: List[Dict[str, Any]], use_replace: bool = True
+    ) -> int:
         """Insert multiple rows into table.
 
         PostgreSQL uses INSERT ... ON CONFLICT ... DO UPDATE instead of INSERT OR REPLACE.
@@ -797,6 +865,13 @@ class PostgreSQLDatabase(BaseDatabase):
         if not data_list:
             raise DatabaseError("No data provided for insert")
 
+        resolved_pk_columns = None
+        if is_sokuho_time_series_odds_capture_table(table_name):
+            from src.database.migration import ensure_sokuho_capture_identity_for_write
+
+            resolved_pk_columns = self._get_primary_key_columns(table_name)
+            ensure_sokuho_capture_identity_for_write(self, table_name, resolved_pk_columns)
+
         data_list = [self._normalize_insert_data(table_name, row) for row in data_list]
 
         # Use the union of all row keys. Expanded records can be heterogeneous
@@ -814,15 +889,22 @@ class PostgreSQLDatabase(BaseDatabase):
 
         if use_replace:
             # Get primary key columns for this table
-            pk_columns = self._get_primary_key_columns(table_name)
-            data_list = self._dedupe_rows_by_primary_key(data_list, pk_columns)
+            pk_columns = (
+                resolved_pk_columns
+                if resolved_pk_columns is not None
+                else self._get_primary_key_columns(table_name)
+            )
+            data_list = self._dedupe_rows_by_primary_key(
+                data_list,
+                pk_columns,
+                preserve_earliest_collected_at=is_time_series_odds_capture_table(table_name),
+            )
 
             if pk_columns:
                 # Build ON CONFLICT DO UPDATE clause
                 # UPDATE all columns except primary key columns
-                update_columns = [col for col in quoted_columns if col.lower() not in pk_columns]
-                if update_columns:
-                    update_set = ", ".join([f"{col} = EXCLUDED.{col}" for col in update_columns])
+                update_set = self._conflict_update_set(table_name, quoted_columns, pk_columns)
+                if update_set:
                     pk_list = ", ".join(pk_columns)
                     conflict_sql = f" ON CONFLICT ({pk_list}) DO UPDATE SET {update_set}"
                 else:

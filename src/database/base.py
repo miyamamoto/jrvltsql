@@ -6,6 +6,11 @@ This module provides the abstract base class for database operations.
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
+from src.database.timeseries_capture import (
+    is_sokuho_time_series_odds_capture_table,
+    is_time_series_odds_capture_table,
+    unqualified_table_name,
+)
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -203,17 +208,28 @@ class BaseDatabase(ABC):
         if not data:
             raise DatabaseError("No data provided for insert")
 
+        if is_sokuho_time_series_odds_capture_table(table_name):
+            from src.database.migration import ensure_sokuho_capture_identity_for_write
+
+            ensure_sokuho_capture_identity_for_write(self, table_name)
+
         columns = list(data.keys())
         values = list(data.values())
         placeholders = ", ".join(["?" for _ in columns])
         # Quote column names using database-specific method
         quoted_columns = [self._quote_identifier(col) for col in columns]
 
-        # Use INSERT OR REPLACE to handle duplicates (UPSERT behavior)
-        # This ensures that running imports multiple times updates existing records
-        # rather than causing constraint violations or creating duplicates
-        insert_clause = "INSERT OR REPLACE INTO" if use_replace else "INSERT INTO"
-        sql = f"{insert_clause} {table_name} ({', '.join(quoted_columns)}) VALUES ({placeholders})"
+        if use_replace and is_time_series_odds_capture_table(table_name):
+            update_set = self._sqlite_time_series_update_set(table_name, columns, quoted_columns)
+            sql = (
+                f"INSERT INTO {table_name} ({', '.join(quoted_columns)}) "
+                f"VALUES ({placeholders}) ON CONFLICT DO UPDATE SET {update_set}"
+            )
+        else:
+            # Keep the generic SQLite path byte-for-byte equivalent for every
+            # unrelated table.
+            insert_clause = "INSERT OR REPLACE INTO" if use_replace else "INSERT INTO"
+            sql = f"{insert_clause} {table_name} ({', '.join(quoted_columns)}) VALUES ({placeholders})"
 
         return self.execute(sql, tuple(values))
 
@@ -246,6 +262,11 @@ class BaseDatabase(ABC):
         if not data_list:
             raise DatabaseError("No data provided for insert")
 
+        if is_sokuho_time_series_odds_capture_table(table_name):
+            from src.database.migration import ensure_sokuho_capture_identity_for_write
+
+            ensure_sokuho_capture_identity_for_write(self, table_name)
+
         # Use the union of all row keys.  Expanded JV-Data records such as O1
         # intentionally produce heterogeneous rows (horse odds vs bracket odds).
         # Using only the first row would silently drop columns that appear later.
@@ -260,16 +281,52 @@ class BaseDatabase(ABC):
         # Quote column names using database-specific method
         quoted_columns = [self._quote_identifier(col) for col in columns]
 
-        # Use INSERT OR REPLACE to handle duplicates (UPSERT behavior)
-        # This ensures that running imports multiple times updates existing records
-        # rather than causing constraint violations or creating duplicates
-        insert_clause = "INSERT OR REPLACE INTO" if use_replace else "INSERT INTO"
-        sql = f"{insert_clause} {table_name} ({', '.join(quoted_columns)}) VALUES ({placeholders})"
+        if use_replace and is_time_series_odds_capture_table(table_name):
+            update_set = self._sqlite_time_series_update_set(table_name, columns, quoted_columns)
+            sql = (
+                f"INSERT INTO {table_name} ({', '.join(quoted_columns)}) "
+                f"VALUES ({placeholders}) ON CONFLICT DO UPDATE SET {update_set}"
+            )
+        else:
+            # Keep the generic SQLite path byte-for-byte equivalent for every
+            # unrelated table.
+            insert_clause = "INSERT OR REPLACE INTO" if use_replace else "INSERT INTO"
+            sql = f"{insert_clause} {table_name} ({', '.join(quoted_columns)}) VALUES ({placeholders})"
 
         # Extract values in correct order for each row
         parameters_list = [tuple(row.get(col) for col in columns) for row in data_list]
 
         return self.executemany(sql, parameters_list)
+
+    def _sqlite_time_series_update_set(
+        self,
+        table_name: str,
+        columns: List[str],
+        quoted_columns: List[str],
+    ) -> str:
+        """Build the time-series-only SQLite conflict assignments."""
+        assignments = []
+        # SQLite accepts ``main.TS_O2`` as an INSERT target, but the stored row
+        # in an UPSERT expression is qualified by the table name alone.
+        qualified_table = self._quote_identifier(unqualified_table_name(table_name))
+        for column, quoted_column in zip(columns, quoted_columns, strict=True):
+            if column.lower() != "collectedat":
+                assignments.append(f"{quoted_column} = excluded.{quoted_column}")
+                continue
+
+            stored = f"{qualified_table}.{quoted_column}"
+            incoming = f"excluded.{quoted_column}"
+            # The connection UDF converts offset-aware ISO text to integer UTC
+            # microseconds; raw string ordering is wrong across UTC offsets.
+            assignments.append(
+                f"{quoted_column} = CASE "
+                f"WHEN {incoming} IS NULL THEN {stored} "
+                f"WHEN {stored} IS NULL THEN {incoming} "
+                f"WHEN jltsql_capture_epoch_us({incoming}) "
+                f"< jltsql_capture_epoch_us({stored}) THEN {incoming} "
+                f"ELSE {stored} END"
+            )
+        return ", ".join(assignments)
 
     def commit(self) -> None:
         """Commit current transaction.
