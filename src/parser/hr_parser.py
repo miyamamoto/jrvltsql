@@ -42,6 +42,9 @@ class HRParser:
     KEY_COLUMNS = ("Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum")
     OFFICIAL_JYO_CODES = OFFICIAL_JYO_CODES_2001
     SANRENTAN_AVAILABLE_FROM = date(2004, 8, 14)
+    # 不成立 / 特払 / 返還フラグ配列の 6 件目は、予備の式別に対応する
+    FLAG_PREFIXES_WITH_RESERVED_SLOT = frozenset({"FuseirituFlag", "TokubaraiFlag", "HenkanFlag"})
+    RESERVED_FLAG_SLOT = 6
     LEGACY_RESERVED_FIELD = "LegacyReserved604_717Hex"
     STATUS9_OPAQUE_FIELD = "OpaqueStatus9Body28_717Hex"
 
@@ -219,13 +222,15 @@ class HRParser:
             for index in range(1, count + 1):
                 field_name = f"{prefix}{index}"
                 value = record.get(field_name)
-                cls._require_bit(field_name, value)
                 if (
-                    prefix in {"FuseirituFlag", "TokubaraiFlag", "HenkanFlag"}
-                    and index == 6
-                    and value not in ("0", 0)
+                    prefix in cls.FLAG_PREFIXES_WITH_RESERVED_SLOT
+                    and index == cls.RESERVED_FLAG_SLOT
                 ):
-                    raise ValueError(f"HR {field_name} is reserved and must be 0")
+                    if value is None:
+                        raise ValueError(f"HR {field_name} must preserve its physical byte")
+                    cls._require_optional_reserved_text(field_name, value, 1)
+                    continue
+                cls._require_bit(field_name, value)
 
         for (
             _,

@@ -202,9 +202,6 @@ def test_hr_parser_rejects_malformed_official_keys(changes: dict[str, str]) -> N
     "field,value",
     (
         ("FuseirituFlag1", "9"),
-        ("FuseirituFlag6", "1"),
-        ("TokubaraiFlag6", "1"),
-        ("HenkanFlag6", "1"),
         ("HenkanUma28", "X"),
         ("TanPay", "notnumber"),
         ("WideKumi7", "123"),
@@ -222,6 +219,86 @@ def test_hr_caller_body_rejects_non_official_values_but_allows_blank_popularity(
     invalid[field] = value
     with pytest.raises(SchemaMigrationError):
         validate_import_record_header(invalid)
+
+
+@pytest.mark.parametrize("field", ("FuseirituFlag6", "TokubaraiFlag6", "HenkanFlag6"))
+@pytest.mark.parametrize("value", ("1", " ", "X"))
+def test_hr_keeps_the_reserved_flag_slot_without_interpreting_it(field: str, value: str) -> None:
+    """Slot 6 of each flag array is reserved, so it is kept rather than read as a flag."""
+
+    record = parsed_hr()
+    record[field] = value
+    assert validate_import_record_header(record) == ("HR", "1")
+
+
+@pytest.mark.parametrize("value", (None, "missing"))
+def test_hr_reserved_flag_slots_cannot_be_absent(value: object) -> None:
+    """Contract-free content is not permission to lose the physical byte."""
+
+    record = parsed_hr()
+    if value == "missing":
+        record.pop("FuseirituFlag6")
+    else:
+        record["FuseirituFlag6"] = value
+    with pytest.raises(SchemaMigrationError):
+        validate_import_record_header(record)
+
+
+@pytest.mark.parametrize("value", ("X", ""), ids=("opaque", "blank"))
+@pytest.mark.parametrize("standard", (False, True), ids=("native", "standard"))
+@pytest.mark.parametrize("entrypoint", ("data-batch", "optimized-batch", "single"))
+def test_hr_reserved_flag_slots_survive_every_sqlite_import_path(
+    tmp_path,
+    entrypoint: str,
+    standard: bool,
+    value: str,
+) -> None:
+    """Reserved slot 6 is lossless text, never a numeric/NULL coercion target."""
+
+    table_name = "HARAI" if standard else "NL_HR"
+    schema = JRAVAN_SCHEMAS[table_name] if standard else SCHEMAS[table_name]
+    record = parsed_hr()
+    fields = ("FuseirituFlag6", "TokubaraiFlag6", "HenkanFlag6")
+    for field in fields:
+        record[field] = value
+
+    database = SQLiteDatabase({"path": str(tmp_path / f"reserved-{table_name}.db")})
+    with database:
+        database.execute(schema)
+        database.commit()
+        stats = import_records(
+            database,
+            entrypoint,
+            [record],
+            standard=standard,
+            auto_commit=True,
+        )
+        assert stats["records_imported"] == 1
+        assert stats["records_failed"] == 0
+        assert database.fetch_one(f"SELECT {', '.join(fields)} FROM {table_name}") == dict.fromkeys(
+            fields, value
+        )
+
+
+@pytest.mark.parametrize("value", ("X", ""), ids=("opaque", "blank"))
+def test_hr_reserved_flag_slots_survive_realtime_storage(tmp_path, value: str) -> None:
+    """Realtime HR uses the same lossless reserved-field contract."""
+
+    record = parsed_hr()
+    fields = ("FuseirituFlag6", "TokubaraiFlag6", "HenkanFlag6")
+    for field in fields:
+        record[field] = value
+    database = SQLiteDatabase({"path": str(tmp_path / "reserved-realtime.db")})
+    with database:
+        database.execute(SCHEMAS["RT_HR"])
+        database.commit()
+        result = RealtimeUpdater(database).process_parsed_records_batch([record])
+        assert result["success"] is True
+        assert result["inserted"] == 1
+        assert result["errors"] == 0
+        assert database.fetch_one(f"SELECT {', '.join(fields)} FROM RT_HR") == dict.fromkeys(
+            fields, value
+        )
 
 
 @pytest.mark.parametrize(
@@ -533,7 +610,10 @@ def test_hr_wrong_primary_key_is_rejected_before_mutation(tmp_path) -> None:
 
 
 @pytest.mark.parametrize("standard", (False, True), ids=("native", "standard"))
-@pytest.mark.parametrize("defect", ("nullable-key", "wrong-type", "short-text", "extra-unique"))
+@pytest.mark.parametrize(
+    "defect",
+    ("nullable-key", "wrong-type", "short-text", "reserved-integer", "extra-unique"),
+)
 def test_hr_unsafe_schema_is_rejected_before_mutation(
     tmp_path, standard: bool, defect: str
 ) -> None:
@@ -575,6 +655,16 @@ def test_hr_unsafe_schema_is_rejected_before_mutation(
                 if standard
                 else "LegacyReserved604_717Hex VARCHAR(227)"
             ),
+            1,
+        )
+    elif defect == "reserved-integer":
+        unsafe = unsafe.replace(
+            (
+                "FuseirituFlag6                 VARCHAR(255)"
+                if standard
+                else "FuseirituFlag6 TEXT"
+            ),
+            "FuseirituFlag6                 INTEGER" if standard else "FuseirituFlag6 INTEGER",
             1,
         )
     else:
