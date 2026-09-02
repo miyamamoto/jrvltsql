@@ -4,8 +4,14 @@ This module provides the base class for fetching JV-Data from JV-Link.
 """
 
 import gc
+import hashlib
+import ntpath
+import os
+import posixpath
+import tempfile
 import time
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import Callable, Iterator, Optional
 
 from src.jvlink.constants import JV_READ_NO_MORE_DATA, JV_READ_SUCCESS
@@ -40,6 +46,8 @@ class BaseFetcher(ABC):
         jvlink: JV-Link wrapper instance
         parser_factory: Parser factory instance
     """
+
+    FAILED_RECORD_DIR_ENV = "JLTSQL_FAILED_RECORD_DIR"
 
     def __init__(
         self,
@@ -221,41 +229,33 @@ class BaseFetcher(ABC):
                         continue
                     self._records_fetched += 1
 
-                    # Parse record
+                    # Parse record. Any rejection is fatal: continuing would
+                    # let callers consume an incomplete provider stream and
+                    # could emit an unbounded failure log on a corrupt feed.
                     try:
                         data = self.parser_factory.parse(buff)
-                        if data:
-                            # Full-struct parsers (H1, H6) return List[Dict]
-                            records_list = data if isinstance(data, list) else [data]
+                    except Exception as error:
+                        self._raise_failed_record(buff, filename, error=error)
+                    if not data:
+                        self._raise_failed_record(buff, filename, error=None)
 
-                            for record_item in records_list:
-                                # Filter by to_date if specified
-                                if to_date and not self._is_within_date_range(record_item, to_date):
-                                    logger.debug(
-                                        "Skipping record outside date range",
-                                        record_num=self._records_fetched,
-                                        to_date=to_date,
-                                    )
-                                    continue
+                    # Full-struct parsers (H1, H6) return List[Dict]
+                    records_list = data if isinstance(data, list) else [data]
 
-                                self._records_parsed += 1
-                                # Include raw buffer for callers that need it (e.g., RealtimeUpdater)
-                                record_item["_raw"] = buff
-                                yield record_item
-                        else:
-                            self._records_failed += 1
-                            logger.warning(
-                                "Failed to parse record",
+                    for record_item in records_list:
+                        # Filter by to_date if specified
+                        if to_date and not self._is_within_date_range(record_item, to_date):
+                            logger.debug(
+                                "Skipping record outside date range",
                                 record_num=self._records_fetched,
+                                to_date=to_date,
                             )
+                            continue
 
-                    except Exception as e:
-                        self._records_failed += 1
-                        logger.error(
-                            "Error parsing record",
-                            record_num=self._records_fetched,
-                            error=str(e),
-                        )
+                        self._records_parsed += 1
+                        # Include raw buffer for callers that need it (e.g., RealtimeUpdater)
+                        record_item["_raw"] = buff
+                        yield record_item
 
                     # Periodic GC to free COM buffer references (every 10s).
                     # kmy-keiba frees COM buffers with Array.Resize(ref buff, 0) after each read.
@@ -347,6 +347,97 @@ class BaseFetcher(ABC):
                 filename=filename,
                 result=result,
             )
+
+    @classmethod
+    def _failed_record_directory(cls) -> Path:
+        configured = os.environ.get(cls.FAILED_RECORD_DIR_ENV)
+        if configured:
+            return Path(configured).expanduser()
+        if os.name == "nt":
+            state_root = Path(os.environ.get("LOCALAPPDATA") or Path.home())
+        else:
+            state_root = Path(
+                os.environ.get("XDG_STATE_HOME") or (Path.home() / ".local" / "state")
+            )
+        return state_root / "jltsql" / "failed-records"
+
+    @staticmethod
+    def _safe_jvd_filename(filename: object) -> str:
+        """Keep only a bounded provider filename, never a credential-bearing path."""
+
+        value = str(filename or "unknown")
+        value = posixpath.basename(ntpath.basename(value))
+        return value[:255] or "unknown"
+
+    def _write_failed_record_artifact(self, record: bytes) -> tuple[str, str]:
+        """Atomically preserve one complete record under its SHA-256 identity."""
+
+        digest = hashlib.sha256(record).hexdigest()
+        artifact_dir = self._failed_record_directory()
+        artifact_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+        target = artifact_dir / f"{digest}.jvd"
+        if target.exists():
+            if target.read_bytes() != record:
+                raise FetcherError("Existing failed-record artifact does not match its SHA-256")
+            return f"sha256:{digest}", digest
+
+        descriptor, temporary_name = tempfile.mkstemp(
+            prefix=f".{digest}.", suffix=".tmp", dir=artifact_dir
+        )
+        temporary = Path(temporary_name)
+        try:
+            if hasattr(os, "fchmod"):
+                os.fchmod(descriptor, 0o600)
+            with os.fdopen(descriptor, "wb") as artifact:
+                artifact.write(record)
+                artifact.flush()
+                os.fsync(artifact.fileno())
+            os.replace(temporary, target)
+        finally:
+            if temporary.exists():
+                temporary.unlink()
+        return f"sha256:{digest}", digest
+
+    def _log_failed_record(self, buff, filename, *, error) -> str:
+        """Persist the complete rejected record and emit only bounded metadata."""
+
+        record = bytes(buff) if buff else b""
+        artifact_id, digest = self._write_failed_record_artifact(record)
+        record_spec = record[:2].decode("ascii", errors="replace")
+        if not record_spec.isprintable():
+            record_spec = record[:2].hex()
+        logger.error(
+            "Failed to parse record",
+            jvd_file=self._safe_jvd_filename(filename),
+            record_num=self._records_fetched,
+            record_spec=record_spec,
+            error_type=type(error).__name__[:128] if error is not None else None,
+            record_len=len(record),
+            record_sha256=digest,
+            artifact_id=artifact_id,
+        )
+        return artifact_id
+
+    def _raise_failed_record(self, buff, filename, *, error) -> None:
+        """Record one bounded diagnostic and stop the provider stream."""
+
+        self._records_failed += 1
+        try:
+            artifact_id = self._log_failed_record(buff, filename, error=error)
+        except Exception as artifact_error:
+            logger.error(
+                "Failed to preserve rejected record artifact",
+                jvd_file=self._safe_jvd_filename(filename),
+                record_num=self._records_fetched,
+                record_len=len(bytes(buff)) if buff else 0,
+                error_type=type(artifact_error).__name__[:128],
+            )
+            raise FetcherError(
+                "Parser rejected a record and artifact preservation failed"
+            ) from artifact_error
+        raise FetcherError(
+            f"Parser rejected record {self._records_fetched}; artifact {artifact_id}"
+        ) from error
 
     def get_statistics(self) -> dict:
         """Get fetching statistics.

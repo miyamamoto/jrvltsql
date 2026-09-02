@@ -2,6 +2,9 @@
 
 from unittest.mock import MagicMock
 
+import pytest
+
+from src.fetcher.base import FetcherError
 from src.fetcher.historical import HistoricalFetcher
 
 
@@ -16,25 +19,29 @@ def _fetcher_without_jvlink() -> HistoricalFetcher:
     return fetcher
 
 
-def test_cache_replay_counts_parser_rejection_as_failure():
+def test_cache_replay_counts_parser_rejection_as_failure(tmp_path, monkeypatch):
     cache = MagicMock()
     cache.has_nl_range.return_value = True
     cache.read_nl.return_value = iter([b"invalid"])
     fetcher = _fetcher_without_jvlink()
     fetcher.parser_factory.parse.return_value = None
 
-    assert list(fetcher.fetch_with_cache(cache, "RACE", "20260714", "20260714")) == []
+    monkeypatch.setenv("JLTSQL_FAILED_RECORD_DIR", str(tmp_path))
+    with pytest.raises(FetcherError):
+        list(fetcher.fetch_with_cache(cache, "RACE", "20260714", "20260714"))
     assert fetcher.get_statistics()["records_failed"] == 1
 
 
-def test_cache_replay_counts_parser_exception_as_failure():
+def test_cache_replay_counts_parser_exception_as_failure(tmp_path, monkeypatch):
     cache = MagicMock()
     cache.has_nl_range.return_value = True
     cache.read_nl.return_value = iter([b"invalid"])
     fetcher = _fetcher_without_jvlink()
     fetcher.parser_factory.parse.side_effect = ValueError("broken cache record")
 
-    assert list(fetcher.fetch_with_cache(cache, "RACE", "20260714", "20260714")) == []
+    monkeypatch.setenv("JLTSQL_FAILED_RECORD_DIR", str(tmp_path))
+    with pytest.raises(FetcherError):
+        list(fetcher.fetch_with_cache(cache, "RACE", "20260714", "20260714"))
     stats = fetcher.get_statistics()
     assert stats["records_fetched"] == 1
     assert stats["records_parsed"] == 0
