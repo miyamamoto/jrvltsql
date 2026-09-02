@@ -255,6 +255,9 @@ def test_invalid_or_inverted_dates_fail_before_any_jvlink_call(bad_from, bad_to)
     jvlink = MagicMock()
     jvlink.jv_open.return_value = (-1, 0, 0, "")
     fetcher = _historical_fetcher(jvlink)
+    # 生成時に一度だけ張る JV-Link セッションは測定対象外。
+    # fetch 側が JVInit を再発行しないことも併せて固定する。
+    jvlink.reset_mock()
 
     with pytest.raises(ValueError):
         list(fetcher.fetch("RACE", bad_from, bad_to, option=4))
@@ -267,6 +270,8 @@ def test_inverted_cache_range_fails_before_cache_lookup_or_jvlink_call():
     cache = MagicMock()
     jvlink = MagicMock()
     fetcher = _historical_fetcher(jvlink)
+    # 生成時の JVInit（セッション確立）は測定対象外。
+    jvlink.reset_mock()
 
     with pytest.raises(ValueError):
         list(fetcher.fetch_with_cache(cache, "RACE", "20260819", "20250820", 4))

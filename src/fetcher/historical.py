@@ -542,15 +542,14 @@ class HistoricalFetcher(BaseFetcher):
                     chunks=len(fromtimes),
                 )
 
-            # Initialize JV-Link
-            logger.info("Initializing JV-Link")
             if self.progress_display:
                 # スペックヘッダーを表示（日付範囲付き）
                 self.progress_display.print_spec_header(data_spec, from_date, to_date)
 
-            # Note: Service key must be pre-configured in Windows registry
-            # jv_init() does not accept service_key parameter
-            self.jvlink.jv_init()
+            # The session was established in BaseFetcher.__init__, so this
+            # method starts at JVOpen and never re-issues JVInit. Re-issuing it
+            # would put the option=3/4 source dialog in front of the operator
+            # again for every dataspec of a multi-spec setup run.
             # リトライ上限は fetch 全体で 1 本。chunk 数ぶんは増やさない。
             self._jvd_self_repair_attempts = 0
 
@@ -625,7 +624,8 @@ class HistoricalFetcher(BaseFetcher):
             self._jv_open_last_file_timestamp = None
             self._fetch_task_id = None
             # JVClose の義務は _fetch_one_open の finally が持つ（JVOpen と
-            # 同じ try に入っている）。ここで二重に閉じない。
+            # 同じ try に入っている）。ここで二重に閉じない。JVInit はここでも
+            # 張り直さない。セッションは JVClose より長く生きる。
 
             # Do NOT call cleanup() here: cleanup() destroys the COM object
             # (self._jvlink = None + CoUninitialize), so subsequent chunks

@@ -249,6 +249,9 @@ class JVLinkWrapper:
         self._is_open = False
         self._needs_close = False
         self._com_initialized = False
+        # JVInit is application-level initialization, not per-JVOpen setup.
+        # Keep the established session so repeated fetches reuse it.
+        self._initialized = False
 
         try:
             import sys
@@ -272,9 +275,16 @@ class JVLinkWrapper:
             raise JVLinkError(f"Failed to create JV-Link COM object: {e}")
 
     def jv_init(self) -> int:
-        """Initialize JV-Link.
+        """Initialize JV-Link once for this JV-Link session.
 
         Must be called before any other JV-Link operations.
+
+        The official spec treats JVInit as application initialization: it is
+        not re-issued per JVOpen. Repeated calls therefore reuse the session
+        established by the first successful JVInit instead of re-entering COM,
+        so one process holds one JV-Link session no matter how many JVOpen /
+        JVClose pairs run inside it. ``cleanup()`` and ``reinitialize_com()``
+        drop the session, and the next call initializes again.
 
         Note:
             Service key must be configured in JRA-VAN DataLab application
@@ -292,9 +302,19 @@ class JVLinkWrapper:
             >>> result = wrapper.jv_init()
             >>> assert result == 0
         """
+        if getattr(self, "_initialized", False):
+            logger.debug("JV-Link already initialized; reusing session", sid=self.sid)
+            return JV_RT_SUCCESS
+
         try:
+            # cleanup() deliberately releases the COM object.  Reusing the
+            # wrapper afterwards starts a new explicit session, just as the
+            # bridge transport starts a new process after its cleanup().
+            if self._jvlink is None:
+                self.reinitialize_com()
             result = self._jvlink.JVInit(self.sid)
             if result == JV_RT_SUCCESS:
+                self._initialized = True
                 logger.info("JV-Link initialized successfully", sid=self.sid)
             else:
                 logger.error("JV-Link initialization failed", error_code=result, sid=self.sid)
@@ -946,6 +966,8 @@ class JVLinkWrapper:
 
             self._is_open = False
             self._needs_close = False
+            # The recreated COM object carries no JV-Link session.
+            self._initialized = False
 
             logger.info("COM component reinitialized successfully", sid=self.sid)
 
@@ -987,6 +1009,10 @@ class JVLinkWrapper:
                 self.jv_close()
             except Exception:
                 pass
+
+        # Dropping the COM object ends the JV-Link session, so a later
+        # jv_init() must reach JVInit again instead of reusing the flag.
+        self._initialized = False
 
         # Release COM object reference BEFORE CoUninitialize
         # This prevents "Win32 exception occurred releasing IUnknown" warnings
