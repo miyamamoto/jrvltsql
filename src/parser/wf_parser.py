@@ -39,7 +39,7 @@ class WFParser:
     FLAG_INITIAL_VALUE = "0"
     # Ver.4.2.0 (2012-02-21) から項番14 キャリーオーバー金額初期が 1/2/9 でも必須
     INITIAL_CARRYOVER_REQUIRED_FROM = date(2012, 2, 21)
-    RESERVED_INITIAL_VALUES = {"Yobi1": "00", "Yobi2": "000000"}
+    RESERVED_SPAN_WIDTHS = {"Yobi1": 2, "Yobi2": 6}
     # 特記事項: 重勝式中止時の払戻情報 (組番 / 払戻金 / 的中票数)
     CANCELLATION_PAYOUT = ("0000000000", "000000100", "0000000000")
     # コード表2001の掲載値から、初期値00と明示的な未使用値C4/F4/F6/
@@ -109,10 +109,20 @@ class WFParser:
             raise ValueError(f"WF {name} must keep its initial value for this DataKubun")
 
     @classmethod
-    def _require_reserved_initial(cls, name: str, value: object) -> None:
-        expected = cls.RESERVED_INITIAL_VALUES[name]
-        if value != expected:
-            raise ValueError(f"WF {name} must keep its initial value {expected}")
+    def _require_reserved_text(cls, name: str, value: object) -> None:
+        """Require an optional reserved span to fit its physical CP932 field."""
+
+        if value in (None, ""):
+            return
+        width = cls.RESERVED_SPAN_WIDTHS[name]
+        if not isinstance(value, str):
+            raise ValueError(f"WF {name} must be text or blank")
+        try:
+            encoded = value.encode("cp932", errors="strict")
+        except UnicodeEncodeError as error:
+            raise ValueError(f"WF {name} must be valid CP932 text") from error
+        if len(encoded) > width:
+            raise ValueError(f"WF {name} must fit in {width} CP932 byte(s)")
 
     @classmethod
     def _require_yyyymmdd(cls, name: str, value: object) -> date:
@@ -213,8 +223,8 @@ class WFParser:
         """
         for name in cls.RACE_INFO_FIELDS:
             cls._require_race_composite(name, values.get(name))
-        for name in cls.RESERVED_INITIAL_VALUES:
-            cls._require_reserved_initial(name, values.get(name))
+        for name in cls.RESERVED_SPAN_WIDTHS:
+            cls._require_reserved_text(name, values.get(name))
 
         if status in cls.INITIAL_VALUE_STATUSES:
             availability = "initial"

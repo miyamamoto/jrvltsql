@@ -24,6 +24,7 @@ from src.database.schema import SchemaManager
 from src.database.sqlite_handler import SQLiteDatabase
 from src.fetcher.historical import FetcherError, HistoricalFetcher
 from src.importer.importer import DataImporter
+from src.jvlink.wrapper import JVLinkError
 from src.parser.factory import ParserFactory
 
 
@@ -335,19 +336,22 @@ class TestFetcherErrors(unittest.TestCase):
 
         mock_jvlink.jv_status.assert_called_once()
 
-    @patch('src.fetcher.base.JVLinkWrapper')
-    def test_jvlink_init_failure(self, mock_jvlink_class):
-        """Test handling of JV-Link initialization failure."""
+    @patch("src.jvlink.bridge.find_bridge_executable", return_value=None)
+    @patch("src.fetcher.base.JVLinkWrapper")
+    def test_jvlink_init_failure(self, mock_jvlink_class, _mock_find_bridge):
+        """A failing JVInit aborts the fetcher before any JVOpen is possible."""
         mock_jvlink = MagicMock()
         mock_jvlink_class.return_value = mock_jvlink
 
-        # Mock JV_Init failure (raises exception)
-        mock_jvlink.jv_init.side_effect = Exception("JV_Init failed")
+        # -101 は JVInit の sid 書式エラー（公式コード表）
+        mock_jvlink.jv_init.side_effect = JVLinkError(
+            "JV-Link initialization failed", error_code=-101
+        )
 
-        fetcher = HistoricalFetcher(sid="TEST")
+        with self.assertRaises(JVLinkError):
+            HistoricalFetcher(sid="TEST")
 
-        with self.assertRaises(Exception):
-            list(fetcher.fetch("RACE", "20240101", "20240101"))
+        mock_jvlink.jv_open.assert_not_called()
 
     @patch('src.fetcher.base.JVLinkWrapper')
     def test_jvopen_failure(self, mock_jvlink_class):

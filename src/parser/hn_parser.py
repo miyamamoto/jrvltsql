@@ -96,10 +96,8 @@ class HNParser:
             # non-key provider bytes are deliberately not interpreted.
             return
 
-        if record.get("reserved") != "00000000":
-            raise ValueError("HN reserved must be the official initial value 00000000")
-        if record.get("DelKubun") != "0":
-            raise ValueError("HN DelKubun must be the official reserved value 0")
+        cls._require_cp932_text("reserved", record.get("reserved"), 8)
+        cls._require_cp932_text("DelKubun", record.get("DelKubun"), 1)
         for field_name in ("KettoNum", "FHansyokuNum", "MHansyokuNum"):
             cls._require_ascii_digits(field_name, record.get(field_name), 10)
         for field_name in ("BirthYear", "ImportYear"):
