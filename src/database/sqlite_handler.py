@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from src.database.base import BaseDatabase, DatabaseError
+from src.database.timeseries_capture import capture_timestamp_epoch_microseconds
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -59,9 +60,7 @@ class SQLiteDatabase(BaseDatabase):
         try:
             return bool(self._connection.in_transaction)
         except Exception as exc:
-            raise DatabaseError(
-                f"Failed to inspect SQLite transaction state: {exc}"
-            ) from exc
+            raise DatabaseError(f"Failed to inspect SQLite transaction state: {exc}") from exc
 
     def connect(self) -> None:
         """Establish SQLite database connection.
@@ -87,6 +86,12 @@ class SQLiteDatabase(BaseDatabase):
             self._connection.execute("PRAGMA synchronous = NORMAL")  # 同期モードを緩和
             self._connection.execute("PRAGMA cache_size = -64000")  # 64MBキャッシュ
             self._connection.execute("PRAGMA temp_store = MEMORY")  # 一時テーブルをメモリに
+            self._connection.create_function(
+                "jltsql_capture_epoch_us",
+                1,
+                capture_timestamp_epoch_microseconds,
+                deterministic=True,
+            )
             # Use Row factory for dict-like access
             self._connection.row_factory = sqlite3.Row
             self._cursor = self._connection.cursor()

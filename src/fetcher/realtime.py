@@ -3,21 +3,151 @@
 This module provides realtime data fetching from JV-Link.
 """
 
-from typing import Callable, Iterable, Iterator, Optional, List
+from collections.abc import Callable, Iterable, Iterator
+from datetime import datetime, timedelta, timezone
+from typing import Optional
 
 from src.fetcher.base import BaseFetcher, FetcherError
 from src.jvlink.constants import (
+    JYO_CODES,
     JV_RT_SUCCESS,
     JVRTOPEN_SPEED_REPORT_SPECS,
     JVRTOPEN_TIME_SERIES_SPECS,
-    is_valid_jvrtopen_spec,
-    is_time_series_spec,
     generate_time_series_key,
-    JYO_CODES,
+    is_time_series_spec,
 )
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+# Japan has observed UTC+09:00 year-round since 1951.  A fixed offset avoids
+# making the base/SQLite installation depend on an IANA tzdata package, which
+# is not present by default on Windows.
+JST = timezone(timedelta(hours=9), name="JST")
+
+
+def _now_jst() -> datetime:
+    """Return the race-window reference clock in Japan time."""
+    return datetime.now(JST)
+
+
+def _filter_race_rows_by_post_time(
+    race_rows: list[tuple],
+    *,
+    post_time_within_minutes: Optional[int],
+    post_time_not_past_minutes: Optional[int],
+) -> tuple[list[tuple], dict[str, int]]:
+    """Date-filter, validate, de-duplicate, and post-time-filter race rows."""
+    now = _now_jst()
+    if now.tzinfo is None or now.utcoffset() is None:
+        raise FetcherError("Race post-time window clock must be timezone-aware")
+    now = now.astimezone(JST)
+
+    grouped: dict[str, list[tuple]] = {}
+    race_dates: dict[str, datetime] = {}
+    for row in race_rows:
+        if len(row) != 7:
+            raise FetcherError(
+                "Race post-time window requires Year, MonthDay, JyoCD, "
+                "Kaiji, Nichiji, RaceNum, and HassoTime"
+            )
+        year, monthday, jyo_cd, _kaiji, _nichiji, race_num, _post_time = row
+        try:
+            date_str = f"{int(year):04d}{int(monthday):04d}"
+            race_date = datetime.strptime(date_str, "%Y%m%d").replace(tzinfo=JST)
+            jyo_cd_text = str(jyo_cd).strip().zfill(2)
+            key = generate_time_series_key(date_str, jyo_cd_text, int(race_num))
+        except (TypeError, ValueError) as exc:
+            raise FetcherError(
+                "Race post-time window cannot name invalid race identity " f"{row[:6]!r}: {exc}"
+            ) from exc
+        grouped.setdefault(key, []).append(row)
+        race_dates.setdefault(key, race_date)
+
+    latest_allowed = (
+        now + timedelta(minutes=post_time_within_minutes)
+        if post_time_within_minutes is not None
+        else None
+    )
+    earliest_allowed = (
+        now - timedelta(minutes=post_time_not_past_minutes)
+        if post_time_not_past_minutes is not None
+        else None
+    )
+    candidates: dict[str, list[tuple]] = {}
+    dropped_too_far_future = 0
+    dropped_too_far_past = 0
+    skipped_out_of_window_by_date = 0
+    for key, rows in grouped.items():
+        race_date_start = race_dates[key]
+        race_date_end = race_date_start + timedelta(days=1) - timedelta(minutes=1)
+        if latest_allowed is not None and race_date_start > latest_allowed:
+            dropped_too_far_future += 1
+            skipped_out_of_window_by_date += 1
+        elif earliest_allowed is not None and race_date_end < earliest_allowed:
+            dropped_too_far_past += 1
+            skipped_out_of_window_by_date += 1
+        else:
+            candidates[key] = rows
+
+    validated: list[tuple[tuple, datetime]] = []
+    problems: list[str] = []
+    for key, rows in candidates.items():
+        raw_post_times = [row[6] for row in rows]
+        normalized_post_times = {
+            str(value).strip()
+            for value in raw_post_times
+            if value is not None and str(value).strip()
+        }
+        if any(value is None or not str(value).strip() for value in raw_post_times):
+            problems.append(f"{key}: missing HassoTime")
+            continue
+        if len(normalized_post_times) != 1:
+            values = ", ".join(sorted(normalized_post_times))
+            problems.append(f"{key}: ambiguous HassoTime values [{values}]")
+            continue
+
+        post_time_text = next(iter(normalized_post_times))
+        if (
+            len(post_time_text) != 4
+            or not post_time_text.isascii()
+            or not post_time_text.isdigit()
+            or int(post_time_text[:2]) > 23
+            or int(post_time_text[2:]) > 59
+        ):
+            problems.append(f"{key}: unparsable HassoTime {post_time_text!r}")
+            continue
+
+        post_time = datetime.strptime(f"{key[:8]}{post_time_text}", "%Y%m%d%H%M").replace(
+            tzinfo=JST
+        )
+        validated.append((rows[0][:6], post_time))
+
+    if problems:
+        raise FetcherError("Race post-time window rejected keys: " + "; ".join(problems))
+
+    kept: list[tuple] = []
+    for row, post_time in validated:
+        minutes_until_post = (post_time - now).total_seconds() / 60
+        if post_time_within_minutes is not None and minutes_until_post > post_time_within_minutes:
+            dropped_too_far_future += 1
+        elif (
+            post_time_not_past_minutes is not None
+            and minutes_until_post < -post_time_not_past_minutes
+        ):
+            dropped_too_far_past += 1
+        else:
+            kept.append(row)
+
+    stats = {
+        "considered_keys": len(grouped),
+        "window_candidate_keys": len(candidates),
+        "window_kept_keys": len(kept),
+        "dropped_too_far_future": dropped_too_far_future,
+        "dropped_too_far_past": dropped_too_far_past,
+        "skipped_out_of_window_by_date": skipped_out_of_window_by_date,
+    }
+    return kept, stats
 
 
 def materialize_complete_records(
@@ -81,8 +211,7 @@ class RealtimeFetcher(BaseFetcher):
         """Keep realtime snapshots fail-fast on corrupt JV-Link files."""
         self._delete_corrupt_file_best_effort(error_code, filename)
         raise FetcherError(
-            f"Realtime JVRead returned {error_code} for "
-            f"{filename or 'an unknown file'}"
+            f"Realtime JVRead returned {error_code} for " f"{filename or 'an unknown file'}"
         )
 
     def fetch(
@@ -131,14 +260,14 @@ class RealtimeFetcher(BaseFetcher):
 
         if data_spec not in RT_DATA_SPECS:
             logger.warning(
-                f"Unknown data spec: {data_spec}. "
-                "Proceeding anyway, but this may not be valid."
+                f"Unknown data spec: {data_spec}. " "Proceeding anyway, but this may not be valid."
             )
 
         # Default key to today's date if not specified
         # JVRTOpen requires a date key (YYYYMMDD) to function properly
         if key is None:
             from datetime import datetime
+
             key = datetime.now().strftime("%Y%m%d")
             logger.debug("Using today's date as key", key=key)
 
@@ -193,7 +322,7 @@ class RealtimeFetcher(BaseFetcher):
             raise
         except Exception as e:
             # -114: 契約外エラーはdebugレベル
-            if '-114' in str(e):
+            if "-114" in str(e):
                 logger.debug("Realtime fetch skipped (not subscribed)", error=str(e))
             else:
                 logger.error("Realtime fetch error", error=str(e))
@@ -319,6 +448,7 @@ class RealtimeFetcher(BaseFetcher):
         # Generate date if not provided
         if date is None:
             from datetime import datetime
+
             date = datetime.now().strftime("%Y%m%d")
 
         # Generate key: YYYYMMDDJJRR
@@ -373,6 +503,8 @@ class RealtimeFetcher(BaseFetcher):
         to_date: Optional[str] = None,
         pg_config: Optional[dict] = None,
         progress_callback: Optional[Callable[[dict], None]] = None,
+        post_time_within_minutes: Optional[int] = None,
+        post_time_not_past_minutes: Optional[int] = None,
     ) -> Iterator[dict]:
         """Fetch time series odds for races registered in the database.
 
@@ -407,6 +539,10 @@ class RealtimeFetcher(BaseFetcher):
                        of SQLite.
             progress_callback: Optional callback called after each race key is
                                attempted. Receives counters and key status.
+            post_time_within_minutes: Keep keys no more than this many minutes
+                                      before their race-record post time.
+            post_time_not_past_minutes: Drop keys more than this many minutes
+                                        after their race-record post time.
 
         Yields:
             Dictionary of parsed record data
@@ -437,22 +573,55 @@ class RealtimeFetcher(BaseFetcher):
                 f"Time series specs: {', '.join(sorted(JVRTOPEN_TIME_SERIES_SPECS.keys()))}"
             )
 
+        for option_name, option_value in (
+            ("post_time_within_minutes", post_time_within_minutes),
+            ("post_time_not_past_minutes", post_time_not_past_minutes),
+        ):
+            if option_value is not None and option_value < 0:
+                raise FetcherError(f"{option_name} must be zero or greater")
+        window_filter_requested = (
+            post_time_within_minutes is not None or post_time_not_past_minutes is not None
+        )
+
         # Forward-only 0B15 cards are stored in RT_RA, while historical RACE
         # records are stored in NL_RA. Use both sources and de-duplicate the
         # key-bearing columns. This exposes no result fields: only the race
         # identity is used to construct the JVRTOpen request key.
         if pg_config:
-            rt_union = (
+            if window_filter_requested:
+                rt_union = (
+                    """
+                        UNION
+                        SELECT year, monthday, jyocd, kaiji, nichiji, racenum, hassotime
+                        FROM rt_ra
+                    """
+                    if self._postgres_table_exists(pg_config, "rt_ra")
+                    else ""
+                )
+                distinct = "" if rt_union else " DISTINCT"
+                query = f"""
+                    WITH race_targets AS (
+                        SELECT year, monthday, jyocd, kaiji, nichiji, racenum, hassotime
+                        FROM nl_ra
+                        {rt_union}
+                    )
+                    SELECT{distinct}
+                        year, monthday, jyocd, kaiji, nichiji, racenum, hassotime
+                    FROM race_targets
+                    WHERE 1=1
                 """
+            else:
+                rt_union = (
+                    """
                     UNION
                     SELECT year, monthday, jyocd, kaiji, nichiji, racenum
                     FROM rt_ra
                 """
-                if self._postgres_table_exists(pg_config, "rt_ra")
-                else ""
-            )
-            distinct = "" if rt_union else " DISTINCT"
-            query = f"""
+                    if self._postgres_table_exists(pg_config, "rt_ra")
+                    else ""
+                )
+                distinct = "" if rt_union else " DISTINCT"
+                query = f"""
                 WITH race_targets AS (
                     SELECT year, monthday, jyocd, kaiji, nichiji, racenum
                     FROM nl_ra
@@ -474,27 +643,45 @@ class RealtimeFetcher(BaseFetcher):
             from contextlib import closing
 
             with closing(sqlite3.connect(db_path)) as conn:
-                has_rt_ra = (
-                    conn.execute(
-                        """
+                has_rt_ra = conn.execute("""
                         SELECT 1
                         FROM sqlite_master
                         WHERE type = 'table' AND lower(name) = lower('RT_RA')
-                        """
-                    ).fetchone()
-                    is not None
+                        """).fetchone() is not None
+            if window_filter_requested:
+                rt_union = (
+                    """
+                        UNION
+                        SELECT Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, HassoTime
+                        FROM RT_RA
+                    """
+                    if has_rt_ra
+                    else ""
                 )
-            rt_union = (
+                distinct = "" if rt_union else " DISTINCT"
+                query = f"""
+                    WITH race_targets AS (
+                        SELECT Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, HassoTime
+                        FROM NL_RA
+                        {rt_union}
+                    )
+                    SELECT{distinct}
+                        Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, HassoTime
+                    FROM race_targets
+                    WHERE 1=1
                 """
+            else:
+                rt_union = (
+                    """
                     UNION
                     SELECT Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum
                     FROM RT_RA
                 """
-                if has_rt_ra
-                else ""
-            )
-            distinct = "" if rt_union else " DISTINCT"
-            query = f"""
+                    if has_rt_ra
+                    else ""
+                )
+                distinct = "" if rt_union else " DISTINCT"
+                query = f"""
                 WITH race_targets AS (
                     SELECT Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum
                     FROM NL_RA
@@ -551,6 +738,12 @@ class RealtimeFetcher(BaseFetcher):
         else:
             query += " ORDER BY Year, MonthDay, JyoCD, RaceNum"
 
+        log_context = {}
+        if window_filter_requested:
+            log_context = {
+                "post_time_within_minutes": post_time_within_minutes,
+                "post_time_not_past_minutes": post_time_not_past_minutes,
+            }
         logger.info(
             "Starting batch time series fetch from database",
             data_spec=data_spec,
@@ -558,12 +751,15 @@ class RealtimeFetcher(BaseFetcher):
             db_path="postgresql" if pg_config else db_path,
             from_date=from_date,
             to_date=to_date,
+            **log_context,
         )
 
         # Get race keys from database
         try:
             if pg_config:
-                race_rows = self._fetch_time_series_race_rows_from_postgres(query, params, pg_config)
+                race_rows = self._fetch_time_series_race_rows_from_postgres(
+                    query, params, pg_config
+                )
             else:
                 import sqlite3
                 from contextlib import closing
@@ -574,6 +770,29 @@ class RealtimeFetcher(BaseFetcher):
                     race_rows = cursor.fetchall()
         except Exception as e:
             raise FetcherError(f"Database query failed: {e}")
+
+        window_stats: Optional[dict[str, int]] = None
+        if window_filter_requested:
+            race_rows, window_stats = _filter_race_rows_by_post_time(
+                race_rows,
+                post_time_within_minutes=post_time_within_minutes,
+                post_time_not_past_minutes=post_time_not_past_minutes,
+            )
+            logger.info("Applied race post-time window", **window_stats)
+            if progress_callback:
+                progress_callback(
+                    {
+                        "status": "window_filter",
+                        "key": None,
+                        "processed_keys": 0,
+                        "total_keys": len(race_rows),
+                        **window_stats,
+                        "success_keys": 0,
+                        "no_data_keys": 0,
+                        "error_keys": 0,
+                        "total_records": 0,
+                    }
+                )
 
         if not race_rows:
             logger.warning("No races found in database for the specified criteria")
@@ -601,7 +820,9 @@ class RealtimeFetcher(BaseFetcher):
                 year, monthday, jyo_cd, kaiji, nichiji, race_num = row
 
                 # Build date string: YYYYMMDD
-                date_str = f"{year}{monthday:04d}" if isinstance(monthday, int) else f"{year}{monthday}"
+                date_str = (
+                    f"{year}{monthday:04d}" if isinstance(monthday, int) else f"{year}{monthday}"
+                )
 
                 # Convert values to proper types. Kaiji/Nichiji are selected
                 # from NL_RA for auditability, but JVRTOpen odds time-series
@@ -614,7 +835,7 @@ class RealtimeFetcher(BaseFetcher):
                     logger.warning(f"Invalid key parameters: {e}")
                     error_keys += 1
                     if progress_callback:
-                        progress_callback({
+                        progress = {
                             "status": "invalid_key",
                             "key": None,
                             "processed_keys": processed_keys,
@@ -624,7 +845,10 @@ class RealtimeFetcher(BaseFetcher):
                             "error_keys": error_keys,
                             "records_for_key": 0,
                             "total_records": total_records,
-                        })
+                        }
+                        if window_stats:
+                            progress.update(window_stats)
+                        progress_callback(progress)
                     continue
 
                 records_for_key = 0
@@ -674,7 +898,7 @@ class RealtimeFetcher(BaseFetcher):
                 except Exception as e:
                     error_keys += 1
                     key_status = "exception"
-                    if '-114' in str(e):
+                    if "-114" in str(e):
                         logger.debug("Not subscribed for key", key=key, error=str(e))
                     else:
                         logger.warning("Error fetching key", key=key, error=str(e))
@@ -684,7 +908,7 @@ class RealtimeFetcher(BaseFetcher):
                     except Exception:
                         pass
                     if progress_callback:
-                        progress_callback({
+                        progress = {
                             "status": key_status,
                             "key": key,
                             "processed_keys": processed_keys,
@@ -694,7 +918,10 @@ class RealtimeFetcher(BaseFetcher):
                             "error_keys": error_keys,
                             "records_for_key": records_for_key,
                             "total_records": total_records,
-                        })
+                        }
+                        if window_stats:
+                            progress.update(window_stats)
+                        progress_callback(progress)
 
         finally:
             try:
@@ -702,6 +929,7 @@ class RealtimeFetcher(BaseFetcher):
             except Exception:
                 pass
 
+        summary_context = window_stats or {}
         logger.info(
             "Batch time series fetch completed",
             data_spec=data_spec,
@@ -710,6 +938,7 @@ class RealtimeFetcher(BaseFetcher):
             no_data_keys=no_data_keys,
             error_keys=error_keys,
             total_records=total_records,
+            **summary_context,
         )
 
     @staticmethod
@@ -762,8 +991,8 @@ class RealtimeFetcher(BaseFetcher):
         data_spec: str,
         from_date: str,
         to_date: str,
-        jyo_codes: Optional[List[str]] = None,
-        race_nums: Optional[List[int]] = None,
+        jyo_codes: Optional[list[str]] = None,
+        race_nums: Optional[list[int]] = None,
     ) -> Iterator[dict]:
         """Fetch time series data for multiple races in a date range.
 
@@ -962,7 +1191,7 @@ class RealtimeFetcher(BaseFetcher):
                         except Exception as e:
                             error_keys += 1
                             # -114: 契約外エラーは警告として処理
-                            if '-114' in str(e):
+                            if "-114" in str(e):
                                 logger.debug("Not subscribed for key", key=key, error=str(e))
                             else:
                                 logger.warning("Error fetching key", key=key, error=str(e))
@@ -1037,15 +1266,11 @@ class RealtimeFetcher(BaseFetcher):
                     "PostgreSQL driver not installed. Install psycopg[binary]."
                 ) from exc
             except Exception as exc:
-                raise FetcherError(
-                    f"Could not check whether {table_name} exists: {exc}"
-                ) from exc
+                raise FetcherError(f"Could not check whether {table_name} exists: {exc}") from exc
         except FetcherError:
             raise
         except Exception as exc:
-            raise FetcherError(
-                f"Could not check whether {table_name} exists: {exc}"
-            ) from exc
+            raise FetcherError(f"Could not check whether {table_name} exists: {exc}") from exc
 
     def __enter__(self):
         """Context manager entry."""
