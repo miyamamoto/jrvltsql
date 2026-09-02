@@ -3,6 +3,7 @@
 import os
 from copy import deepcopy
 from pathlib import Path
+from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
@@ -14,6 +15,7 @@ from src.database.schema_jravan import JRAVAN_SCHEMAS
 from src.database.sqlite_handler import SQLiteDatabase
 from src.importer.importer import (
     DataImporter,
+    convert_record_types,
     validate_hn_record,
     validate_import_record_header,
     verify_hn_storage_schema,
@@ -43,22 +45,48 @@ def hn_record(
     return parsed
 
 
-@pytest.mark.parametrize(
-    ("offset", "value"),
-    (
-        pytest.param(11, b"12345A7890", id="non-digit-key"),
-        pytest.param(21, b"00000001", id="nonzero-reserved"),
-        pytest.param(39, b"1", id="nonzero-reserved-code"),
-        pytest.param(204, b"8", id="invalid-mochi-code"),
-    ),
-)
-def test_hn_parser_rejects_official_domain_violations(offset: int, value: bytes) -> None:
+def official_domain_record() -> bytearray:
+    """Return one current HN record whose official-domain spans are all valid."""
+
     raw = bytearray(build_record())
     raw[21:29] = b"00000000"
     raw[39:40] = b"0"
     raw[204:205] = b"1"
+    return raw
+
+
+@pytest.mark.parametrize(
+    ("offset", "value"),
+    (
+        pytest.param(11, b"12345A7890", id="non-digit-key"),
+        pytest.param(204, b"8", id="invalid-mochi-code"),
+    ),
+)
+def test_hn_parser_rejects_official_domain_violations(offset: int, value: bytes) -> None:
+    raw = official_domain_record()
     raw[offset : offset + len(value)] = value
     assert HNParser().parse(bytes(raw)) is None
+
+
+@pytest.mark.parametrize(
+    ("offset", "value", "field_name", "expected"),
+    (
+        pytest.param(21, b"00000001", "reserved", "00000001", id="nonzero-reserved"),
+        pytest.param(21, b"        ", "reserved", "", id="blank-reserved"),
+        pytest.param(39, b"1", "DelKubun", "1", id="nonzero-reserved-code"),
+        pytest.param(39, b" ", "DelKubun", "", id="blank-reserved-code"),
+    ),
+)
+def test_hn_parser_keeps_reserved_spans_without_interpreting_them(
+    offset: int, value: bytes, field_name: str, expected: str
+) -> None:
+    """The official layout defines no item for these spans, so any content is kept."""
+
+    raw = official_domain_record()
+    raw[offset : offset + len(value)] = value
+    parsed = HNParser().parse(bytes(raw))
+    assert parsed is not None
+    assert parsed[field_name] == expected
 
 
 def test_hn_status_zero_raw_body_is_opaque_but_live_body_remains_strict() -> None:
@@ -81,6 +109,8 @@ def test_hn_status_zero_raw_body_is_opaque_but_live_body_remains_strict() -> Non
         pytest.param({"Bamei": None}, id="missing-required-body"),
         pytest.param({"Bamei": "　"}, id="whitespace-only-required-body"),
         pytest.param({"FHansyokuNum": "12345A7890"}, id="invalid-parent-key"),
+        pytest.param({"reserved": "0" * 9}, id="reserved-exceeds-its-span"),
+        pytest.param({"DelKubun": "00"}, id="reserved-code-exceeds-its-span"),
         pytest.param(
             {"MochiKubun": "1", "HansyokuMochiKubun": "2"},
             id="conflicting-standard-alias",
@@ -153,6 +183,72 @@ def test_hn_blank_optional_text_remains_an_empty_provider_value(
             "BameiEng": "",
             "SanchiName": "",
         }
+
+
+@pytest.mark.parametrize("use_standard", (False, True), ids=("native", "standard"))
+@pytest.mark.parametrize("entrypoint", ("data-batch", "optimized-batch", "single"))
+def test_hn_blank_reserved_spans_survive_every_sqlite_import_path(
+    tmp_path,
+    use_standard: bool,
+    entrypoint: str,
+) -> None:
+    """Validated blank reserved bytes stay provider strings, never SQL NULL."""
+
+    table_name = "HANSYOKU" if use_standard else "NL_HN"
+    schema = JRAVAN_SCHEMAS[table_name] if use_standard else SCHEMAS[table_name]
+    raw = official_domain_record()
+    raw[21:29] = b"        "
+    raw[39:40] = b" "
+    record = HNParser().parse(bytes(raw))
+    assert record is not None
+
+    database = SQLiteDatabase({"path": str(tmp_path / f"reserved-{table_name}-{entrypoint}.db")})
+    with database:
+        database.execute(schema)
+        database.commit()
+        if entrypoint == "single":
+            assert DataImporter(database, use_jravan_schema=use_standard).import_single_record(
+                record
+            )
+        else:
+            importer_class = (
+                OptimizedDataImporter if entrypoint == "optimized-batch" else DataImporter
+            )
+            stats = importer_class(database, use_jravan_schema=use_standard).import_records(
+                iter([record])
+            )
+            assert stats["records_imported"] == 1
+            assert stats["records_failed"] == 0
+        assert database.fetch_one(f"SELECT reserved, DelKubun FROM {table_name}") == {
+            "reserved": "",
+            "DelKubun": "",
+        }
+
+
+def test_hn_blank_reserved_spans_remain_text_in_postgresql_bindings(monkeypatch) -> None:
+    """The PostgreSQL adapter must receive empty provider text, never SQL NULL."""
+
+    import src.database.postgresql_handler as postgresql_handler
+
+    monkeypatch.setattr(postgresql_handler, "DRIVER", "psycopg")
+    raw = official_domain_record()
+    raw[21:29] = b"        "
+    raw[39:40] = b" "
+    record = HNParser().parse(bytes(raw))
+    assert record is not None
+    converted = convert_record_types(record, "NL_HN")
+
+    database = postgresql_handler.PostgreSQLDatabase({})
+    database._connection = MagicMock()
+    database._cursor = MagicMock()
+    database._get_primary_key_columns = MagicMock(return_value=["hansyokunum"])
+
+    assert database.insert_many("NL_HN", [converted]) == 1
+
+    _, values = database._cursor.execute.call_args.args
+    bound = dict(zip(converted, values, strict=True))
+    assert bound["reserved"] == ""
+    assert bound["DelKubun"] == ""
 
 
 @pytest.mark.parametrize("use_standard", (False, True), ids=("native", "standard"))
