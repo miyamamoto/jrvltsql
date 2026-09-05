@@ -939,9 +939,14 @@ def test_sqlite_race_window_rt_lifecycle_cancellation_does_not_fall_back_to_nl(
                 ("2", 2026, 905, "06", 4, 8, 12, "1630"),
             ],
         )
-        conn.execute(
+        conn.executemany(
             "INSERT INTO RT_RA VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            ("9", 2026, 905, "06", 4, 8, 11, "1615"),
+            [
+                ("9", 2026, 905, "06", 4, 8, 11, "1615"),
+                # A second canceled full key collapses to the same JVRTOpen
+                # key deterministically; it is still one omitted key.
+                ("9", 2026, 905, "06", 5, 1, 11, "1615"),
+            ],
         )
         conn.commit()
 
@@ -1175,6 +1180,107 @@ def test_sqlite_race_window_rt_lifecycle_source_conflict_fails_closed(tmp_path, 
     fetcher.jvlink = _window_jvlink()
 
     with pytest.raises(FetcherError, match=r"202609050612.*ambiguous"):
+        list(
+            fetcher.fetch_time_series_batch_from_db(
+                data_spec="0B41",
+                db_path=str(db_path),
+                from_date="20260905",
+                to_date="20260905",
+                post_time_within_minutes=20,
+                post_time_not_past_minutes=1,
+            )
+        )
+    assert fetcher.jvlink.init_calls == 0
+
+
+@pytest.mark.parametrize(
+    "race_rows",
+    [
+        pytest.param(
+            [
+                ("RT", "6", 2026, 905, "06", 4, 8, 12, "1630"),
+                ("RT", "9", 2026, 905, "06", 5, 1, 12, "1630"),
+            ],
+            id="active-first",
+        ),
+        pytest.param(
+            [
+                ("RT", "9", 2026, 905, "06", 5, 1, 12, "1630"),
+                ("RT", "6", 2026, 905, "06", 4, 8, 12, "1630"),
+            ],
+            id="canceled-first",
+        ),
+    ],
+)
+def test_postgresql_race_window_rt_lifecycle_mixed_state_fails_closed_before_init(
+    monkeypatch, race_rows
+):
+    """One JVRTOpen key cannot be both active and canceled based on row order."""
+    from src.fetcher.base import FetcherError
+    from src.fetcher.realtime import RealtimeFetcher
+
+    _fixed_lifecycle_incident_now(monkeypatch)
+    monkeypatch.setattr(
+        RealtimeFetcher,
+        "_fetch_time_series_race_rows_from_postgres",
+        staticmethod(lambda _query, _params, _config: race_rows),
+    )
+    monkeypatch.setattr(
+        RealtimeFetcher,
+        "_postgres_table_exists",
+        staticmethod(lambda _config, table_name: table_name == "rt_ra"),
+    )
+    fetcher = object.__new__(RealtimeFetcher)
+    fetcher.jvlink = _window_jvlink()
+
+    with pytest.raises(FetcherError, match=r"202609050612.*ambiguous.*lifecycle"):
+        list(
+            fetcher.fetch_time_series_batch_from_db(
+                data_spec="0B41",
+                db_path="ignored.sqlite",
+                from_date="20260905",
+                to_date="20260905",
+                pg_config={"host": "localhost", "database": "keiba"},
+                post_time_within_minutes=20,
+                post_time_not_past_minutes=1,
+            )
+        )
+    assert fetcher.jvlink.init_calls == 0
+
+
+@pytest.mark.parametrize("owning_source", ["RT", "NL"])
+def test_sqlite_race_window_rt_lifecycle_persisted_erase_fails_closed_before_init(
+    tmp_path, monkeypatch, owning_source
+):
+    """A stored RA DataKubun 0 erase marker is not an active race target."""
+    import sqlite3
+    from contextlib import closing
+
+    from src.fetcher.base import FetcherError
+    from src.fetcher.realtime import RealtimeFetcher
+
+    _fixed_lifecycle_incident_now(monkeypatch)
+    db_path = tmp_path / f"lifecycle-{owning_source.lower()}-erase.db"
+    with closing(sqlite3.connect(db_path)) as conn:
+        _create_lifecycle_race_tables(conn)
+        if owning_source == "RT":
+            conn.execute(
+                "INSERT INTO NL_RA VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                ("2", 2026, 905, "06", 4, 8, 10, "1620"),
+            )
+            table = "RT_RA"
+        else:
+            table = "NL_RA"
+        conn.execute(
+            f"INSERT INTO {table} VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            ("0", 2026, 905, "06", 4, 8, 10, "1620"),
+        )
+        conn.commit()
+
+    fetcher = object.__new__(RealtimeFetcher)
+    fetcher.jvlink = _window_jvlink()
+
+    with pytest.raises(FetcherError, match=r"202609050610.*DataKubun.*0.*erase"):
         list(
             fetcher.fetch_time_series_batch_from_db(
                 data_spec="0B41",

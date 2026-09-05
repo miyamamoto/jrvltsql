@@ -8,19 +8,21 @@ What `2.1.2` fixes over `2.1.1`:
 
 - when `--post-time-within-minutes` / `--post-time-not-past-minutes` are
   requested, race targets are selected per full race key (Year, MonthDay,
-  JyoCD, Kaiji, Nichiji, RaceNum) with lifecycle-source precedence: a same-day
-  `RT_RA` row owns its key regardless of DataKubun, and `NL_RA` is used only
-  for keys absent from `RT_RA`; when the optional `RT_RA` table is absent,
-  `NL_RA` owns every key. A stale `NL_RA` post time coexisting with the
-  current `RT_RA` revision is no longer misread as ambiguity — on 2026-09-05
-  that misread aborted the whole batch and left later due races without
-  official O1/O2 capture
+  JyoCD, Kaiji, Nichiji, RaceNum) with lifecycle-source precedence: a stored
+  same-day `RT_RA` row first owns its full key, and `NL_RA` is used only for
+  full keys absent from `RT_RA`; when the optional `RT_RA` table is absent,
+  `NL_RA` owns every key. A stale `NL_RA` post time coexisting with the current
+  `RT_RA` revision is no longer misread as ambiguity — on 2026-09-05 that
+  misread aborted the whole batch and left later due races without official
+  O1/O2 capture
 - the selected current row's DataKubun is validated against the official RA
   domain; missing, blank, or out-of-domain statuses fail closed naming the
-  12-digit race key, and nothing is opened. After validation, DataKubun=9
-  cancellations are omitted for whichever source owns the key, never falling
-  back to the shadowed row. Genuine same-source post-time conflicts on the
-  12-digit JVRTOpen key still fail closed
+  12-digit race key, and nothing is opened. A persisted DataKubun=0 erase
+  marker also fails closed instead of becoming an active target. After
+  validation, DataKubun=9 cancellations are omitted for whichever source owns
+  the key, never falling back to the shadowed row. A 12-digit JVRTOpen key
+  carrying both active and canceled selected rows fails closed independent of
+  row order; genuine post-time conflicts still fail closed
 - window statistics always report `omitted_canceled_keys` (0 when none), and
   `window_kept_keys` equals the keys actually opened
 - machine-parsed CLI progress is extended for downstream verification: the
@@ -41,6 +43,12 @@ Verification limits:
   focused run). No live JV-Link race day has exercised this build yet: the
   first complete prospective proof must come from a future real race day, and
   this release does not backfill 2026-09-05
+- the normal updater physically removes RT DataKubun=0 rows. This read path
+  therefore cannot distinguish an already-removed RT erase tombstone from a
+  key which never received an RT update; rejecting a tombstone that remains
+  stored is covered, but preventing stale-NL fallback after an already-removed
+  RT erase is not proven by this release. `2.1.2` does not claim unconditional
+  lifecycle resolution for every DataKubun state
 
 Adoption / rollback:
 

@@ -163,24 +163,30 @@ def _race_key_label(key_fields: tuple) -> str:
 
 def _overlay_current_lifecycle_rows(
     race_rows: list[tuple],
-) -> tuple[list[tuple], set[tuple]]:
+) -> tuple[list[tuple], set[str]]:
     """Select the current lifecycle source for each exact full race key.
 
     Rows carry (LifecycleSource, DataKubun, Year, MonthDay, JyoCD, Kaiji,
     Nichiji, RaceNum, HassoTime). A same-day RT_RA row supersedes the
-    historical NL_RA row for the identical full key regardless of DataKubun,
-    including cancellation status 9; NL_RA rows are used only for full keys
-    absent from RT_RA. Duplicates from the selected source are preserved so a
-    genuine 12-digit-key post-time conflict still fails closed downstream.
+    historical NL_RA row for the identical full key before lifecycle-state
+    validation, including cancellation status 9; NL_RA rows are used only for
+    full keys absent from RT_RA. Duplicates from the selected source are
+    preserved so a genuine 12-digit-key post-time conflict still fails closed
+    downstream.
 
     Because DataKubun decides whether a selected row is active or canceled,
     every selected row must carry an officially valid current RA DataKubun
     (``src.parser.status_domain``); an undecidable status fails closed with
-    the 12-digit race key named, and nothing is opened.
+    the 12-digit race key named, and nothing is opened. DataKubun 0 is an
+    erase instruction which the normal updater physically removes, so finding
+    one persisted here is an inconsistent state and also fails closed.
 
-    Returns the selected 7-column rows and the full keys whose selected
-    source reports cancellation (DataKubun 9) — from RT or NL alike, since
-    selection already happened and RT 9 never exposes the NL row.
+    The selected full keys are also grouped by their normalized 12-digit
+    JVRTOpen key. If one such key is both active and canceled, its state cannot
+    be represented by JVRTOpen and the batch fails closed independent of row
+    order. Returns the selected 7-column rows and the 12-digit keys whose
+    selected rows all report cancellation (DataKubun 9) — from RT or NL alike,
+    since selection already happened and RT 9 never exposes the NL row.
     Cancellations are not removed here: their rows stay subject to
     fail-closed post-time validation first.
     """
@@ -197,7 +203,8 @@ def _overlay_current_lifecycle_rows(
             raise FetcherError(f"Race lifecycle overlay cannot classify source {row[0]!r}")
 
     selected: list[tuple] = []
-    canceled_full_keys: set[tuple] = set()
+    lifecycle_states: dict[str, set[str]] = {}
+    canceled_race_keys: set[str] = set()
     for row in race_rows:
         source, data_kubun = row[0], row[1]
         full_key = tuple(row[2:8])
@@ -215,10 +222,25 @@ def _overlay_current_lifecycle_rows(
             raise FetcherError(
                 f"Race lifecycle selection rejected {_race_key_label(row[2:8])}: {exc}"
             ) from exc
+        race_key = _race_key_label(row[2:8])
+        if validated_kubun == "0":
+            raise FetcherError(
+                f"Race lifecycle selection rejected {race_key}: "
+                "persisted RA DataKubun '0' erase marker"
+            )
         selected.append(tuple(row[2:]))
+        lifecycle_state = "canceled" if validated_kubun == "9" else "active"
+        lifecycle_states.setdefault(race_key, set()).add(lifecycle_state)
         if validated_kubun == "9":
-            canceled_full_keys.add(full_key)
-    return selected, canceled_full_keys
+            canceled_race_keys.add(race_key)
+
+    mixed_state_keys = [key for key, states in lifecycle_states.items() if len(states) > 1]
+    if mixed_state_keys:
+        problems = "; ".join(
+            f"{key}: ambiguous active/canceled lifecycle states" for key in mixed_state_keys
+        )
+        raise FetcherError("Race lifecycle selection rejected keys: " + problems)
+    return selected, canceled_race_keys
 
 
 def materialize_complete_records(
@@ -614,11 +636,11 @@ class RealtimeFetcher(BaseFetcher):
                                initial ``window_filter`` entry carries the
                                window statistics, including
                                ``omitted_canceled_keys``: the number of
-                               selected cancellations (DataKubun 9 reported
-                               by the lifecycle source that owns the full
-                               race key) that passed validation and otherwise
-                               fell inside the requested window. It is always
-                               present (0 when none), and
+                               normalized JVRTOpen keys whose selected
+                               lifecycle rows all report DataKubun 9, passed
+                               validation, and otherwise fell inside the
+                               requested window. It is always present (0 when
+                               none), and
                                ``window_kept_keys`` is reduced by the same
                                amount so it equals total_keys and the keys
                                actually opened.
@@ -892,14 +914,20 @@ class RealtimeFetcher(BaseFetcher):
                 post_time_not_past_minutes=post_time_not_past_minutes,
             )
             if canceled_race_keys:
-                # A validated cancellation owns its full key in whichever
-                # source was selected: omit it without opening and without
-                # falling back to the shadowed row.
-                race_rows = [row for row in race_rows if tuple(row[:6]) not in canceled_race_keys]
-            # omitted_canceled_keys counts selected cancellations that passed
-            # validation and otherwise fell inside the requested window. It is
-            # always reported (0 when none), and window_kept_keys shrinks by
-            # the same amount so it equals total_keys/opened targets.
+                # A validated cancellation owns its normalized JVRTOpen key in
+                # whichever source was selected: omit it without opening and
+                # without falling back to the shadowed row. Mixed active and
+                # canceled state for one 12-digit key was rejected above.
+                race_rows = [
+                    row
+                    for row in race_rows
+                    if _race_key_label(tuple(row[:6])) not in canceled_race_keys
+                ]
+            # omitted_canceled_keys counts normalized JVRTOpen keys whose
+            # selected rows all report cancellation, passed validation, and
+            # otherwise fell inside the requested window. It is always
+            # reported (0 when none), and window_kept_keys shrinks by the same
+            # amount so it equals total_keys/opened targets.
             omitted_canceled_keys = window_stats["window_kept_keys"] - len(race_rows)
             window_stats["window_kept_keys"] = len(race_rows)
             window_stats["omitted_canceled_keys"] = omitted_canceled_keys

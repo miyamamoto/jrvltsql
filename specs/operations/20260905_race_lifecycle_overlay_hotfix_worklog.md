@@ -350,18 +350,111 @@
   `67649f5de39ebedd7fbf13721962454ef9525cbfb3694434b3b49fe887f60ad7`;
   wheel `fc07d18555742e5e13dd4a76ec9ed84a0cad26614c5ae0357c895cef58a65336`.
   These are local pre-freeze evidence, not the authoritative release hashes.
+- 2026-09-05 independent review of frozen candidate
+  `589a3c08cf39f2a9065cfea965dfd49cc4df33b8` returned NEEDS_CHANGES on two
+  P1 fail-open lifecycle edges. The reviewer reproduced that two selected RT
+  full keys with different Kaiji/Nichiji but the same 12-digit JVRTOpen key,
+  same HassoTime, and active/canceled states were opened or omitted according
+  to row order; cancellation was tracked by full key after the post-time
+  filter had collapsed to `rows[0]`. The reviewer also reproduced that the
+  official RA `DataKubun=0` erase state passed domain validation and was
+  treated as an active target. The original Claude Fable implementer session
+  reached its session quota before this review response, so one Codex teammate
+  is applying the batched review repair; this does not change the recorded
+  Fable implementation provenance above.
+- 2026-09-05 RED (batched independent-review repair, before any src change):
+  added one two-order regression for the physically possible distinct-full-key
+  collision (RT DK6 and RT DK9, identical 12-digit key and HassoTime) and one
+  RT/NL ownership parameterization for an unexpectedly persisted RA DK0 erase
+  marker. Both require `FetcherError` naming the 12-digit key before JV init.
+  Command: `nice -n 15 uv run --frozen --extra dev --extra postgres pytest
+  tests/test_time_series.py -k 'mixed_state_fails_closed_before_init or
+  persisted_erase_fails_closed_before_init' -v --no-cov` -> **4 failed, 38
+  deselected in 0.19s**, all with `DID NOT RAISE`. Active-first opened
+  `202609050612` with `omitted_canceled_keys=0`; canceled-first omitted that
+  same key with `omitted_canceled_keys=1`, proving row-order dependence. Both
+  RT-owned and NL-owned DK0 rows opened `202609050610`. No production source
+  was changed in this RED step.
+- 2026-09-05 batched repair (Codex teammate; still uncommitted): lifecycle
+  source ownership remains exact-full-key-first, then every selected row is
+  validated against the official RA domain. A selected persisted DK0 erase
+  marker now raises `FetcherError` naming its normalized 12-digit key before
+  JV init. Selected rows are grouped by that 12-digit JVRTOpen key; any
+  active/canceled mixture now fails closed independent of input order. An
+  all-DK9 group remains in post-time validation and is removed/counts as one
+  normalized key only afterwards, preserving genuine HassoTime-conflict
+  failure and the established window statistics. The existing cancellation
+  test now covers two distinct canceled full keys collapsing to one 12-digit
+  key. Changed paths are `src/fetcher/realtime.py`,
+  `tests/test_time_series.py`, `CHANGELOG.md`, `RELEASE_NOTES.md`, and this
+  worklog.
+- 2026-09-05 documentation scope correction: the normal updater physically
+  removes RT DK0. Therefore, this read path cannot distinguish an already
+  removed tombstone from no RT update, and preventing stale-NL resurrection
+  after an erase is **not proven**. CHANGELOG and release notes now say so and
+  no longer claim unconditional lifecycle correctness regardless of
+  DataKubun. A persisted DK0 is rejected; an absent tombstone remains a
+  pre-existing storage-semantics limitation requiring separate work.
+- 2026-09-05 GREEN after the production repair and Black:
+  `nice -n 15 uv run --frozen --extra dev --extra postgres pytest
+  tests/test_time_series.py -k 'mixed_state_fails_closed_before_init or
+  persisted_erase_fails_closed_before_init' -v --no-cov` -> **4 passed, 38
+  deselected in 0.12s**. Full affected file with the existing active,
+  cancellation, invalid-domain, RT-table-absent, genuine HassoTime-conflict,
+  PostgreSQL parity, and no-window coverage: `nice -n 15 uv run --frozen
+  --extra dev --extra postgres pytest tests/test_time_series.py -v --no-cov`
+  -> **42 passed in 0.70s**. Release-document contract: `nice -n 15 uv run
+  --frozen --extra dev --extra postgres pytest
+  tests/test_public_setup_contract.py -v --no-cov` -> **10 passed in 0.13s**.
+- 2026-09-05 formatting/static/diff gates for this repair: `nice -n 15 uv run
+  --frozen --extra dev --extra postgres black src/fetcher/realtime.py
+  tests/test_time_series.py` and the matching `black --check` both reported
+  **2 files unchanged**; isolated fatal lint (`flake8 ... --select=E9,F63,F7,F82`)
+  reported **0**; `git diff --check` passed. The five intended files remain
+  dirty by explicit handoff instruction; no commit or push was made. Because
+  the independent reviewer implemented the repair, a newly frozen full SHA
+  still requires a different independent reviewer before release.
+- 2026-09-05 remote release-track setup (state-changing, verified): read-only
+  `git ls-remote` first proved `release/2.1.2`, `stable/2.1`, `v2.1.2`, and the
+  hotfix branch absent. `git push --dry-run origin 0f3161d...:refs/heads/
+  release/2.1.2` showed only one new branch; the matching apply succeeded.
+  Post-fetch verification proved remote `release/2.1.2` equals exact v2.1.1
+  `0f3161d30de65f15795608e2a4bec9fc91e05349` with zero commits beyond it.
+  The hotfix push also ran dry first, then applied, and remote verification
+  proved candidate `589a3c08cf39f2a9065cfea965dfd49cc4df33b8` exactly. Rollback handles before
+  merge are deletion of those two newly-created remote branches; immutable
+  v2.1.1 remains the code rollback. No tag or stable branch was created.
+- 2026-09-05 PR state (state-changing, verified): opened hotfix PR
+  `https://github.com/miyamamoto/jrvltsql/pull/267` from the hotfix branch into
+  exact-base `release/2.1.2`. The newly added release-branch trigger worked:
+  authoritative Tests run `33959351499` started for candidate `589a3c08...`.
+  As soon as independent review reported the first P1, the measured open/ready
+  PR was converted to draft and labeled `release:blocker`,
+  `release:hotfix-candidate`, `risk:data-integrity`, and `risk:provider`;
+  re-read verification confirmed draft=true and the exact labels. Candidate
+  `589a3c08...` must not be merged, tagged, released, or adopted.
+- 2026-09-05 parent independently confirmed the STOP state: keep PR 267 draft,
+  batch both P1 repairs red-first, disclose the tombstone limitation, and mark
+  ready only after new exact-head affected plus required workflow-equivalent
+  gates and final review. The repaired focused aggregate was independently
+  rerun in this agent: four affected files -> **122 passed, 22 subtests passed
+  in 2.61s**; Black check, diff check, and fatal Flake8 remain green. Scoped
+  Ruff has no new debt (57 candidate diagnostics versus 58 on exact v2.1.1),
+  and scoped MyPy has no new diagnostic (11 candidate versus 12 baseline).
 
 ## Pending safe sequence and STOP conditions
 
-1. Review the complete diff, commit/freeze a full candidate SHA, and obtain
-   independent critical review; batch any actionable corrections and repeat the
-   affected/full gates as risk requires.
-2. Push `release/2.1.2` at the exact tag base and this branch, open the hotfix PR,
-   wait for authoritative CI/review, resolve every thread, merge, tag/release only
-   after the immutable merge SHA passes the release gates, and forward-port.
+1. Commit/freeze the batched review repair, push the new exact PR head, run the
+   full workflow-equivalent suite/build on that SHA, and obtain critical review
+   from a different independent reviewer. Keep PR 267 draft/blocking until all
+   actionable findings are closed.
+2. Wait for authoritative CI/review on the repaired head, resolve every thread,
+   remove `release:blocker`, mark ready, and merge only from authoritative state.
 3. Rebuild and hash the authoritative release artifacts from the immutable merge
    SHA, publish `v2.1.2`, advance `stable/2.1` to the same commit, and provide the
    merged tag/source/wheel pins to downstream `jrvltsql-wine-runtime`.
+4. Forward-port the repair from the published hotfix into current `master` by a
+   separate PR, preserving dependency order and recording its merge SHA.
 
 STOP on any fail-open path, unexpected database/schema change, failing test,
 non-authoritative merge state, unresolved review thread, artifact/source mismatch,

@@ -15,16 +15,18 @@
 
 - 発走時刻window指定時の時系列オッズ対象選択で、同一フルキー（Year,
   MonthDay, JyoCD, Kaiji, Nichiji, RaceNum）のレースをライフサイクル
-  ソース優先で1系列に選ぶ。`RT_RA`行が存在するキーはDataKubunに関わらず
-  `RT_RA`が所有し、`NL_RA`は`RT_RA`に無いキーだけに使う（`RT_RA` table
-  不在時は`NL_RA`が全キーを所有）。古い`NL_RA`発走時刻と当日`RT_RA`改定
-  時刻の同居を曖昧性と誤検知してbatch全体を中断し、後続due raceの公式
-  O1/O2捕捉を失う障害（2026-09-05）を修正した。
+  ソース優先で1系列に選ぶ。保存済み`RT_RA`行が存在するキーはまず`RT_RA`
+  が所有し、`NL_RA`は`RT_RA`に無いキーだけに使う（`RT_RA` table不在時は
+  `NL_RA`が全キーを所有）。古い`NL_RA`発走時刻と当日`RT_RA`改定時刻の
+  同居を曖昧性と誤検知してbatch全体を中断し、後続due raceの公式O1/O2
+  捕捉を失う障害（2026-09-05）を修正した。
 - 選択された現行行のDataKubunを公式RA domain（`src/parser/status_domain.py`）
   で検証し、欠落・空白・domain外は対象レースキーを名指ししてfail closed
-  （何も開かない）。検証後、所有ソースを問わずDataKubun=9（中止）のキーは
-  収集対象から除外し、隠れた行へfallbackしない。選択ソース内で12桁キーの
-  発走時刻が衝突する真の曖昧性は従来どおりfail closedを維持する。
+  （何も開かない）。通常保存経路では物理削除されるDataKubun=0が残存して
+  いた場合も、activeとして扱わずfail closedする。検証後、所有ソースを問わず
+  DataKubun=9（中止）の12桁キーは収集対象から除外し、隠れた行へfallback
+  しない。同じ12桁キーがactiveと中止の両状態を持つ場合は行順に依存せず
+  fail closedし、発走時刻が衝突する真の曖昧性も従来どおりfail closedを維持する。
 - window統計に`omitted_canceled_keys`を常時追加し（中止なしでも0を報告）、
   `window_kept_keys`を中止除外後の実際に開く対象数と一致させた。
 - 下流runtimeが機械parseするCLI進捗を拡張した: `Window:`行に`canceled=`、
@@ -35,6 +37,10 @@
 - windowなしの対象選択query・schema・保存形式・provider書き込みは変更なし。
   windowなし出力の変更はキー処理時のCLI `Keys:`行に`nonempty=`が加わる
   ことのみ。
+- 既存の通常updaterはRTのDataKubun=0を物理削除するため、消えたRT tombstone
+  と「RT更新なし」をこのread pathだけでは区別できない。残存DK0のfail-closedは
+  本修正に含むが、RT erase後に古いNL行へfallbackしないことは本releaseでは
+  未証明であり、無条件の全DataKubunライフサイクル解決は主張しない。
 
 ## [2.1.1] - 2026-09-02
 
