@@ -817,6 +817,7 @@ auto_update_check: false
                     "considered_keys": 3,
                     "window_candidate_keys": 3,
                     "window_kept_keys": 1,
+                    "omitted_canceled_keys": 2,
                     "dropped_too_far_future": 1,
                     "dropped_too_far_past": 1,
                     "skipped_out_of_window_by_date": 0,
@@ -824,6 +825,20 @@ auto_update_check: false
                     "no_data_keys": 0,
                     "error_keys": 0,
                     "total_records": 0,
+                }
+            )
+            callback(
+                {
+                    "status": "success",
+                    "key": "202609010501",
+                    "processed_keys": 1,
+                    "total_keys": 1,
+                    "success_keys": 1,
+                    "nonempty_keys": 1,
+                    "no_data_keys": 0,
+                    "error_keys": 0,
+                    "records_for_key": 3,
+                    "total_records": 3,
                 }
             )
             return iter(())
@@ -874,12 +889,106 @@ auto_update_check: false
         call_kwargs = fetcher.fetch_time_series_batch_from_db.call_args.kwargs
         self.assertEqual(call_kwargs["post_time_within_minutes"], 30)
         self.assertEqual(call_kwargs["post_time_not_past_minutes"], 2)
-        self.assertIn("considered=3", result.output)
-        self.assertIn("candidates=3", result.output)
-        self.assertIn("kept=1", result.output)
-        self.assertIn("future=1", result.output)
-        self.assertIn("past=1", result.output)
-        self.assertIn("date_excluded=0", result.output)
+        # 下流のwine runtimeがこの行をparseするため、tokenと順序を固定する。
+        # canceled= は検証済み中止の除外数で、中止なしでも0が出力される。
+        self.assertIn(
+            "Window: considered=3 candidates=3 kept=1 canceled=2 "
+            "future=1 past=1 date_excluded=0",
+            result.output,
+        )
+        # Keys行も同様にparseされる: ok(成功キー)と実レコードを返した
+        # nonemptyキーを区別し、token順を固定する。
+        self.assertIn("ok=1 nonempty=1 no_data=0", result.output)
+
+    def test_timeseries_window_idle_run_emits_zero_keys_summary(self):
+        """対象0件のidle実行でもspecごとに終端Keysサマリを1行だけ出す。
+
+        窓フィルタで全キーが落ちた(total_keys=0)日でも、下流のwine runtime
+        は「何も開かなかった」ことをKeys行で機械的に確認する。last=を含ま
+        ない終端形1行のみで、Window行は別行のまま。
+        """
+        database = MagicMock()
+        database.__enter__.return_value = database
+        database.__exit__.return_value = None
+        fetcher = MagicMock()
+
+        def fetch_rows(**kwargs):
+            callback = kwargs["progress_callback"]
+            callback(
+                {
+                    "status": "window_filter",
+                    "key": None,
+                    "processed_keys": 0,
+                    "total_keys": 0,
+                    "considered_keys": 2,
+                    "window_candidate_keys": 2,
+                    "window_kept_keys": 0,
+                    "omitted_canceled_keys": 1,
+                    "dropped_too_far_future": 0,
+                    "dropped_too_far_past": 1,
+                    "skipped_out_of_window_by_date": 0,
+                    "success_keys": 0,
+                    "nonempty_keys": 0,
+                    "no_data_keys": 0,
+                    "error_keys": 0,
+                    "total_records": 0,
+                }
+            )
+            return iter(())
+
+        fetcher.fetch_time_series_batch_from_db.side_effect = fetch_rows
+        updater = MagicMock()
+
+        with self.runner.isolated_filesystem():
+            config_path = Path("config.yaml")
+            config_path.write_text("""
+database:
+  type: postgresql
+databases:
+  postgresql:
+    enabled: true
+jvlink:
+  sid: TEST
+auto_update_check: false
+""")
+            with (
+                patch("src.database.create_database_from_config", return_value=database),
+                patch("src.fetcher.realtime.RealtimeFetcher", return_value=fetcher),
+                patch("src.realtime.updater.RealtimeUpdater", return_value=updater),
+            ):
+                result = self.runner.invoke(
+                    cli,
+                    [
+                        "--config",
+                        str(config_path),
+                        "realtime",
+                        "timeseries",
+                        "--spec",
+                        "0B41",
+                        "--from",
+                        "20260901",
+                        "--to",
+                        "20260901",
+                        "--db",
+                        "postgresql",
+                        "--post-time-within-minutes",
+                        "30",
+                        "--post-time-not-past-minutes",
+                        "2",
+                    ],
+                )
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertIn(
+            "Window: considered=2 candidates=2 kept=0 canceled=1 "
+            "future=0 past=1 date_excluded=0",
+            result.output,
+        )
+        self.assertEqual(
+            result.output.count("Keys: 0/0 ok=0 nonempty=0 no_data=0 errors=0 records=0"),
+            1,
+        )
+        self.assertNotIn("last=", result.output)
 
     def test_timeseries_window_implicit_dates_use_jst(self):
         from datetime import datetime as real_datetime

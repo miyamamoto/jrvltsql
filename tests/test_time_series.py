@@ -71,10 +71,10 @@ def test_key_generation():
 
 def test_fetch_time_series_batch_from_db_uses_simple_key():
     """DB登録済みレースからの時系列取得が12桁キーを使うことを確認する。"""
-    from contextlib import closing
     import sqlite3
     import tempfile
     import types
+    from contextlib import closing
     from pathlib import Path
 
     from src.fetcher.realtime import RealtimeFetcher
@@ -193,6 +193,84 @@ def test_fetch_time_series_batch_from_db_closes_no_data_stream():
         assert progress[-1]["status"] == "no_data"
         assert progress[-1]["processed_keys"] == 1
         assert progress[-1]["no_data_keys"] == 1
+        assert progress[-1]["nonempty_keys"] == 0
+
+
+def test_fetch_time_series_batch_from_db_counts_nonempty_keys():
+    """success_keysは実レコードの証拠にならない: 空成功キーを区別して数える。
+
+    JVRTOpenが成功してもJVReadが0行のキーはnonempty_keysを増やさず、
+    実レコードを返したキーだけが増やす。下流の収集証跡はok(success)では
+    なくnonemptyを非空捕捉の根拠に使う。
+    """
+    import sqlite3
+    import tempfile
+    import types
+    from contextlib import closing
+    from pathlib import Path
+
+    from src.fetcher.realtime import RealtimeFetcher
+
+    with tempfile.TemporaryDirectory(dir="/tmp") as temp_dir:
+        db_path = Path(temp_dir) / "keiba.db"
+        with closing(sqlite3.connect(db_path)) as conn:
+            conn.execute("""
+                CREATE TABLE NL_RA (
+                    Year INTEGER,
+                    MonthDay INTEGER,
+                    JyoCD TEXT,
+                    Kaiji INTEGER,
+                    Nichiji INTEGER,
+                    RaceNum INTEGER
+                )
+                """)
+            conn.execute("INSERT INTO NL_RA VALUES (2025, 1201, '05', 5, 8, 11)")
+            conn.execute("INSERT INTO NL_RA VALUES (2025, 1201, '05', 5, 8, 12)")
+            conn.commit()
+
+        class FakeJVLink:
+            def jv_init(self):
+                return 0
+
+            def jv_rt_open(self, data_spec, key):
+                return 0, 1
+
+            def jv_close(self):
+                return 0
+
+        fetcher = object.__new__(RealtimeFetcher)
+        fetcher.jvlink = FakeJVLink()
+        calls = {"count": 0}
+
+        def fake_fetch_and_parse(self):
+            calls["count"] += 1
+            if calls["count"] > 1:
+                yield {"RecordSpec": "O1", "_raw": b"O1"}
+
+        fetcher._fetch_and_parse = types.MethodType(fake_fetch_and_parse, fetcher)
+        progress = []
+
+        records = list(
+            fetcher.fetch_time_series_batch_from_db(
+                data_spec="0B30",
+                db_path=str(db_path),
+                from_date="20251201",
+                to_date="20251201",
+                progress_callback=progress.append,
+            )
+        )
+
+        assert records == [{"RecordSpec": "O1", "_raw": b"O1"}]
+        # 1キー目: openは成功したがJVReadは0行 -> ok=1 でも非空は0。
+        assert progress[0]["status"] == "success"
+        assert progress[0]["success_keys"] == 1
+        assert progress[0]["records_for_key"] == 0
+        assert progress[0]["nonempty_keys"] == 0
+        # 2キー目: 実レコード1行で初めて非空キーが増える。
+        assert progress[1]["status"] == "success"
+        assert progress[1]["success_keys"] == 2
+        assert progress[1]["records_for_key"] == 1
+        assert progress[1]["nonempty_keys"] == 1
 
 
 def test_fetch_time_series_batch_from_db_discards_partial_key():
@@ -457,16 +535,17 @@ def test_sqlite_race_window_keeps_near_post_and_reports_drop_reasons(tmp_path, m
     with closing(sqlite3.connect(db_path)) as conn:
         conn.execute("""
             CREATE TABLE NL_RA (
+                DataKubun TEXT,
                 Year INTEGER, MonthDay INTEGER, JyoCD TEXT, Kaiji INTEGER,
                 Nichiji INTEGER, RaceNum INTEGER, HassoTime TEXT
             )
             """)
         conn.executemany(
-            "INSERT INTO NL_RA VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO NL_RA VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             [
-                (2026, 901, "05", 3, 4, 1, "1230"),
-                (2026, 901, "05", 3, 4, 2, "1231"),
-                (2026, 901, "05", 3, 4, 3, "1157"),
+                ("2", 2026, 901, "05", 3, 4, 1, "1230"),
+                ("2", 2026, 901, "05", 3, 4, 2, "1231"),
+                ("2", 2026, 901, "05", 3, 4, 3, "1157"),
             ],
         )
         conn.commit()
@@ -502,7 +581,9 @@ def test_sqlite_race_window_keeps_near_post_and_reports_drop_reasons(tmp_path, m
         "dropped_too_far_future": 1,
         "dropped_too_far_past": 1,
         "skipped_out_of_window_by_date": 0,
+        "omitted_canceled_keys": 0,
         "success_keys": 0,
+        "nonempty_keys": 0,
         "no_data_keys": 0,
         "error_keys": 0,
         "total_records": 0,
@@ -520,15 +601,16 @@ def test_race_window_skips_malformed_post_time_on_out_of_window_date(tmp_path, m
     with closing(sqlite3.connect(db_path)) as conn:
         conn.execute("""
             CREATE TABLE NL_RA (
+                DataKubun TEXT,
                 Year INTEGER, MonthDay INTEGER, JyoCD TEXT, Kaiji INTEGER,
                 Nichiji INTEGER, RaceNum INTEGER, HassoTime TEXT
             )
             """)
         conn.executemany(
-            "INSERT INTO NL_RA VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO NL_RA VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             [
-                (2026, 901, "05", 3, 4, 1, "1230"),
-                (2026, 902, "05", 3, 4, 1, "not-a-time"),
+                ("2", 2026, 901, "05", 3, 4, 1, "1230"),
+                ("2", 2026, 902, "05", 3, 4, 1, "not-a-time"),
             ],
         )
         conn.commit()
@@ -578,15 +660,16 @@ def test_race_window_boundary_date_is_evaluated_by_post_time(tmp_path, monkeypat
     with closing(sqlite3.connect(db_path)) as conn:
         conn.execute("""
             CREATE TABLE NL_RA (
+                DataKubun TEXT,
                 Year INTEGER, MonthDay INTEGER, JyoCD TEXT, Kaiji INTEGER,
                 Nichiji INTEGER, RaceNum INTEGER, HassoTime TEXT
             )
             """)
         conn.executemany(
-            "INSERT INTO NL_RA VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO NL_RA VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             [
-                (2026, 831, "05", 3, 4, 1, "1200"),
-                (2026, 831, "05", 3, 4, 2, "2359"),
+                ("2", 2026, 831, "05", 3, 4, 1, "1200"),
+                ("2", 2026, 831, "05", 3, 4, 2, "2359"),
             ],
         )
         conn.commit()
@@ -650,10 +733,12 @@ def test_postgresql_race_window_filters_rows_from_pg_source(monkeypatch):
 
     def fake_pg_rows(query, params, pg_config):
         captured["query"] = query
+        # 実スキーマどおり nl_ra は datakubun を持ち、rt_ra 不在時は
+        # 'NL' タグ付きの9列ライフサイクル行が返る。
         return [
-            (2026, 901, "05", 3, 4, 1, "1230"),
-            (2026, 901, "05", 3, 4, 2, "1231"),
-            (2026, 901, "05", 3, 4, 3, "1157"),
+            ("NL", "2", 2026, 901, "05", 3, 4, 1, "1230"),
+            ("NL", "2", 2026, 901, "05", 3, 4, 2, "1231"),
+            ("NL", "2", 2026, 901, "05", 3, 4, 3, "1157"),
         ]
 
     monkeypatch.setattr(
@@ -685,6 +770,7 @@ def test_postgresql_race_window_filters_rows_from_pg_source(monkeypatch):
     )
 
     assert "hassotime" in captured["query"].lower()
+    assert "datakubun" in captured["query"].lower()
     assert fetcher.jvlink.opened == [("0B42", "202609010501")]
 
 
@@ -713,12 +799,13 @@ def test_race_window_candidate_fails_closed_and_names_bad_race_key(
     with closing(sqlite3.connect(db_path)) as conn:
         conn.execute("""
             CREATE TABLE NL_RA (
+                DataKubun TEXT,
                 Year INTEGER, MonthDay INTEGER, JyoCD TEXT, Kaiji INTEGER,
                 Nichiji INTEGER, RaceNum INTEGER, HassoTime TEXT
             )
             """)
         conn.executemany(
-            "INSERT INTO NL_RA VALUES (2026, 901, '05', 3, 4, 1, ?)",
+            "INSERT INTO NL_RA VALUES ('2', 2026, 901, '05', 3, 4, 1, ?)",
             [(post_time,) for post_time in post_times],
         )
         conn.commit()
@@ -737,6 +824,569 @@ def test_race_window_candidate_fails_closed_and_names_bad_race_key(
             )
         )
     assert fetcher.jvlink.init_calls == 0
+
+
+def _fixed_lifecycle_incident_now(monkeypatch):
+    from datetime import datetime
+
+    import src.fetcher.realtime as realtime_module
+    from src.fetcher.realtime import JST
+
+    # 2026-09-05 16:16 JST: レース12(16:30)が20分窓の対象になった瞬間。
+    now = datetime(2026, 9, 5, 16, 16, tzinfo=JST)
+    monkeypatch.setattr(realtime_module, "_now_jst", lambda: now, raising=False)
+
+
+def _create_lifecycle_race_tables(conn, tables=("NL_RA", "RT_RA")):
+    # SCHEMAS["NL_RA"]/["RT_RA"] のうち選択に関与する形状を再現する:
+    # DataKubun と PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji,
+    # RaceNum)。保存は INSERT OR REPLACE なので、フルキーごとに現在の
+    # ライフサイクル行は1件だけ物理的に存在できる。RT_RAは任意テーブルで、
+    # 不在のDBではNL_RAだけを作る。
+    for table in tables:
+        conn.execute(f"""
+            CREATE TABLE {table} (
+                DataKubun TEXT,
+                Year INTEGER, MonthDay INTEGER, JyoCD TEXT, Kaiji INTEGER,
+                Nichiji INTEGER, RaceNum INTEGER, HassoTime TEXT,
+                PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum)
+            )
+            """)
+
+
+def test_sqlite_race_window_rt_lifecycle_overlay_supersedes_stale_nl_row(tmp_path, monkeypatch):
+    """同一フルキーではRT_RAの現行行がNL_RAの古い発走時刻を上書きする。
+
+    2026-09-05障害の再現: NL_RA 1400 と RT_RA(DataKubun 6) 1401 の同居を
+    曖昧性として扱うと窓判定前に一括中断し、窓内のレース12(16:30)まで
+    取得できなくなる。RT系列がキーを所有すれば 1401 は過去側で落ち、
+    レース12だけが開く。
+    """
+    import sqlite3
+    from contextlib import closing
+
+    from src.fetcher.realtime import RealtimeFetcher
+
+    _fixed_lifecycle_incident_now(monkeypatch)
+    db_path = tmp_path / "lifecycle-overlay.db"
+    with closing(sqlite3.connect(db_path)) as conn:
+        _create_lifecycle_race_tables(conn)
+        conn.executemany(
+            "INSERT INTO NL_RA VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                ("2", 2026, 905, "06", 4, 8, 8, "1400"),
+                ("2", 2026, 905, "06", 4, 8, 12, "1630"),
+            ],
+        )
+        conn.executemany(
+            "INSERT INTO RT_RA VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                ("6", 2026, 905, "06", 4, 8, 8, "1401"),
+                ("2", 2026, 905, "06", 4, 8, 12, "1630"),
+            ],
+        )
+        conn.commit()
+
+    progress = []
+    fetcher = object.__new__(RealtimeFetcher)
+    fetcher.jvlink = _window_jvlink()
+
+    assert (
+        list(
+            fetcher.fetch_time_series_batch_from_db(
+                data_spec="0B41",
+                db_path=str(db_path),
+                from_date="20260905",
+                to_date="20260905",
+                post_time_within_minutes=20,
+                post_time_not_past_minutes=1,
+                progress_callback=progress.append,
+            )
+        )
+        == []
+    )
+
+    assert fetcher.jvlink.opened == [("0B41", "202609050612")]
+    assert progress[0]["window_kept_keys"] == 1
+    assert progress[0]["dropped_too_far_past"] == 1
+    assert progress[0]["dropped_too_far_future"] == 0
+
+
+def test_sqlite_race_window_rt_lifecycle_cancellation_does_not_fall_back_to_nl(
+    tmp_path, monkeypatch
+):
+    """選択された現行行の中止(DataKubun 9)は所有ソースを問わず開いてはならない。
+
+    レース11はNL_RAの発走時刻では窓内だが、RT_RAが中止を報じている
+    (RT中止はNLへのフォールバックを防ぐ)。レース10はRT_RAに無く、
+    選択されたNL_RA行自身が中止を報じている。どちらの中止キーも開かず、
+    残るレース12だけを開く。
+    """
+    import sqlite3
+    from contextlib import closing
+
+    from src.fetcher.realtime import RealtimeFetcher
+
+    _fixed_lifecycle_incident_now(monkeypatch)
+    db_path = tmp_path / "lifecycle-cancel.db"
+    with closing(sqlite3.connect(db_path)) as conn:
+        _create_lifecycle_race_tables(conn)
+        conn.executemany(
+            "INSERT INTO NL_RA VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                ("9", 2026, 905, "06", 4, 8, 10, "1620"),
+                ("2", 2026, 905, "06", 4, 8, 11, "1615"),
+                ("2", 2026, 905, "06", 4, 8, 12, "1630"),
+            ],
+        )
+        conn.executemany(
+            "INSERT INTO RT_RA VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                ("9", 2026, 905, "06", 4, 8, 11, "1615"),
+                # A second canceled full key collapses to the same JVRTOpen
+                # key deterministically; it is still one omitted key.
+                ("9", 2026, 905, "06", 5, 1, 11, "1615"),
+            ],
+        )
+        conn.commit()
+
+    fetcher = object.__new__(RealtimeFetcher)
+    fetcher.jvlink = _window_jvlink()
+
+    progress = []
+    assert (
+        list(
+            fetcher.fetch_time_series_batch_from_db(
+                data_spec="0B41",
+                db_path=str(db_path),
+                from_date="20260905",
+                to_date="20260905",
+                post_time_within_minutes=20,
+                post_time_not_past_minutes=1,
+                progress_callback=progress.append,
+            )
+        )
+        == []
+    )
+
+    assert fetcher.jvlink.opened == [("0B41", "202609050612")]
+    # NL所有・RT所有の両方の中止が数えられ、開く対象と統計が一致する。
+    assert progress[0]["window_kept_keys"] == 1
+    assert progress[0]["omitted_canceled_keys"] == 2
+    assert progress[0]["total_keys"] == 1
+
+
+@pytest.mark.parametrize(
+    ("owning_source", "bad_data_kubun"),
+    [
+        ("RT", None),
+        ("RT", ""),
+        ("RT", "8"),
+        ("NL", " "),
+        ("NL", "９"),
+    ],
+)
+def test_sqlite_race_window_rt_lifecycle_rejects_undecidable_datakubun(
+    tmp_path, monkeypatch, owning_source, bad_data_kubun
+):
+    """選択行のDataKubunが欠落/空白/公式RAドメイン外ならfail-closedする。
+
+    DataKubunが選択行のactive/中止を決める以上、判定不能な値をactiveとして
+    暗黙に扱ってはならない。公式RA DataKubunドメイン
+    (src/parser/status_domain.py) の域外値はレースキーを名指しして
+    FetcherErrorで停止し、何も開かない。
+    """
+    import sqlite3
+    from contextlib import closing
+
+    from src.fetcher.base import FetcherError
+    from src.fetcher.realtime import RealtimeFetcher
+    from src.parser.status_domain import CURRENT_REALTIME_DATA_KUBUN
+
+    if isinstance(bad_data_kubun, str):
+        assert bad_data_kubun not in CURRENT_REALTIME_DATA_KUBUN["RA"]
+
+    _fixed_lifecycle_incident_now(monkeypatch)
+    db_path = tmp_path / "lifecycle-bad-datakubun.db"
+    with closing(sqlite3.connect(db_path)) as conn:
+        _create_lifecycle_race_tables(conn)
+        # 有効なレース12を同居させ、選択行の検証失敗が個別スキップではなく
+        # バッチ全体の停止(fail-closed)になることを確認する。
+        conn.execute(
+            "INSERT INTO NL_RA VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            ("2", 2026, 905, "06", 4, 8, 12, "1630"),
+        )
+        if owning_source == "RT":
+            # 隠される側のNL行は有効: RTが所有した上で検証に失敗すること。
+            conn.execute(
+                "INSERT INTO NL_RA VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                ("2", 2026, 905, "06", 4, 8, 10, "1620"),
+            )
+            conn.execute(
+                "INSERT INTO RT_RA VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (bad_data_kubun, 2026, 905, "06", 4, 8, 10, "1620"),
+            )
+        else:
+            conn.execute(
+                "INSERT INTO NL_RA VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (bad_data_kubun, 2026, 905, "06", 4, 8, 10, "1620"),
+            )
+        conn.commit()
+
+    fetcher = object.__new__(RealtimeFetcher)
+    fetcher.jvlink = _window_jvlink()
+
+    with pytest.raises(FetcherError, match=r"202609050610.*DataKubun"):
+        list(
+            fetcher.fetch_time_series_batch_from_db(
+                data_spec="0B41",
+                db_path=str(db_path),
+                from_date="20260905",
+                to_date="20260905",
+                post_time_within_minutes=20,
+                post_time_not_past_minutes=1,
+            )
+        )
+    assert fetcher.jvlink.init_calls == 0
+
+
+def test_sqlite_race_window_rt_lifecycle_nl_owns_all_keys_when_rt_table_absent(
+    tmp_path, monkeypatch
+):
+    """任意テーブルRT_RAが無いDBでも、NL_RAが全キーを所有し中止を除外する。
+
+    選択契約は「RT_RAに無いフルキーはNL_RAが所有する」。RT_RAテーブル自体の
+    不在は"NLが全キーを所有する"の意味であり、DataKubunを見ない旧7列経路へ
+    退行してはならない。中止レース11(DataKubun 9、窓内)は開かず、レース12
+    だけを開き、統計は除外1・保持1・total 1で開く対象と一致する。
+    """
+    import sqlite3
+    from contextlib import closing
+
+    from src.fetcher.realtime import RealtimeFetcher
+
+    _fixed_lifecycle_incident_now(monkeypatch)
+    db_path = tmp_path / "lifecycle-no-rt-table.db"
+    with closing(sqlite3.connect(db_path)) as conn:
+        _create_lifecycle_race_tables(conn, tables=("NL_RA",))
+        conn.executemany(
+            "INSERT INTO NL_RA VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                ("9", 2026, 905, "06", 4, 8, 11, "1615"),
+                ("2", 2026, 905, "06", 4, 8, 12, "1630"),
+            ],
+        )
+        conn.commit()
+
+    progress = []
+    fetcher = object.__new__(RealtimeFetcher)
+    fetcher.jvlink = _window_jvlink()
+
+    assert (
+        list(
+            fetcher.fetch_time_series_batch_from_db(
+                data_spec="0B41",
+                db_path=str(db_path),
+                from_date="20260905",
+                to_date="20260905",
+                post_time_within_minutes=20,
+                post_time_not_past_minutes=1,
+                progress_callback=progress.append,
+            )
+        )
+        == []
+    )
+
+    assert fetcher.jvlink.opened == [("0B41", "202609050612")]
+    assert progress[0]["considered_keys"] == 2
+    assert progress[0]["window_kept_keys"] == 1
+    assert progress[0]["omitted_canceled_keys"] == 1
+    assert progress[0]["total_keys"] == 1
+
+
+def test_sqlite_race_window_rt_lifecycle_rejects_undecidable_nl_datakubun_when_rt_table_absent(
+    tmp_path, monkeypatch
+):
+    """RT_RA不在でも、選択されたNL行の判定不能DataKubunはfail-closed。"""
+    import sqlite3
+    from contextlib import closing
+
+    from src.fetcher.base import FetcherError
+    from src.fetcher.realtime import RealtimeFetcher
+
+    _fixed_lifecycle_incident_now(monkeypatch)
+    db_path = tmp_path / "lifecycle-no-rt-bad-datakubun.db"
+    with closing(sqlite3.connect(db_path)) as conn:
+        _create_lifecycle_race_tables(conn, tables=("NL_RA",))
+        conn.executemany(
+            "INSERT INTO NL_RA VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                ("8", 2026, 905, "06", 4, 8, 10, "1620"),
+                ("2", 2026, 905, "06", 4, 8, 12, "1630"),
+            ],
+        )
+        conn.commit()
+
+    fetcher = object.__new__(RealtimeFetcher)
+    fetcher.jvlink = _window_jvlink()
+
+    with pytest.raises(FetcherError, match=r"202609050610.*DataKubun"):
+        list(
+            fetcher.fetch_time_series_batch_from_db(
+                data_spec="0B41",
+                db_path=str(db_path),
+                from_date="20260905",
+                to_date="20260905",
+                post_time_within_minutes=20,
+                post_time_not_past_minutes=1,
+            )
+        )
+    assert fetcher.jvlink.init_calls == 0
+
+
+def test_sqlite_race_window_rt_lifecycle_source_conflict_fails_closed(tmp_path, monkeypatch):
+    """選択されたRTソース内で12桁キーが衝突する行は従来どおりfail-closed。
+
+    PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum) と
+    INSERT OR REPLACE 保存のため、同一フルキーの同一ソース内重複は物理的に
+    作れない。物理的に到達可能な同一ソース内曖昧性は、Kaiji/Nichijiが異なる
+    行が同じ12桁JVRTOpenキーへ畳まれる形状であり、その形状で検証する。
+    NL_RA側に一致行があってもRTソース内の衝突を隠してはならない。
+    """
+    import sqlite3
+    from contextlib import closing
+
+    from src.fetcher.base import FetcherError
+    from src.fetcher.realtime import RealtimeFetcher
+
+    _fixed_lifecycle_incident_now(monkeypatch)
+    db_path = tmp_path / "lifecycle-conflict.db"
+    with closing(sqlite3.connect(db_path)) as conn:
+        _create_lifecycle_race_tables(conn)
+        conn.execute(
+            "INSERT INTO NL_RA VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            ("2", 2026, 905, "06", 4, 8, 12, "1630"),
+        )
+        conn.executemany(
+            "INSERT INTO RT_RA VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                ("6", 2026, 905, "06", 4, 8, 12, "1630"),
+                ("6", 2026, 905, "06", 5, 1, 12, "1633"),
+            ],
+        )
+        conn.commit()
+
+    fetcher = object.__new__(RealtimeFetcher)
+    fetcher.jvlink = _window_jvlink()
+
+    with pytest.raises(FetcherError, match=r"202609050612.*ambiguous"):
+        list(
+            fetcher.fetch_time_series_batch_from_db(
+                data_spec="0B41",
+                db_path=str(db_path),
+                from_date="20260905",
+                to_date="20260905",
+                post_time_within_minutes=20,
+                post_time_not_past_minutes=1,
+            )
+        )
+    assert fetcher.jvlink.init_calls == 0
+
+
+@pytest.mark.parametrize(
+    "race_rows",
+    [
+        pytest.param(
+            [
+                ("RT", "6", 2026, 905, "06", 4, 8, 12, "1630"),
+                ("RT", "9", 2026, 905, "06", 5, 1, 12, "1630"),
+            ],
+            id="active-first",
+        ),
+        pytest.param(
+            [
+                ("RT", "9", 2026, 905, "06", 5, 1, 12, "1630"),
+                ("RT", "6", 2026, 905, "06", 4, 8, 12, "1630"),
+            ],
+            id="canceled-first",
+        ),
+    ],
+)
+def test_postgresql_race_window_rt_lifecycle_mixed_state_fails_closed_before_init(
+    monkeypatch, race_rows
+):
+    """One JVRTOpen key cannot be both active and canceled based on row order."""
+    from src.fetcher.base import FetcherError
+    from src.fetcher.realtime import RealtimeFetcher
+
+    _fixed_lifecycle_incident_now(monkeypatch)
+    monkeypatch.setattr(
+        RealtimeFetcher,
+        "_fetch_time_series_race_rows_from_postgres",
+        staticmethod(lambda _query, _params, _config: race_rows),
+    )
+    monkeypatch.setattr(
+        RealtimeFetcher,
+        "_postgres_table_exists",
+        staticmethod(lambda _config, table_name: table_name == "rt_ra"),
+    )
+    fetcher = object.__new__(RealtimeFetcher)
+    fetcher.jvlink = _window_jvlink()
+
+    with pytest.raises(FetcherError, match=r"202609050612.*ambiguous.*lifecycle"):
+        list(
+            fetcher.fetch_time_series_batch_from_db(
+                data_spec="0B41",
+                db_path="ignored.sqlite",
+                from_date="20260905",
+                to_date="20260905",
+                pg_config={"host": "localhost", "database": "keiba"},
+                post_time_within_minutes=20,
+                post_time_not_past_minutes=1,
+            )
+        )
+    assert fetcher.jvlink.init_calls == 0
+
+
+@pytest.mark.parametrize("owning_source", ["RT", "NL"])
+def test_sqlite_race_window_rt_lifecycle_persisted_erase_fails_closed_before_init(
+    tmp_path, monkeypatch, owning_source
+):
+    """A stored RA DataKubun 0 erase marker is not an active race target."""
+    import sqlite3
+    from contextlib import closing
+
+    from src.fetcher.base import FetcherError
+    from src.fetcher.realtime import RealtimeFetcher
+
+    _fixed_lifecycle_incident_now(monkeypatch)
+    db_path = tmp_path / f"lifecycle-{owning_source.lower()}-erase.db"
+    with closing(sqlite3.connect(db_path)) as conn:
+        _create_lifecycle_race_tables(conn)
+        if owning_source == "RT":
+            conn.execute(
+                "INSERT INTO NL_RA VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                ("2", 2026, 905, "06", 4, 8, 10, "1620"),
+            )
+            table = "RT_RA"
+        else:
+            table = "NL_RA"
+        conn.execute(
+            f"INSERT INTO {table} VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            ("0", 2026, 905, "06", 4, 8, 10, "1620"),
+        )
+        conn.commit()
+
+    fetcher = object.__new__(RealtimeFetcher)
+    fetcher.jvlink = _window_jvlink()
+
+    with pytest.raises(FetcherError, match=r"202609050610.*DataKubun.*0.*erase"):
+        list(
+            fetcher.fetch_time_series_batch_from_db(
+                data_spec="0B41",
+                db_path=str(db_path),
+                from_date="20260905",
+                to_date="20260905",
+                post_time_within_minutes=20,
+                post_time_not_past_minutes=1,
+            )
+        )
+    assert fetcher.jvlink.init_calls == 0
+
+
+def test_postgresql_race_window_rt_lifecycle_overlay_parity(tmp_path, monkeypatch):
+    """PostgreSQL経路の生成クエリ/ロジックがRTライフサイクル上書きを表現する。
+
+    ライブPostgreSQLを使わず、生成されたSQLをそのままSQLite上で実行して
+    (%s→?、LPADシムのみ翻訳) クエリ自体の選択結果を検証する。nl_ra/rt_raは
+    本番と同じ6列PRIMARY KEYを持つ。レース8は上書き後に過去側で落ち、
+    レース11はRT中止が所有し、rt_raに無いレース12だけがnl_raから開く。
+    """
+    import sqlite3
+    from contextlib import closing
+
+    from src.fetcher.realtime import RealtimeFetcher
+
+    _fixed_lifecycle_incident_now(monkeypatch)
+    db_path = tmp_path / "pg-parity.db"
+    with closing(sqlite3.connect(db_path)) as conn:
+        for table in ("nl_ra", "rt_ra"):
+            conn.execute(f"""
+                CREATE TABLE {table} (
+                    datakubun TEXT,
+                    year INTEGER, monthday INTEGER, jyocd TEXT, kaiji INTEGER,
+                    nichiji INTEGER, racenum INTEGER, hassotime TEXT,
+                    PRIMARY KEY (year, monthday, jyocd, kaiji, nichiji, racenum)
+                )
+                """)
+        conn.executemany(
+            "INSERT INTO nl_ra VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                ("2", 2026, 905, "06", 4, 8, 8, "1400"),
+                ("2", 2026, 905, "06", 4, 8, 11, "1615"),
+                ("2", 2026, 905, "06", 4, 8, 12, "1630"),
+            ],
+        )
+        conn.executemany(
+            "INSERT INTO rt_ra VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                ("6", 2026, 905, "06", 4, 8, 8, "1401"),
+                ("9", 2026, 905, "06", 4, 8, 11, "1615"),
+            ],
+        )
+        conn.commit()
+
+    captured = {}
+
+    def run_pg_query_on_sqlite(query, params, pg_config):
+        captured["query"] = query
+        with closing(sqlite3.connect(db_path)) as conn:
+            conn.create_function(
+                "LPAD",
+                3,
+                lambda value, length, fill: str(value).rjust(int(length), str(fill)),
+            )
+            return conn.execute(query.replace("%s", "?"), params).fetchall()
+
+    monkeypatch.setattr(
+        RealtimeFetcher,
+        "_fetch_time_series_race_rows_from_postgres",
+        staticmethod(run_pg_query_on_sqlite),
+    )
+    monkeypatch.setattr(
+        RealtimeFetcher,
+        "_postgres_table_exists",
+        staticmethod(lambda _config, table_name: table_name == "rt_ra"),
+    )
+    fetcher = object.__new__(RealtimeFetcher)
+    fetcher.jvlink = _window_jvlink()
+
+    progress = []
+    assert (
+        list(
+            fetcher.fetch_time_series_batch_from_db(
+                data_spec="0B42",
+                db_path="ignored.sqlite",
+                from_date="20260905",
+                to_date="20260905",
+                pg_config={"host": "localhost", "database": "keiba"},
+                post_time_within_minutes=20,
+                post_time_not_past_minutes=1,
+                progress_callback=progress.append,
+            )
+        )
+        == []
+    )
+
+    assert "datakubun" in captured["query"].lower()
+    assert fetcher.jvlink.opened == [("0B42", "202609050612")]
+    # 中止除外後の統計は開く対象と一致しなければならない: 除外済みキーを
+    # window_kept_keys に残さず、除外数を明示的に数える。
+    assert progress[0]["window_kept_keys"] == 1
+    assert progress[0]["omitted_canceled_keys"] == 1
+    assert progress[0]["total_keys"] == 1
+    assert progress[0]["dropped_too_far_past"] == 1
+    assert progress[0]["dropped_too_far_future"] == 0
 
 
 def test_race_window_off_leaves_legacy_postgresql_query_and_rows_untouched(monkeypatch):
