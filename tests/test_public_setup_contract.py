@@ -33,9 +33,7 @@ def test_public_setup_uses_supported_registration_and_dataspecs() -> None:
         assert not any(guidance in text for guidance in stale_guidance), path
 
     config = yaml.safe_load(
-        (REPOSITORY_ROOT / "config/config.yaml.example").read_text(
-            encoding="utf-8"
-        )
+        (REPOSITORY_ROOT / "config/config.yaml.example").read_text(encoding="utf-8")
     )
     data_specs = config["data_fetch"]["initial"]["data_specs"]
     assert data_specs
@@ -82,8 +80,7 @@ def test_tracked_public_markdown_omits_the_retired_infrastructure_token() -> Non
             path.read_text(encoding="utf-8"),
         )
         assert all(
-            hashlib.sha256(token.lower().encode("ascii")).hexdigest()
-            != blocked_hash
+            hashlib.sha256(token.lower().encode("ascii")).hexdigest() != blocked_hash
             for token in tokens
         ), path
 
@@ -107,25 +104,17 @@ def test_sqlite_bootstrap_does_not_import_an_optional_postgresql_driver() -> Non
 
 def test_removed_public_setup_contract_is_recorded_for_2_0() -> None:
     changelog = (REPOSITORY_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    release_notes = (REPOSITORY_ROOT / "RELEASE_NOTES.md").read_text(
-        encoding="utf-8"
-    )
-    constants = (REPOSITORY_ROOT / "src/jvlink/constants.py").read_text(
-        encoding="utf-8"
-    )
-    project = tomllib.loads(
-        (REPOSITORY_ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    )
+    release_notes = (REPOSITORY_ROOT / "RELEASE_NOTES.md").read_text(encoding="utf-8")
+    constants = (REPOSITORY_ROOT / "src/jvlink/constants.py").read_text(encoding="utf-8")
+    project = tomllib.loads((REPOSITORY_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
 
     assert "2.0.0" in changelog
     assert "## [2.0.0] - 2026-08-27" in changelog
     assert (
-        "[Unreleased]: https://github.com/miyamamoto/jrvltsql/compare/"
-        "v2.1.1...HEAD"
+        "[Unreleased]: https://github.com/miyamamoto/jrvltsql/compare/" "v2.1.2...HEAD"
     ) in changelog
     assert (
-        "[2.0.0]: https://github.com/miyamamoto/jrvltsql/compare/"
-        "v1.6.10...v2.0.0"
+        "[2.0.0]: https://github.com/miyamamoto/jrvltsql/compare/" "v1.6.10...v2.0.0"
     ) in changelog
     assert "final candidate" not in release_notes.lower()
     assert "not released yet" not in release_notes.lower()
@@ -135,7 +124,7 @@ def test_removed_public_setup_contract_is_recorded_for_2_0() -> None:
     assert "RECORD_TYPE_O1" in release_notes
     assert "RECORD_TYPE_O6" in release_notes
     assert "uses_external_runner" in release_notes
-    assert project["project"]["version"] == "2.1.1"
+    assert project["project"]["version"] == "2.1.2"
     assert "wrapper.py の JVSetServiceKey 呼び出し箇所" not in constants
     for record_type in range(1, 7):
         assert f"DATA_SPEC_O{record_type} =" not in constants
@@ -146,15 +135,9 @@ def test_version_and_lock_metadata_are_consistent() -> None:
     from src import __version__
     from src.cli import main as cli_main
 
-    project = tomllib.loads(
-        (REPOSITORY_ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    )
-    lock = tomllib.loads(
-        (REPOSITORY_ROOT / "uv.lock").read_text(encoding="utf-8")
-    )
-    locked_project = next(
-        package for package in lock["package"] if package["name"] == "jltsql"
-    )
+    project = tomllib.loads((REPOSITORY_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    lock = tomllib.loads((REPOSITORY_ROOT / "uv.lock").read_text(encoding="utf-8"))
+    locked_project = next(package for package in lock["package"] if package["name"] == "jltsql")
 
     assert __version__ == project["project"]["version"]
     assert cli_main.__version__ == __version__
@@ -162,27 +145,19 @@ def test_version_and_lock_metadata_are_consistent() -> None:
 
     build_requires = project["build-system"]["requires"]
     setuptools_requirement = next(
-        requirement
-        for requirement in build_requires
-        if requirement.startswith("setuptools>=")
+        requirement for requirement in build_requires if requirement.startswith("setuptools>=")
     )
-    assert Version(setuptools_requirement.removeprefix("setuptools>=")) >= Version(
-        "77.0.3"
-    )
+    assert Version(setuptools_requirement.removeprefix("setuptools>=")) >= Version("77.0.3")
 
     manifest = (REPOSITORY_ROOT / "MANIFEST.in").read_text(encoding="utf-8")
     assert "prune specs" in manifest.splitlines()
 
-    workflow = (
-        REPOSITORY_ROOT / ".github/workflows/test.yml"
-    ).read_text(encoding="utf-8")
+    workflow = (REPOSITORY_ROOT / ".github/workflows/test.yml").read_text(encoding="utf-8")
     assert "pip install uv==" in workflow
 
 
 def test_architecture_documents_the_generic_non_windows_runner_contract() -> None:
-    architecture = (REPOSITORY_ROOT / "docs/architecture.md").read_text(
-        encoding="utf-8"
-    )
+    architecture = (REPOSITORY_ROOT / "docs/architecture.md").read_text(encoding="utf-8")
 
     assert "JVLINK_BRIDGE_RUNNER" in architecture
 
@@ -203,3 +178,20 @@ def test_2_0_notes_define_the_data_and_rollback_migration_boundary() -> None:
         assert term in notes
     assert "reimport" in changelog
     assert "rollback" in changelog
+
+
+def test_tests_workflow_gates_release_hotfix_pull_requests() -> None:
+    """Hotfix PRs target release/X.Y.Z; the Tests workflow must gate them.
+
+    docs/release_policy.md routes an emergency hotfix into a pull request
+    against ``release/X.Y.Z``. If the ``pull_request`` trigger omits release
+    branches, the mandatory Tests gate silently never runs on the only PR
+    that publishes a hotfix, so the release-path CI evidence cannot exist.
+    """
+    workflow = yaml.safe_load(
+        (REPOSITORY_ROOT / ".github/workflows/test.yml").read_text(encoding="utf-8")
+    )
+    # YAML 1.1 parses the bare `on` key as boolean True.
+    triggers = workflow.get("on", workflow.get(True))
+    branches = triggers["pull_request"]["branches"]
+    assert "release/**" in branches

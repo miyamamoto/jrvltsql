@@ -16,6 +16,7 @@ from src.jvlink.constants import (
     generate_time_series_key,
     is_time_series_spec,
 )
+from src.parser.status_domain import DataKubunContext, validate_data_kubun
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -148,6 +149,76 @@ def _filter_race_rows_by_post_time(
         "skipped_out_of_window_by_date": skipped_out_of_window_by_date,
     }
     return kept, stats
+
+
+def _race_key_label(key_fields: tuple) -> str:
+    """Name a race by its 12-digit JVRTOpen key, or raw fields when malformed."""
+    year, monthday, jyo_cd, _kaiji, _nichiji, race_num = key_fields
+    try:
+        date_str = f"{int(year):04d}{int(monthday):04d}"
+        return str(generate_time_series_key(date_str, str(jyo_cd).strip().zfill(2), int(race_num)))
+    except (TypeError, ValueError):
+        return repr(key_fields)
+
+
+def _overlay_current_lifecycle_rows(
+    race_rows: list[tuple],
+) -> tuple[list[tuple], set[tuple]]:
+    """Select the current lifecycle source for each exact full race key.
+
+    Rows carry (LifecycleSource, DataKubun, Year, MonthDay, JyoCD, Kaiji,
+    Nichiji, RaceNum, HassoTime). A same-day RT_RA row supersedes the
+    historical NL_RA row for the identical full key regardless of DataKubun,
+    including cancellation status 9; NL_RA rows are used only for full keys
+    absent from RT_RA. Duplicates from the selected source are preserved so a
+    genuine 12-digit-key post-time conflict still fails closed downstream.
+
+    Because DataKubun decides whether a selected row is active or canceled,
+    every selected row must carry an officially valid current RA DataKubun
+    (``src.parser.status_domain``); an undecidable status fails closed with
+    the 12-digit race key named, and nothing is opened.
+
+    Returns the selected 7-column rows and the full keys whose selected
+    source reports cancellation (DataKubun 9) — from RT or NL alike, since
+    selection already happened and RT 9 never exposes the NL row.
+    Cancellations are not removed here: their rows stay subject to
+    fail-closed post-time validation first.
+    """
+    rt_full_keys: set[tuple] = set()
+    for row in race_rows:
+        if len(row) != 9:
+            raise FetcherError(
+                "Race lifecycle overlay requires LifecycleSource, DataKubun, "
+                "Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, and HassoTime"
+            )
+        if row[0] == "RT":
+            rt_full_keys.add(tuple(row[2:8]))
+        elif row[0] != "NL":
+            raise FetcherError(f"Race lifecycle overlay cannot classify source {row[0]!r}")
+
+    selected: list[tuple] = []
+    canceled_full_keys: set[tuple] = set()
+    for row in race_rows:
+        source, data_kubun = row[0], row[1]
+        full_key = tuple(row[2:8])
+        if source == "NL" and full_key in rt_full_keys:
+            continue
+        try:
+            validated_kubun = validate_data_kubun(
+                "RA",
+                data_kubun,
+                context=(
+                    DataKubunContext.REALTIME if source == "RT" else DataKubunContext.ACCUMULATED
+                ),
+            )
+        except ValueError as exc:
+            raise FetcherError(
+                f"Race lifecycle selection rejected {_race_key_label(row[2:8])}: {exc}"
+            ) from exc
+        selected.append(tuple(row[2:]))
+        if validated_kubun == "9":
+            canceled_full_keys.add(full_key)
+    return selected, canceled_full_keys
 
 
 def materialize_complete_records(
@@ -539,6 +610,18 @@ class RealtimeFetcher(BaseFetcher):
                        of SQLite.
             progress_callback: Optional callback called after each race key is
                                attempted. Receives counters and key status.
+                               When a post-time window is requested, the
+                               initial ``window_filter`` entry carries the
+                               window statistics, including
+                               ``omitted_canceled_keys``: the number of
+                               selected cancellations (DataKubun 9 reported
+                               by the lifecycle source that owns the full
+                               race key) that passed validation and otherwise
+                               fell inside the requested window. It is always
+                               present (0 when none), and
+                               ``window_kept_keys`` is reduced by the same
+                               amount so it equals total_keys and the keys
+                               actually opened.
             post_time_within_minutes: Keep keys no more than this many minutes
                                       before their race-record post time.
             post_time_not_past_minutes: Drop keys more than this many minutes
@@ -584,32 +667,49 @@ class RealtimeFetcher(BaseFetcher):
         )
 
         # Forward-only 0B15 cards are stored in RT_RA, while historical RACE
-        # records are stored in NL_RA. Use both sources and de-duplicate the
-        # key-bearing columns. This exposes no result fields: only the race
-        # identity is used to construct the JVRTOpen request key.
+        # records are stored in NL_RA. Without a post-time window both sources
+        # are merged and de-duplicated on the key-bearing columns. With a
+        # window, rows always keep their source and DataKubun so the selected
+        # current lifecycle row is validated and can cancel its key: a current
+        # RT_RA row supersedes the stale NL_RA row for the same full race key,
+        # and when RT_RA is absent NL_RA owns every full key. This exposes no
+        # result fields: only the race identity is used to construct the
+        # JVRTOpen request key.
         if pg_config:
             if window_filter_requested:
-                rt_union = (
+                if self._postgres_table_exists(pg_config, "rt_ra"):
+                    # UNION ALL: duplicates inside the selected source must
+                    # survive the overlay so a genuine 12-digit-key post-time
+                    # conflict still fails closed.
+                    query = """
+                        WITH race_targets AS (
+                            SELECT 'RT' AS lifecycle_source, datakubun,
+                                   year, monthday, jyocd, kaiji, nichiji, racenum, hassotime
+                            FROM rt_ra
+                            UNION ALL
+                            SELECT 'NL', datakubun,
+                                   year, monthday, jyocd, kaiji, nichiji, racenum, hassotime
+                            FROM nl_ra
+                        )
+                        SELECT
+                            lifecycle_source, datakubun,
+                            year, monthday, jyocd, kaiji, nichiji, racenum, hassotime
+                        FROM race_targets
+                        WHERE 1=1
                     """
-                        UNION
-                        SELECT year, monthday, jyocd, kaiji, nichiji, racenum, hassotime
-                        FROM rt_ra
+                else:
+                    query = """
+                        WITH race_targets AS (
+                            SELECT 'NL' AS lifecycle_source, datakubun,
+                                   year, monthday, jyocd, kaiji, nichiji, racenum, hassotime
+                            FROM nl_ra
+                        )
+                        SELECT
+                            lifecycle_source, datakubun,
+                            year, monthday, jyocd, kaiji, nichiji, racenum, hassotime
+                        FROM race_targets
+                        WHERE 1=1
                     """
-                    if self._postgres_table_exists(pg_config, "rt_ra")
-                    else ""
-                )
-                distinct = "" if rt_union else " DISTINCT"
-                query = f"""
-                    WITH race_targets AS (
-                        SELECT year, monthday, jyocd, kaiji, nichiji, racenum, hassotime
-                        FROM nl_ra
-                        {rt_union}
-                    )
-                    SELECT{distinct}
-                        year, monthday, jyocd, kaiji, nichiji, racenum, hassotime
-                    FROM race_targets
-                    WHERE 1=1
-                """
             else:
                 rt_union = (
                     """
@@ -649,27 +749,39 @@ class RealtimeFetcher(BaseFetcher):
                         WHERE type = 'table' AND lower(name) = lower('RT_RA')
                         """).fetchone() is not None
             if window_filter_requested:
-                rt_union = (
+                if has_rt_ra:
+                    # UNION ALL: duplicates inside the selected source must
+                    # survive the overlay so a genuine 12-digit-key post-time
+                    # conflict still fails closed.
+                    query = """
+                        WITH race_targets AS (
+                            SELECT 'RT' AS LifecycleSource, DataKubun,
+                                   Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, HassoTime
+                            FROM RT_RA
+                            UNION ALL
+                            SELECT 'NL', DataKubun,
+                                   Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, HassoTime
+                            FROM NL_RA
+                        )
+                        SELECT
+                            LifecycleSource, DataKubun,
+                            Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, HassoTime
+                        FROM race_targets
+                        WHERE 1=1
                     """
-                        UNION
-                        SELECT Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, HassoTime
-                        FROM RT_RA
+                else:
+                    query = """
+                        WITH race_targets AS (
+                            SELECT 'NL' AS LifecycleSource, DataKubun,
+                                   Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, HassoTime
+                            FROM NL_RA
+                        )
+                        SELECT
+                            LifecycleSource, DataKubun,
+                            Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, HassoTime
+                        FROM race_targets
+                        WHERE 1=1
                     """
-                    if has_rt_ra
-                    else ""
-                )
-                distinct = "" if rt_union else " DISTINCT"
-                query = f"""
-                    WITH race_targets AS (
-                        SELECT Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, HassoTime
-                        FROM NL_RA
-                        {rt_union}
-                    )
-                    SELECT{distinct}
-                        Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, HassoTime
-                    FROM race_targets
-                    WHERE 1=1
-                """
             else:
                 rt_union = (
                     """
@@ -773,11 +885,29 @@ class RealtimeFetcher(BaseFetcher):
 
         window_stats: Optional[dict[str, int]] = None
         if window_filter_requested:
+            race_rows, canceled_race_keys = _overlay_current_lifecycle_rows(race_rows)
             race_rows, window_stats = _filter_race_rows_by_post_time(
                 race_rows,
                 post_time_within_minutes=post_time_within_minutes,
                 post_time_not_past_minutes=post_time_not_past_minutes,
             )
+            if canceled_race_keys:
+                # A validated cancellation owns its full key in whichever
+                # source was selected: omit it without opening and without
+                # falling back to the shadowed row.
+                race_rows = [row for row in race_rows if tuple(row[:6]) not in canceled_race_keys]
+            # omitted_canceled_keys counts selected cancellations that passed
+            # validation and otherwise fell inside the requested window. It is
+            # always reported (0 when none), and window_kept_keys shrinks by
+            # the same amount so it equals total_keys/opened targets.
+            omitted_canceled_keys = window_stats["window_kept_keys"] - len(race_rows)
+            window_stats["window_kept_keys"] = len(race_rows)
+            window_stats["omitted_canceled_keys"] = omitted_canceled_keys
+            if omitted_canceled_keys:
+                logger.info(
+                    "Omitted canceled races after post-time validation",
+                    omitted_canceled_keys=omitted_canceled_keys,
+                )
             logger.info("Applied race post-time window", **window_stats)
             if progress_callback:
                 progress_callback(
@@ -788,6 +918,7 @@ class RealtimeFetcher(BaseFetcher):
                         "total_keys": len(race_rows),
                         **window_stats,
                         "success_keys": 0,
+                        "nonempty_keys": 0,
                         "no_data_keys": 0,
                         "error_keys": 0,
                         "total_records": 0,
@@ -805,9 +936,12 @@ class RealtimeFetcher(BaseFetcher):
         if ret != JV_RT_SUCCESS:
             raise FetcherError(f"JV-Link initialization failed: {ret}")
 
-        # Statistics
+        # Statistics. nonempty_keys counts only keys whose complete buffered
+        # response materialized at least one record: success_keys alone is not
+        # evidence of nonempty capture.
         total_keys = len(race_rows)
         success_keys = 0
+        nonempty_keys = 0
         no_data_keys = 0
         error_keys = 0
         total_records = 0
@@ -841,6 +975,7 @@ class RealtimeFetcher(BaseFetcher):
                             "processed_keys": processed_keys,
                             "total_keys": total_keys,
                             "success_keys": success_keys,
+                            "nonempty_keys": nonempty_keys,
                             "no_data_keys": no_data_keys,
                             "error_keys": error_keys,
                             "records_for_key": 0,
@@ -883,6 +1018,8 @@ class RealtimeFetcher(BaseFetcher):
                     key_records = list(self._fetch_and_parse())
                     records_for_key = len(key_records)
                     success_keys += 1
+                    if records_for_key:
+                        nonempty_keys += 1
                     key_status = "success"
                     total_records += records_for_key
                     yield from key_records
@@ -914,6 +1051,7 @@ class RealtimeFetcher(BaseFetcher):
                             "processed_keys": processed_keys,
                             "total_keys": total_keys,
                             "success_keys": success_keys,
+                            "nonempty_keys": nonempty_keys,
                             "no_data_keys": no_data_keys,
                             "error_keys": error_keys,
                             "records_for_key": records_for_key,
@@ -935,6 +1073,7 @@ class RealtimeFetcher(BaseFetcher):
             data_spec=data_spec,
             total_keys=total_keys,
             success_keys=success_keys,
+            nonempty_keys=nonempty_keys,
             no_data_keys=no_data_keys,
             error_keys=error_keys,
             total_records=total_records,
