@@ -610,7 +610,10 @@ def test_race_window_skips_malformed_post_time_on_out_of_window_date(tmp_path, m
             "INSERT INTO NL_RA VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 ("2", 2026, 901, "05", 3, 4, 1, "1230"),
-                ("2", 2026, 902, "05", 3, 4, 1, "not-a-time"),
+                # This date cannot intersect the requested live window, so
+                # neither its malformed post time nor its invalid lifecycle
+                # status may prevent the due race from being opened.
+                ("8", 2026, 902, "05", 3, 4, 1, "not-a-time"),
             ],
         )
         conn.commit()

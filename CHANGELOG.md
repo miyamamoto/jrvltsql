@@ -7,7 +7,12 @@
 
 ## [Unreleased]
 
-該当なし。
+### Fixed
+
+- 発走時刻windowの既定1年date rangeでは、まず所有ソースを選んだ後、live
+  windowと日付単位で交差し得るレースだけにDataKubun検証を適用する。日付だけで
+  除外できる過去・未来行の古い不正DataKubunが、当日のdue race取得を中断しない。
+  window候補日内の不正・判定不能statusは従来どおりfail closedする。
 
 ## [2.1.2] - 2026-09-05
 

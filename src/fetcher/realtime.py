@@ -32,18 +32,22 @@ def _now_jst() -> datetime:
     return datetime.now(JST)
 
 
-def _filter_race_rows_by_post_time(
-    race_rows: list[tuple],
-    *,
-    post_time_within_minutes: Optional[int],
-    post_time_not_past_minutes: Optional[int],
-) -> tuple[list[tuple], dict[str, int]]:
-    """Date-filter, validate, de-duplicate, and post-time-filter race rows."""
-    now = _now_jst()
+def _validated_window_now(reference_now: datetime | None = None) -> datetime:
+    """Return one timezone-aware JST reference shared by window stages."""
+    now = reference_now if reference_now is not None else _now_jst()
     if now.tzinfo is None or now.utcoffset() is None:
         raise FetcherError("Race post-time window clock must be timezone-aware")
-    now = now.astimezone(JST)
+    return now.astimezone(JST)
 
+
+def _group_race_rows_by_window_date(
+    race_rows: list[tuple],
+    *,
+    reference_now: datetime,
+    post_time_within_minutes: int | None,
+    post_time_not_past_minutes: int | None,
+) -> tuple[dict[str, list[tuple]], dict[str, list[tuple]], int, int, int]:
+    """Group race rows and prune whole dates that cannot intersect the window."""
     grouped: dict[str, list[tuple]] = {}
     race_dates: dict[str, datetime] = {}
     for row in race_rows:
@@ -66,12 +70,12 @@ def _filter_race_rows_by_post_time(
         race_dates.setdefault(key, race_date)
 
     latest_allowed = (
-        now + timedelta(minutes=post_time_within_minutes)
+        reference_now + timedelta(minutes=post_time_within_minutes)
         if post_time_within_minutes is not None
         else None
     )
     earliest_allowed = (
-        now - timedelta(minutes=post_time_not_past_minutes)
+        reference_now - timedelta(minutes=post_time_not_past_minutes)
         if post_time_not_past_minutes is not None
         else None
     )
@@ -90,6 +94,37 @@ def _filter_race_rows_by_post_time(
             skipped_out_of_window_by_date += 1
         else:
             candidates[key] = rows
+
+    return (
+        grouped,
+        candidates,
+        dropped_too_far_future,
+        dropped_too_far_past,
+        skipped_out_of_window_by_date,
+    )
+
+
+def _filter_race_rows_by_post_time(
+    race_rows: list[tuple],
+    *,
+    post_time_within_minutes: Optional[int],
+    post_time_not_past_minutes: Optional[int],
+    reference_now: datetime | None = None,
+) -> tuple[list[tuple], dict[str, int]]:
+    """Date-filter, validate, de-duplicate, and post-time-filter race rows."""
+    now = _validated_window_now(reference_now)
+    (
+        grouped,
+        candidates,
+        dropped_too_far_future,
+        dropped_too_far_past,
+        skipped_out_of_window_by_date,
+    ) = _group_race_rows_by_window_date(
+        race_rows,
+        reference_now=now,
+        post_time_within_minutes=post_time_within_minutes,
+        post_time_not_past_minutes=post_time_not_past_minutes,
+    )
 
     validated: list[tuple[tuple, datetime]] = []
     problems: list[str] = []
@@ -163,6 +198,10 @@ def _race_key_label(key_fields: tuple) -> str:
 
 def _overlay_current_lifecycle_rows(
     race_rows: list[tuple],
+    *,
+    reference_now: datetime,
+    post_time_within_minutes: int | None,
+    post_time_not_past_minutes: int | None,
 ) -> tuple[list[tuple], set[str]]:
     """Select the current lifecycle source for each exact full race key.
 
@@ -174,12 +213,16 @@ def _overlay_current_lifecycle_rows(
     preserved so a genuine 12-digit-key post-time conflict still fails closed
     downstream.
 
-    Because DataKubun decides whether a selected row is active or canceled,
-    every selected row must carry an officially valid current RA DataKubun
-    (``src.parser.status_domain``); an undecidable status fails closed with
-    the 12-digit race key named, and nothing is opened. DataKubun 0 is an
-    erase instruction which the normal updater physically removes, so finding
-    one persisted here is an inconsistent state and also fails closed.
+    Whole dates that cannot intersect the requested live window are identified
+    after source ownership but before lifecycle validation. Their DataKubun and
+    HassoTime values cannot affect this request and are left for the existing
+    date-exclusion counters. For every date candidate, DataKubun decides whether
+    the selected row is active or canceled, so it must carry an officially valid
+    current RA DataKubun (``src.parser.status_domain``); an undecidable status
+    fails closed with the 12-digit race key named, and nothing is opened.
+    DataKubun 0 is an erase instruction which the normal updater physically
+    removes, so finding one persisted on a candidate is an inconsistent state
+    and also fails closed.
 
     The selected full keys are also grouped by their normalized 12-digit
     JVRTOpen key. If one such key is both active and canceled, its state cannot
@@ -202,13 +245,29 @@ def _overlay_current_lifecycle_rows(
         elif row[0] != "NL":
             raise FetcherError(f"Race lifecycle overlay cannot classify source {row[0]!r}")
 
-    selected: list[tuple] = []
-    lifecycle_states: dict[str, set[str]] = {}
-    canceled_race_keys: set[str] = set()
+    selected_lifecycle_rows: list[tuple] = []
     for row in race_rows:
-        source, data_kubun = row[0], row[1]
+        source = row[0]
         full_key = tuple(row[2:8])
         if source == "NL" and full_key in rt_full_keys:
+            continue
+        selected_lifecycle_rows.append(row)
+
+    selected = [tuple(row[2:]) for row in selected_lifecycle_rows]
+    _, date_candidates, _, _, _ = _group_race_rows_by_window_date(
+        selected,
+        reference_now=reference_now,
+        post_time_within_minutes=post_time_within_minutes,
+        post_time_not_past_minutes=post_time_not_past_minutes,
+    )
+    candidate_race_keys = set(date_candidates)
+
+    lifecycle_states: dict[str, set[str]] = {}
+    canceled_race_keys: set[str] = set()
+    for row in selected_lifecycle_rows:
+        source, data_kubun = row[0], row[1]
+        race_key = _race_key_label(row[2:8])
+        if race_key not in candidate_race_keys:
             continue
         try:
             validated_kubun = validate_data_kubun(
@@ -222,13 +281,11 @@ def _overlay_current_lifecycle_rows(
             raise FetcherError(
                 f"Race lifecycle selection rejected {_race_key_label(row[2:8])}: {exc}"
             ) from exc
-        race_key = _race_key_label(row[2:8])
         if validated_kubun == "0":
             raise FetcherError(
                 f"Race lifecycle selection rejected {race_key}: "
                 "persisted RA DataKubun '0' erase marker"
             )
-        selected.append(tuple(row[2:]))
         lifecycle_state = "canceled" if validated_kubun == "9" else "active"
         lifecycle_states.setdefault(race_key, set()).add(lifecycle_state)
         if validated_kubun == "9":
@@ -903,11 +960,18 @@ class RealtimeFetcher(BaseFetcher):
 
         window_stats: Optional[dict[str, int]] = None
         if window_filter_requested:
-            race_rows, canceled_race_keys = _overlay_current_lifecycle_rows(race_rows)
+            reference_now = _validated_window_now()
+            race_rows, canceled_race_keys = _overlay_current_lifecycle_rows(
+                race_rows,
+                reference_now=reference_now,
+                post_time_within_minutes=post_time_within_minutes,
+                post_time_not_past_minutes=post_time_not_past_minutes,
+            )
             race_rows, window_stats = _filter_race_rows_by_post_time(
                 race_rows,
                 post_time_within_minutes=post_time_within_minutes,
                 post_time_not_past_minutes=post_time_not_past_minutes,
+                reference_now=reference_now,
             )
             if canceled_race_keys:
                 # A validated cancellation owns its normalized JVRTOpen key in

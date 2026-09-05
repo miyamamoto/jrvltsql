@@ -93,3 +93,64 @@ touch the NAR P8 process or its database.
   diagnostics on both. Exact baseline worktree:
   `/home/keiba/scratch/20260905_jrvltsql_forwardport_lint_baseline`,
   detached at `2e58b17f6177eb0e0bc5bd097fa0b181ed2d7ba4`.
+- 2026-09-05 first frozen candidate and PR: commit
+  `d460dbfef37c47b263e7ff3fef7b14447b80b49b` passed the combined focused set
+  (**149 passed, 22 subtests passed in 3.38s**), workflow-equivalent full suite
+  (**4962 passed, 516 skipped, 14 deselected, 33 subtests passed in 121.18s;
+  81% coverage**), distribution build/content equality, and isolated wheel
+  import. Verification-only artifact SHA-256 values were wheel
+  `9d5e3a978b0ae8c0ea20f2b109dc9f398f7835671a7d6b2e7d6fe4189d432aec`
+  and sdist
+  `cc0f8efba9d16ce123656133726e8ea0803bb02a1d5a11f1bce6a8b8305e7d1d`.
+  Pushed after a clean dry-run and opened PR 268:
+  https://github.com/miyamamoto/jrvltsql/pull/268. Authoritative Tests run
+  `33961457946` passed lint, Linux full test/distribution, and Windows launcher
+  jobs on that exact SHA; performance was skipped by its declared PR condition.
+- 2026-09-05 aggregated first-head review: CodeRabbit completed with no
+  actionable comment (its docstring-coverage suggestion is non-blocking style
+  debt, not a configured repository gate). The one-time Codex review raised one
+  valid P1 at
+  https://github.com/miyamamoto/jrvltsql/pull/268#discussion_r3940340565:
+  source-selected rows were lifecycle-validated before the existing whole-date
+  pruning, so a malformed legacy DataKubun in the generic/default 365-day SQL
+  range could abort today's otherwise valid due race even though that row's
+  HassoTime was deliberately never evaluated. Merge was held and both completed
+  reviews were collected before one repair batch.
+- Task 53 impact determination: its explicit same-day
+  `--from-date D --to-date D` SQL predicates exclude all other dates before the
+  lifecycle overlay, so the reported old-date defect cannot affect that exact
+  production path. Rows on D remain candidates at the date phase and continue
+  to fail closed on invalid lifecycle state, including same-day races outside
+  the minute window; that is the established conservative card contract. The
+  public v2.1.2 tag/assets/branches therefore stay immutable. This repair is an
+  unreleased development-master follow-up, not a silent retag or a new Wine pin.
+- 2026-09-05 RED for the review repair: without changing production source,
+  strengthened the existing out-of-window regression so the 2026-09-02 row has
+  both malformed HassoTime and invalid accumulated RA DataKubun `8`, while the
+  due 2026-09-01 row remains valid. Command (uv CPython 3.13.5, frozen
+  dev+postgres dependencies, `nice -n 15`):
+  `pytest tests/test_time_series.py::test_race_window_skips_malformed_post_time_on_out_of_window_date -v --no-cov`
+  -> **1 failed** with `FetcherError: Race lifecycle selection rejected
+  202609020501: RA DataKubun is not valid for accumulated: '8'`; no JV key was
+  opened. This demonstrates the exact fail-too-early path.
+- 2026-09-05 GREEN implementation: extracted the existing race grouping and
+  whole-date candidate calculation as one shared helper. The overlay still
+  selects RT-over-NL ownership for every exact full key first, then validates
+  lifecycle only for normalized keys whose dates can intersect this request.
+  The post-time filter reuses the same reference instant/helper, retains all
+  original considered/candidate/date-excluded counters, and alone validates
+  candidate HassoTime. No fail-closed candidate, cancellation, source-conflict,
+  schema/storage, no-window, or master one-JVInit contract was weakened. The
+  exact red test is now **1 passed in 0.08s**.
+- 2026-09-05 pre-freeze repair gates (same uv/frozen/nice environment): full
+  `tests/test_time_series.py` plus the current-master JVInit and multi-spec
+  boundary files -> **69 passed in 1.51s**. The changelog/release-contract file
+  -> **10 passed in 0.13s**, and the exact regression remained green after the
+  final type-annotation cleanup -> **1 passed in 0.09s**. Black over all seven
+  changed Python files, `git diff --check`, `scripts/validate_test_gate.py`, and
+  isolated fatal Flake8 are green. Configured scoped Ruff has no new debt and
+  remains better than exact master (**57 candidate versus 58 baseline**);
+  direct-module scoped MyPy also has no new debt (**11 candidate versus 12
+  baseline**). The exact baseline checkout remains the detached worktree named
+  above. These are pre-commit repair results; authoritative post-push CI must
+  rerun on the new full SHA before merge.
