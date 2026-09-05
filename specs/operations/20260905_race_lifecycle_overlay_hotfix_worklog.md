@@ -441,14 +441,49 @@
   in 2.61s**; Black check, diff check, and fatal Flake8 remain green. Scoped
   Ruff has no new debt (57 candidate diagnostics versus 58 on exact v2.1.1),
   and scoped MyPy has no new diagnostic (11 candidate versus 12 baseline).
+- 2026-09-05 repaired candidate freeze and remote verification: committed the
+  two P1 repairs as `ea187ee586d16a65826b104bf00756bb87229918`
+  (`fix(realtime): reject ambiguous lifecycle states`), pushed only after a
+  successful dry-run, and verified the remote hotfix branch and PR 267 head
+  equal that full SHA. The obsolete `589a3c08...` candidate remains explicitly
+  non-releasable. PR 267 remained draft with `release:blocker` throughout.
+- 2026-09-05 repaired-candidate exact-head gates: the workflow-equivalent full
+  suite on `ea187ee586d16a65826b104bf00756bb87229918` completed with **4876
+  passed, 514 skipped, 14 deselected, 33 subtests passed in 119.90s**, total
+  coverage **80%**. `scripts/validate_test_gate.py` returned `TEST GATE PASS`;
+  isolated fatal Flake8 returned 0; Black check over every changed Python file
+  and `git diff --check` passed. Scoped comparisons remain no-new-debt: Ruff
+  57 candidate versus 58 exact-v2.1.1 baseline, MyPy 11 versus 12.
+- 2026-09-05 repaired-candidate provisional distribution gate: built outside
+  the repository at
+  `/home/keiba/scratch/20260905_jrvltsql_212_repaired_dist.Q4M5jl`.
+  Distribution-content and wheel-init smoke checks passed; METADATA is exactly
+  version `2.1.2`. Wheel copies of `src/fetcher/realtime.py` and
+  `src/cli/main.py` equal the candidate sources by SHA-256
+  (`fff3582543c7d15abf83bc47d6d655c6c93ce947f84ad94c745426aa67111127`
+  and `60924eeb0df12bbbfca2718deb68cb9f556add46fc1093b4449675876ab717df`).
+  Provisional artifact hashes are sdist
+  `8ba6081ba6bfde324908371cc30523db32540d86a904ed773ed8b6199512fe19`
+  and wheel
+  `a9a58f6963c2674f8198520ae0d2f8d13f234e6d83100476b06f514a9e0e27b6`.
+  They are not release artifacts and must not be published or pinned.
+- 2026-09-05 authoritative GitHub Actions for the repaired code candidate:
+  Tests run `33959854432` is `success` for exact head
+  `ea187ee586d16a65826b104bf00756bb87229918`; jobs `test`, `lint`, and
+  `windows-batch-syntax` all succeeded, while the PR-inapplicable performance
+  job was skipped by its declared condition. The test job executed the
+  fail-closed gate, full suite, distribution-content check, and wheel-init
+  smoke. The PR remains draft/blocking until the different independent
+  reviewer finishes and this final tracked handoff update receives exact-head
+  CI.
 
 ## Pending safe sequence and STOP conditions
 
-1. Commit/freeze the batched review repair, push the new exact PR head, run the
-   full workflow-equivalent suite/build on that SHA, and obtain critical review
-   from a different independent reviewer. Keep PR 267 draft/blocking until all
-   actionable findings are closed.
-2. Wait for authoritative CI/review on the repaired head, resolve every thread,
+1. Commit and push this documentation-only handoff update, then repeat the
+   required exact-head gates and obtain final confirmation from the different
+   independent reviewer. Keep PR 267 draft/blocking until all actionable
+   findings are closed.
+2. Verify authoritative CI and unresolved-thread count on the final head,
    remove `release:blocker`, mark ready, and merge only from authoritative state.
 3. Rebuild and hash the authoritative release artifacts from the immutable merge
    SHA, publish `v2.1.2`, advance `stable/2.1` to the same commit, and provide the
