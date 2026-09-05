@@ -97,7 +97,9 @@ def _reject_data_specs(data_specs, jv_option: int) -> None:
         if is_valid_jvopen_combination(data_spec, jv_option):
             continue
         console.print()
-        console.print(f"[red]Error:[/red] データ種別 '{data_spec}' は option={jv_option} では取得できません")
+        console.print(
+            f"[red]Error:[/red] データ種別 '{data_spec}' は option={jv_option} では取得できません"
+        )
         valid_specs = JVOPEN_VALID_COMBINATIONS.get(jv_option, [])
         console.print(f"       option={jv_option} で取得可能: {', '.join(valid_specs)}")
         sys.exit(1)
@@ -598,10 +600,7 @@ def fetch(ctx, date_from, date_to, data_specs, jv_option, db, batch_size, progre
                 # An exception here leaves the remaining specs unprocessed and
                 # exits non-zero (ADR-0023: stop and show a human).
                 result = processor.process_date_range(
-                    data_spec=data_spec,
-                    from_date=date_from,
-                    to_date=date_to,
-                    option=jv_option
+                    data_spec=data_spec, from_date=date_from, to_date=date_to, option=jv_option
                 )
 
                 _print_fetch_statistics(result)

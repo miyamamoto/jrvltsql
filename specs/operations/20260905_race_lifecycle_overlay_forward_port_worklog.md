@@ -75,3 +75,21 @@ touch the NAR P8 process or its database.
 - The apply also carries the released hotfix worklog as immutable historical
   evidence. This forward-port worklog records post-release integration facts
   so the historical file does not need a self-referential metadata-only commit.
+- 2026-09-05 focused integration evidence (unfrozen forward-port tree, uv
+  CPython 3.13.5, frozen dev+postgres dependencies, `nice -n 15`): all four
+  released affected files passed, **122 passed and 22 subtests passed in
+  2.85s**. The current-master lifecycle boundary also passed:
+  `tests/test_jvinit_once_per_process.py` plus
+  `tests/test_fetch_multiple_dataspecs.py` -> **27 passed in 0.91s**,
+  including one JVInit for three fetches, no re-init after stream error, one
+  shared session across specs, and fail-before-open on init error.
+- 2026-09-05 scoped pre-freeze gates: the forward-ported CLI initially exposed
+  two pre-existing current-master formatting regions under the locked Black;
+  formatting the changed file produced only those mechanical line wraps.
+  Black check over every changed Python file is now green. The fail-closed CI
+  gate validator reports `TEST GATE PASS`, isolated fatal Flake8 reports 0,
+  and diff check is green. Configured scoped Ruff improved from **58** on exact
+  master base to **57** on the candidate; scoped MyPy is unchanged at **12**
+  diagnostics on both. Exact baseline worktree:
+  `/home/keiba/scratch/20260905_jrvltsql_forwardport_lint_baseline`,
+  detached at `2e58b17f6177eb0e0bc5bd097fa0b181ed2d7ba4`.
