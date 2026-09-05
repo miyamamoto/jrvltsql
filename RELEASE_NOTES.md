@@ -1,3 +1,65 @@
+# jrvltsql v2.1.2 Release Notes
+
+`2.1.2` is an emergency correctness hotfix on top of `2.1.1` for prospective
+time-series odds capture; no parser, schema, storage, migration, or
+provider-registration contract changes.
+
+What `2.1.2` fixes over `2.1.1`:
+
+- when `--post-time-within-minutes` / `--post-time-not-past-minutes` are
+  requested, race targets are selected per full race key (Year, MonthDay,
+  JyoCD, Kaiji, Nichiji, RaceNum) with lifecycle-source precedence: a stored
+  same-day `RT_RA` row first owns its full key, and `NL_RA` is used only for
+  full keys absent from `RT_RA`; when the optional `RT_RA` table is absent,
+  `NL_RA` owns every key. A stale `NL_RA` post time coexisting with the current
+  `RT_RA` revision is no longer misread as ambiguity — on 2026-09-05 that
+  misread aborted the whole batch and left later due races without official
+  O1/O2 capture
+- the selected current row's DataKubun is validated against the official RA
+  domain; missing, blank, or out-of-domain statuses fail closed naming the
+  12-digit race key, and nothing is opened. A persisted DataKubun=0 erase
+  marker also fails closed instead of becoming an active target. After
+  validation, DataKubun=9 cancellations are omitted for whichever source owns
+  the key, never falling back to the shadowed row. A 12-digit JVRTOpen key
+  carrying both active and canceled selected rows fails closed independent of
+  row order; genuine post-time conflicts still fail closed
+- window statistics always report `omitted_canceled_keys` (0 when none), and
+  `window_kept_keys` equals the keys actually opened
+- machine-parsed CLI progress is extended for downstream verification: the
+  `Window:` line adds `canceled=`, the `Keys:` lines add `nonempty=` (keys
+  that returned at least one record — `ok=` success alone is not evidence of
+  nonempty capture), a window run that keeps zero keys still prints exactly
+  one terminal `Keys: 0/0 ...` summary, and `nonempty_keys` is always
+  present in fetcher progress callbacks and the completion log
+- target selection and queries without the post-time window options are
+  unchanged; the only no-window output change is that `Keys:` lines gain
+  `nonempty=` when a key is processed
+
+Verification limits:
+
+- regression coverage is database-backed: SQLite fixtures mirroring the real
+  `NL_RA`/`RT_RA` key shape, with the generated PostgreSQL window query
+  executed against an equivalent SQLite model (no live PostgreSQL in the
+  focused run). No live JV-Link race day has exercised this build yet: the
+  first complete prospective proof must come from a future real race day, and
+  this release does not backfill 2026-09-05
+- the normal updater physically removes RT DataKubun=0 rows. This read path
+  therefore cannot distinguish an already-removed RT erase tombstone from a
+  key which never received an RT update; rejecting a tombstone that remains
+  stored is covered, but preventing stale-NL fallback after an already-removed
+  RT erase is not proven by this release. `2.1.2` does not claim unconditional
+  lifecycle resolution for every DataKubun state
+
+Adoption / rollback:
+
+- no schema change; no migration or reimport is required from `2.1.1`
+- downstream `jrvltsql-wine-runtime` must explicitly re-pin this release's
+  tag/artifact before KPS JRA prospective capture is considered repaired;
+  merging or tagging alone adopts nothing
+- rollback: re-adopt immutable `v2.1.1`
+  (`0f3161d30de65f15795608e2a4bec9fc91e05349`); no database rollback is
+  required
+
 # jrvltsql v2.1.1 Release Notes
 
 `2.1.1` is a CLI compatibility hotfix on top of `2.1.0`; no parser, schema,

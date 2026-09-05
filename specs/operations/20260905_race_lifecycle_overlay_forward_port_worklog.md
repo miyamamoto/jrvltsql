@@ -57,3 +57,21 @@ STOP on any loss of the master JVInit lifecycle, fail-open lifecycle state,
 test or build failure, unexpected schema/storage change, unresolved review
 finding, master drift that changes the integration decision, or any need to
 touch the NAR P8 process or its database.
+
+## Progress
+
+- 2026-09-05 forward-port apply: after the tracked starting record was
+  committed, applied released squash SHA
+  `bc7951f59f4e6cc1da30fa614014f1da0fa73757` with `git cherry-pick`.
+  Git's three-way apply merged every path except one localized conflict at the
+  pre-loop statistics block in `src/fetcher/realtime.py`. The released side
+  still carried its old explicit `self.jvlink.jv_init()`; current master had
+  intentionally removed that block because `BaseFetcher.__init__` owns one
+  JVInit for the multi-spec session. Resolved the conflict by retaining the
+  master initialization lifecycle and adding only the released
+  `nonempty_keys` statistics/comment. A post-resolution search found no
+  conflict marker and no reintroduced `jv_init` in realtime/CLI; the owning
+  call remains in `src/fetcher/base.py`.
+- The apply also carries the released hotfix worklog as immutable historical
+  evidence. This forward-port worklog records post-release integration facts
+  so the historical file does not need a self-referential metadata-only commit.

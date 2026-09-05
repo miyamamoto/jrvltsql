@@ -2166,6 +2166,7 @@ def timeseries(
                         "processed_keys": 0,
                         "total_keys": 0,
                         "success_keys": 0,
+                        "nonempty_keys": 0,
                         "no_data_keys": 0,
                         "error_keys": 0,
                         "total_records": 0,
@@ -2174,15 +2175,21 @@ def timeseries(
                     def report_key_progress(progress):
                         key_progress.update(progress)
                         if progress.get("status") == "window_filter":
+                            # 下流のwine runtimeがこの行をparseする。tokenと
+                            # 順序は契約であり、canceled= は検証済み中止の
+                            # 除外数（中止なしでも0）。soft_wrapで非TTY
+                            # 捕捉時も1行のまま折り返さない。
                             console.print(
                                 "  Window: "
                                 f"considered={progress.get('considered_keys', 0):,} "
                                 f"candidates={progress.get('window_candidate_keys', 0):,} "
                                 f"kept={progress.get('window_kept_keys', 0):,} "
+                                f"canceled={progress.get('omitted_canceled_keys', 0):,} "
                                 f"future={progress.get('dropped_too_far_future', 0):,} "
                                 f"past={progress.get('dropped_too_far_past', 0):,} "
                                 "date_excluded="
-                                f"{progress.get('skipped_out_of_window_by_date', 0):,}"
+                                f"{progress.get('skipped_out_of_window_by_date', 0):,}",
+                                soft_wrap=True,
                             )
                             return
                         processed = int(progress.get("processed_keys", 0))
@@ -2193,15 +2200,20 @@ def timeseries(
                         )
                         if not should_print:
                             return
+                        # Keys行も下流がparseする契約行: nonempty= は実レコード
+                        # を返したキー数で、ok(成功)とは区別する。soft_wrapで
+                        # 折り返さない。
                         console.print(
                             "\r  Keys: "
                             f"{processed:,}/{total:,} "
                             f"ok={progress.get('success_keys', 0):,} "
+                            f"nonempty={progress.get('nonempty_keys', 0):,} "
                             f"no_data={progress.get('no_data_keys', 0):,} "
                             f"errors={progress.get('error_keys', 0):,} "
                             f"records={progress.get('total_records', 0):,} "
                             f"last={progress.get('key') or '-'}:{status}",
                             end="",
+                            soft_wrap=True,
                         )
 
                     pg_config = (
@@ -2236,14 +2248,24 @@ def timeseries(
                             console.print(f"\r  Processed: {record_count:,} records", end="")
 
                     flush_batch(records_batch)
-                    if key_progress["processed_keys"]:
+                    window_requested = (
+                        post_time_within_minutes is not None
+                        or post_time_not_past_minutes is not None
+                    )
+                    if window_requested or key_progress["processed_keys"]:
+                        # window指定時は対象0件(0/0)でも終端サマリを必ず1行
+                        # 出し、下流が「何も開かなかった」ことを機械検証
+                        # できるようにする。window無しの0キー時は従来どおり
+                        # 出力しない。
                         console.print(
                             "\r  Keys: "
                             f"{key_progress['processed_keys']:,}/{key_progress['total_keys']:,} "
                             f"ok={key_progress['success_keys']:,} "
+                            f"nonempty={key_progress['nonempty_keys']:,} "
                             f"no_data={key_progress['no_data_keys']:,} "
                             f"errors={key_progress['error_keys']:,} "
-                            f"records={key_progress['total_records']:,}"
+                            f"records={key_progress['total_records']:,}",
+                            soft_wrap=True,
                         )
                     console.print(
                         f"  [green][OK][/green] {spec_code}: {record_count:,} records processed"

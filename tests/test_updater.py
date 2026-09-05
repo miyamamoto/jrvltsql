@@ -75,7 +75,7 @@ class TestGetCurrentVersion:
         version = get_current_version()
         # Source metadata is the candidate version; a stale release tag must
         # not make a development checkout report the previous release.
-        assert version == "2.1.1"
+        assert version == "2.1.2"
 
     @patch("subprocess.run")
     def test_fallback_to_installed_distribution_metadata(
@@ -163,10 +163,12 @@ class TestCheckForUpdates:
         from src.utils.updater import check_for_updates
 
         mock_response = MagicMock()
-        mock_response.read.return_value = json.dumps({
-            "tag_name": "v99.0.0",
-            "html_url": "https://github.com/miyamamoto/jrvltsql/releases/v99.0.0",
-        }).encode()
+        mock_response.read.return_value = json.dumps(
+            {
+                "tag_name": "v99.0.0",
+                "html_url": "https://github.com/miyamamoto/jrvltsql/releases/v99.0.0",
+            }
+        ).encode()
         mock_response.__enter__ = lambda s: s
         mock_response.__exit__ = MagicMock(return_value=False)
         mock_urlopen.return_value = mock_response
