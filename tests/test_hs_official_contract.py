@@ -29,6 +29,7 @@ from src.importer.importer import (
 from src.importer.importer_optimized import OptimizedDataImporter
 from src.parser.hs_parser import HSParser
 from src.realtime.updater import RealtimeUpdater
+from tests.importer_support import import_each, import_one
 
 FIXTURES = Path(__file__).parent / "fixtures" / "official_layout"
 MANIFEST = json.loads((FIXTURES / "jvdata_sdk500_manifest.json").read_text(encoding="utf-8"))
@@ -238,10 +239,7 @@ def _import(
         )
     else:
         importer = DataImporter(database, use_jravan_schema=standard)
-        assert all(
-            importer.import_single_record(record, auto_commit=auto_commit) for record in records
-        )
-        stats = importer.get_statistics()
+        stats = import_each(importer, records, auto_commit=auto_commit)
     if not auto_commit:
         database.commit()
     return stats
@@ -265,15 +263,20 @@ def _assert_hs_failure_transaction_boundary(
     )
     with pytest.raises(SchemaMigrationError):
         if entrypoint == "single":
-            assert importer.import_single_record(good, auto_commit=auto_commit)
-            importer.import_single_record(malformed, auto_commit=auto_commit)
+            assert import_one(importer, good, auto_commit=auto_commit)
+            import_one(importer, malformed, auto_commit=auto_commit)
         else:
             importer.import_records(iter([good, malformed]), auto_commit=auto_commit)
     expected = 1 if auto_commit else 0
     assert database.fetch_one(f"SELECT COUNT(*) AS count FROM {table_name}") == {"count": expected}
-    stats = importer.get_statistics()
-    assert stats["records_imported"] == expected
-    assert stats["records_failed"] == 0
+    if entrypoint != "single":
+        # `import_records` resets its counters on entry, so after the failing
+        # call `get_statistics()` describes that call alone. Only the paths that
+        # hand both records to one call can read the boundary off the counters;
+        # the one-at-a-time path is pinned by the row count above.
+        stats = importer.get_statistics()
+        assert stats["records_imported"] == expected
+        assert stats["records_failed"] == 0
 
 
 def test_hs_sdk500_layout_and_current_only_boundary() -> None:
@@ -404,8 +407,8 @@ def test_hs_status_zero_caller_body_is_opaque_but_aliases_remain_strict(
         database.execute(SCHEMAS["NL_HS"])
         database.commit()
         importer = DataImporter(database)
-        assert importer.import_single_record(parsed_hs())
-        assert importer.import_single_record(erase)
+        assert import_one(importer, parsed_hs())
+        assert import_one(importer, erase)
         assert database.fetch_one("SELECT COUNT(*) AS count FROM NL_HS") == {"count": 0}
 
 
@@ -690,7 +693,7 @@ def test_hs_invalid_first_record_precedes_standard_additive_migration(
                     iter([malformed])
                 )
             else:
-                DataImporter(database, use_jravan_schema=True).import_single_record(malformed)
+                import_one(DataImporter(database, use_jravan_schema=True), malformed)
         assert database.fetch_all('PRAGMA table_info("RACE")') == before
 
 
@@ -1006,7 +1009,7 @@ def test_hs_postgresql_idle_schema_rejection_closes_implicit_transaction(
     assert postgresql_db.has_pending_transaction() is False
     with pytest.raises(SchemaMigrationError):
         if entrypoint == "single":
-            importer.import_single_record(parsed_hs(), auto_commit=True)
+            import_one(importer, parsed_hs(), auto_commit=True)
         else:
             importer.import_records(iter([parsed_hs()]), auto_commit=True)
     # Check ownership before the diagnostic SELECT below starts a new lazy

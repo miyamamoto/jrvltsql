@@ -22,6 +22,7 @@ from src.parser.h6_parser import H6Parser
 from src.parser.o1_parser import O1Parser
 from src.parser.o2_parser import O2Parser
 from src.realtime.updater import RealtimeUpdater
+from tests.importer_support import import_one
 
 
 def _pad(value: str, length: int) -> bytes:
@@ -1348,7 +1349,7 @@ def test_sqlite_importer_stores_official_av_record(sqlite_db):
     _create_tables(sqlite_db, ["NL_AV"])
     record = AVParser().parse(_make_av_record())
 
-    assert DataImporter(sqlite_db).import_single_record(record) is True
+    assert import_one(DataImporter(sqlite_db), record) is True
 
     row = sqlite_db.fetch_one(
         """

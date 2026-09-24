@@ -24,6 +24,7 @@ from src.importer.importer import (
 from src.importer.importer_optimized import OptimizedDataImporter
 from src.parser.hn_parser import HNParser
 from tests.test_hn_parser_layout import build_record
+from tests.importer_support import import_each, import_one
 
 
 def hn_record(
@@ -208,8 +209,8 @@ def test_hn_blank_reserved_spans_survive_every_sqlite_import_path(
         database.execute(schema)
         database.commit()
         if entrypoint == "single":
-            assert DataImporter(database, use_jravan_schema=use_standard).import_single_record(
-                record
+            assert import_one(
+                DataImporter(database, use_jravan_schema=use_standard), record
             )
         else:
             importer_class = (
@@ -347,25 +348,26 @@ def test_hn_single_record_erase_is_physical(
         database.execute(schema)
         database.commit()
         importer = DataImporter(database, use_jravan_schema=use_standard)
-        assert importer.import_single_record(hn_record(), auto_commit=auto_commit)
-        assert importer.import_single_record(
-            hn_record(data_kubun="2", bamei="更新馬"),
+        totals = import_each(
+            importer,
+            (
+                hn_record(),
+                hn_record(data_kubun="2", bamei="更新馬"),
+                {
+                    "RecordSpec": "HN",
+                    "DataKubun": "0",
+                    "MakeDate": "20260818",
+                    "HansyokuNum": "1234567890",
+                },
+            ),
             auto_commit=auto_commit,
         )
-        assert importer.import_single_record(
-            {
-                "RecordSpec": "HN",
-                "DataKubun": "0",
-                "MakeDate": "20260818",
-                "HansyokuNum": "1234567890",
-            },
-            auto_commit=auto_commit,
-        )
+        assert totals["records_failed"] == 0
         assert database.fetch_one(f"SELECT COUNT(*) AS count FROM {table_name}") == {"count": 0}
         if not auto_commit:
             database.commit()
 
-    assert importer.get_statistics()["records_imported"] == 3
+    assert totals["records_imported"] == 3
 
 
 @pytest.mark.parametrize("use_standard", (False, True), ids=("native", "standard"))

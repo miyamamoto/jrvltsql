@@ -27,6 +27,7 @@ from src.parser.hr_parser import HRParser
 from src.parser.status_domain import CURRENT_ACCUMULATED_DATA_KUBUN
 from src.realtime.updater import RealtimeUpdater
 from tests.test_hr_parser_full_payouts import build_record
+from tests.importer_support import import_each, import_one
 
 FIXTURES = Path(__file__).parent / "fixtures" / "official_layout"
 CONTRACT = json.loads((FIXTURES / "hr_contract_4901.json").read_text(encoding="utf-8"))
@@ -90,10 +91,7 @@ def import_records(
         )
     else:
         importer = DataImporter(database, use_jravan_schema=standard)
-        assert all(
-            importer.import_single_record(record, auto_commit=auto_commit) for record in records
-        )
-        result = importer.get_statistics()
+        result = import_each(importer, records, auto_commit=auto_commit)
     if not auto_commit:
         database.commit()
     return result
@@ -391,8 +389,8 @@ def test_hr_caller_built_status_nine_stores_only_key_and_state(tmp_path, standar
         database.execute(schema)
         database.commit()
         importer = DataImporter(database, use_jravan_schema=standard)
-        assert importer.import_single_record(parsed_hr()) is True
-        assert importer.import_single_record(key_and_state) is True
+        assert import_one(importer, parsed_hr()) is True
+        assert import_one(importer, key_and_state) is True
         if standard:
             row = database.fetch_one(
                 "SELECT DataKubun, PayFukusyoPay2 AS FukuPay2, "

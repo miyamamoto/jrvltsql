@@ -31,6 +31,7 @@ from src.parser.status_domain import (
     HISTORICAL_DATA_KUBUN,
 )
 from src.realtime.updater import RealtimeUpdater
+from tests.importer_support import import_one
 
 FIXTURES = Path(__file__).parent / "fixtures" / "official_layout"
 OFFICIAL_MANIFEST = json.loads(
@@ -172,7 +173,7 @@ def import_records(database, entrypoint, records, *, standard, auto_commit, batc
     else:
         importer = DataImporter(database, use_jravan_schema=standard)
         assert all(
-            importer.import_single_record(record, auto_commit=auto_commit) for record in records
+            import_one(importer, record, auto_commit=auto_commit) for record in records
         )
     if not auto_commit:
         database.commit()

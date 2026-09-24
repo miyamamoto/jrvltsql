@@ -2,8 +2,8 @@
 
 Every official-contract family verifies its native storage schema before any DML,
 and the per-family modules prove the verifier rejects each unsafe schema. What was
-not pinned is that ``DataImporter.import_single_record`` still performs that
-preflight: deleting the guard block inside that method left
+not pinned is that the single-record path still performs that preflight:
+deleting the guard block left
 ``tests/test_<family>_official_contract.py`` fully green for 14 of the 16 families
 that have one. This module is that pin, using one defect that is unsafe for every
 family - an extra UNIQUE constraint, which silently turns an official replacement
@@ -34,6 +34,7 @@ from tests.test_sk_official_contract import sk_record
 from tests.test_tc_official_contract import parsed_tc
 from tests.test_wc_official_contract import parsed_record as parsed_wc
 from tests.test_we_official_contract import parsed_we
+from tests.importer_support import import_one
 from tests.test_wf_official_contract import parsed_record as parsed_wf
 
 
@@ -91,7 +92,7 @@ def test_single_record_path_rejects_a_drifted_native_schema_before_dml(
         before_indexes = database.fetch_all(f'PRAGMA index_list("{table_name}")')
         importer = DataImporter(database)
         with pytest.raises(SchemaMigrationError, match="UNIQUE"):
-            importer.import_single_record(build_record(), auto_commit=auto_commit)
+            import_one(importer, build_record(), auto_commit=auto_commit)
         assert database.fetch_all(f'PRAGMA index_list("{table_name}")') == before_indexes
         assert database.fetch_one(f"SELECT COUNT(*) AS count FROM {table_name}") == {"count": 0}
         assert importer.get_statistics()["records_imported"] == 0

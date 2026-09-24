@@ -26,6 +26,7 @@ from src.fetcher.historical import FetcherError, HistoricalFetcher
 from src.importer.importer import DataImporter
 from src.jvlink.wrapper import JVLinkError
 from src.parser.factory import ParserFactory
+from tests.importer_support import import_one
 
 
 class TestInvalidDataHandling(unittest.TestCase):
@@ -83,7 +84,7 @@ class TestInvalidDataHandling(unittest.TestCase):
             # Missing required fields
         }
 
-        success = self.importer.import_single_record(invalid_record)
+        success = import_one(self.importer, invalid_record)
         # May succeed or fail depending on schema, but shouldn't crash
         self.assertIsInstance(success, bool)
 
@@ -97,7 +98,7 @@ class TestInvalidDataHandling(unittest.TestCase):
         }
 
         with self.assertRaises(SchemaMigrationError):
-            self.importer.import_single_record(wrong_record)
+            import_one(self.importer, wrong_record)
 
     def test_duplicate_key_violation(self):
         """Test handling of duplicate key constraint violations."""
@@ -111,10 +112,10 @@ class TestInvalidDataHandling(unittest.TestCase):
         }
 
         # Import first time (may or may not succeed with limited fields)
-        success1 = self.importer.import_single_record(sample)
+        success1 = import_one(self.importer, sample)
 
         # Import again (may fail due to UNIQUE constraint)
-        success2 = self.importer.import_single_record(sample)
+        success2 = import_one(self.importer, sample)
 
         # Should handle gracefully without crashing
         self.assertIsInstance(success1, bool)
@@ -130,7 +131,7 @@ class TestInvalidDataHandling(unittest.TestCase):
             '競馬場コード': '',  # Empty string
         }
 
-        success = self.importer.import_single_record(record_with_nulls)
+        success = import_one(self.importer, record_with_nulls)
         # Should handle NULL values gracefully
         self.assertIsInstance(success, bool)
 
@@ -276,7 +277,7 @@ class TestResourceConstraints(unittest.TestCase):
         }
 
         importer = DataImporter(db, batch_size=10)
-        success = importer.import_single_record(long_record)
+        success = import_one(importer, long_record)
 
         # Should handle or truncate long strings
         self.assertIsInstance(success, bool)
@@ -305,7 +306,7 @@ class TestResourceConstraints(unittest.TestCase):
             many_fields_record[f'field_{i}'] = f'value_{i}'
 
         importer = DataImporter(db, batch_size=10)
-        success = importer.import_single_record(many_fields_record)
+        success = import_one(importer, many_fields_record)
 
         # Should handle gracefully (extra fields ignored)
         self.assertIsInstance(success, bool)
@@ -423,8 +424,8 @@ class TestConcurrencyIssues(unittest.TestCase):
             '開催年月日': '20240102',
         }
 
-        success1 = importer1.import_single_record(record1)
-        success2 = importer2.import_single_record(record2)
+        success1 = import_one(importer1, record1)
+        success2 = import_one(importer2, record2)
 
         # Both should succeed (or handle conflicts)
         self.assertIsInstance(success1, bool)

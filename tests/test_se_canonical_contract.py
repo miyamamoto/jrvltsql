@@ -8,6 +8,7 @@ from src.importer.importer import convert_record_types
 from src.parser.canonical import canonicalize_se_fields
 from src.parser.se_parser import SEParser
 from tests.fixtures.record_factory import make_se_record
+from tests.importer_support import import_one
 
 
 def _record(**fields: str) -> bytes:
@@ -266,7 +267,7 @@ def test_jravan_single_record_auto_commit_false_stays_in_caller_transaction(tmp_
             "RaceNum, Umaban, KettoNum))"
         )
         db.commit()
-        inserted = importer.import_single_record(
+        inserted = import_one(importer,
             {
                 "RecordSpec": "SE",
                 "DataKubun": "1",

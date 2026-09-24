@@ -22,6 +22,7 @@ from src.importer.importer_optimized import OptimizedDataImporter
 from src.parser.hn_parser import HNParser
 from src.parser.tk_parser import TKParser
 from tests.fixtures.record_factory import make_hn_record
+from tests.importer_support import import_one
 
 TK_OFFICIAL_LENGTH = 21657
 TK_RACE_KEY = ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum"]
@@ -407,7 +408,7 @@ def test_tk_single_record_path_writes_both_tables_atomically(tmp_path) -> None:
 
     with database:
         _create_current_tables(database, standard=False)
-        assert DataImporter(database).import_single_record(parsed)
+        assert import_one(DataImporter(database), parsed)
         assert database.fetch_one("SELECT COUNT(*) AS count FROM NL_TK_RACE")["count"] == 1
         assert database.fetch_one("SELECT COUNT(*) AS count FROM NL_TK")["count"] == 2
 

@@ -27,6 +27,7 @@ from src.parser.factory import ParserFactory
 from src.parser.status_domain import CURRENT_ACCUMULATED_DATA_KUBUN
 from src.parser.tc_parser import TCParser
 from src.realtime.updater import RealtimeUpdater
+from tests.importer_support import import_one
 
 FIXTURES = Path(__file__).parent / "fixtures" / "official_layout"
 CONTRACT = json.loads((FIXTURES / "tc_contract_4901.json").read_text(encoding="utf-8"))
@@ -88,7 +89,7 @@ def import_tc_records(
     if entrypoint == "single":
         importer = DataImporter(database, use_jravan_schema=standard)
         for record in records:
-            assert importer.import_single_record(record, auto_commit=auto_commit)
+            assert import_one(importer, record, auto_commit=auto_commit)
         return importer.get_statistics()
     importer_class = DataImporter if entrypoint == "data-batch" else OptimizedDataImporter
     return importer_class(
@@ -450,11 +451,11 @@ def test_tc_single_record_uses_the_same_fail_closed_validator(
         database.execute(schema)
         database.commit()
         importer = DataImporter(database, use_jravan_schema=standard)
-        assert importer.import_single_record(parsed_tc(), auto_commit=auto_commit)
+        assert import_one(importer, parsed_tc(), auto_commit=auto_commit)
         invalid = parsed_tc()
         invalid["AtoFun"] = "60"
         with pytest.raises(SchemaMigrationError):
-            importer.import_single_record(invalid, auto_commit=auto_commit)
+            import_one(importer, invalid, auto_commit=auto_commit)
         expected = 1 if auto_commit else 0
         assert database.fetch_one(f"SELECT COUNT(*) AS n FROM {table_name}") == {"n": expected}
 

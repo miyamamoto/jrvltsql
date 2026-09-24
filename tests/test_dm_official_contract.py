@@ -16,6 +16,7 @@ from src.importer.importer import DataImporter
 from src.importer.importer_optimized import OptimizedDataImporter
 from src.parser.dm_parser import DMParser
 from src.realtime.updater import RealtimeUpdater
+from tests.importer_support import import_one
 
 RACE_KEY = ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum"]
 NATIVE_KEY = [*RACE_KEY, "Umaban"]
@@ -359,8 +360,8 @@ def test_dm_single_record_import_replaces_the_complete_native_snapshot(tmp_path)
         corrected = DMParser().parse(_dm_record(make_hm="0945", entries=corrected_entries))
         assert first is not None and corrected is not None
 
-        assert importer.import_single_record(first[-1]) is True
-        assert importer.import_single_record(corrected[0]) is True
+        assert import_one(importer, first[-1]) is True
+        assert import_one(importer, corrected[0]) is True
         rows = database.fetch_all("SELECT Umaban, MakeHM FROM NL_DM ORDER BY Umaban")
 
     assert len(rows) == 17

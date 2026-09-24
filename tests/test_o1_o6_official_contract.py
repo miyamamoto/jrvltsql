@@ -33,6 +33,7 @@ from src.parser.o3_parser import O3Parser
 from src.parser.o4_parser import O4Parser
 from src.parser.o5_parser import O5Parser
 from src.parser.o6_parser import O6Parser
+from tests.importer_support import import_one
 
 OFFICIAL_DATA_KUBUN = ("1", "2", "3", "4", "5", "9")
 OFFICIAL_SALE_FLAGS = ("0", "1", "3", "7")
@@ -603,7 +604,7 @@ def test_sqlite_single_record_path_keeps_the_totals_only_snapshot(
         _create(database, (table_name,))
         importer = DataImporter(database)
         for row in totals_only_rows(record_type):
-            assert importer.import_single_record(row, auto_commit=auto_commit) is True
+            assert import_one(importer, row, auto_commit=auto_commit) is True
         if not auto_commit:
             database.commit()
         assert database.fetch_one(f"SELECT COUNT(*) AS cnt FROM {table_name}")["cnt"] == 1

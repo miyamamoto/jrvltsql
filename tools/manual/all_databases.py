@@ -162,8 +162,15 @@ class DatabaseTester:
                         if rec_type:
                             record_types.add(rec_type)
 
-                        # インポート
-                        if importer.import_single_record(record):
+                        # インポート。診断ツールなので1件の不良で全体を止めない
+                        # （import_records は import_single_record と違って送出する）
+                        failed_before = importer.get_statistics()['records_failed']
+                        try:
+                            importer.import_records(iter([record]))
+                        except Exception as error:
+                            print(f"  スキップ ({rec_type}): {error}")
+                            continue
+                        if importer.get_statistics()['records_failed'] == failed_before:
                             imported += 1
 
                 jv.jv_close()

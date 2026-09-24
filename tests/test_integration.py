@@ -19,6 +19,7 @@ from src.database.sqlite_handler import SQLiteDatabase
 from src.importer.importer import DataImporter
 from src.parser.factory import ParserFactory
 from tests.fixtures.record_factory import make_hr_record
+from tests.importer_support import import_one
 
 
 class TestIntegration:
@@ -138,7 +139,7 @@ class TestIntegration:
             }
 
             # Import record
-            success = importer.import_single_record(parsed_record, auto_commit=True)
+            success = import_one(importer, parsed_record, auto_commit=True)
             assert success is True, "Import should succeed"
 
             # Verify data in database
@@ -184,7 +185,7 @@ class TestIntegration:
             }
 
             # Import record
-            success = importer.import_single_record(parsed_record, auto_commit=True)
+            success = import_one(importer, parsed_record, auto_commit=True)
             assert success is True
 
             # Verify in database
@@ -225,7 +226,7 @@ class TestIntegration:
                 "Kyori": 2000,
             }
 
-            success = importer.import_single_record(record1, auto_commit=True)
+            success = import_one(importer, record1, auto_commit=True)
             assert success is True
 
             # Verify first record
@@ -251,7 +252,7 @@ class TestIntegration:
                 "Kyori": 2400,
             }
 
-            success = importer.import_single_record(record2, auto_commit=True)
+            success = import_one(importer, record2, auto_commit=True)
             assert success is True
 
             # Verify record was replaced (not duplicated)
@@ -429,7 +430,7 @@ class TestIntegration:
                 "KakuteiJyuni": "1",     # STRING -> INTEGER
             }
 
-            success = importer.import_single_record(record, auto_commit=True)
+            success = import_one(importer, record, auto_commit=True)
             assert success is True
 
             # Verify conversions

@@ -22,6 +22,7 @@ from src.importer.importer_optimized import OptimizedDataImporter
 from src.parser.sk_parser import SKParser
 from src.realtime.updater import RealtimeUpdater
 from tests.test_sk_parser_layout import PEDIGREE_FIELDS, build_current_record
+from tests.importer_support import import_each, import_one
 
 KETTO_NUM = "2024100001"
 OTHER_KETTO_NUM = "2024100002"
@@ -242,17 +243,21 @@ def test_sk_single_record_erase_is_physical(
         database.execute(schema)
         database.commit()
         importer = DataImporter(database, use_jravan_schema=use_standard)
-        assert importer.import_single_record(sk_record(), auto_commit=auto_commit)
-        assert importer.import_single_record(
-            sk_record(data_kubun="2", sanchi_name="更新産地"),
+        totals = import_each(
+            importer,
+            (
+                sk_record(),
+                sk_record(data_kubun="2", sanchi_name="更新産地"),
+                sk_erase(),
+            ),
             auto_commit=auto_commit,
         )
-        assert importer.import_single_record(sk_erase(), auto_commit=auto_commit)
+        assert totals["records_failed"] == 0
         assert database.fetch_one(f"SELECT COUNT(*) AS count FROM {table_name}") == {"count": 0}
         if not auto_commit:
             database.commit()
 
-    assert importer.get_statistics()["records_imported"] == 3
+    assert totals["records_imported"] == 3
 
 
 @pytest.mark.parametrize("use_standard", (False, True), ids=("native", "standard"))
@@ -396,9 +401,9 @@ def test_sk_single_record_path_rejects_each_unsafe_contract_before_dml(
         before = database.fetch_all('PRAGMA table_xinfo("NL_SK")')
         importer = DataImporter(database)
         with pytest.raises(SchemaMigrationError):
-            importer.import_single_record(sk_record(), auto_commit=auto_commit)
+            import_one(importer, sk_record(), auto_commit=auto_commit)
         with pytest.raises(SchemaMigrationError):
-            importer.import_single_record(sk_erase(), auto_commit=auto_commit)
+            import_one(importer, sk_erase(), auto_commit=auto_commit)
         assert database.fetch_all('PRAGMA table_xinfo("NL_SK")') == before
         assert database.fetch_one("SELECT COUNT(*) AS count FROM NL_SK") == {"count": 0}
 

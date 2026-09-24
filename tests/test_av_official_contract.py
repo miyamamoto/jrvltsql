@@ -30,6 +30,7 @@ from src.parser.status_domain import (
     HISTORICAL_DATA_KUBUN,
 )
 from src.realtime.updater import RealtimeUpdater
+from tests.importer_support import import_one
 
 FIXTURES = Path(__file__).parent / "fixtures" / "official_layout"
 OFFICIAL_MANIFEST = json.loads(
@@ -153,7 +154,7 @@ def import_records(
     else:
         importer = DataImporter(database, use_jravan_schema=standard)
         assert all(
-            importer.import_single_record(record, auto_commit=auto_commit) for record in records
+            import_one(importer, record, auto_commit=auto_commit) for record in records
         )
     if not auto_commit:
         database.commit()
@@ -459,7 +460,7 @@ def test_av_legacy_standard_alias_stops_dual_migration_before_any_alter(
             elif entrypoint == "optimized-batch":
                 OptimizedDataImporter(dual, use_jravan_schema=True).import_records(iter([]))
             else:
-                DataImporter(dual, use_jravan_schema=True).import_single_record(parsed_av())
+                import_one(DataImporter(dual, use_jravan_schema=True), parsed_av())
 
         assert primary.fetch_all('PRAGMA table_info("RACE")') == before_primary
         assert secondary.fetch_all('PRAGMA table_info("RACE")') == before_secondary

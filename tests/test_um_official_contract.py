@@ -30,6 +30,7 @@ from src.importer.importer_optimized import OptimizedDataImporter
 from src.parser.um_parser import UMParser
 from src.realtime.updater import RealtimeUpdater
 from tests.test_um_parser_layout import FIELDS, build_record
+from tests.importer_support import import_each, import_one
 
 KETTO_NUM = "2019900001"
 OTHER_KETTO_NUM = "2019900002"
@@ -252,17 +253,21 @@ def test_um_single_record_erase_is_physical(
         database.execute(schema)
         database.commit()
         importer = DataImporter(database, use_jravan_schema=use_standard)
-        assert importer.import_single_record(um_record(), auto_commit=auto_commit)
-        assert importer.import_single_record(
-            um_record(data_kubun="2", Bamei="改名馬"),
+        totals = import_each(
+            importer,
+            (
+                um_record(),
+                um_record(data_kubun="2", Bamei="改名馬"),
+                um_erase(),
+            ),
             auto_commit=auto_commit,
         )
-        assert importer.import_single_record(um_erase(), auto_commit=auto_commit)
+        assert totals["records_failed"] == 0
         assert database.fetch_one(f"SELECT COUNT(*) AS count FROM {table_name}") == {"count": 0}
         if not auto_commit:
             database.commit()
 
-    assert importer.get_statistics()["records_imported"] == 3
+    assert totals["records_imported"] == 3
 
 
 @pytest.mark.parametrize("use_standard", (False, True), ids=("native", "standard"))
@@ -410,9 +415,9 @@ def test_um_single_record_path_rejects_each_unsafe_contract_before_dml(
         before = database.fetch_all('PRAGMA table_xinfo("NL_UM")')
         importer = DataImporter(database)
         with pytest.raises(SchemaMigrationError):
-            importer.import_single_record(um_record(), auto_commit=auto_commit)
+            import_one(importer, um_record(), auto_commit=auto_commit)
         with pytest.raises(SchemaMigrationError):
-            importer.import_single_record(um_erase(), auto_commit=auto_commit)
+            import_one(importer, um_erase(), auto_commit=auto_commit)
         assert database.fetch_all('PRAGMA table_xinfo("NL_UM")') == before
         assert database.fetch_one("SELECT COUNT(*) AS count FROM NL_UM") == {"count": 0}
 

@@ -31,6 +31,7 @@ from src.importer.importer import (
 from src.importer.importer_optimized import OptimizedDataImporter
 from src.parser.wf_parser import WFParser
 from src.realtime.updater import RealtimeUpdater
+from tests.importer_support import import_one
 
 
 def _pad(value: str, width: int) -> bytes:
@@ -1448,14 +1449,14 @@ def test_wf_single_record_import_covers_native_and_standard_storage(tmp_path) ->
         _standard_tables(database)
 
         native = DataImporter(database)
-        assert native.import_single_record(parsed_record()) is True
+        assert import_one(native, parsed_record()) is True
         assert _count(database, "NL_WF") == 1
         invalid = parsed_record()
         invalid["CarryOverStart"] = "9Q8"
         with pytest.raises(SchemaMigrationError):
-            native.import_single_record(invalid)
+            import_one(native, invalid)
         assert database.fetch_one("SELECT CarryOverStart FROM NL_WF") == {"CarryOverStart": 1000}
-        assert native.import_single_record(parsed_record(data_kubun="0")) is True
+        assert import_one(native, parsed_record(data_kubun="0")) is True
         assert _count(database, "NL_WF") == 0
 
         standard = DataImporter(database, use_jravan_schema=True)
@@ -1464,7 +1465,7 @@ def test_wf_single_record_import_covers_native_and_standard_storage(tmp_path) ->
         distinct_flags["HenkanFlag"] = "1"
         distinct_flags["headRecordSpec"] = distinct_flags.pop("RecordSpec")
         distinct_flags["headDataKubun"] = distinct_flags.pop("DataKubun")
-        assert standard.import_single_record(distinct_flags) is True
+        assert import_one(standard, distinct_flags) is True
         assert _count(database, "JYUSYOSIKI_HEAD") == 1
         assert _count(database, "JYUSYOSIKI") == 243
         head = database.fetch_one("SELECT * FROM JYUSYOSIKI_HEAD")
@@ -1547,7 +1548,7 @@ def test_wf_single_record_import_covers_native_and_standard_storage(tmp_path) ->
             },
         ]
         native_flags = DataImporter(database)
-        assert native_flags.import_single_record(distinct_flags) is True
+        assert import_one(native_flags, distinct_flags) is True
         assert database.fetch_one(
             "SELECT DataKubun, HenkanFlag, FuseirituFlag, TekichuNasiFlag FROM NL_WF"
         ) == {
@@ -1556,16 +1557,16 @@ def test_wf_single_record_import_covers_native_and_standard_storage(tmp_path) ->
             "FuseirituFlag": "0",
             "TekichuNasiFlag": "1",
         }
-        assert native_flags.import_single_record(parsed_record(data_kubun="0")) is True
+        assert import_one(native_flags, parsed_record(data_kubun="0")) is True
         assert _count(database, "NL_WF") == 0
         with pytest.raises(SchemaMigrationError):
-            standard.import_single_record(invalid)
+            import_one(standard, invalid)
         assert _count(database, "JYUSYOSIKI") == 243
         cancelled = WFParser().parse(cancellation_record())
         assert cancelled is not None
-        assert standard.import_single_record(cancelled) is True
+        assert import_one(standard, cancelled) is True
         assert database.fetch_one("SELECT DataKubun FROM JYUSYOSIKI_HEAD") == {"DataKubun": "9"}
-        assert standard.import_single_record(parsed_record(data_kubun="0")) is True
+        assert import_one(standard, parsed_record(data_kubun="0")) is True
         assert _count(database, "JYUSYOSIKI_HEAD") == 0
         assert _count(database, "JYUSYOSIKI") == 0
 
@@ -1581,66 +1582,60 @@ def test_wf_single_record_owned_transaction_rolls_back_on_validation_failure(
         importer = DataImporter(database, use_jravan_schema=standard)
         target = "JYUSYOSIKI_HEAD" if standard else "NL_WF"
 
-        assert importer.import_single_record(parsed_record()) is True
+        assert import_one(importer, parsed_record()) is True
         baseline_stats = importer.get_statistics()
         assert baseline_stats["records_imported"] == 1
         assert baseline_stats["records_failed"] == 0
 
         assert (
-            importer.import_single_record(parsed_record(month_day="0817"), auto_commit=False)
+            import_one(importer, parsed_record(month_day="0817"), auto_commit=False)
             is True
         )
         invalid = parsed_record(month_day="0818")
         invalid["PayoutsJson"] = "[]"
         with pytest.raises(SchemaMigrationError):
-            importer.import_single_record(invalid, auto_commit=False)
+            import_one(importer, invalid, auto_commit=False)
 
         assert database.is_transaction_active() is False
         assert _count(database, target) == 1
-        assert importer.get_statistics() == baseline_stats
+        # The removed `import_single_record` checkpointed and restored statistics
+        # around a failure. `import_records` resets its counters on entry instead,
+        # so what survives a failure is the durable state - the rolled-back
+        # transaction and the row counts - and that is what is pinned here.
         if standard:
             assert _count(database, "JYUSYOSIKI") == 243
 
         assert (
-            importer.import_single_record(parsed_record(month_day="0817"), auto_commit=False)
+            import_one(importer, parsed_record(month_day="0817"), auto_commit=False)
             is True
         )
         database.commit()
         assert _count(database, target) == 2
-        expected_stats = dict(baseline_stats)
-        expected_stats["records_imported"] += 1
-        if standard:
-            expected_stats["batches_processed"] += 1
-        assert importer.get_statistics() == expected_stats
         if standard:
             assert _count(database, "JYUSYOSIKI") == 486
 
         # A caller may commit one importer sequence and start the next
-        # transaction before the importer observes the inactive boundary. A
-        # failure in that new transaction must not restore the already
-        # committed sequence's older statistics checkpoint.
+        # transaction before the importer observes the inactive boundary. The
+        # failure in that new transaction must leave the committed sequence's
+        # rows alone.
         database.begin_transaction()
         invalid = parsed_record(month_day="0819")
         invalid["DataKubun"] = "8"
         with pytest.raises(SchemaMigrationError):
-            importer.import_single_record(invalid, auto_commit=False)
+            import_one(importer, invalid, auto_commit=False)
         assert database.is_transaction_active() is False
         assert _count(database, target) == 2
-        assert importer.get_statistics() == expected_stats
         if standard:
             assert _count(database, "JYUSYOSIKI") == 486
 
         assert (
-            importer.import_single_record(parsed_record(month_day="0819"), auto_commit=False)
+            import_one(importer, parsed_record(month_day="0819"), auto_commit=False)
             is True
         )
         database.commit()
         assert _count(database, target) == 3
-        expected_stats["records_imported"] += 1
         if standard:
-            expected_stats["batches_processed"] += 1
             assert _count(database, "JYUSYOSIKI") == 729
-        assert importer.get_statistics() == expected_stats
 
 
 def _corrupt_caller_records(*, standard: bool) -> list[tuple[str, dict]]:
@@ -2159,22 +2154,22 @@ def test_wf_postgresql_auto_commit_false_validation_failure_rolls_back(
         return
     single = DataImporter(postgresql_db, use_jravan_schema=standard)
     target = "JYUSYOSIKI_HEAD" if standard else "NL_WF"
-    assert single.import_single_record(parsed_record()) is True
+    assert import_one(single, parsed_record()) is True
     baseline_stats = single.get_statistics()
     assert baseline_stats["records_imported"] == 1
     assert baseline_stats["records_failed"] == 0
-    assert single.import_single_record(parsed_record(month_day="0817"), auto_commit=False) is True
+    assert import_one(single, parsed_record(month_day="0817"), auto_commit=False) is True
     invalid = parsed_record(month_day="0818")
     invalid["PayoutsJson"] = "[]"
     with pytest.raises(SchemaMigrationError):
-        single.import_single_record(invalid, auto_commit=False)
+        import_one(single, invalid, auto_commit=False)
     assert postgresql_db.is_transaction_active() is False
     assert _count(postgresql_db, target) == 1
     assert single.get_statistics() == baseline_stats
     if standard:
         assert _count(postgresql_db, "JYUSYOSIKI") == 243
 
-    assert single.import_single_record(parsed_record(month_day="0817"), auto_commit=False) is True
+    assert import_one(single, parsed_record(month_day="0817"), auto_commit=False) is True
     postgresql_db.commit()
     assert _count(postgresql_db, target) == 2
     expected_stats = dict(baseline_stats)
@@ -2189,14 +2184,14 @@ def test_wf_postgresql_auto_commit_false_validation_failure_rolls_back(
     invalid = parsed_record(month_day="0819")
     invalid["DataKubun"] = "8"
     with pytest.raises(SchemaMigrationError):
-        single.import_single_record(invalid, auto_commit=False)
+        import_one(single, invalid, auto_commit=False)
     assert postgresql_db.is_transaction_active() is False
     assert _count(postgresql_db, target) == 2
     assert single.get_statistics() == expected_stats
     if standard:
         assert _count(postgresql_db, "JYUSYOSIKI") == 486
 
-    assert single.import_single_record(parsed_record(month_day="0819"), auto_commit=False) is True
+    assert import_one(single, parsed_record(month_day="0819"), auto_commit=False) is True
     postgresql_db.commit()
     assert _count(postgresql_db, target) == 3
     expected_stats["records_imported"] += 1

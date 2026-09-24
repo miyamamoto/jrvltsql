@@ -29,6 +29,7 @@ from src.parser.canonical import canonicalize_se_fields
 from src.parser.se_parser import SEParser
 from src.realtime.updater import RealtimeUpdater
 from tests.fixtures.record_factory import make_se_record
+from tests.importer_support import import_one
 
 SE_KEY_COLUMNS = (
     "Year",
@@ -191,7 +192,7 @@ def _import_records(
     else:
         importer = DataImporter(database, use_jravan_schema=standard)
         for record in records:
-            assert importer.import_single_record(record, auto_commit=auto_commit) is True
+            assert import_one(importer, record, auto_commit=auto_commit) is True
     if not auto_commit:
         database.commit()
 
@@ -824,7 +825,7 @@ def test_se_postgresql_dual_rejects_overwidth_body_before_any_write(
                     iter([record])
                 )
             else:
-                DataImporter(dual, use_jravan_schema=True).import_single_record(record)
+                import_one(DataImporter(dual, use_jravan_schema=True), record)
 
         assert sqlite.fetch_one("SELECT COUNT(*) AS n FROM UMA_RACE") == {"n": 0}
         assert postgresql_db.fetch_one("SELECT COUNT(*) AS n FROM UMA_RACE") == {"n": 0}

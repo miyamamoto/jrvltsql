@@ -35,10 +35,9 @@ def _tc_record(**overrides) -> dict:
     return record
 
 
-ENTRY_POINTS: tuple[tuple[str, type, bool], ...] = (
-    ("data-batch", DataImporter, False),
-    ("optimized-batch", OptimizedDataImporter, False),
-    ("data-single", DataImporter, True),
+ENTRY_POINTS: tuple[tuple[str, type], ...] = (
+    ("data-batch", DataImporter),
+    ("optimized-batch", OptimizedDataImporter),
 )
 
 
@@ -61,13 +60,12 @@ class _PendingInspectionFailureSQLite(SQLiteDatabase):
         super().invalidate_connection()
 
 
-@pytest.mark.parametrize(("entry_name", "importer_class", "single"), ENTRY_POINTS)
+@pytest.mark.parametrize(("entry_name", "importer_class"), ENTRY_POINTS)
 @pytest.mark.parametrize("auto_commit", (True, False))
 def test_import_entries_reject_invalid_or_missing_status_before_mutation(
     tmp_path,
     entry_name: str,
     importer_class: type,
-    single: bool,
     auto_commit: bool,
 ) -> None:
     variants: tuple[tuple[str, Callable[[dict], None]], ...] = (
@@ -92,20 +90,16 @@ def test_import_entries_reject_invalid_or_missing_status_before_mutation(
             mutate(record)
             importer = importer_class(database)
             with pytest.raises(SchemaMigrationError, match="DataKubun"):
-                if single:
-                    importer.import_single_record(record, auto_commit=auto_commit)
-                else:
-                    importer.import_records(iter([record]), auto_commit=auto_commit)
+                importer.import_records(iter([record]), auto_commit=auto_commit)
             assert database.fetch_one("SELECT COUNT(*) AS count FROM NL_TC")["count"] == 0
             assert database.has_pending_transaction() is False
 
 
-@pytest.mark.parametrize(("entry_name", "importer_class", "single"), ENTRY_POINTS)
+@pytest.mark.parametrize(("entry_name", "importer_class"), ENTRY_POINTS)
 def test_import_entries_accept_equal_legacy_aliases_and_store_canonical_header(
     tmp_path,
     entry_name: str,
     importer_class: type,
-    single: bool,
 ) -> None:
     database = SQLiteDatabase({"path": str(tmp_path / f"valid-{entry_name}.db")})
     with database:
@@ -115,12 +109,9 @@ def test_import_entries_accept_equal_legacy_aliases_and_store_canonical_header(
         record["headRecordSpec"] = record.pop("RecordSpec")
         record["headDataKubun"] = record.pop("DataKubun")
         importer = importer_class(database)
-        if single:
-            assert importer.import_single_record(record) is True
-        else:
-            stats = importer.import_records(iter([record]))
-            assert stats["records_imported"] == 1
-            assert stats["records_failed"] == 0
+        stats = importer.import_records(iter([record]))
+        assert stats["records_imported"] == 1
+        assert stats["records_failed"] == 0
         assert database.fetch_one("SELECT RecordSpec, DataKubun FROM NL_TC") == {
             "RecordSpec": "TC",
             "DataKubun": "1",
@@ -176,12 +167,11 @@ def test_caller_owned_batch_rolls_back_an_earlier_flush_on_later_invalid_status(
         assert importer.get_statistics()["batches_processed"] == 0
 
 
-@pytest.mark.parametrize(("entry_name", "importer_class", "single"), ENTRY_POINTS)
+@pytest.mark.parametrize(("entry_name", "importer_class"), ENTRY_POINTS)
 def test_first_header_failure_rolls_back_an_existing_caller_owned_sequence(
     tmp_path,
     entry_name: str,
     importer_class: type,
-    single: bool,
 ) -> None:
     """Validation before setup must still unwind an already-active sequence."""
 
@@ -190,24 +180,15 @@ def test_first_header_failure_rolls_back_an_existing_caller_owned_sequence(
         database.execute(SCHEMAS["NL_TC"])
         database.commit()
         importer = importer_class(database)
-        if single:
-            assert importer.import_single_record(_tc_record(), auto_commit=False) is True
-        else:
-            stats = importer.import_records(iter([_tc_record()]), auto_commit=False)
-            assert stats["records_imported"] == 1
+        stats = importer.import_records(iter([_tc_record()]), auto_commit=False)
+        assert stats["records_imported"] == 1
         assert database.has_pending_transaction() is True
 
         with pytest.raises(SchemaMigrationError, match="DataKubun"):
-            if single:
-                importer.import_single_record(
-                    _tc_record(DataKubun="0"),
-                    auto_commit=False,
-                )
-            else:
-                importer.import_records(
-                    iter([_tc_record(DataKubun="0")]),
-                    auto_commit=False,
-                )
+            importer.import_records(
+                iter([_tc_record(DataKubun="0")]),
+                auto_commit=False,
+            )
 
         assert database.has_pending_transaction() is False
         assert database.fetch_one("SELECT COUNT(*) AS count FROM NL_TC")["count"] == 0
@@ -215,12 +196,11 @@ def test_first_header_failure_rolls_back_an_existing_caller_owned_sequence(
         assert importer.get_statistics()["batches_processed"] == 0
 
 
-@pytest.mark.parametrize(("entry_name", "importer_class", "single"), ENTRY_POINTS)
+@pytest.mark.parametrize(("entry_name", "importer_class"), ENTRY_POINTS)
 def test_first_header_state_inspection_failure_invalidates_the_connection(
     tmp_path,
     entry_name: str,
     importer_class: type,
-    single: bool,
 ) -> None:
     """Unknown transaction state is unsafe, never permission to keep writing."""
 
@@ -230,26 +210,17 @@ def test_first_header_state_inspection_failure_invalidates_the_connection(
         database.execute(SCHEMAS["NL_TC"])
         database.commit()
         importer = importer_class(database)
-        if single:
-            assert importer.import_single_record(_tc_record(), auto_commit=False) is True
-        else:
-            assert (
-                importer.import_records(iter([_tc_record()]), auto_commit=False)["records_imported"]
-                == 1
-            )
+        assert (
+            importer.import_records(iter([_tc_record()]), auto_commit=False)["records_imported"]
+            == 1
+        )
         database.fail_next_pending_inspection = True
 
         with pytest.raises(TransactionRecoveryError, match="inspection"):
-            if single:
-                importer.import_single_record(
-                    _tc_record(DataKubun="0"),
-                    auto_commit=False,
-                )
-            else:
-                importer.import_records(
-                    iter([_tc_record(DataKubun="0")]),
-                    auto_commit=False,
-                )
+            importer.import_records(
+                iter([_tc_record(DataKubun="0")]),
+                auto_commit=False,
+            )
 
         assert database.is_connected() is False
         assert importer.get_statistics()["records_imported"] == 0
@@ -267,64 +238,26 @@ def test_first_header_state_inspection_failure_invalidates_the_connection(
         recovery_failure.execute(SCHEMAS["NL_TC"])
         recovery_failure.commit()
         importer = importer_class(recovery_failure)
-        if single:
-            assert importer.import_single_record(_tc_record(), auto_commit=False) is True
-        else:
-            assert (
-                importer.import_records(
-                    iter([_tc_record()]), auto_commit=False
-                )["records_imported"]
-                == 1
-            )
+        assert (
+            importer.import_records(
+                iter([_tc_record()]), auto_commit=False
+            )["records_imported"]
+            == 1
+        )
         recovery_failure.fail_next_pending_inspection = True
         recovery_failure.fail_next_invalidation = True
 
         with pytest.raises(TransactionRecoveryError, match="invalidation failed"):
-            if single:
-                importer.import_single_record(
-                    _tc_record(DataKubun="0"), auto_commit=False
-                )
-            else:
-                importer.import_records(
-                    iter([_tc_record(DataKubun="0")]), auto_commit=False
-                )
+            importer.import_records(
+                iter([_tc_record(DataKubun="0")]), auto_commit=False
+            )
 
         assert recovery_failure.is_connected() is True
         assert recovery_failure.has_pending_transaction() is True
         assert importer.get_statistics()["records_imported"] == 1
-        assert importer.get_statistics()["batches_processed"] == (0 if single else 1)
+        assert importer.get_statistics()["batches_processed"] == 1
         recovery_failure.rollback()
 
-    if single:
-        committed_path = tmp_path / "inspection-single-committed.db"
-        committed = _PendingInspectionFailureSQLite(
-            {"path": str(committed_path)}
-        )
-        with committed:
-            committed.execute(SCHEMAS["NL_TC"])
-            committed.commit()
-            importer = importer_class(committed)
-            assert importer.import_single_record(
-                _tc_record(), auto_commit=False
-            ) is True
-            committed.commit()
-            assert importer.get_statistics()["records_imported"] == 1
-            committed.fail_next_pending_inspection = True
-
-            with pytest.raises(TransactionRecoveryError, match="inspection"):
-                importer.import_single_record(
-                    _tc_record(DataKubun="0"), auto_commit=False
-                )
-
-            assert committed.is_connected() is False
-            assert importer.get_statistics()["records_imported"] == 1
-            assert importer.get_statistics()["batches_processed"] == 0
-
-        committed_reopened = SQLiteDatabase({"path": str(committed_path)})
-        with committed_reopened:
-            assert committed_reopened.fetch_one(
-                "SELECT COUNT(*) AS count FROM NL_TC"
-            )["count"] == 1
 
 
 @pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
