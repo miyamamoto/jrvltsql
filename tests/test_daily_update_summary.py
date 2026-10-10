@@ -527,3 +527,67 @@ def test_config_log_path_is_anchored_at_the_project_root(monkeypatch):
 
     daily_update._configure_logging(_Config({}), "/abs/explicit.log")
     assert seen["log_file"] == "/abs/explicit.log"
+
+
+def test_argparse_rejection_still_writes_the_summary(tmp_path):
+    """argparse が落とす引数（型エラー・未知オプション）でも usage_error を書く."""
+    summary_path = tmp_path / "summary.json"
+
+    with pytest.raises(SystemExit) as excinfo:
+        daily_update.main(["--summary-json", str(summary_path), "--days-back", "nope"])
+
+    assert excinfo.value.code == 2
+    doc = _read_summary(summary_path)
+    assert doc["outcome"] == "usage_error"
+    assert doc["exit_code"] == 2
+    assert doc["specs"] == []
+    assert doc["from_date"] is None
+
+
+def test_help_does_not_write_a_summary(tmp_path, capsys):
+    summary_path = tmp_path / "summary.json"
+
+    with pytest.raises(SystemExit) as excinfo:
+        daily_update.main(["--summary-json", str(summary_path), "--help"])
+
+    assert excinfo.value.code == 0
+    assert not summary_path.exists()
+
+
+def test_realtime_failure_keeps_the_counts_read_before_it(run_daily, tmp_path):
+    """途中のキーで JVRTOpen が失敗しても、それまでに読んだ件数をサマリに残す."""
+    from tests.test_daily_update import _build_rt_ra_record
+
+    class _FailsOnSecondKey(FakeRealtimeJVLink):
+        def __init__(self):
+            super().__init__()
+            self._pending = []
+
+        def jv_rt_open(self, data_spec, key):
+            self.opened.append((data_spec, key))
+            if len(self.opened) > 1:
+                raise JVLinkError("JVRTOpen failed", error_code=-301)
+            self._pending = [_build_rt_ra_record()]
+            return 0, 1
+
+        def jv_read(self):
+            if self._pending:
+                buff = self._pending.pop(0)
+                return len(buff), buff, "RT"
+            return 0, None, None
+
+    summary_path = tmp_path / "summary.json"
+    with pytest.raises(Exception, match="-301"):
+        run_daily(
+            FakeHistoricalJVLink((-1, 0, 0, "")),
+            "--specs", "0B12",
+            "--summary-json", str(summary_path),
+            realtime_fake=_FailsOnSecondKey(),
+        )
+
+    [spec] = _read_summary(summary_path)["specs"]
+    assert spec["status"] == "error"
+    assert spec["jvopen_code"] == -301
+    assert spec["records_read"] == 1
+    assert spec["records_parsed"] == 1
+    assert spec["records_imported"] is None

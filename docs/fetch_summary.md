@@ -14,7 +14,7 @@
 
 | オプション | 意味 |
 | --- | --- |
-| `--summary-json PATH` | サマリを `PATH` に書く。一時ファイルから `os.replace` で置き換えるので、読み手が途中の状態を見ることはない。引数解析より後のすべての終了経路（引数エラー、config / DB 接続の失敗、例外、中断）で書く。書けなかったときは stderr に出し、ほかの例外が起きていなければその `OSError` で終わる |
+| `--summary-json PATH` | サマリを `PATH` に書く。一時ファイルから `os.replace` で置き換えるので、読み手が途中の状態を見ることはない。すべての終了経路（argparse を含む引数エラー、config / DB 接続の失敗、例外、中断）で書く。書けなかったときは stderr に出し、ほかの例外が起きていなければその `OSError` で終わる |
 | `--require-records SPEC[,SPEC]` | 列挙した spec が何も返さなければ exit 3。JVOpen spec は `read_count`（JVOpen が返した対象ファイル数、p.19）が 0 のとき、`0Bxx` spec は読んだレコードが 0 件のとき。skip / error になった spec も満たさない扱い。`--specs` で選んでいない spec を書くと exit 2 |
 | `--log-file PATH` | 構造化ログの出力先（相対パスは cwd 基準）。省略時は config の `logging.file.path`、それも無ければ `logs/jltsql.log`。config 由来・既定の相対パスはプロジェクトルート基準（スケジューラの cwd には依存しない） |
 
@@ -32,7 +32,7 @@ WARNING（`daily_update spec returned no data`）を残します。TOKU や非�
 | --- | --- |
 | 0 | 正常終了（`--require-records` が無ければ 0 件でも 0） |
 | 1 | 例外（JVOpen エラー、`-2`、取込拒否など）。従来どおり traceback を出す（Ctrl-C は 130） |
-| 2 | 引数エラー（未知の spec、`--specs` に無い `--require-records` spec）。`--summary-json` には `outcome: "usage_error"` で書く |
+| 2 | 引数エラー（argparse が拒否した引数、未知の spec、`--specs` に無い `--require-records` spec）。`--summary-json` には `outcome: "usage_error"` で書く。argparse が拒否した場合は `from_date` / `to_date` が null。`--help` は何も書かない |
 | 3 | `--require-records` の spec が何も返さなかった。ほかの spec は最後まで同期し、commit 済み |
 
 ## 文書
@@ -113,7 +113,7 @@ WARNING（`daily_update spec returned no data`）を残します。TOKU や非�
 | `lastfiletimestamp` | string / null | JVOpen が返した中で最も新しい値（p.19）。空文字は null |
 | `records_read` | int | JVRead が返したレコード数 |
 | `records_parsed` | int | パースして取込に渡したレコード数（`to_date` で落としたぶんを除く） |
-| `records_imported` | int / null | DB に書いた行数。error / skipped では null（ロールバック済み） |
+| `records_imported` | int / null | DB に書いた行数。error / skipped では null（＝不明）。option 1/2 と 0Bxx は spec 単位でロールバックされるが、option 4（DIFN の setup fallback）は完了した chunk ごとに commit するので、失敗前の chunk の行は DB に残っている |
 | `records_failed` | int | パーサ・取込が拒否した件数 |
 | `records_out_of_range` | int | パース後、client 側の `to_date` filter で落とした件数 |
 | `elapsed_seconds` | number | この spec の所要時間 |

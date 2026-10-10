@@ -106,6 +106,7 @@ def _sync_realtime_spec(
     updater=None,
     ensure_tables: bool = True,
     jvrtopen_results: list | None = None,
+    stats: dict | None = None,
 ) -> dict:
     """Fetch a JVRTOpen speed-report spec for each date key and upsert rows.
 
@@ -123,6 +124,8 @@ def _sync_realtime_spec(
         updater: Optional RealtimeUpdater override (tests).
         jvrtopen_results: Optional list that receives the key and JVRTOpen
             code of every open (src.fetcher.summary.jvrtopen_entry).
+        stats: Optional counter dict to update in place, so a caller still
+            sees what was read when this raises part-way.
     """
 
     from src.jvlink.bridge import JVLinkBridgeError
@@ -143,12 +146,16 @@ def _sync_realtime_spec(
     if updater is None:
         updater = RealtimeUpdater(database=database)
 
-    stats = {
-        "records_fetched": 0,
-        "records_parsed": 0,
-        "records_imported": 0,
-        "records_failed": 0,
-    }
+    if stats is None:
+        stats = {}
+    stats.update(
+        {
+            "records_fetched": 0,
+            "records_parsed": 0,
+            "records_imported": 0,
+            "records_failed": 0,
+        }
+    )
     # The caller's list receives one entry per JVRTOpen call, including the
     # calls made before a failure; the counter dict keeps its shape.
     record_open = (
@@ -437,11 +444,12 @@ def _sync_jvrtopen_spec(
 
     started = time.monotonic()
     opens: list = []
+    # Filled in place so the counts read before a failure survive it.
     stats: dict = {}
     error: Exception | None = None
     skipped_code: int | None = None
     try:
-        stats = _sync_realtime_spec(
+        _sync_realtime_spec(
             database=database,
             spec=spec,
             from_date=from_date,
@@ -449,6 +457,7 @@ def _sync_jvrtopen_spec(
             sid=sid,
             ensure_tables=ensure_tables,
             jvrtopen_results=opens,
+            stats=stats,
         )
     except Exception as exc:
         code = _error_code_from_exception(exc)
@@ -473,7 +482,7 @@ def _sync_jvrtopen_spec(
         skipped=skipped_code is not None,
         skipped_code=skipped_code,
     )
-    if error is None and stats:
+    if error is None and skipped_code is None and stats:
         print(
             f"[daily-sync] {spec} fetched={stats.get('records_fetched', 0)} "
             f"parsed={stats.get('records_parsed', 0)} "
@@ -486,8 +495,8 @@ def _sync_jvrtopen_spec(
 def _run_document(
     *,
     started_at: datetime,
-    from_date: str,
-    to_date: str,
+    from_date: str | None,
+    to_date: str | None,
     required_specs: list[str],
     specs: list[dict],
     failures: list[dict],
@@ -543,6 +552,38 @@ def _write_run_summary(path: str, document: dict, *, error_in_flight: bool) -> N
         print(f"[daily-sync] ERROR could not write --summary-json {path}: {exc}", file=sys.stderr)
         if not error_in_flight:
             raise
+
+
+def _write_usage_error_summary(argv: list[str] | None, exc: SystemExit) -> None:
+    """Write the summary for an argument argparse itself rejected.
+
+    The real parse failed, so the path is recovered with a parser that knows
+    only --summary-json. --help/--version (exit 0) write nothing.
+    """
+
+    exit_code = _exit_code_for(exc)
+    if exit_code == 0:
+        return
+    probe = argparse.ArgumentParser(add_help=False)
+    probe.add_argument("--summary-json", default=None)
+    known, _ = probe.parse_known_args(argv)
+    if not known.summary_json:
+        return
+    now = datetime.now().astimezone()
+    _write_run_summary(
+        known.summary_json,
+        _run_document(
+            started_at=now,
+            from_date=None,
+            to_date=None,
+            required_specs=[],
+            specs=[],
+            failures=[],
+            exit_code=exit_code,
+            error=None,
+        ),
+        error_in_flight=True,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -601,7 +642,11 @@ def main(argv: list[str] | None = None) -> int:
         metavar="PATH",
         help="Structured log file (default: config logging.file.path, else ./logs/jltsql.log)",
     )
-    args = parser.parse_args(argv)
+    try:
+        args = parser.parse_args(argv)
+    except SystemExit as exc:
+        _write_usage_error_summary(argv, exc)
+        raise
 
     started_at = datetime.now().astimezone()
     to_date = (datetime.now() + timedelta(days=max(args.days_forward, 0))).strftime("%Y%m%d")
