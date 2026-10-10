@@ -531,6 +531,10 @@ cache の変更に入る前に、対応する現行種別名を示して停止�
 - 欠けた旧払戻を既存行から復元できないため、自動 ALTER で完全扱いにせず、
   DB をバックアップして `NL_HR` / `RT_HR` / `HARAI` を現行 DDL で再作成し、
   保持範囲に合う `RACE` source を再取込してください。
+- 2.1.2 で作った DB で、違いが 3 つの flag 配列 6 件目の列型（INTEGER）だけの
+  場合は、値が `0` だけなので PostgreSQL の
+  `ALTER COLUMN ... TYPE TEXT USING <列>::text` で失わずに移行できます（2.2.0 の
+  RELEASE_NOTES.md「Upgrade from 2.1.2」）。SQLite は列型を変えられないため再作成します。
 
 #### SE（馬毎レース情報）
 
