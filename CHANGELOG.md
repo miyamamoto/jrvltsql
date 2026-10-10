@@ -9,20 +9,45 @@
 
 ## [2.2.0] - 2026-10-11
 
+### 移行（2.1.2 から上げる場合）
+
+- **HR の予備フラグ 3 列の型が INTEGER → TEXT に変わった**（#263）。対象は `NL_HR`・`RT_HR` の `FuseirituFlag6`・`TokubaraiFlag6`・`HenkanFlag6`。2.1.2 で作った DB のままでは
+  取込前の列契約検査が型不一致で HR の取込を止める（fail closed、黙って壊れることは無い）。
+  上げる前に DB を backup し、PostgreSQL は次で列型を変える。SQLite は列型を変えられないので
+  新しい DB を作って取り直す。
+  ```sql
+  ALTER TABLE nl_hr ALTER COLUMN fuseirituflag6 TYPE TEXT USING fuseirituflag6::text,
+                    ALTER COLUMN tokubaraiflag6 TYPE TEXT USING tokubaraiflag6::text,
+                    ALTER COLUMN henkanflag6    TYPE TEXT USING henkanflag6::text;
+  -- rt_hr も同じ 3 列（HARAI は元から VARCHAR で対象外）
+  ```
+- この SQL は使い捨て PostgreSQL 15 で確認済み（2.1.2 形の表は検査で拒否、ALTER 後に通過）。
+- rollback: 2.1.2 の不変 tag/wheel を再採用し、上の変更前に取った backup を restore する。
+
 ### Added
 
 - `scripts/daily_update.py --summary-json PATH`: dataspec ごとに送った fromtime と JVOpen の
   戻り値・`readcount`・`downloadcount`・`lastfiletimestamp`（JV-Link IF 4.9.0.1 p.19, p.54）、
-  読込・パース・取込・`to_date` で落とした件数、所要時間を JSON で書く。例外で終わっても書く。
+  読込・パース・取込・`to_date` で落とした件数、所要時間を JSON で書く。例外・引数エラーで終わっても書く（`--help` は書かない）。
   契約は `docs/fetch_summary.md`
 - `--require-records SPEC[,SPEC]`: 列挙した spec が何も返さなければ exit 3（既定は従来どおり
   0 件でも exit 0）
 - `--log-file PATH`。daily_update が構造化ログをファイルに出すようになった（従来は
   import 時の console-only/ERROR 設定のままで、JVOpen の戻り値がどこにも残らなかった）
 - `HistoricalFetcher.get_jvopen_results()` / `BaseFetcher.get_records_out_of_range()`
+- パースに失敗したレコードを、ファイル名・通し番号・spec・エラー・全バイト（content-addressed）
+  で保存し、その spec を fail closed にする（#264）
 
 ### Changed
 
+- JVInit を fetch ごとではなく process（fetcher 構築時）に 1 回にした。複数 dataspec の
+  セットアップでもダイアログは 1 回。bridge process が途中で死んだ場合だけ JVOpen/JVRTOpen
+  前に session を張り直す（#266）
+- PostgreSQL `insert_many` を単一行 template + `executemany` にした（psycopg の再 parse を
+  解消、pg8000 の原子性は維持、戻り値は従来どおり）（#265）
+- HN `reserved`・`DelKubun`、WF `Yobi1`/`Yobi2`、HR の予備フラグ（各配列 6 件目）に
+  固定値を要求するのをやめ、値をそのまま保持する（#263、上の移行を参照）
+- 参照の無い `src/utils/db_helpers.py` を削除（#269）
 - 何も返さなかった spec はログに WARNING で残す（stdout / stderr は変えない）。JVOpen `-1` は
   p.54 で「最新バージョンの DL を選択した」場合も含むため、空の証明としては扱わない
 - JVOpen `-2` の例外文言に `(code: -2)` を付けた。`--ignore-jvopen-error-codes -2` が

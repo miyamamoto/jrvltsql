@@ -1,25 +1,61 @@
 # jrvltsql v2.2.0 Release Notes
 
 `2.2.0` releases everything merged on `master` since `2.1.2` (#263-#266,
-#268-#270, #272). Parser layouts, table schemas and provider-registration
-contracts are unchanged.
+#268-#270, #272). Parser byte layouts and provider-registration contracts are
+unchanged. One storage type changes (see Upgrade).
 
-Highlights:
+## Highlights
 
 - fetch observability (#272): `scripts/daily_update.py --summary-json PATH`
   writes, per dataspec, the fromtime sent and the JVOpen return code,
   `readcount`, `downloadcount` and `lastfiletimestamp` (JV-Link IF 4.9.0.1
-  p.19, p.54), plus read/parsed/imported/out-of-range counts, on every exit
-  path. `--require-records SPEC[,SPEC]` exits 3 when a listed spec returns
-  nothing; `--log-file PATH` gives daily_update a file log. JVOpen `-1` is
-  recorded, never treated as proof of an empty server (p.54 also returns it
-  when a newer JV-Link was offered and chosen). Contract: `docs/fetch_summary.md`.
-  Without the new flags behaviour is unchanged, except that
-  `--ignore-jvopen-error-codes -2` now takes effect.
+  p.19, p.54), plus read/parsed/imported/out-of-range counts. It is written on
+  normal completion, exceptions, argument errors and interrupts; `--help`
+  writes nothing. `--require-records SPEC[,SPEC]` exits 3 when a listed spec
+  returns nothing; `--log-file PATH` gives daily_update a file log. JVOpen `-1`
+  is recorded, never treated as proof of an empty server (p.54 also returns it
+  when a newer JV-Link was offered and chosen). Contract:
+  `docs/fetch_summary.md`. Without the new flags behaviour is unchanged, except
+  that `--ignore-jvopen-error-codes -2` now takes effect.
 - `fetch --to` is optional (#270); failed records are stored content-addressed
-  and fail closed (#264); one setup dialog for multi-spec fetch (#266);
-  PostgreSQL `insert_many` fast path (#265); provider values in reserved fields
-  are kept (#263); the 2.1.2 lifecycle overlay is forward-ported (#268).
+  and the spec fails closed (#264); JVInit once per process and one setup
+  dialog for multi-spec fetch (#266); PostgreSQL `insert_many` fast path
+  (#265); provider values in reserved fields are kept (#263); the 2.1.2
+  lifecycle overlay is forward-ported (#268); unused `src/utils/db_helpers.py`
+  removed (#269).
+
+## Upgrade from 2.1.2 (migration required)
+
+`NL_HR` and `RT_HR` columns `FuseirituFlag6`, `TokubaraiFlag6` and
+`HenkanFlag6` change from `INTEGER` to `TEXT` (#263). On a database created by
+2.1.2 the pre-import column contract check rejects HR imports (fail closed;
+nothing is written wrongly). Back up the database first, then on PostgreSQL:
+
+```sql
+ALTER TABLE nl_hr ALTER COLUMN fuseirituflag6 TYPE TEXT USING fuseirituflag6::text,
+                  ALTER COLUMN tokubaraiflag6 TYPE TEXT USING tokubaraiflag6::text,
+                  ALTER COLUMN henkanflag6    TYPE TEXT USING henkanflag6::text;
+-- same three columns on rt_hr; HARAI was already VARCHAR
+```
+
+SQLite cannot change a column type in place: create a new database and
+re-import. Verified on a disposable PostgreSQL 15: the 2.1.2-shaped tables are
+rejected by the HR storage check and pass after the ALTER.
+
+## Rollback
+
+Re-adopt the immutable `v2.1.2` tag/wheel and restore the backup taken before
+the ALTER. Do not assume code-only rollback works on a migrated database.
+
+## Validation and known constraints
+
+- `pytest tests --ignore=tests/integration --ignore=tests/e2e -m "not slow"`:
+  5023 passed, 516 skipped (coverage 82%); CI lint/test/windows-batch-syntax
+  passed.
+- Not measured for this release: a live JV-Link provider run of the changed
+  fetch path (#266 JVInit lifecycle, #272 summary). This must be done in the
+  adopting runtime before production use, e.g. one `daily_update.py --specs RACE
+  --summary-json ... --require-records RACE` run and a multi-spec setup.
 
 See `CHANGELOG.md` for details.
 
