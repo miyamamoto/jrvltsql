@@ -7,7 +7,25 @@
 
 ## [Unreleased]
 
+### Added
+
+- `scripts/daily_update.py --summary-json PATH`: dataspec ごとに送った fromtime と JVOpen の
+  戻り値・`readcount`・`downloadcount`・`lastfiletimestamp`（JV-Link IF 4.9.0.1 p.19, p.54）、
+  読込・パース・取込・`to_date` で落とした件数、所要時間を JSON で書く。例外で終わっても書く。
+  契約は `docs/fetch_summary.md`
+- `--require-records SPEC[,SPEC]`: 列挙した spec が何も返さなければ exit 3（既定は従来どおり
+  0 件でも exit 0）
+- `--log-file PATH`。daily_update が構造化ログをファイルに出すようになった（従来は
+  import 時の console-only/ERROR 設定のままで、JVOpen の戻り値がどこにも残らなかった）
+- `HistoricalFetcher.get_jvopen_results()` / `BaseFetcher.get_records_out_of_range()`
+
 ### Changed
+
+- 何も返さなかった spec はログに WARNING で残す（stdout / stderr は変えない）。JVOpen `-1` は
+  p.54 で「最新バージョンの DL を選択した」場合も含むため、空の証明としては扱わない
+- JVOpen `-2` の例外文言に `(code: -2)` を付けた。`--ignore-jvopen-error-codes -2` が
+  初めて効くようになる（従来は文言にコードが無く、指定しても無視されていた）
+- ログファイルに ANSI 色コードを書かない（console は従来どおり）
 
 - `fetch` の `--to` を省略可能にする。省くとclient-side dateフィルタをかけず、`JVOpen` へ
   終了時刻も渡さず（暦年で刻まず開始のみ 1 回）、NL cacheも使わない

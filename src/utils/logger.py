@@ -91,16 +91,20 @@ def setup_logging(
         cache_logger_on_first_use=True,
     )
 
-    # Update handlers with structlog formatter
-    formatter = structlog.stdlib.ProcessorFormatter(
-        processor=structlog.dev.ConsoleRenderer(),
-        foreign_pre_chain=[
-            structlog.stdlib.add_log_level,
-            structlog.processors.TimeStamper(fmt="iso", utc=False),
-        ],
-    )
+    # Update handlers with structlog formatter. The log file is read by grep
+    # and by operators after the fact, so it gets no ANSI colour codes.
+    def _formatter(renderer_kwargs: dict) -> structlog.stdlib.ProcessorFormatter:
+        return structlog.stdlib.ProcessorFormatter(
+            processor=structlog.dev.ConsoleRenderer(**renderer_kwargs),
+            foreign_pre_chain=[
+                structlog.stdlib.add_log_level,
+                structlog.processors.TimeStamper(fmt="iso", utc=False),
+            ],
+        )
+
     for handler in handlers:
-        handler.setFormatter(formatter)
+        is_file = isinstance(handler, logging.FileHandler)
+        handler.setFormatter(_formatter({"colors": False} if is_file else {}))
 
 
 def get_logger(name: str) -> structlog.BoundLogger:

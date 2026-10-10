@@ -6,15 +6,29 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from src import __version__ as JLTSQL_VERSION
 from src.database import create_database_from_config
+from src.fetcher.summary import (
+    STATUS_NO_DATA,
+    SUMMARY_SCHEMA_VERSION,
+    jvrtopen_entry,
+    requirement_failures,
+    summarize_jvopen_spec,
+    summarize_jvrtopen_spec,
+    write_summary_json,
+)
 from src.importer.batch import BatchProcessor
 from src.utils.config import load_config
+from src.utils.logger import get_logger, setup_logging
+
+logger = get_logger(__name__)
 
 UPDATE_SPECS = [
     ("TOKU", 2),
@@ -56,6 +70,12 @@ REALTIME_SPEC_PREFIX = "0B"
 # スキップする。realtime 経路(JVRTOpen)も同じ3コードを処理する。
 SUBSCRIPTION_ERROR_CODES = frozenset({-111, -114, -115})
 
+# Exit codes. 0 and 2 keep their earlier meaning and an uncaught exception
+# still exits 1; 3 is only reachable through --require-records.
+EXIT_OK = 0
+EXIT_USAGE = 2
+EXIT_REQUIRED_RECORDS_MISSING = 3
+
 
 def _is_realtime_spec(spec: str) -> bool:
     """Return True for JVRTOpen speed-report specs (e.g., 0B12, 0B15)."""
@@ -85,6 +105,7 @@ def _sync_realtime_spec(
     jvlink=None,
     updater=None,
     ensure_tables: bool = True,
+    jvrtopen_results: list | None = None,
 ) -> dict:
     """Fetch a JVRTOpen speed-report spec for each date key and upsert rows.
 
@@ -100,6 +121,8 @@ def _sync_realtime_spec(
         sid: JV-Link session ID.
         jvlink: Optional JV-Link wrapper override (tests).
         updater: Optional RealtimeUpdater override (tests).
+        jvrtopen_results: Optional list that receives the key and JVRTOpen
+            code of every open (src.fetcher.summary.jvrtopen_entry).
     """
 
     from src.jvlink.bridge import JVLinkBridgeError
@@ -126,6 +149,11 @@ def _sync_realtime_spec(
         "records_imported": 0,
         "records_failed": 0,
     }
+    # The caller's list receives one entry per JVRTOpen call, including the
+    # calls made before a failure; the counter dict keeps its shape.
+    record_open = (
+        jvrtopen_results.append if jvrtopen_results is not None else (lambda entry: None)
+    )
 
     try:
         if owns_jvlink:
@@ -135,10 +163,12 @@ def _sync_realtime_spec(
                 ret, _count = jvlink.jv_rt_open(spec, key)
             except (JVLinkError, JVLinkBridgeError) as exc:
                 code = getattr(exc, "error_code", None)
+                record_open(jvrtopen_entry(key=key, jvrtopen_code=code))
                 if code in SUBSCRIPTION_ERROR_CODES:
                     print(f"[daily-sync] {spec} not subscribed, skipping spec")
                     break
                 raise
+            record_open(jvrtopen_entry(key=key, jvrtopen_code=ret))
             if ret == -1:
                 # No data published for this date key (normal).
                 continue
@@ -239,7 +269,277 @@ def _effective_option(spec: str, configured_option: int, from_date: str) -> int:
     return 4 if months_ago > 11 else configured_option
 
 
-def main() -> int:
+def _parse_required_specs(value: str | None, selected: list[tuple[str, int]]) -> list[str]:
+    """Resolve --require-records against the specs this run will fetch."""
+
+    if not value:
+        return []
+    known = {spec for spec, _ in UPDATE_SPECS}
+    selected_specs = {spec for spec, _ in selected}
+    required: list[str] = []
+    for raw in value.split(","):
+        spec = raw.strip().upper()
+        if not spec:
+            continue
+        if spec not in known:
+            raise ValueError(f"Unsupported --require-records spec: {spec}")
+        if spec not in selected_specs:
+            raise ValueError(f"--require-records spec {spec} is not selected by --specs")
+        if spec not in required:
+            required.append(spec)
+    return required
+
+
+def _configure_logging(config, log_file: str | None) -> None:
+    """Send this run's structured log to a file (console stays errors-only).
+
+    The import-time default is console-only at ERROR, which dropped every
+    JVOpen result. --log-file wins; otherwise the config's logging.file
+    settings apply, falling back to setup_logging's ./logs/jltsql.log.
+    """
+
+    level = str(config.get("logging.level", "INFO"))
+    log_to_file = bool(log_file) or bool(config.get("logging.file.enabled", True))
+    try:
+        setup_logging(
+            level=level,
+            log_file=log_file or config.get("logging.file.path", None),
+            log_to_console=True,
+            log_to_file=log_to_file,
+            console_level="ERROR",
+        )
+    except OSError as exc:
+        # An unwritable log location must not stop the sync itself.
+        print(
+            f"[daily-sync] WARNING file logging disabled: {exc}",
+            file=sys.stderr,
+        )
+        setup_logging(level=level, log_to_console=True, log_to_file=False, console_level="ERROR")
+
+
+def _jvopen_error_code(fetcher, exc: Exception) -> int | None:
+    """The JV-Link code behind a failed spec: recorded by the fetcher, else parsed."""
+
+    opens = fetcher.get_jvopen_results() if hasattr(fetcher, "get_jvopen_results") else []
+    if opens and opens[-1].get("jvopen_code") not in (None, 0, -1):
+        return opens[-1]["jvopen_code"]
+    return _error_code_from_exception(exc)
+
+
+def _report_spec(summary: dict) -> None:
+    """Log one spec summary; a spec that got nothing back is logged as a warning."""
+
+    fields = {
+        key: summary[key]
+        for key in (
+            "dataspec",
+            "kind",
+            "option",
+            "status",
+            "jvopen_code",
+            "fromtimes",
+            "read_count",
+            "download_count",
+            "lastfiletimestamp",
+            "records_read",
+            "records_parsed",
+            "records_imported",
+            "records_failed",
+            "records_out_of_range",
+            "elapsed_seconds",
+        )
+    }
+    logger.info("daily_update spec finished", **fields)
+    if summary["status"] != STATUS_NO_DATA:
+        return
+    # IF 4.9.0.1 p.54: -1 also means "a newer JV-Link was published and the
+    # user chose to download it", so no data is reported, not concluded.
+    # Logged, not printed: TOKU/option-2 and off-day 0Bxx specs are often
+    # legitimately empty, and --require-records is what turns "empty" into a
+    # failure for the specs that must not be.
+    logger.warning("daily_update spec returned no data", **fields)
+
+
+def _sync_jvopen_spec(
+    processor,
+    spec: str,
+    option: int,
+    from_date: str,
+    to_date: str,
+    ensure_tables: bool,
+    ignored_error_codes: set[int],
+) -> tuple[dict, Exception | None]:
+    """Run one JVOpen spec and summarize it; return the error to re-raise, if any."""
+
+    started = time.monotonic()
+    stats: dict = {}
+    error: Exception | None = None
+    skipped_code: int | None = None
+    # A failure before JVOpen (schema setup, validation) must not report the
+    # previous spec's opens and counters as this spec's.
+    processor.fetcher.reset_statistics()
+    try:
+        stats = processor.process_date_range(
+            data_spec=spec,
+            from_date=from_date,
+            to_date=to_date,
+            option=option,
+            ensure_tables=ensure_tables,
+        )
+    except Exception as exc:
+        code = _jvopen_error_code(processor.fetcher, exc)
+        if code in ignored_error_codes or code in SUBSCRIPTION_ERROR_CODES:
+            print(f"[daily-sync] {spec} skipped: JVOpen code {code} (unsubscribed/ignored)")
+            skipped_code = code
+        else:
+            error = exc
+    fetcher = processor.fetcher
+    completed = error is None and skipped_code is None
+    summary = summarize_jvopen_spec(
+        dataspec=spec,
+        option=option,
+        from_date=from_date,
+        to_date=to_date,
+        opens=fetcher.get_jvopen_results(),
+        fetch_stats=stats if completed else fetcher.get_statistics(),
+        records_imported=int(stats.get("records_imported", 0) or 0) if completed else None,
+        records_out_of_range=fetcher.get_records_out_of_range(),
+        elapsed_seconds=time.monotonic() - started,
+        error=error,
+        skipped=skipped_code is not None,
+        skipped_code=skipped_code,
+    )
+    if completed:
+        print(
+            f"[daily-sync] {spec} fetched={stats.get('records_fetched', 0)} "
+            f"parsed={stats.get('records_parsed', 0)} imported={stats.get('records_imported', 0)} "
+            f"failed={stats.get('records_failed', 0)}"
+        )
+    return summary, error
+
+
+def _sync_jvrtopen_spec(
+    database,
+    spec: str,
+    from_date: str,
+    to_date: str,
+    sid: str,
+    ensure_tables: bool,
+    ignored_error_codes: set[int],
+) -> tuple[dict, Exception | None]:
+    """Run one JVRTOpen spec and summarize it; return the error to re-raise, if any."""
+
+    started = time.monotonic()
+    opens: list = []
+    stats: dict = {}
+    error: Exception | None = None
+    skipped_code: int | None = None
+    try:
+        stats = _sync_realtime_spec(
+            database=database,
+            spec=spec,
+            from_date=from_date,
+            to_date=to_date,
+            sid=sid,
+            ensure_tables=ensure_tables,
+            jvrtopen_results=opens,
+        )
+    except Exception as exc:
+        code = _error_code_from_exception(exc)
+        if code in ignored_error_codes or code in SUBSCRIPTION_ERROR_CODES:
+            print(f"[daily-sync] {spec} skipped: JVOpen code {code} (unsubscribed/ignored)")
+            skipped_code = code
+        else:
+            error = exc
+    if skipped_code is None and error is None and opens:
+        # _sync_realtime_spec stops the spec on a subscription code and returns.
+        last_code = opens[-1].get("jvrtopen_code")
+        if last_code in SUBSCRIPTION_ERROR_CODES:
+            skipped_code = last_code
+    summary = summarize_jvrtopen_spec(
+        dataspec=spec,
+        from_date=from_date,
+        to_date=to_date,
+        opens=opens,
+        stats=stats,
+        elapsed_seconds=time.monotonic() - started,
+        error=error,
+        skipped=skipped_code is not None,
+        skipped_code=skipped_code,
+    )
+    if error is None and stats:
+        print(
+            f"[daily-sync] {spec} fetched={stats.get('records_fetched', 0)} "
+            f"parsed={stats.get('records_parsed', 0)} "
+            f"imported={stats.get('records_imported', 0)} "
+            f"failed={stats.get('records_failed', 0)}"
+        )
+    return summary, error
+
+
+def _run_document(
+    *,
+    started_at: datetime,
+    from_date: str,
+    to_date: str,
+    required_specs: list[str],
+    specs: list[dict],
+    failures: list[dict],
+    exit_code: int,
+    error: BaseException | None,
+) -> dict:
+    """Top-level summary document (contract: docs/fetch_summary.md)."""
+
+    if error is not None:
+        outcome = "error"
+    elif exit_code == EXIT_USAGE:
+        outcome = "usage_error"
+    elif failures:
+        outcome = "required_records_missing"
+    else:
+        outcome = "ok"
+    return {
+        "schema_version": SUMMARY_SCHEMA_VERSION,
+        "generator": "jltsql scripts/daily_update.py",
+        "jltsql_version": JLTSQL_VERSION,
+        "started_at": started_at.isoformat(timespec="seconds"),
+        "finished_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+        "from_date": from_date,
+        "to_date": to_date,
+        "required_specs": required_specs,
+        "outcome": outcome,
+        "exit_code": exit_code,
+        "error": None if error is None else f"{type(error).__name__}: {error}"[:500],
+        "requirement_failures": failures,
+        "specs": specs,
+    }
+
+
+def _exit_code_for(exc: BaseException) -> int:
+    """The process exit code an exception escaping main() will produce."""
+
+    if isinstance(exc, SystemExit):
+        code = exc.code
+        if code is None:
+            return 0
+        return code if isinstance(code, int) else 1
+    if isinstance(exc, KeyboardInterrupt):
+        return 130
+    return 1
+
+
+def _write_run_summary(path: str, document: dict, *, error_in_flight: bool) -> None:
+    """Write the summary without masking the error that is already unwinding."""
+
+    try:
+        write_summary_json(path, document)
+    except OSError as exc:
+        print(f"[daily-sync] ERROR could not write --summary-json {path}: {exc}", file=sys.stderr)
+        if not error_in_flight:
+            raise
+
+
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run daily JRA incremental sync")
     parser.add_argument("--config", default=None, help="Path to config.yaml")
     parser.add_argument("--days-back", type=int, default=7, help="Fetch window size in days")
@@ -275,80 +575,133 @@ def main() -> int:
         default=None,
         help="Comma-separated JVOpen error codes to warn-and-skip for daily tasks",
     )
-    args = parser.parse_args()
+    parser.add_argument(
+        "--summary-json",
+        default=None,
+        metavar="PATH",
+        help="Write a per-spec JSON summary of JVOpen results and counts "
+        "(docs/fetch_summary.md); written on failure too",
+    )
+    parser.add_argument(
+        "--require-records",
+        default=None,
+        metavar="SPEC[,SPEC]",
+        help="Exit 3 when any listed spec got nothing back "
+        "(JVOpen read_count 0, or no records for a 0Bxx spec)",
+    )
+    parser.add_argument(
+        "--log-file",
+        default=None,
+        metavar="PATH",
+        help="Structured log file (default: config logging.file.path, else ./logs/jltsql.log)",
+    )
+    args = parser.parse_args(argv)
 
-    config_path = args.config or str(PROJECT_ROOT / "config" / "config.yaml")
-    config = load_config(config_path)
-    database = create_database_from_config(config, db_type_override=args.db)
-
+    started_at = datetime.now().astimezone()
     to_date = (datetime.now() + timedelta(days=max(args.days_forward, 0))).strftime("%Y%m%d")
     from_date = (datetime.now() - timedelta(days=max(args.days_back, 1))).strftime("%Y%m%d")
+    summaries: list[dict] = []
+    required_specs: list[str] = []
+    failures: list[dict] = []
+    error: BaseException | None = None
+    exit_code = EXIT_OK
+    # Everything after argument parsing runs inside this try so that the
+    # summary is written on every exit path: usage errors, config/database
+    # failures, JV-Link errors and interrupts alike.
+    try:
+        config_path = args.config or str(PROJECT_ROOT / "config" / "config.yaml")
+        config = load_config(config_path)
+        _configure_logging(config, args.log_file)
 
-    with database:
-        processor = BatchProcessor(
-            database=database,
-            sid=config.get("jvlink.sid", "JLTSQL"),
-            batch_size=1000,
-            show_progress=False,
-        )
         try:
             update_specs = _select_update_specs(args.specs)
+            required_specs = _parse_required_specs(args.require_records, update_specs)
         except ValueError as exc:
             print(f"[daily-sync] {exc}", file=sys.stderr)
-            return 2
+            exit_code = EXIT_USAGE
+            return exit_code
         if args.force_incremental:
             update_specs = _force_incremental_options(update_specs)
         ignored_error_codes = _parse_ignored_error_codes(args.ignore_jvopen_error_codes)
 
-        for spec, option in update_specs:
-            if _is_realtime_spec(spec):
-                print(f"[daily-sync] {spec} {from_date}..{to_date} (realtime)")
-                try:
-                    stats = _sync_realtime_spec(
-                        database=database,
-                        spec=spec,
-                        from_date=from_date,
-                        to_date=to_date,
-                        sid=config.get("jvlink.sid", "JLTSQL"),
-                        ensure_tables=args.ensure_tables,
+        database = create_database_from_config(config, db_type_override=args.db)
+        sid = config.get("jvlink.sid", "JLTSQL")
+        logger.info(
+            "daily_update started",
+            from_date=from_date,
+            to_date=to_date,
+            specs=[spec for spec, _ in update_specs],
+            required_specs=required_specs,
+            jltsql_version=JLTSQL_VERSION,
+        )
+
+        with database:
+            processor = BatchProcessor(
+                database=database,
+                sid=sid,
+                batch_size=1000,
+                show_progress=False,
+            )
+            for spec, option in update_specs:
+                if _is_realtime_spec(spec):
+                    print(f"[daily-sync] {spec} {from_date}..{to_date} (realtime)")
+                    summary, spec_error = _sync_jvrtopen_spec(
+                        database,
+                        spec,
+                        from_date,
+                        to_date,
+                        sid,
+                        args.ensure_tables,
+                        ignored_error_codes,
                     )
-                except Exception as exc:
-                    code = _error_code_from_exception(exc)
-                    if code in ignored_error_codes or code in SUBSCRIPTION_ERROR_CODES:
-                        print(
-                            f"[daily-sync] {spec} skipped: JVOpen code {code} (unsubscribed/ignored)"
-                        )
-                        continue
-                    raise
+                else:
+                    option = _effective_option(spec, option, from_date)
+                    print(f"[daily-sync] {spec} {from_date}..{to_date} option={option}")
+                    summary, spec_error = _sync_jvopen_spec(
+                        processor,
+                        spec,
+                        option,
+                        from_date,
+                        to_date,
+                        args.ensure_tables,
+                        ignored_error_codes,
+                    )
+                summaries.append(summary)
+                _report_spec(summary)
+                if spec_error is not None:
+                    raise spec_error
+        failures = requirement_failures(required_specs, summaries)
+        if failures:
+            exit_code = EXIT_REQUIRED_RECORDS_MISSING
+            for failure in failures:
+                logger.error("daily_update required spec got no records", **failure)
                 print(
-                    f"[daily-sync] {spec} fetched={stats.get('records_fetched', 0)} "
-                    f"parsed={stats.get('records_parsed', 0)} "
-                    f"imported={stats.get('records_imported', 0)} "
-                    f"failed={stats.get('records_failed', 0)}"
+                    f"[daily-sync] ERROR required spec {failure['dataspec']} got no records "
+                    f"(status={failure['status']} read_count={failure['read_count']})",
+                    file=sys.stderr,
                 )
-                continue
-            option = _effective_option(spec, option, from_date)
-            print(f"[daily-sync] {spec} {from_date}..{to_date} option={option}")
-            try:
-                stats = processor.process_date_range(
-                    data_spec=spec,
+        return exit_code
+    except BaseException as exc:
+        error = exc
+        exit_code = _exit_code_for(exc)
+        logger.error("daily_update failed", error=f"{type(exc).__name__}: {exc}")
+        raise
+    finally:
+        if args.summary_json:
+            _write_run_summary(
+                args.summary_json,
+                _run_document(
+                    started_at=started_at,
                     from_date=from_date,
                     to_date=to_date,
-                    option=option,
-                    ensure_tables=args.ensure_tables,
-                )
-            except Exception as exc:
-                code = _error_code_from_exception(exc)
-                if code in ignored_error_codes or code in SUBSCRIPTION_ERROR_CODES:
-                    print(f"[daily-sync] {spec} skipped: JVOpen code {code} (unsubscribed/ignored)")
-                    continue
-                raise
-            print(
-                f"[daily-sync] {spec} fetched={stats.get('records_fetched', 0)} "
-                f"parsed={stats.get('records_parsed', 0)} imported={stats.get('records_imported', 0)} "
-                f"failed={stats.get('records_failed', 0)}"
+                    required_specs=required_specs,
+                    specs=summaries,
+                    failures=failures,
+                    exit_code=exit_code,
+                    error=error,
+                ),
+                error_in_flight=error is not None,
             )
-    return 0
 
 
 if __name__ == "__main__":

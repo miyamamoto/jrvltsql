@@ -49,6 +49,10 @@ class BaseFetcher(ABC):
 
     FAILED_RECORD_DIR_ENV = "JLTSQL_FAILED_RECORD_DIR"
 
+    # Parsed records dropped by the client-side to_date filter. A class-level
+    # default keeps fetchers built without __init__ (tests) countable.
+    _records_out_of_range = 0
+
     def __init__(
         self,
         sid: str = "UNKNOWN",
@@ -245,6 +249,7 @@ class BaseFetcher(ABC):
                     for record_item in records_list:
                         # Filter by to_date if specified
                         if to_date and not self._is_within_date_range(record_item, to_date):
+                            self._records_out_of_range += 1
                             logger.debug(
                                 "Skipping record outside date range",
                                 record_num=self._records_fetched,
@@ -453,8 +458,13 @@ class BaseFetcher(ABC):
             "repaired_read_errors": self._repaired_read_errors,
         }
 
+    def get_records_out_of_range(self) -> int:
+        """Parsed records dropped by the client-side to_date filter."""
+        return self._records_out_of_range
+
     def reset_statistics(self):
         """Reset fetching statistics."""
+        self._records_out_of_range = 0
         self._records_fetched = 0
         self._records_parsed = 0
         self._records_failed = 0

@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from typing import Any, Iterator, Optional
 
 from src.fetcher.base import BaseFetcher, FetcherError
+from src.fetcher.summary import jvopen_entry
 from src.jvlink.constants import (
     JVOPEN_OPTION_SETUP,
     JVOPEN_OPTION_SETUP_SPLIT,
@@ -154,6 +155,11 @@ class HistoricalFetcher(BaseFetcher):
 
     JVD_SELF_REPAIR_MAX_RETRIES = 2
 
+    # What each JVOpen of the current fetch returned (src.fetcher.summary).
+    # Rebound, never mutated, so the class-level default is safe for fetchers
+    # built without __init__ (tests).
+    _jvopen_results: tuple = ()
+
     def __init__(self, sid: str = "UNKNOWN", show_progress: bool = True):
         super().__init__(sid, show_progress=show_progress)
         self.cache_manager = None
@@ -165,6 +171,25 @@ class HistoricalFetcher(BaseFetcher):
         self._jv_open_context: Optional[tuple[str, str, int]] = None
         self._jv_open_last_file_timestamp: Optional[str] = None
         self._fetch_task_id: Optional[int] = None
+
+    def reset_statistics(self):
+        """Reset fetching statistics and the per-JVOpen record of this fetch."""
+        super().reset_statistics()
+        self._jvopen_results = ()
+
+    def get_jvopen_results(self) -> list[dict]:
+        """What every JVOpen of the last fetch was sent and returned.
+
+        One entry per JVOpen call (calendar-year chunks open more than once):
+        the fromtime sent and the result code, readcount, downloadcount and
+        lastfiletimestamp returned (JV-Link IF 4.9.0.1 p.17-19, p.54). An open
+        that raised has its error code and ``None`` counts. Empty after a full
+        cache hit, which does not call JVOpen.
+        """
+        return [dict(entry) for entry in self._jvopen_results]
+
+    def _record_jvopen(self, **values) -> None:
+        self._jvopen_results = (*self._jvopen_results, jvopen_entry(**values))
 
     def _consume_replayed_record(self) -> bool:
         """Skip records already emitted before a close/reopen recovery.
@@ -327,8 +352,25 @@ class HistoricalFetcher(BaseFetcher):
         # finally 1 箇所に集約する。
         primary_error = None
         try:
-            result, read_count, download_count, last_file_timestamp = (
-                self.jvlink.jv_open(data_spec, fromtime, option)
+            try:
+                result, read_count, download_count, last_file_timestamp = (
+                    self.jvlink.jv_open(data_spec, fromtime, option)
+                )
+            except Exception as open_error:
+                # Both transports raise for codes other than 0/-1/-2 and keep
+                # the code on the exception. Record it before unwinding so the
+                # caller can report what JV-Link actually returned.
+                self._record_jvopen(
+                    fromtime=fromtime,
+                    jvopen_code=getattr(open_error, "error_code", None),
+                )
+                raise
+            self._record_jvopen(
+                fromtime=fromtime,
+                jvopen_code=result,
+                read_count=read_count,
+                download_count=download_count,
+                lastfiletimestamp=last_file_timestamp,
             )
             self._jv_open_last_file_timestamp = last_file_timestamp
 
@@ -342,7 +384,11 @@ class HistoricalFetcher(BaseFetcher):
             )
 
             if result == -2:
-                raise FetcherError("JVOpen setup dialog was cancelled")
+                # IF 4.9.0.1 p.54: -2 はセットアップダイアログのキャンセル。
+                # データなしではないのでエラーとして伝播する。
+                raise FetcherError(
+                    "JVOpen setup dialog was cancelled (code: -2)"
+                )
             # 「データなし」判定より先にエラーコードを弾く。-113（読み出し終了
             # 時刻のパラメータ不正）のような失敗は read_count も download_count も
             # 0 で返るので、順序を逆にすると空の窓と見分けがつかなくなる。
@@ -354,10 +400,18 @@ class HistoricalFetcher(BaseFetcher):
                 # 言えないので、NL キャッシュの完了マークは付けさせない。
                 # (付けると has_nl_range が 0 件をこの範囲の答えとして返し続ける)
                 cache.range_complete = False
+                # IF 4.9.0.1 p.54: -1 は「該当データ無し」のほかに「最新
+                # バージョンが公開されユーザーが DL を選択した」場合も返る。
+                # 空であることの証明にはならないので、値を添えて残す。
                 logger.info(
                     "No data available for this window",
                     data_spec=data_spec,
                     fromtime=fromtime,
+                    option=option,
+                    result_code=result,
+                    read_count=read_count,
+                    download_count=download_count,
+                    last_file_timestamp=last_file_timestamp,
                     chunk=chunk_label,
                 )
                 if self.progress_display:

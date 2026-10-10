@@ -33,6 +33,7 @@ nav:
   - Wine/Docker: wine_docker.md
   - JV-Link 手動登録: jvlink_manual_registration.md
   - スクリプト一覧: scripts.md
+  - 取得サマリ JSON: fetch_summary.md
   - アーキテクチャ: architecture.md
   - リリース運用方針: release_policy.md
 
