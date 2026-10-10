@@ -212,3 +212,27 @@ def test_write_summary_json_replaces_atomically(tmp_path):
 
     assert json.loads(target.read_text(encoding="utf-8"))["specs"] == [{"dataspec": "RACE"}]
     assert [p.name for p in target.parent.iterdir()] == ["summary.json"]
+
+
+def test_recovery_reopen_is_recorded_but_not_counted():
+    """JVRead -402 の自己修復で開き直した JVOpen も記録するが、集計には入れない."""
+    from tests.test_jvd_self_repair import _fetcher as _repair_fetcher
+
+    fetcher = _repair_fetcher()
+    fetcher.jvlink.jv_read.side_effect = [(-402, None, "corrupt/RACE.jvd"), (0, None, None)]
+
+    list(fetcher._fetch_and_parse(recover_file_error=fetcher._recover_historical_read_error))
+
+    [entry] = fetcher.get_jvopen_results()
+    assert entry["recovery"] is True
+    assert entry["read_count"] == 3
+
+    original = jvopen_entry(
+        fromtime="20260101000000", jvopen_code=0, read_count=3, download_count=1,
+        lastfiletimestamp="ts",
+    )
+    summary = _spec(opens=[original, entry])
+    assert summary["read_count"] == 3
+    assert summary["download_count"] == 1
+    assert summary["fromtimes"] == ["20260101000000"]
+    assert [o["recovery"] for o in summary["opens"]] == [False, True]

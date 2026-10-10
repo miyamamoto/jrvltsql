@@ -16,7 +16,7 @@
 | --- | --- |
 | `--summary-json PATH` | サマリを `PATH` に書く。一時ファイルから `os.replace` で置き換えるので、読み手が途中の状態を見ることはない。引数解析より後のすべての終了経路（引数エラー、config / DB 接続の失敗、例外、中断）で書く。書けなかったときは stderr に出し、ほかの例外が起きていなければその `OSError` で終わる |
 | `--require-records SPEC[,SPEC]` | 列挙した spec が何も返さなければ exit 3。JVOpen spec は `read_count`（JVOpen が返した対象ファイル数、p.19）が 0 のとき、`0Bxx` spec は読んだレコードが 0 件のとき。skip / error になった spec も満たさない扱い。`--specs` で選んでいない spec を書くと exit 2 |
-| `--log-file PATH` | 構造化ログの出力先。省略時は config の `logging.file.path`、それも無ければ `./logs/jltsql.log` |
+| `--log-file PATH` | 構造化ログの出力先（相対パスは cwd 基準）。省略時は config の `logging.file.path`、それも無ければ `logs/jltsql.log`。config 由来・既定の相対パスはプロジェクトルート基準（スケジューラの cwd には依存しない） |
 
 どれも省略すると従来どおり動きます（0 件でも exit 0。stdout の
 `[daily-sync] SPEC fetched=.. parsed=.. imported=.. failed=..` 行も同じ形のまま）。
@@ -79,7 +79,8 @@ WARNING（`daily_update spec returned no data`）を残します。TOKU や非�
           "jvopen_code": -1,
           "read_count": 0,
           "download_count": 0,
-          "lastfiletimestamp": ""
+          "lastfiletimestamp": "",
+          "recovery": false
         }
       ]
     }
@@ -117,7 +118,7 @@ WARNING（`daily_update spec returned no data`）を残します。TOKU や非�
 | `records_out_of_range` | int | パース後、client 側の `to_date` filter で落とした件数 |
 | `elapsed_seconds` | number | この spec の所要時間 |
 | `error` | string / null | status が error のときの例外 |
-| `opens` | object[] | JVOpen 1 回ごとの `fromtime` / `jvopen_code` / `read_count` / `download_count` / `lastfiletimestamp`。jvrtopen は日付キーごとの `key` / `jvrtopen_code`。JVRead `-402` からの自己修復で同じ条件のまま開き直した open は含めない（ログに WARNING で残る） |
+| `opens` | object[] | JVOpen 1 回ごとの `fromtime` / `jvopen_code` / `read_count` / `download_count` / `lastfiletimestamp`。jvrtopen は日付キーごとの `key` / `jvrtopen_code`。JVOpen の各要素には `recovery`（bool）があり、JVRead `-402`（p.56）からの自己修復で同じ条件のまま開き直した open は `true`。`recovery: true` の要素は `jvopen_code` / `fromtimes` / `read_count` / `download_count` / `lastfiletimestamp` の集計に入れない |
 
 | status | 条件 |
 | --- | --- |
@@ -134,5 +135,7 @@ JVOpen の `-2`（セットアップダイアログでキャンセル、p.54）�
 - `--require-records` が見るのは JVOpen の `read_count`（対象ファイル数）です。ファイルは
   あったが中身がすべて `to_date` より後で落とされた場合（`records_out_of_range` に数える）は
   満たした扱いになります。
+- 例外や `--require-records` の失敗時に出す ERROR ログは、console 設定（ERROR 以上）により stdout にも出ます。
+  成功時の stdout は変わりません。
 - NL キャッシュに完全に当たったときは JVOpen を呼ばないので `opens` は空で `no_data` に
   なります。daily_update はキャッシュを使わないので現状は起きません。

@@ -255,6 +255,17 @@ class HistoricalFetcher(BaseFetcher):
                 fromtime,
                 option,
             )
+            # Same request re-issued to restore a deleted file: recorded so
+            # every JVOpen call is visible, but flagged so the summary does
+            # not count the listed files twice.
+            self._record_jvopen(
+                fromtime=fromtime,
+                jvopen_code=result,
+                read_count=read_count,
+                download_count=download_count,
+                lastfiletimestamp=last_file_timestamp,
+                recovery=True,
+            )
             if result == -1 or (read_count == 0 and download_count == 0):
                 raise FetcherError(
                     "JVOpen returned no data while recovering "

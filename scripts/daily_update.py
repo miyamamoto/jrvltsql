@@ -294,16 +294,22 @@ def _configure_logging(config, log_file: str | None) -> None:
     """Send this run's structured log to a file (console stays errors-only).
 
     The import-time default is console-only at ERROR, which dropped every
-    JVOpen result. --log-file wins; otherwise the config's logging.file
-    settings apply, falling back to setup_logging's ./logs/jltsql.log.
+    JVOpen result. --log-file (relative to cwd) wins; otherwise the config's
+    logging.file settings apply, resolved against PROJECT_ROOT, falling back
+    to PROJECT_ROOT/logs/jltsql.log.
     """
 
     level = str(config.get("logging.level", "INFO"))
     log_to_file = bool(log_file) or bool(config.get("logging.file.enabled", True))
+    if not log_file:
+        # The config path (and the fallback) is anchored at the project root,
+        # not the scheduler's cwd, which may be read-only.
+        configured = Path(str(config.get("logging.file.path", "") or "logs/jltsql.log"))
+        log_file = str(configured if configured.is_absolute() else PROJECT_ROOT / configured)
     try:
         setup_logging(
             level=level,
-            log_file=log_file or config.get("logging.file.path", None),
+            log_file=log_file,
             log_to_console=True,
             log_to_file=log_to_file,
             console_level="ERROR",

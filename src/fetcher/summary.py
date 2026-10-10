@@ -51,14 +51,20 @@ def jvopen_entry(
     read_count: int | None = None,
     download_count: int | None = None,
     lastfiletimestamp: str | None = None,
+    recovery: bool = False,
 ) -> dict:
-    """One JVOpen call: the fromtime sent and the four values returned (p.17-19)."""
+    """One JVOpen call: the fromtime sent and the four values returned (p.17-19).
+
+    ``recovery`` marks the re-open of an identical request after a corrupt
+    file was deleted (JVRead -402, p.56); aggregates skip it.
+    """
     return {
         "fromtime": fromtime,
         "jvopen_code": jvopen_code,
         "read_count": read_count,
         "download_count": download_count,
         "lastfiletimestamp": lastfiletimestamp,
+        "recovery": recovery,
     }
 
 
@@ -125,6 +131,8 @@ def summarize_jvopen_spec(
     skipped_code: int | None = None,
 ) -> dict:
     """Summarize one JVOpen dataspec (all of its calendar-year chunks)."""
+    all_opens = opens
+    opens = [entry for entry in all_opens if not entry.get("recovery")]
     read_count = _sum_counts(entry.get("read_count") for entry in opens)
     jvopen_code = aggregate_open_code(entry.get("jvopen_code") for entry in opens)
     if skipped and skipped_code is not None:
@@ -150,7 +158,7 @@ def summarize_jvopen_spec(
         "records_out_of_range": records_out_of_range,
         "elapsed_seconds": round(elapsed_seconds, 3),
         "error": None if skipped else _error_text(error),
-        "opens": [dict(entry) for entry in opens],
+        "opens": [dict(entry) for entry in all_opens],
     }
 
 

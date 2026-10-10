@@ -223,6 +223,7 @@ class TestSuccessfulOpen:
                 "read_count": 1,
                 "download_count": 1,
                 "lastfiletimestamp": "20261010123456",
+                "recovery": False,
             }
         ]
 
@@ -389,6 +390,7 @@ class TestErrors:
                 "read_count": None,
                 "download_count": None,
                 "lastfiletimestamp": None,
+                "recovery": False,
             }
         ]
 
@@ -510,3 +512,18 @@ def test_failure_before_jvopen_does_not_inherit_previous_spec_opens(
     assert difn["opens"] == []
     assert difn["jvopen_code"] is None
     assert difn["records_read"] == 0
+
+
+def test_config_log_path_is_anchored_at_the_project_root(monkeypatch):
+    """スケジューラの cwd（読み取り専用でありうる）ではなく PROJECT_ROOT 基準."""
+    seen = {}
+    monkeypatch.setattr(daily_update, "setup_logging", lambda **kwargs: seen.update(kwargs))
+
+    daily_update._configure_logging(_Config({"logging.file.path": "./logs/x.log"}), None)
+    assert seen["log_file"] == str(daily_update.PROJECT_ROOT / "logs" / "x.log")
+
+    daily_update._configure_logging(_Config({}), None)
+    assert seen["log_file"] == str(daily_update.PROJECT_ROOT / "logs" / "jltsql.log")
+
+    daily_update._configure_logging(_Config({}), "/abs/explicit.log")
+    assert seen["log_file"] == "/abs/explicit.log"
