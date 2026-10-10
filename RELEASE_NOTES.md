@@ -1,3 +1,28 @@
+# jrvltsql v2.2.0 Release Notes
+
+`2.2.0` releases everything merged on `master` since `2.1.2` (#263-#266,
+#268-#270, #272). Parser layouts, table schemas and provider-registration
+contracts are unchanged.
+
+Highlights:
+
+- fetch observability (#272): `scripts/daily_update.py --summary-json PATH`
+  writes, per dataspec, the fromtime sent and the JVOpen return code,
+  `readcount`, `downloadcount` and `lastfiletimestamp` (JV-Link IF 4.9.0.1
+  p.19, p.54), plus read/parsed/imported/out-of-range counts, on every exit
+  path. `--require-records SPEC[,SPEC]` exits 3 when a listed spec returns
+  nothing; `--log-file PATH` gives daily_update a file log. JVOpen `-1` is
+  recorded, never treated as proof of an empty server (p.54 also returns it
+  when a newer JV-Link was offered and chosen). Contract: `docs/fetch_summary.md`.
+  Without the new flags behaviour is unchanged, except that
+  `--ignore-jvopen-error-codes -2` now takes effect.
+- `fetch --to` is optional (#270); failed records are stored content-addressed
+  and fail closed (#264); one setup dialog for multi-spec fetch (#266);
+  PostgreSQL `insert_many` fast path (#265); provider values in reserved fields
+  are kept (#263); the 2.1.2 lifecycle overlay is forward-ported (#268).
+
+See `CHANGELOG.md` for details.
+
 # jrvltsql v2.1.2 Release Notes
 
 `2.1.2` is an emergency correctness hotfix on top of `2.1.1` for prospective

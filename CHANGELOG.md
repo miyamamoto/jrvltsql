@@ -7,6 +7,8 @@
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-10-11
+
 ### Added
 
 - `scripts/daily_update.py --summary-json PATH`: dataspec ごとに送った fromtime と JVOpen の
@@ -672,7 +674,8 @@
 - quickstart.py 対話形式セットアップウィザード
 - CLI コマンド（fetch, status, monitor, init）
 
-[Unreleased]: https://github.com/miyamamoto/jrvltsql/compare/v2.1.2...HEAD
+[Unreleased]: https://github.com/miyamamoto/jrvltsql/compare/v2.2.0...HEAD
+[2.2.0]: https://github.com/miyamamoto/jrvltsql/compare/v2.1.2...v2.2.0
 [2.1.2]: https://github.com/miyamamoto/jrvltsql/compare/v2.1.1...v2.1.2
 [2.1.1]: https://github.com/miyamamoto/jrvltsql/compare/v2.1.0...v2.1.1
 [2.1.0]: https://github.com/miyamamoto/jrvltsql/compare/v2.0.0...v2.1.0
