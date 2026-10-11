@@ -118,7 +118,7 @@ WARNING（`daily_update spec returned no data`）を残します。TOKU や非�
 | `records_out_of_range` | int | パース後、client 側の `to_date` filter で落とした件数 |
 | `elapsed_seconds` | number | この spec の所要時間 |
 | `error` | string / null | status が error のときの例外 |
-| `opens` | object[] | JVOpen 1 回ごとの `fromtime` / `jvopen_code` / `read_count` / `download_count` / `lastfiletimestamp`。jvrtopen は日付キーごとの `key` / `jvrtopen_code`。JVOpen の各要素には `recovery`（bool）があり、JVRead `-402`（p.56）からの自己修復で同じ条件のまま開き直した open は `true`。`recovery: true` の要素は `jvopen_code` / `fromtimes` / `read_count` / `download_count` / `lastfiletimestamp` の集計に入れない |
+| `opens` | object[] | JVOpen 1 回ごとの `fromtime` / `jvopen_code` / `read_count` / `download_count` / `lastfiletimestamp`。jvrtopen は日付キーごとの `key` / `jvrtopen_code` / `fetch_id`（2.3.0 以降。`0B11` / `0B14` で JVRTOpen が `0` か `-1` を返した open は [取得ログ](capture_log.md) の `RT_CAPTURE_FETCH.FetchId`、それ以外は null。spec が error で rollback された場合、その `fetch_id` の行は DB に残らない）。JVOpen の各要素には `recovery`（bool）があり、JVRead `-402`（p.56）からの自己修復で同じ条件のまま開き直した open は `true`。`recovery: true` の要素は `jvopen_code` / `fromtimes` / `read_count` / `download_count` / `lastfiletimestamp` の集計に入れない |
 
 | status | 条件 |
 | --- | --- |
@@ -129,6 +129,14 @@ WARNING（`daily_update spec returned no data`）を残します。TOKU や非�
 
 JVOpen の `-2`（セットアップダイアログでキャンセル、p.54）は「データなし」ではないので
 `error` になります。
+
+### 速報 spec
+
+- `0B11`（速報馬体重）は 2.3.0 から既定の spec に入り、`specs[]` に `kind: "jvrtopen"`
+  で出ます。`--require-records 0B11` は、どのキーでも WH レコードを 1 件も読まなかったときに
+  満たさない扱いになります（非開催日・発走約 1 時間前より前は正当に空）。
+- `0B11` / `0B14` の各 open は取得ログ（`docs/capture_log.md`）に追記され、
+  `opens[].fetch_id` で突き合わせられます。
 
 ### 注意
 

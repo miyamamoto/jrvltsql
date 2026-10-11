@@ -68,9 +68,15 @@ def jvopen_entry(
     }
 
 
-def jvrtopen_entry(*, key: str, jvrtopen_code: int | None) -> dict:
-    """One JVRTOpen call: the key sent and the code returned (p.22, p.54)."""
-    return {"key": key, "jvrtopen_code": jvrtopen_code}
+def jvrtopen_entry(
+    *, key: str, jvrtopen_code: int | None, fetch_id: str | None = None
+) -> dict:
+    """One JVRTOpen call: the key sent and the code returned (p.22, p.54).
+
+    ``fetch_id`` names the RT_CAPTURE_FETCH row of a captured spec (0B11/0B14,
+    docs/capture_log.md); it is None for other specs and for failed opens.
+    """
+    return {"key": key, "jvrtopen_code": jvrtopen_code, "fetch_id": fetch_id}
 
 
 def aggregate_open_code(codes: Iterable[int | None]) -> int | None:

@@ -1529,7 +1529,12 @@ class RealtimeUpdater:
                 "Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji",
                 "HappyoTime", "HenkoID",
             ],
-            "RT_WH": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "Umaban"],
+            # One row per announcement: 0B11 adds a record each time weights
+            # are announced, and HappyoTime tells the announcements apart.
+            "RT_WH": [
+                "Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji",
+                "RaceNum", "HappyoTime", "Umaban",
+            ],
 
             # Other realtime tables
             "RT_DM": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "Umaban"],
@@ -1542,6 +1547,10 @@ class RealtimeUpdater:
             "RT_TC": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum"],
             "RT_CC": ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum"],
             "RT_WF": ["Year", "MonthDay"],
+
+            # Append-only capture log, written by src.realtime.capture_log.
+            "RT_CAPTURE_FETCH": ["FetchId"],
+            "RT_CAPTURE_RECORD": ["FetchId", "Seq"],
         }
 
         return PRIMARY_KEY_MAP.get(lookup_name, [])

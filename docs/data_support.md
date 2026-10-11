@@ -109,6 +109,9 @@ jrvltsql は JRA / 中央競馬専用です。NAR / 地方競馬はこのリポ�
   表と速報での差分）: [公式 DataKubun の検証](record_contracts.md#datakubun)
 - `0B14` の日単位 snapshot 置換と `0B16` の関係:
   [0B14 の日単位 snapshot 置換と 0B16](record_contracts.md#0b14-snapshot-0b16)
+- `0B11` / `0B14` は `scripts/daily_update.py` の既定 spec に含まれ、取得ごとに
+  [取得ログ](capture_log.md)（`RT_CAPTURE_FETCH` / `RT_CAPTURE_RECORD`）へ
+  追記されます（2.3.0 以降）。
 - `HappyoTime`（`MMDDhhmm`）の保存形式:
   [HappyoTime の保存形式](record_contracts.md#happyotimemmddhhmm)
 
@@ -187,7 +190,7 @@ jrvltsql は現在、以下 38 種類の JRA レコード種別に対してパ�
 
 | レコード種別 | 要点 | 詳細 |
 | --- | --- | --- |
-| `WH` | 公式 format 101 の 847 バイト。`NL_WH` / `RT_WH` は 18 頭配列を馬ごとの行へ展開（主キー: レース識別子＋馬番）、標準名 `BATAIJYU` は 18 頭横持ちの 1 行。旧 `NL_WH` / `RT_WH`（主キー不一致で起動時に停止）と旧 `BATAIJYU` はオペレーター移行が必要 | [WH](record_contracts.md#wh) |
+| `WH` | 公式 format 101 の 847 バイト。`NL_WH` / `RT_WH` は 18 頭配列を馬ごとの行へ展開（主キー: `NL_WH` はレース識別子＋馬番、`RT_WH` は 2.3.0 からレース識別子＋`HappyoTime`＋馬番で発表ごとに 1 行）、標準名 `BATAIJYU` は 18 頭横持ちの 1 行。旧 `NL_WH` / `RT_WH`（主キー不一致で起動時に停止）と旧 `BATAIJYU` はオペレーター移行が必要 | [WH](record_contracts.md#wh) |
 | `WE` | 42 バイト。`HappyoTime`, `HenkoID` を含む 7 項目キーで複数発表を別行保持。現行 `1`、旧 `0` は 2003-07-11 より前の `MakeDate` だけ | [WE](record_contracts.md#we) |
 | `AV` | 78 バイト。7 項目キー（`HappyoTime` はキーでない）。現行 `1`=出走取消、`2`=競走除外。旧標準名 `AVOIDENCE` だけの構成は停止 | [AV](record_contracts.md#av) |
 | `JC` | 161 バイト。`HappyoTime` を含む 8 項目キー。負担重量は native / 速報の `REAL` 列で `550` を `55.0`kg へ正規化 | [JC](record_contracts.md#jc) |

@@ -324,6 +324,20 @@ INDEXES = {
         "CREATE INDEX IF NOT EXISTS idx_rt_rc_horse ON RT_RC(Umaban)",
         "CREATE INDEX IF NOT EXISTS idx_rt_rc_jockey ON RT_RC(KisyuCode)",
     ],
+
+    "RT_CAPTURE_FETCH": [
+        # 0B11/0B14 取得ログ: 開催日キーごとの取得履歴
+        "CREATE INDEX IF NOT EXISTS idx_rt_capture_fetch_key "
+        "ON RT_CAPTURE_FETCH(DataSpec, RequestKey, CompletedAt)",
+    ],
+
+    "RT_CAPTURE_RECORD": [
+        # 0B11/0B14 取得ログ: レース・発表単位の as-of 検索
+        "CREATE INDEX IF NOT EXISTS idx_rt_capture_record_date "
+        "ON RT_CAPTURE_RECORD(Year, MonthDay, JyoCD, RaceNum)",
+        "CREATE INDEX IF NOT EXISTS idx_rt_capture_record_collected "
+        "ON RT_CAPTURE_RECORD(CollectedAt)",
+    ],
 }
 
 

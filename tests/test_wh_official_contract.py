@@ -275,10 +275,13 @@ def test_wh_realtime_insert_and_pre_2003_race_delete(tmp_path) -> None:
         assert isinstance(corrected, list)
         assert len(corrected) == 2
         assert all(result and result["success"] for result in corrected)
+        # RT_WH keeps every announcement (HappyoTime is part of the key).
         current = database.fetch_all(
-            "SELECT Umaban, HappyoTime, BaTaijyu FROM RT_WH ORDER BY Umaban"
+            "SELECT Umaban, HappyoTime, BaTaijyu FROM RT_WH ORDER BY HappyoTime, Umaban"
         )
         assert [dict(row) for row in current] == [
+            {"Umaban": 1, "HappyoTime": "06150930", "BaTaijyu": 480},
+            {"Umaban": 18, "HappyoTime": "06150930", "BaTaijyu": 999},
             {"Umaban": 1, "HappyoTime": "06150935", "BaTaijyu": 486},
             {"Umaban": 18, "HappyoTime": "06150935", "BaTaijyu": 999},
         ]
@@ -330,11 +333,13 @@ def test_wh_native_schema_matches_expanded_official_rows() -> None:
         "Umaban",
     ]
 
-    for table_name in ("NL_WH", "RT_WH"):
+    # RT_WH keeps one row per 0B11 announcement; NL_WH the latest per horse.
+    realtime_key = [*expected_key[:6], "HappyoTime", "Umaban"]
+    for table_name, key in (("NL_WH", expected_key), ("RT_WH", realtime_key)):
         ddl = SCHEMAS[table_name]
         assert expected_columns <= set(re.findall(r"^\s+(\w+)\s+\w+", ddl, re.MULTILINE))
         assert forbidden_weather_columns.isdisjoint(ddl)
-        assert _primary_key(ddl) == expected_key
+        assert _primary_key(ddl) == key
 
 
 def test_wh_maps_to_official_bataijyu_table_name() -> None:

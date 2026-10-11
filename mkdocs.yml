@@ -34,6 +34,7 @@ nav:
   - JV-Link 手動登録: jvlink_manual_registration.md
   - スクリプト一覧: scripts.md
   - 取得サマリ JSON: fetch_summary.md
+  - 速報の取得ログ: capture_log.md
   - アーキテクチャ: architecture.md
   - リリース運用方針: release_policy.md
 

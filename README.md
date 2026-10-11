@@ -148,6 +148,10 @@ python scripts/daily_update.py --specs RACE --days-back 1 \
 - `--require-records`: 指定した spec が何も返さなければ exit 3。JVOpen `-1` は
   「該当データ無し」以外の意味も持つため、空であることの証明にはしません。
 - 契約の詳細は [取得サマリ JSON](docs/fetch_summary.md)。
+- 速報馬体重 `0B11` と速報開催情報 `0B14` は、取得ごとに追記型の
+  取得ログ（`RT_CAPTURE_FETCH` / `RT_CAPTURE_RECORD`、UTC の取得時刻・生レコード・
+  パース結果）にも残ります（2.3.0 以降）。`RT_WH` は発表時刻を主キーに含み、
+  発表ごとに 1 行です。詳細は [速報の取得ログ](docs/capture_log.md)。
 
 ## Linux (Docker + Wine) で動かす
 
@@ -196,6 +200,7 @@ setup 取得が 120 秒を超える環境では `JVLINK_OPEN_TIMEOUT_SECONDS`（
 | [対応データ種別一覧](docs/data_support.md) | JVOpen / JVRTOpen spec と保存先 |
 | [レコード別の公式契約と移行手順](docs/record_contracts.md) | レコード種別ごとの公式レイアウト・主キー・`DataKubun`・既存 DB の移行手順 |
 | [取得サマリ JSON](docs/fetch_summary.md) | `daily_update.py --summary-json` の出力契約と exit code |
+| [速報の取得ログ](docs/capture_log.md) | 0B11 / 0B14 の追記型取得ログ（`RT_CAPTURE_*`）の契約と as-of の読み方 |
 | [時系列オッズ](docs/timeseries_odds.md) | `0B41/0B42` と `0B30` 系の違い |
 | [PostgreSQL](docs/postgresql.md) | PostgreSQL 保存と日次同期 |
 | [CLI](docs/CLI.md) | CLI リファレンス |

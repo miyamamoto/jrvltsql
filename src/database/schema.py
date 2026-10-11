@@ -73,7 +73,8 @@ Change Information Tables:
 
 Weather and Horse-Weight Tables:
     NL_WE, RT_WE: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, HappyoTime, HenkoID)
-    NL_WH, RT_WH: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
+    NL_WH: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
+    RT_WH: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, HappyoTime, Umaban)
 
 Pace/Data Mining Tables:
     NL_DM, RT_DM: PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
@@ -2448,7 +2449,7 @@ SCHEMAS = {
             BaTaijyu INTEGER,
             ZogenFugo TEXT,
             ZogenSa INTEGER,
-            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)
+            PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, HappyoTime, Umaban)
         )
     """,
     "RT_WF": """
@@ -2742,6 +2743,58 @@ for _source_table, _target_table in (
         _source_table,
         _target_table,
     )
+
+
+# Append-only capture log for the 0B11/0B14 speed reports
+# (src/realtime/capture_log.py, docs/capture_log.md). RT_WH/RT_WE/... keep the
+# current state; these tables keep what each JVRTOpen returned and when.
+# jltsql only ever INSERTs into them.
+SCHEMAS.update(
+    {
+        "RT_CAPTURE_FETCH": """
+        CREATE TABLE IF NOT EXISTS RT_CAPTURE_FETCH (
+            FetchId TEXT,
+            DataSpec TEXT,
+            RequestKey TEXT,
+            Status TEXT,
+            JVRTOpenCode INTEGER,
+            RecordCount INTEGER,
+            RequestedAt TEXT,
+            OpenedAt TEXT,
+            CompletedAt TEXT,
+            Producer TEXT,
+            JltsqlVersion TEXT,
+            PRIMARY KEY (FetchId)
+        )
+    """,
+        "RT_CAPTURE_RECORD": """
+        CREATE TABLE IF NOT EXISTS RT_CAPTURE_RECORD (
+            FetchId TEXT,
+            Seq INTEGER,
+            CollectedAt TEXT,
+            DataSpec TEXT,
+            RequestKey TEXT,
+            RecordSpec TEXT,
+            DataKubun TEXT,
+            MakeDate TEXT,
+            Year TEXT,
+            MonthDay TEXT,
+            JyoCD TEXT,
+            Kaiji TEXT,
+            Nichiji TEXT,
+            RaceNum TEXT,
+            HappyoTime TEXT,
+            HenkoID TEXT,
+            Umaban TEXT,
+            RawEncoding TEXT,
+            RawRecord TEXT,
+            RawSha256 TEXT,
+            RowsJson TEXT,
+            PRIMARY KEY (FetchId, Seq)
+        )
+    """,
+    }
+)
 
 
 SCHEMAS.update(
