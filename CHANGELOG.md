@@ -41,6 +41,12 @@
   1 コマンド」で使えなかったため。速報取得の本体は `src.realtime.oneshot` に移し、
   daily_update と共有する。
 
+### Fixed
+
+- 速報取得で JVRTOpen が `-1` を返した日付キーを JVClose せずに次のキーへ進んでいた
+  （IF p.54: `-1` でも要求は開いている）。複数日の窓で次のキーが `-202` になっていた。
+  daily_update と `realtime fetch` の共有コードで修正（#276）。
+
 ### Changed
 
 - `RT_WH` の主キーを (レース識別子, `HappyoTime`, 馬番) に変更し、0B11 の発表ごとに行を

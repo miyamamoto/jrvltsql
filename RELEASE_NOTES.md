@@ -30,6 +30,10 @@ operator migration** (see Upgrade); it is not applied automatically.
   imports, writes the capture log and the schema-1 summary
   (`generator: "jltsql realtime fetch"`), and exits 0/1/2/3. The fetch body
   moved to `src.realtime.oneshot` and is shared with daily_update.
+- **JVRTOpen `-1` is closed before the next key** (#276): a date key with no
+  data still leaves the request open (IF 4.9.0.1 p.54); without `JVClose` the
+  next key of a multi-day window failed with `-202`. This also fixes
+  `scripts/daily_update.py`, which shares the code.
 
 ## Upgrade from 2.2.0 (operator migration for RT_WH)
 
