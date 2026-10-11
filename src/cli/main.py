@@ -2418,8 +2418,9 @@ def odds_sokuho_timeseries(ctx, from_date, to_date, db, db_path):
 @realtime.command("fetch")
 @click.option(
     "--specs",
-    required=True,
-    help="Comma-separated date-keyed speed-report specs (0B11,0B12,0B13,0B14,0B15,0B17,0B51)",
+    default=None,
+    help="Required. Comma-separated date-keyed speed-report specs "
+    "(0B11,0B12,0B13,0B14,0B15,0B17,0B51)",
 )
 @click.option("--date", "date_key", default=None, help="One race date YYYYMMDD")
 @click.option("--from-date", default=None, help="First race date YYYYMMDD (with --to-date)")
@@ -2476,7 +2477,7 @@ def realtime_fetch(
     try:
         try:
             window = oneshot.resolve_window(date_key, from_date, to_date)
-            selected = oneshot.resolve_specs(specs)
+            selected = oneshot.resolve_specs(specs or "")
             required = oneshot.resolve_required(require_records, selected)
         except oneshot.FetchUsageError as exc:
             console.print(f"[red]Error:[/red] {exc}")
@@ -2529,6 +2530,8 @@ def realtime_fetch(
                 )
             except OSError as exc:
                 console.print(f"[red]Error:[/red] could not write --summary-json: {exc}")
+                # The caller asked for the summary; do not report success without it.
+                exit_code = exit_code or oneshot.EXIT_ERROR
     if exit_code:
         sys.exit(exit_code)
 

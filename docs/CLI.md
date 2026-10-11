@@ -101,7 +101,7 @@ jltsql realtime fetch --specs 0B14 --from-date 20261010 --to-date 20261011
 | `--specs` | 開催日キーで開く速報 spec: `0B11` `0B12` `0B13` `0B14` `0B15` `0B17` `0B51`。`0B16`（イベントキー）とオッズ（`0B20`/`0B3x`/`0B4x`、レースキー）は対象外 |
 | `--date` / `--from-date` `--to-date` | 取得する開催日（両端を含む）。どちらか一方が必須 |
 | `--require-records SPEC[,SPEC]` | 列挙した spec が 1 件も読めなければ exit 3 |
-| `--summary-json PATH` | [取得サマリ JSON](fetch_summary.md)（schema 1、`generator: "jltsql realtime fetch"`）。全終了経路で書く |
+| `--summary-json PATH` | [取得サマリ JSON](fetch_summary.md)（schema 1、`generator: "jltsql realtime fetch"`）。全終了経路で書く（`--specs` 無しなどの引数エラーも `usage_error` で書く）。書けなかったときは、ほかに失敗が無くても exit 1 |
 | `--db` / `--no-ensure-tables` | DB 種別 / 表の作成を省く |
 
 exit code: 0 正常、1 エラー（その spec は rollback、後続 spec は走らない）、2 引数エラー

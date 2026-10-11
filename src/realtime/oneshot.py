@@ -235,7 +235,7 @@ def resolve_window(date: str | None, from_date: str | None, to_date: str | None)
 def resolve_specs(raw: str) -> list[str]:
     specs = list(dict.fromkeys(part.strip().upper() for part in raw.split(",") if part.strip()))
     if not specs:
-        raise FetchUsageError("--specs is empty")
+        raise FetchUsageError("--specs is required")
     unsupported = [spec for spec in specs if spec not in DATE_KEYED_REALTIME_SPECS]
     if unsupported:
         raise FetchUsageError(

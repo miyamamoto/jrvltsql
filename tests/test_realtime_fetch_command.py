@@ -165,6 +165,7 @@ def test_required_spec_without_records_exits_3(run_fetch, tmp_path):
         ("--specs", "0B14", "--date", RACE_DATE, "--from-date", RACE_DATE),
         ("--specs", "0B14", "--from-date", "20260819", "--to-date", "20260818"),
         ("--specs", "0B14", "--date", RACE_DATE, "--require-records", "0B11"),
+        ("--date", RACE_DATE),  # no --specs: still a summarized usage error
     ],
 )
 def test_usage_errors_exit_2_without_opening(run_fetch, tmp_path, args):
@@ -199,3 +200,16 @@ def test_failed_spec_exits_1_and_keeps_the_summary(run_fetch, tmp_path):
     database = SQLiteDatabase({"path": str(run_fetch.db_path)})
     with database:
         assert database.fetch_one("SELECT COUNT(*) AS n FROM RT_CAPTURE_FETCH")["n"] == 0
+
+
+def test_unwritable_summary_fails_an_otherwise_successful_fetch(run_fetch, tmp_path):
+    """The collector asked for the summary; exit 0 without it would hide that."""
+    blocker = tmp_path / "not-a-directory"
+    blocker.write_text("", encoding="utf-8")
+
+    result = run_fetch(
+        {}, "--specs", "0B14", "--date", RACE_DATE, "--summary-json", str(blocker / "s.json")
+    )
+
+    assert result.exit_code == 1
+    assert "could not write --summary-json" in result.output
