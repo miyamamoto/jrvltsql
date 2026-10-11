@@ -238,3 +238,84 @@ def test_interrupt_exits_130_and_is_summarized_as_an_error(run_fetch, tmp_path):
     assert document["outcome"] == "error"
     assert document["exit_code"] == 130
     assert document["error"].startswith("KeyboardInterrupt")
+
+
+class StrictCloseJVLink(SpecJVLink):
+    """JV-Link refuses a second open before the previous one is closed (-202)."""
+
+    def __init__(self, records_by_key):
+        super().__init__(records_by_key)
+        self.is_open = False
+
+    def jv_rt_open(self, data_spec, key):
+        if self.is_open:
+            from src.jvlink.wrapper import JVLinkError
+
+            raise JVLinkError("JVRTOpen failed (code: -202)", error_code=-202)
+        self.is_open = True
+        return super().jv_rt_open(data_spec, key)
+
+    def jv_close(self):
+        self.is_open = False
+        return super().jv_close()
+
+
+def test_no_data_open_is_closed_before_the_next_date(run_fetch):
+    """IF p.54: -1 still leaves the request open; the next key must not hit -202."""
+    jvlink = StrictCloseJVLink({("0B14", "20260818"): [build_we_record()]})
+
+    result = run_fetch(
+        {},
+        "--specs",
+        "0B14",
+        "--from-date",
+        "20260817",
+        "--to-date",
+        "20260818",
+        jvlink=jvlink,
+    )
+
+    assert result.exit_code == 0, result.output
+    assert jvlink.opened_keys == [("0B14", "20260817"), ("0B14", "20260818")]
+
+
+def test_invalid_db_is_a_summarized_usage_error(run_fetch, tmp_path):
+    summary_path = tmp_path / "summary.json"
+
+    result = run_fetch(
+        {},
+        "--specs",
+        "0B14",
+        "--date",
+        RACE_DATE,
+        "--db",
+        "mysql",
+        "--summary-json",
+        str(summary_path),
+    )
+
+    assert result.exit_code == 2
+    assert _summary(summary_path)["outcome"] == "usage_error"
+
+
+def test_interrupted_spec_is_in_the_summary(run_fetch, tmp_path):
+    class InterruptedRead(SpecJVLink):
+        def jv_read(self):
+            raise KeyboardInterrupt
+
+    summary_path = tmp_path / "summary.json"
+    result = run_fetch(
+        {RACE_DATE: [build_we_record()]},
+        "--specs",
+        "0B14",
+        "--date",
+        RACE_DATE,
+        "--summary-json",
+        str(summary_path),
+        jvlink=InterruptedRead({RACE_DATE: [build_we_record()]}),
+    )
+
+    assert result.exit_code == 130
+    [spec] = _summary(summary_path)["specs"]
+    assert spec["dataspec"] == "0B14"
+    assert spec["status"] == "error"

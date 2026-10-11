@@ -132,9 +132,14 @@ def fetch_realtime_spec(
                 fetch_id = capture.fetch_id
             record_open(jvrtopen_entry(key=key, jvrtopen_code=ret, fetch_id=fetch_id))
             if ret == -1:
-                # No data published for this date key (normal).
+                # No data published for this date key (normal). The request
+                # is still open (IF p.54); close it or the next key gets -202.
                 if capture is not None:
                     capture.complete()
+                try:
+                    jvlink.jv_close()
+                except Exception:
+                    pass
                 continue
             if ret < -1:
                 raise RuntimeError(f"{spec} {key} JVRTOpen failed: {ret}")
@@ -246,6 +251,18 @@ def resolve_specs(raw: str) -> list[str]:
     return specs
 
 
+DATABASE_TYPES = ("sqlite", "postgresql")
+
+
+def resolve_db(raw: str | None) -> str | None:
+    """``--db`` is validated here so a bad value still gets a usage summary."""
+    if raw is None:
+        return None
+    if raw not in DATABASE_TYPES:
+        raise FetchUsageError(f"--db must be one of {', '.join(DATABASE_TYPES)}: {raw!r}")
+    return raw
+
+
 def resolve_required(raw: str | None, specs: list[str]) -> list[str]:
     if not raw:
         return []
@@ -324,7 +341,7 @@ def run_realtime_fetch(
         started = time.monotonic()
         opens: list[dict] = []
         stats: dict = {}
-        error: Exception | None = None
+        error: BaseException | None = None
         skipped_code: int | None = None
         try:
             fetch_realtime_spec(
@@ -337,7 +354,7 @@ def run_realtime_fetch(
                 jvrtopen_results=opens,
                 stats=stats,
             )
-        except Exception as exc:
+        except BaseException as exc:  # summarized, then re-raised (Ctrl-C too)
             error = exc
         if error is None and opens and opens[-1].get("jvrtopen_code") in SUBSCRIPTION_ERROR_CODES:
             skipped_code = opens[-1]["jvrtopen_code"]

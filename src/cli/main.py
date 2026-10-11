@@ -2425,12 +2425,7 @@ def odds_sokuho_timeseries(ctx, from_date, to_date, db, db_path):
 @click.option("--date", "date_key", default=None, help="One race date YYYYMMDD")
 @click.option("--from-date", default=None, help="First race date YYYYMMDD (with --to-date)")
 @click.option("--to-date", default=None, help="Last race date YYYYMMDD (inclusive)")
-@click.option(
-    "--db",
-    type=click.Choice(["sqlite", "postgresql"]),
-    default=None,
-    help="Database type (default: from config)",
-)
+@click.option("--db", default=None, help="Database type: sqlite or postgresql (default: from config)")
 @click.option(
     "--require-records",
     default=None,
@@ -2479,6 +2474,7 @@ def realtime_fetch(
             window = oneshot.resolve_window(date_key, from_date, to_date)
             selected = oneshot.resolve_specs(specs or "")
             required = oneshot.resolve_required(require_records, selected)
+            db = oneshot.resolve_db(db)
         except oneshot.FetchUsageError as exc:
             console.print(f"[red]Error:[/red] {exc}")
             exit_code = oneshot.EXIT_USAGE
