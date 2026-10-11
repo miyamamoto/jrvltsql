@@ -29,6 +29,11 @@
   公式位置のキー項目・パース結果）。RT_* への取込と同じ transaction で書く。契約は
   `docs/capture_log.md`。`src.realtime.capture_log.begin_capture` は runtime からも使える。
 - `--summary-json` の jvrtopen `opens[]` に `fetch_id`（取得ログとの突き合わせ用）。
+- `jltsql realtime fetch`: 開催日キーの速報 spec（0B11/0B12/0B13/0B14/0B15/0B17/0B51）を
+  指定の日付窓で 1 回ずつ取得して終わる単発コマンド。`--require-records` / `--summary-json`
+  （schema 1）、exit 0/1/2/3。常駐ループの `realtime start` を collector の「1 リクエスト
+  1 コマンド」で使えなかったため。速報取得の本体は `src.realtime.oneshot` に移し、
+  daily_update と共有する。
 
 ### Changed
 

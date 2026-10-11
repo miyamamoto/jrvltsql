@@ -2415,6 +2415,124 @@ def odds_sokuho_timeseries(ctx, from_date, to_date, db, db_path):
     )
 
 
+@realtime.command("fetch")
+@click.option(
+    "--specs",
+    required=True,
+    help="Comma-separated date-keyed speed-report specs (0B11,0B12,0B13,0B14,0B15,0B17,0B51)",
+)
+@click.option("--date", "date_key", default=None, help="One race date YYYYMMDD")
+@click.option("--from-date", default=None, help="First race date YYYYMMDD (with --to-date)")
+@click.option("--to-date", default=None, help="Last race date YYYYMMDD (inclusive)")
+@click.option(
+    "--db",
+    type=click.Choice(["sqlite", "postgresql"]),
+    default=None,
+    help="Database type (default: from config)",
+)
+@click.option(
+    "--require-records",
+    default=None,
+    metavar="SPEC[,SPEC]",
+    help="Exit 3 when a listed spec read no record",
+)
+@click.option(
+    "--summary-json",
+    default=None,
+    metavar="PATH",
+    help="Write the schema-1 fetch summary (docs/fetch_summary.md); written on failure too",
+)
+@click.option("--no-ensure-tables", is_flag=True, help="Skip table creation before fetching")
+@click.pass_context
+def realtime_fetch(
+    ctx, specs, date_key, from_date, to_date, db, require_records, summary_json, no_ensure_tables
+):
+    """Fetch date-keyed speed-report specs once and exit.
+
+    \b
+    Unlike 'realtime start' (a resident loop), this opens each date key of
+    each spec once (JVRTOpen key YYYYMMDD), imports, appends 0B11/0B14 to the
+    capture log (docs/capture_log.md) and exits.
+    Exit: 0 ok, 1 error, 2 usage, 3 a --require-records spec read nothing.
+
+    \b
+    Examples:
+      jltsql realtime fetch --specs 0B11,0B14 --date 20261011 \\
+          --require-records 0B14 --summary-json /tmp/rt.json
+    """
+    from datetime import datetime
+
+    from src.database import create_database_from_config
+    from src.fetcher.summary import write_summary_json
+    from src.realtime import oneshot
+
+    started_at = datetime.now().astimezone()
+    window: tuple[str | None, str | None] = (None, None)
+    required: list[str] = []
+    summaries: list[dict] = []
+    failures: list[dict] = []
+    error: BaseException | None = None
+    exit_code = oneshot.EXIT_OK
+    try:
+        try:
+            window = oneshot.resolve_window(date_key, from_date, to_date)
+            selected = oneshot.resolve_specs(specs)
+            required = oneshot.resolve_required(require_records, selected)
+        except oneshot.FetchUsageError as exc:
+            console.print(f"[red]Error:[/red] {exc}")
+            exit_code = oneshot.EXIT_USAGE
+            selected = []
+        config = ctx.obj.get("config")
+        db_type = db or (config.get("database.type", "sqlite") if config else "sqlite")
+        sid = config.get("jvlink.sid", "JLTSQL") if config else "JLTSQL"
+        database = (
+            create_database_from_config(config, db_type_override=db_type) if selected else None
+        )
+        if database is not None:
+            with database:
+                failures = oneshot.run_realtime_fetch(
+                    database,
+                    selected,
+                    *window,
+                    required_specs=required,
+                    sid=sid,
+                    ensure_tables=not no_ensure_tables,
+                    summaries=summaries,
+                )
+        for failure in failures:
+            console.print(
+                f"[red]Error:[/red] required spec {failure['dataspec']} read no record "
+                f"(status={failure['status']})"
+            )
+        if failures:
+            exit_code = oneshot.EXIT_REQUIRED_RECORDS_MISSING
+    except Exception as exc:  # noqa: BLE001 - reported, summarized, exit 1
+        error = exc
+        exit_code = oneshot.EXIT_ERROR
+        console.print(f"[red]Error:[/red] {type(exc).__name__}: {exc}")
+        logger.error("realtime fetch failed", error=f"{type(exc).__name__}: {exc}")
+    finally:
+        if summary_json:
+            try:
+                write_summary_json(
+                    summary_json,
+                    oneshot.build_document(
+                        started_at=started_at,
+                        from_date=window[0],
+                        to_date=window[1],
+                        required_specs=required,
+                        specs=summaries,
+                        failures=failures,
+                        exit_code=exit_code,
+                        error=error,
+                    ),
+                )
+            except OSError as exc:
+                console.print(f"[red]Error:[/red] could not write --summary-json: {exc}")
+    if exit_code:
+        sys.exit(exit_code)
+
+
 @realtime.command()
 def specs():
     """List available realtime data specification codes.

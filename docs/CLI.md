@@ -84,6 +84,31 @@ jltsql realtime specs
 | 0B41 | 時系列オッズ（単複枠、1年） |
 | 0B42 | 時系列オッズ（馬連、1年） |
 
+### 単発取得（`realtime fetch`、2.3.0 以降）
+
+`realtime start` は常駐ループです。collector のように「1 リクエストで 1 コマンドを
+走らせて終わる」使い方には `realtime fetch` を使います。指定した開催日キー
+（`YYYYMMDD`）ごとに、指定 spec を 1 回ずつ JVRTOpen して取り込み、終了します。
+
+```bash
+jltsql realtime fetch --specs 0B11,0B14 --date 20261011 \
+  --require-records 0B14 --summary-json /tmp/rt_summary.json
+jltsql realtime fetch --specs 0B14 --from-date 20261010 --to-date 20261011
+```
+
+| オプション | 意味 |
+| --- | --- |
+| `--specs` | 開催日キーで開く速報 spec: `0B11` `0B12` `0B13` `0B14` `0B15` `0B17` `0B51`。`0B16`（イベントキー）とオッズ（`0B20`/`0B3x`/`0B4x`、レースキー）は対象外 |
+| `--date` / `--from-date` `--to-date` | 取得する開催日（両端を含む）。どちらか一方が必須 |
+| `--require-records SPEC[,SPEC]` | 列挙した spec が 1 件も読めなければ exit 3 |
+| `--summary-json PATH` | [取得サマリ JSON](fetch_summary.md)（schema 1、`generator: "jltsql realtime fetch"`）。全終了経路で書く |
+| `--db` / `--no-ensure-tables` | DB 種別 / 表の作成を省く |
+
+exit code: 0 正常、1 エラー（その spec は rollback、後続 spec は走らない）、2 引数エラー
+（JV-Link・DB に触れる前）、3 `--require-records` 不足。spec ごとに 1 transaction で、
+`0B11` / `0B14` は [取得ログ](capture_log.md) に追記します（`Producer` は
+`jltsql realtime fetch`）。
+
 ## 過去時系列オッズ
 
 公式1年保持の単複枠・馬連時系列オッズは `odds-timeseries` で取得します。

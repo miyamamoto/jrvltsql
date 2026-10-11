@@ -10,6 +10,10 @@
 そのため `-1` はサーバーが空であることの証明にはならず、このサマリは値を記録するだけで
 解釈はしません。
 
+単発の速報取得 `jltsql realtime fetch`（2.3.0 以降、[CLI](CLI.md)）も同じ schema の文書を
+`generator: "jltsql realtime fetch"` で書きます（`specs[]` はすべて `kind: "jvrtopen"`、
+exit code の意味も同じ）。
+
 ## CLI
 
 | オプション | 意味 |

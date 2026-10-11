@@ -78,7 +78,8 @@
 
 - 対象は `0B11` と `0B14` だけ（`src/realtime/capture_log.py` の
   `CAPTURE_LOG_SPECS`）。ほかの速報 spec と蓄積系は記録しません。
-- 書くのは `scripts/daily_update.py`（と、それを使う runtime）の速報取得経路です。
+- 書くのは `scripts/daily_update.py`（と、それを使う runtime）の速報取得経路と、
+  単発取得 `jltsql realtime fetch` です（`Producer` で区別できる）。
   `jltsql realtime start`（`RealtimeMonitor`）は 2.3.0 では書きません。
 - RT_* への取込と**同じ transaction** で書きます。spec が失敗して rollback
   された（JVRead エラー、取込拒否など）ときは、その spec の取得ログも残りません。
