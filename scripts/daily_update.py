@@ -141,11 +141,16 @@ def _sync_realtime_spec(
 
     from src.jvlink.bridge import JVLinkBridgeError
     from src.jvlink.wrapper import JVLinkError
+    from src.database.migration import require_current_primary_key
     from src.database.schema import create_all_tables
     from src.realtime.updater import RealtimeUpdater, summarize_update_result
 
     if ensure_tables:
         create_all_tables(database)
+    if spec == "0B11":
+        # Fail before JVRTOpen: a legacy RT_WH key would overwrite earlier
+        # announcements, and its migration is an operator step.
+        require_current_primary_key(database, "RT_WH")
 
     database.begin_transaction()
 

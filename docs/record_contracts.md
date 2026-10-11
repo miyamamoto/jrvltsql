@@ -260,14 +260,57 @@ cache の変更に入る前に、対応する現行種別名を示して停止�
   保持期間内に再取得します。
 - 旧 `NL_WH` / `RT_WH` の行は公式 WH ではないため、馬体重履歴として
   移植しないでください。
-- 2.2.0 以前の公式 WH 形の `RT_WH`（主キーがレース識別子＋馬番）は、2.3.0 の
-  起動時（`create_all_tables`）に主キーへ `HappyoTime` を足す移行を自動で
-  行います。キーが広がるだけなので既存行はすべてそのまま一意で、行の削除・
-  書き換えはしません。PostgreSQL は `ALTER TABLE ... DROP CONSTRAINT ...,
-  ADD PRIMARY KEY (...)`、SQLite は同じ transaction 内でテーブルを作り直して
-  全行と index を移します。`HappyoTime` が NULL の行が 1 行でもあれば移行せず
-  停止します（その行は発表で区別できないため、オペレーターが削除か修復を
-  判断します）。手順と rollback は 2.3.0 の release notes を参照してください。
+- 2.2.0 以前の公式 WH 形の `RT_WH`（主キーがレース識別子＋馬番）は、2.3.0 では
+  **自動移行しません**（本番の収集が書いている表で、表ロックを取るため）。未移行の
+  あいだ、起動とほかの spec はそのまま動き、`0B11` の取得（JVRTOpen の前）と
+  RT_WH への書き込み（`jltsql realtime start` を含む）だけが停止します。
+  主キーが広がるだけなので、移行で行は削除・変更されません。手順（オペレーター）:
+
+  1. RT_WH を書く収集（daily_update / collector / `realtime start`）を止め、DB を
+     backup する。
+  2. `SELECT COUNT(*) FROM rt_wh WHERE happyotime IS NULL;` が 0 であること
+     （0 でなければ中止。その行は発表で区別できないので、削除か修復を判断する）。
+  3. PostgreSQL（主キー制約名は
+     `SELECT conname FROM pg_constraint WHERE conrelid = 'rt_wh'::regclass AND contype = 'p';`
+     で確認。既定は `rt_wh_pkey`）:
+
+     ```sql
+     BEGIN;
+     LOCK TABLE rt_wh IN ACCESS EXCLUSIVE MODE;
+     ALTER TABLE rt_wh DROP CONSTRAINT rt_wh_pkey, ADD PRIMARY KEY
+       (year, monthday, jyocd, kaiji, nichiji, racenum, happyotime, umaban);
+     COMMIT;
+     ```
+
+     `ACCESS EXCLUSIVE` の間は RT_WH の読み書きが待たされます（主キー index の作り直し
+     の時間。行数に比例）。
+  4. SQLite（主キーを変えられないので作り直す。RT_WH を参照する view / trigger が
+     あれば先に退避する）:
+
+     ```sql
+     BEGIN IMMEDIATE;
+     ALTER TABLE RT_WH RENAME TO RT_WH_legacy_2_2;
+     -- 2.3.0 の RT_WH の CREATE TABLE（src/database/schema.py の SCHEMAS["RT_WH"]）
+     INSERT INTO RT_WH (RecordSpec, DataKubun, MakeDate, Year, MonthDay, JyoCD, Kaiji,
+       Nichiji, RaceNum, HappyoTime, Umaban, Bamei, BaTaijyu, ZogenFugo, ZogenSa)
+       SELECT RecordSpec, DataKubun, MakeDate, Year, MonthDay, JyoCD, Kaiji, Nichiji,
+       RaceNum, HappyoTime, Umaban, Bamei, BaTaijyu, ZogenFugo, ZogenSa
+       FROM RT_WH_legacy_2_2;
+     DROP TABLE RT_WH_legacy_2_2;
+     COMMIT;
+     ```
+
+     その後 `jltsql create-indexes` で index を作り直す。
+  5. 行数が移行前と同じことを確かめてから収集を再開する。
+
+  rollback: 2.2.0 は移行後の RT_WH を主キー不一致として `create_all_tables` ごと
+  拒否する（実測: `SchemaMigrationError`）。daily_update の既定 `--ensure-tables` では
+  **すべての spec が止まる**ので、2.2.0 に戻すときは RT_WH を旧主キーに戻してから
+  戻す。2.3.0 で発表ごとの行が増えた後は旧主キー（レース＋馬番）では一意にならない
+  ため、backup の restore か、レース・馬ごとに `HappyoTime` 最大の行だけを残してから
+  旧主キーを付け直す必要がある（後者は発表の履歴を捨てる）。
+  この手順は PostgreSQL 17 / SQLite でテスト
+  （`tests/test_realtime_capture_log.py` の documented procedure）しています。
 
 #### WE（天候・馬場状態変更）
 

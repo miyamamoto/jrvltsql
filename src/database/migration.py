@@ -5,9 +5,7 @@ Detects schema mismatches in existing tables and applies safe migrations.
 The production PostgreSQL database is used by near-real-time collectors, so
 ``quickstart`` must never wipe tables implicitly. Migrations are additive only:
 missing columns are added with ``ALTER TABLE`` and extra/renamed columns are
-preserved. Primary-key changes fail closed during ordinary startup, except
-the registered widenings in ``PRIMARY_KEY_WIDENINGS`` (a key that only gained
-columns keeps every row unique, so it is applied without touching a row).
+preserved. Primary-key changes always fail closed during ordinary startup.
 The PostgreSQL TS_SOKUHO capture-key correction is available only through the
 explicit operator command; SQLite requires an operator-managed rebuild.
 """
@@ -362,157 +360,6 @@ def _add_missing_columns(
     if added and commit:
         db.commit()
     return added
-
-
-# Primary keys that only gained columns. Every existing row stays unique under
-# the wider key, so ordinary startup applies the change without deleting or
-# rewriting a row. RT_WH gained HappyoTime in 2.3.0 so that every 0B11
-# announcement is kept (JV-Data 4.9.0.1: 馬体重が発表される毎にレコード追加・更新).
-PRIMARY_KEY_WIDENINGS: Dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
-    "RT_WH": (
-        ("Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "Umaban"),
-        ("Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "HappyoTime", "Umaban"),
-    ),
-}
-
-
-def _primary_key_widening(
-    table_name: str,
-    existing_pk: List[str],
-    expected_pk: List[str],
-) -> Optional[List[str]]:
-    """Return the added key columns when this is a registered widening."""
-    widening = PRIMARY_KEY_WIDENINGS.get(unqualified_table_name(table_name).upper())
-    if widening is None:
-        return None
-    legacy, current = ([column.lower() for column in key] for key in widening)
-    if [column.lower() for column in existing_pk] != legacy:
-        return None
-    if [column.lower() for column in expected_pk] != current:
-        return None
-    return [column for column in expected_pk if column.lower() not in legacy]
-
-
-def _begin_migration_transaction(db: BaseDatabase) -> None:
-    if db.get_db_type() == "sqlite":
-        connection = getattr(db, "_connection", None)
-        if connection is None:
-            raise SchemaMigrationError("SQLite migration requires a connected database")
-        if not connection.in_transaction:
-            db.execute("BEGIN")
-    elif not db.has_pending_transaction():
-        db.begin_transaction()
-
-
-def _widen_postgresql_primary_key(
-    db: BaseDatabase,
-    table_name: str,
-    expected_pk: List[str],
-) -> None:
-    table_identifier = _table_identifier(db, table_name)
-    constraint = db.fetch_one(
-        "SELECT conname FROM pg_constraint WHERE conrelid = to_regclass(?) AND contype = 'p'",
-        (table_name.lower(),),
-    )
-    if not constraint or not constraint.get("conname"):
-        raise SchemaMigrationError(f"Cannot widen {table_name}: primary key constraint not found")
-    constraint_identifier = '"' + str(constraint["conname"]).replace('"', '""') + '"'
-    db.execute(
-        f"ALTER TABLE {table_identifier} DROP CONSTRAINT {constraint_identifier}, "
-        f"ADD PRIMARY KEY ({', '.join(column.lower() for column in expected_pk)})"
-    )
-
-
-def _widen_sqlite_primary_key(db: BaseDatabase, table_name: str, schema_sql: str) -> None:
-    """Rebuild the table under the new key; SQLite cannot alter a key in place."""
-    table_identifier = _table_identifier(db, table_name)
-    legacy_name = f"__jltsql_{unqualified_table_name(table_name).lower()}_pk_{uuid4().hex}"
-    index_sql = [
-        row["sql"]
-        for row in db.fetch_all(
-            "SELECT sql FROM sqlite_master WHERE type = 'index' AND tbl_name = ? "
-            "AND sql IS NOT NULL",
-            (unqualified_table_name(table_name),),
-        )
-    ]
-    existing_types = _get_existing_column_types(db, table_name)
-    existing_columns = sorted(_get_existing_columns(db, table_name))
-    expected_lower = {
-        column.lower() for column in (_extract_column_definitions(schema_sql) or {})
-    }
-
-    db.execute(f'ALTER TABLE {table_identifier} RENAME TO "{legacy_name}"')
-    db.execute(schema_sql)
-    for column in existing_columns:
-        if column.lower() not in expected_lower:
-            # Extra legacy columns are preserved, as in every other migration.
-            db.execute(
-                f'ALTER TABLE {table_identifier} ADD COLUMN "{column}" '
-                f"{existing_types.get(column.lower(), '')}".rstrip()
-            )
-    column_list = ", ".join(f'"{column}"' for column in existing_columns)
-    db.execute(
-        f"INSERT INTO {table_identifier} ({column_list}) "
-        f'SELECT {column_list} FROM "{legacy_name}"'
-    )
-    before = db.fetch_one(f'SELECT COUNT(*) AS count FROM "{legacy_name}"') or {}
-    after = db.fetch_one(f"SELECT COUNT(*) AS count FROM {table_identifier}") or {}
-    if int(before.get("count") or 0) != int(after.get("count") or 0):
-        raise SchemaMigrationError(
-            f"Cannot widen {table_name}: copied {after.get('count')} of {before.get('count')} rows"
-        )
-    db.execute(f'DROP TABLE "{legacy_name}"')
-    for sql in index_sql:
-        db.execute(sql)
-
-
-def _widen_primary_key(
-    db: BaseDatabase,
-    table_name: str,
-    schema_sql: str,
-    existing_pk: List[str],
-    expected_pk: List[str],
-    added_columns: List[str],
-    *,
-    commit: bool,
-) -> None:
-    """Apply a registered key widening in one transaction, keeping every row."""
-    table_identifier = _table_identifier(db, table_name)
-    existing_lower = {column.lower() for column in _get_existing_columns(db, table_name)}
-    missing = [column for column in added_columns if column.lower() not in existing_lower]
-    if missing:
-        raise SchemaMigrationError(
-            f"Cannot widen {table_name} primary key: columns {missing} do not exist"
-        )
-    null_filter = " OR ".join(f"{column} IS NULL" for column in added_columns)
-    row = (
-        db.fetch_one(f"SELECT COUNT(*) AS count FROM {table_identifier} WHERE {null_filter}")
-        or {}
-    )
-    null_rows = int(row.get("count") or 0)
-    if null_rows:
-        raise SchemaMigrationError(
-            f"Cannot widen {table_name} primary key to {expected_pk}: {null_rows} row(s) "
-            f"have NULL in {added_columns}. Back up the table, then delete or repair those "
-            "rows (they cannot be keyed by announcement) and restart"
-        )
-
-    logger.warning(
-        f"Widening primary key of {table_name}: existing={existing_pk}, expected={expected_pk}"
-    )
-    _begin_migration_transaction(db)
-    try:
-        if db.get_db_type() == "postgresql":
-            _widen_postgresql_primary_key(db, table_name, expected_pk)
-        else:
-            _widen_sqlite_primary_key(db, table_name, schema_sql)
-        if commit:
-            db.commit()
-    except Exception as exc:
-        db.rollback()
-        if isinstance(exc, SchemaMigrationError):
-            raise
-        raise SchemaMigrationError(f"Failed to widen {table_name} primary key: {exc}") from exc
 
 
 def _validate_existing_capture_stamps(db: BaseDatabase, table_name: str) -> None:
@@ -1025,20 +872,6 @@ def migrate_table_if_needed(
     expected_columns_lower = {column.lower() for column in expected_columns}
     if _is_legacy_sokuho_capture_identity(table_name, existing_pk, expected_pk):
         raise SchemaMigrationError(legacy_sokuho_capture_identity_message(db, table_name))
-    widened_columns = _primary_key_widening(table_name, existing_pk, expected_pk)
-    if widened_columns is not None:
-        _widen_primary_key(
-            db,
-            table_name,
-            schema_sql,
-            existing_pk,
-            expected_pk,
-            widened_columns,
-            commit=commit,
-        )
-        # Any additive column change is applied under the new key.
-        migrate_table_if_needed(db, table_name, schema_sql, commit=commit)
-        return True
     if expected_pk_lower and existing_pk_lower != expected_pk_lower:
         logger.warning(
             f"Primary key mismatch for {table_name}: "
@@ -1226,3 +1059,60 @@ def verify_table_schema(
         raise SchemaMigrationError(
             f"Schema verification failed for {table_name}: " + "; ".join(problems)
         )
+
+
+# Primary-key changes that need an operator. They are documented, never run
+# automatically: production collectors write these tables and the change
+# takes a table lock. Startup tolerates the legacy key so the other feeds keep
+# running; every writer of the table calls ``require_current_primary_key`` and
+# fails closed until the operator has migrated it.
+OPERATOR_PRIMARY_KEY_MIGRATIONS: Dict[str, Dict[str, tuple[str, ...] | str]] = {
+    # jltsql 2.3.0: one RT_WH row per 0B11 announcement (HappyoTime in the key).
+    "RT_WH": {
+        "legacy": ("Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum", "Umaban"),
+        "procedure": "docs/record_contracts.md#wh and RELEASE_NOTES.md (2.3.0)",
+    },
+}
+
+
+def _expected_primary_key(table_name: str) -> List[str]:
+    from src.database.schema import SCHEMAS
+
+    return _extract_primary_key_columns(SCHEMAS[unqualified_table_name(table_name).upper()]) or []
+
+
+def _lower(columns: List[str]) -> List[str]:
+    return [column.lower() for column in columns]
+
+
+def is_pending_operator_key_migration(db: BaseDatabase, table_name: str) -> bool:
+    """Whether any target still has the registered legacy key of this table."""
+    entry = OPERATOR_PRIMARY_KEY_MIGRATIONS.get(unqualified_table_name(table_name).upper())
+    if entry is None:
+        return False
+    legacy = _lower(list(entry["legacy"]))
+    for target in _migration_targets(db):
+        if not target.table_exists(table_name):
+            continue
+        if _lower(_get_existing_primary_key_columns(target, table_name)) == legacy:
+            return True
+    return False
+
+
+def require_current_primary_key(db: BaseDatabase, table_name: str) -> None:
+    """Fail closed before writing a table whose key needs an operator migration."""
+    normalized = unqualified_table_name(table_name).upper()
+    entry = OPERATOR_PRIMARY_KEY_MIGRATIONS.get(normalized)
+    if entry is None:
+        return
+    expected = _expected_primary_key(normalized)
+    for target in _migration_targets(db):
+        if not target.table_exists(table_name):
+            raise SchemaMigrationError(f"Required table does not exist: {table_name}")
+        existing = _get_existing_primary_key_columns(target, table_name)
+        if _lower(existing) != _lower(expected):
+            raise SchemaMigrationError(
+                f"{normalized} primary key existing={existing}, expected={expected}; "
+                f"writes are refused until the operator migration in {entry['procedure']} "
+                "is applied (back up first; it is not run automatically)"
+            )

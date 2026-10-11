@@ -3100,6 +3100,9 @@ class SchemaManager:
         for table_name, schema_sql in SCHEMAS.items():
             try:
                 self.db.execute(schema_sql)
+                if _skip_pending_operator_migration(self.db, table_name):
+                    results[table_name] = False
+                    continue
                 verify_table_schema(self.db, table_name, schema_sql)
                 if table_name in STRICT_SE_STORAGE_TABLES:
                     from src.importer.importer import verify_se_storage_schema
@@ -3473,6 +3476,27 @@ class SchemaManager:
         return results
 
 
+def _skip_pending_operator_migration(db: BaseDatabase, table_name: str) -> bool:
+    """Leave a table with a documented operator-only key migration as it is.
+
+    Startup must not stop every feed because one table still has its legacy
+    key; that table's writers refuse instead (require_current_primary_key).
+    """
+    from src.database.migration import (
+        OPERATOR_PRIMARY_KEY_MIGRATIONS,
+        is_pending_operator_key_migration,
+    )
+
+    if not is_pending_operator_key_migration(db, table_name):
+        return False
+    logger.warning(
+        f"{table_name} still has its legacy primary key; writes to it are refused until "
+        f"the operator migration in "
+        f"{OPERATOR_PRIMARY_KEY_MIGRATIONS[table_name.upper()]['procedure']} is applied"
+    )
+    return True
+
+
 def create_all_tables(db: BaseDatabase) -> None:
     """Additively migrate and create all tables defined in SCHEMAS.
 
@@ -3501,6 +3525,8 @@ def create_all_tables(db: BaseDatabase) -> None:
     for table_name, schema_sql in SCHEMAS.items():
         try:
             db.execute(schema_sql)
+            if _skip_pending_operator_migration(db, table_name):
+                continue
             verify_table_schema(db, table_name, schema_sql)
             if table_name in STRICT_SE_STORAGE_TABLES:
                 from src.importer.importer import verify_se_storage_schema

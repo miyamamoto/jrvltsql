@@ -7,7 +7,10 @@ withdrawn changes from later responses (JV-Data 4.9.0.1, データ提供タイ�
 for every JVRTOpen of a captured spec, one RT_CAPTURE_FETCH row and one
 RT_CAPTURE_RECORD row per JVRead buffer (raw record plus parsed rows), stamped
 in UTC. Rows are only inserted, inside the caller's transaction, so a fetch
-that rolls back leaves no log either.
+that rolls back leaves no log either. Building a row never fails on the
+record's content (undecodable or NUL bytes are kept as hex, an unparsable
+record keeps RowsJson NULL), so a malformed buffer cannot make the log take
+the RT_* import down with it; a database error still fails the spec.
 
 Contract: docs/capture_log.md.
 """
@@ -89,7 +92,8 @@ def _decode_raw(buff: bytes) -> tuple[str, str]:
         text = buff.decode(ENCODING_JVDATA)
     except UnicodeDecodeError:
         return "hex", buff.hex()
-    if text.encode(ENCODING_JVDATA) != buff:
+    # NUL is rejected by PostgreSQL TEXT.
+    if "\x00" in text or text.encode(ENCODING_JVDATA) != buff:
         return "hex", buff.hex()
     return ENCODING_JVDATA, text
 
@@ -98,6 +102,8 @@ def _header(buff: bytes, start: int, end: int) -> str | None:
     try:
         value = buff[start:end].decode("ascii").strip()
     except UnicodeDecodeError:
+        return None
+    if "\x00" in value:
         return None
     return value or None
 
@@ -155,8 +161,13 @@ class RealtimeCaptureFetch:
         self.record_count += 1
         try:
             rows = _public_rows(self._parser_factory.parse(buff))
+            rows_json = (
+                json.dumps(rows, ensure_ascii=False, sort_keys=True, default=str) if rows else None
+            )
         except Exception:  # noqa: BLE001 - the importer reports the rejection
-            rows = []
+            rows_json = None
+        if rows_json is not None and "\x00" in rows_json:
+            rows_json = None
         encoding, raw = _decode_raw(buff)
         record_spec = _header(buff, 0, 2)
         row = {
@@ -172,9 +183,7 @@ class RealtimeCaptureFetch:
             "RawEncoding": encoding,
             "RawRecord": raw,
             "RawSha256": hashlib.sha256(buff).hexdigest(),
-            "RowsJson": (
-                json.dumps(rows, ensure_ascii=False, sort_keys=True, default=str) if rows else None
-            ),
+            "RowsJson": rows_json,
         }
         self.database.insert(CAPTURE_RECORD_TABLE, row, use_replace=False)
 

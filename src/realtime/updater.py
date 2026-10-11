@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional, Union
 
 from src.database.base import BaseDatabase
-from src.database.migration import SchemaMigrationError
+from src.database.migration import SchemaMigrationError, require_current_primary_key
 from src.database.schema_types import get_table_primary_key_columns
 from src.importer.importer import (
     CANCELLATION_STATE_RECORD_TYPES,
@@ -216,6 +216,7 @@ class RealtimeUpdater:
         self._verified_cc_tables: set[str] = set()
         self._verified_jc_tables: set[str] = set()
         self._verified_wf_tables: set[str] = set()
+        self._verified_wh_tables: set[str] = set()
 
         logger.info("RealtimeUpdater initialized")
 
@@ -232,6 +233,9 @@ class RealtimeUpdater:
             "RT_CC",
             "RT_JC",
             "RT_WF",
+            # Key check only: a legacy RT_WH (no HappyoTime in the key) would
+            # silently overwrite earlier 0B11 announcements.
+            "RT_WH",
         }
     )
 
@@ -316,6 +320,10 @@ class RealtimeUpdater:
                 if table_name not in self._verified_cc_tables:
                     if verify_cc_storage_schema(self.database, table_name):
                         self._verified_cc_tables.add(table_name)
+            elif table_name == "RT_WH":
+                if table_name not in self._verified_wh_tables:
+                    require_current_primary_key(self.database, table_name)
+                    self._verified_wh_tables.add(table_name)
             elif table_name == "RT_JC":
                 if table_name not in self._verified_jc_tables:
                     if verify_jc_storage_schema(self.database, table_name):

@@ -436,41 +436,124 @@ _LEGACY_RT_WH = (
 )
 
 
-def test_create_all_tables_widens_legacy_rt_wh_key_without_losing_rows(tmp_path):
+_LEGACY_ROW = (
+    "INSERT INTO RT_WH (RecordSpec, DataKubun, MakeDate, Year, MonthDay, JyoCD, "
+    "Kaiji, Nichiji, RaceNum, HappyoTime, Umaban, Bamei, BaTaijyu, ZogenFugo, ZogenSa) "
+    "VALUES ('WH', '1', '20260818', 2026, 818, '05', 3, 8, 11, '08180930', 1, "
+    "'日本馬', 480, '+', 5)"
+)
+
+# The operator procedures documented in RELEASE_NOTES.md / record_contracts.md.
+_RT_WH_COLUMNS = (
+    "RecordSpec, DataKubun, MakeDate, Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, "
+    "HappyoTime, Umaban, Bamei, BaTaijyu, ZogenFugo, ZogenSa"
+)
+SQLITE_RT_WH_MIGRATION = [
+    "ALTER TABLE RT_WH RENAME TO RT_WH_legacy_2_2",
+    SCHEMAS["RT_WH"],
+    f"INSERT INTO RT_WH ({_RT_WH_COLUMNS}) SELECT {_RT_WH_COLUMNS} FROM RT_WH_legacy_2_2",
+    "DROP TABLE RT_WH_legacy_2_2",
+]
+POSTGRESQL_RT_WH_MIGRATION = [
+    "LOCK TABLE rt_wh IN ACCESS EXCLUSIVE MODE",
+    "ALTER TABLE rt_wh DROP CONSTRAINT rt_wh_pkey, ADD PRIMARY KEY "
+    "(year, monthday, jyocd, kaiji, nichiji, racenum, happyotime, umaban)",
+]
+
+
+def _legacy_database(tmp_path):
+    database = SQLiteDatabase({"path": str(tmp_path / "legacy.db")})
+    database.connect()
+    database.execute(_LEGACY_RT_WH)
+    database.execute(_LEGACY_ROW)
+    database.commit()
+    return database
+
+
+def test_startup_leaves_legacy_rt_wh_alone_and_other_feeds_run(tmp_path):
+    """The key migration is an operator step: never run automatically."""
     from src.database.migration import _get_existing_primary_key_columns
 
     assert _LEGACY_RT_WH != SCHEMAS["RT_WH"]
-    database = SQLiteDatabase({"path": str(tmp_path / "legacy.db")})
-    with database:
-        database.execute(_LEGACY_RT_WH)
-        database.execute("CREATE INDEX idx_rt_wh_time ON RT_WH(HappyoTime)")
-        database.execute(
-            "INSERT INTO RT_WH (RecordSpec, DataKubun, MakeDate, Year, MonthDay, JyoCD, "
-            "Kaiji, Nichiji, RaceNum, HappyoTime, Umaban, Bamei, BaTaijyu, ZogenFugo, ZogenSa) "
-            "VALUES ('WH', '1', '20260818', 2026, 818, '05', 3, 8, 11, '08180930', 1, "
-            "'日本馬', 480, '+', 5)"
-        )
-        database.commit()
-
+    database = _legacy_database(tmp_path)
+    try:
         create_all_tables(database)
 
-        assert _get_existing_primary_key_columns(database, "RT_WH") == [
-            "Year",
-            "MonthDay",
-            "JyoCD",
-            "Kaiji",
-            "Nichiji",
+        assert _get_existing_primary_key_columns(database, "RT_WH")[-2:] == [
             "RaceNum",
-            "HappyoTime",
             "Umaban",
         ]
-        rows = [dict(row) for row in database.fetch_all("SELECT * FROM RT_WH")]
-        assert len(rows) == 1
-        assert rows[0]["HappyoTime"] == "08180930"
-        assert rows[0]["BaTaijyu"] == 480
-        assert rows[0]["Bamei"] == "日本馬"
+        assert database.fetch_one("SELECT COUNT(*) AS n FROM RT_WH")["n"] == 1
+        # 0B14 (and every other feed) still runs and is captured.
+        _sync_realtime_spec(
+            database=database,
+            spec="0B14",
+            from_date=RACE_DATE,
+            to_date=RACE_DATE,
+            sid="TEST",
+            jvlink=FakeJVLink({RACE_DATE: [build_we_record()]}),
+            ensure_tables=False,
+        )
+        assert len(_fetches(database)) == 1
+    finally:
+        database.disconnect()
 
-        # 移行後は同じ馬の別発表が別行になる。
+
+@pytest.mark.parametrize("ensure_tables", [True, False])
+def test_0b11_refuses_a_legacy_rt_wh_before_opening(tmp_path, ensure_tables):
+    from src.database.migration import SchemaMigrationError
+
+    database = _legacy_database(tmp_path)
+    try:
+        if not ensure_tables:
+            create_all_tables(database)
+        jvlink = FakeJVLink({RACE_DATE: [_wh("08180935", weight="486")]})
+        with pytest.raises(SchemaMigrationError, match="RT_WH primary key"):
+            _sync_realtime_spec(
+                database=database,
+                spec="0B11",
+                from_date=RACE_DATE,
+                to_date=RACE_DATE,
+                sid="TEST",
+                jvlink=jvlink,
+                ensure_tables=ensure_tables,
+            )
+        assert jvlink.opened_keys == []
+        assert database.fetch_one("SELECT BaTaijyu FROM RT_WH")["BaTaijyu"] == 480
+    finally:
+        database.disconnect()
+
+
+def test_realtime_updater_refuses_wh_writes_to_a_legacy_rt_wh(tmp_path):
+    """Other writers (jltsql realtime start) fail closed too."""
+    from src.realtime.updater import RealtimeUpdater
+
+    database = _legacy_database(tmp_path)
+    try:
+        result = RealtimeUpdater(database).process_record(_wh("08180935", weight="486"))
+        results = result if isinstance(result, list) else [result]
+        assert results and all(item["success"] is False for item in results)
+        assert "RT_WH primary key" in results[0]["error"]
+        assert database.fetch_one("SELECT BaTaijyu FROM RT_WH")["BaTaijyu"] == 480
+    finally:
+        database.disconnect()
+
+
+def test_documented_sqlite_procedure_migrates_rt_wh_without_losing_rows(tmp_path):
+    from src.database.migration import _get_existing_primary_key_columns
+
+    database = _legacy_database(tmp_path)
+    try:
+        assert (
+            database.fetch_one("SELECT COUNT(*) AS n FROM RT_WH WHERE HappyoTime IS NULL")["n"] == 0
+        )
+        database.execute("BEGIN IMMEDIATE")
+        for statement in SQLITE_RT_WH_MIGRATION:
+            database.execute(statement)
+        database.commit()
+        create_all_tables(database)
+
+        assert "HappyoTime" in _get_existing_primary_key_columns(database, "RT_WH")
         _sync_realtime_spec(
             database=database,
             spec="0B11",
@@ -480,58 +563,52 @@ def test_create_all_tables_widens_legacy_rt_wh_key_without_losing_rows(tmp_path)
             jvlink=FakeJVLink({RACE_DATE: [_wh("08180935", weight="486")]}),
             ensure_tables=False,
         )
-        assert database.fetch_one("SELECT COUNT(*) AS n FROM RT_WH WHERE Umaban = 1")["n"] == 2
-
-
-def test_rt_wh_widening_refuses_rows_without_happyo_time(tmp_path):
-    from src.database.migration import SchemaMigrationError, _get_existing_primary_key_columns
-
-    database = SQLiteDatabase({"path": str(tmp_path / "legacy-null.db")})
-    with database:
-        database.execute(_LEGACY_RT_WH)
-        database.execute(
-            "INSERT INTO RT_WH (RecordSpec, Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, "
-            "HappyoTime, Umaban) VALUES ('WH', 2026, 818, '05', 3, 8, 11, NULL, 1)"
+        rows = database.fetch_all(
+            "SELECT HappyoTime, BaTaijyu, Bamei FROM RT_WH WHERE Umaban = 1 ORDER BY HappyoTime"
         )
-        database.commit()
-
-        with pytest.raises(SchemaMigrationError, match="NULL"):
-            create_all_tables(database)
-
-        # Fail closed: the legacy table and its row are untouched.
-        assert _get_existing_primary_key_columns(database, "RT_WH")[-1] == "Umaban"
-        assert database.fetch_one("SELECT COUNT(*) AS n FROM RT_WH")["n"] == 1
+        assert [dict(row) for row in rows] == [
+            {"HappyoTime": "08180930", "BaTaijyu": 480, "Bamei": "日本馬"},
+            {"HappyoTime": "08180935", "BaTaijyu": 486, "Bamei": "日本馬"},
+        ]
+    finally:
+        database.disconnect()
 
 
 # --- PostgreSQL ------------------------------------------------------------------
 
 
-def test_postgresql_widens_legacy_rt_wh_and_appends_capture_log(postgresql_db):  # noqa: F811
-    from src.database.migration import _get_existing_primary_key_columns
+def test_postgresql_documented_procedure_and_capture_log(postgresql_db):  # noqa: F811
+    from src.database.migration import SchemaMigrationError
 
     database = postgresql_db
     database.execute(_LEGACY_RT_WH)
-    database.execute(
-        "INSERT INTO RT_WH (RecordSpec, DataKubun, MakeDate, Year, MonthDay, JyoCD, "
-        "Kaiji, Nichiji, RaceNum, HappyoTime, Umaban, Bamei, BaTaijyu, ZogenFugo, ZogenSa) "
-        "VALUES ('WH', '1', '20260818', 2026, 818, '05', 3, 8, 11, '08180930', 1, "
-        "'日本馬', 480, '+', 5)"
-    )
+    database.execute(_LEGACY_ROW)
     database.commit()
 
     create_all_tables(database)
+    database.commit()
+    with pytest.raises(SchemaMigrationError, match="RT_WH primary key"):
+        _sync_realtime_spec(
+            database=database,
+            spec="0B11",
+            from_date=RACE_DATE,
+            to_date=RACE_DATE,
+            sid="TEST",
+            jvlink=FakeJVLink({RACE_DATE: [_wh("08180935", weight="486")]}),
+            ensure_tables=False,
+        )
+    database.rollback()
 
-    assert [column.lower() for column in _get_existing_primary_key_columns(database, "RT_WH")] == [
-        "year",
-        "monthday",
-        "jyocd",
-        "kaiji",
-        "nichiji",
-        "racenum",
-        "happyotime",
-        "umaban",
-    ]
-    assert database.fetch_one("SELECT COUNT(*) AS n FROM rt_wh")["n"] == 1
+    assert (
+        database.fetch_one(
+            "SELECT conname FROM pg_constraint WHERE conrelid = 'rt_wh'::regclass AND contype = 'p'"
+        )["conname"]
+        == "rt_wh_pkey"
+    )
+    database.begin_transaction()
+    for statement in POSTGRESQL_RT_WH_MIGRATION:
+        database.execute(statement)
+    database.commit()
 
     _sync_realtime_spec(
         database=database,
@@ -561,27 +638,28 @@ def test_postgresql_widens_legacy_rt_wh_and_appends_capture_log(postgresql_db): 
         ("0B14", 2, "complete"),
     ]
     records = database.fetch_all(
-        "SELECT recordspec, rawrecord, happyotime FROM rt_capture_record ORDER BY collectedat, seq"
+        "SELECT recordspec, rawrecord FROM rt_capture_record ORDER BY collectedat, seq"
     )
     assert [row["recordspec"] for row in records] == ["WH", "WE", "JC"]
     assert records[0]["rawrecord"].encode("cp932") == _wh("08180935", weight="486")
 
 
-def test_postgresql_widening_refuses_null_happyo_time(postgresql_db):  # noqa: F811
-    from src.database.migration import SchemaMigrationError
+def test_postgresql_accepts_raw_records_with_nul_bytes(postgresql_db):  # noqa: F811
+    from src.realtime.capture_log import begin_capture
 
     database = postgresql_db
-    database.execute(_LEGACY_RT_WH)
-    database.execute(
-        "INSERT INTO RT_WH (RecordSpec, Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, "
-        "HappyoTime, Umaban) VALUES ('WH', 2026, 818, '05', 3, 8, 11, NULL, 1)"
-    )
+    create_all_tables(database)
+    database.begin_transaction()
+    raw = b"WH1" + b"\x00" * 40
+    capture = begin_capture(database, "0B11", RACE_DATE, producer="test")
+    capture.opened(0)
+    capture.append(raw)
+    capture.complete()
     database.commit()
 
-    with pytest.raises(SchemaMigrationError, match="NULL"):
-        create_all_tables(database)
-    database.rollback()
-    assert database.fetch_one("SELECT COUNT(*) AS n FROM rt_wh")["n"] == 1
+    row = database.fetch_one("SELECT rawencoding, rawrecord FROM rt_capture_record")
+    assert row["rawencoding"] == "hex"
+    assert bytes.fromhex(row["rawrecord"]) == raw
 
 
 # --- review follow-ups -----------------------------------------------------------

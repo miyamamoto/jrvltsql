@@ -9,11 +9,13 @@
 
 ### 移行（2.2.0 から上げる場合）
 
-- **`RT_WH` の主キーに `HappyoTime` が入った**。2.2.0 で作った DB は、起動時
-  （`create_all_tables`、daily_update の既定 `--ensure-tables`）に主キーを広げる移行を
-  自動で行う（PostgreSQL は `DROP CONSTRAINT` + `ADD PRIMARY KEY`、SQLite は同一
-  transaction で表を作り直して全行・index を移す）。行の削除・書き換えはしない。
-  `HappyoTime` が NULL の行があれば移行せず停止する。
+- **`RT_WH` の主キーに `HappyoTime` が入った（`NOT NULL`）**。2.2.0 で作った DB の
+  移行は**自動では行わない**（オペレーター手順: `docs/record_contracts.md#wh`）。未移行の
+  あいだ起動とほかの spec は動き、`0B11` の取得は JVRTOpen の前に、RT_WH への書き込みは
+  `jltsql realtime start` を含めて `SchemaMigrationError` で止まる（`--no-ensure-tables` でも
+  同じ）。PostgreSQL の移行は `ACCESS EXCLUSIVE` lock を取る。
+- 2.2.0 への rollback: 2.2.0 は移行済みの RT_WH を主キー不一致として `create_all_tables`
+  ごと拒否する（実測）。RT_WH を旧主キーに戻すか backup を restore してから戻す。
 - `RT_WH` は発表ごとに行が残るので、「馬ごとに 1 行」を前提にした読み手は
   レースごとの最大 `HappyoTime` で絞る必要がある。
 - 新しい表 `RT_CAPTURE_FETCH` / `RT_CAPTURE_RECORD` を作る（追加のみ）。
