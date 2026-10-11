@@ -30,18 +30,19 @@ class TestIndexDefinitions(unittest.TestCase):
 
     def test_index_count(self):
         """Test that we have indexes for all working tables."""
-        # 39 working tables (26 NL + 13 RT) — normalized TK header included
+        # 41 working tables (26 NL + 13 RT + 2 capture log) — normalized TK header included
         expected_tables = {
             'NL_AV', 'NL_BN', 'NL_BR', 'NL_BT', 'NL_CC', 'NL_CH', 'NL_CS', 'NL_DM',
             'NL_HC', 'NL_HS', 'NL_HY', 'NL_JG', 'NL_KS', 'NL_O1', 'NL_O2', 'NL_O3',
             'NL_O4', 'NL_RA', 'NL_RC', 'NL_SE', 'NL_TC', 'NL_TK', 'NL_TK_RACE', 'NL_TM', 'NL_WH',
             'NL_YS',
             'RT_AV', 'RT_CC', 'RT_DM', 'RT_O1', 'RT_O2', 'RT_O3', 'RT_O4',
-            'RT_RA', 'RT_RC', 'RT_SE', 'RT_TC', 'RT_TM', 'RT_WH'
+            'RT_RA', 'RT_RC', 'RT_SE', 'RT_TC', 'RT_TM', 'RT_WH',
+            'RT_CAPTURE_FETCH', 'RT_CAPTURE_RECORD',
         }
 
         defined_tables = set(INDEXES.keys())
-        self.assertEqual(len(defined_tables), 39, "Should have indexes for 39 tables")
+        self.assertEqual(len(defined_tables), 41, "Should have indexes for 41 tables")
         self.assertEqual(defined_tables, expected_tables, "Should match working tables")
 
     def test_total_index_count(self):
@@ -123,7 +124,7 @@ class TestIndexManager(unittest.TestCase):
     def test_list_tables_with_indexes(self):
         """Test listing tables with index definitions."""
         tables = self.index_manager.list_tables_with_indexes()
-        self.assertEqual(len(tables), 39, "Should have 39 tables with indexes")
+        self.assertEqual(len(tables), 41, "Should have 41 tables with indexes")
         self.assertIn('NL_HC', tables)
         self.assertIn('NL_RA', tables)
         self.assertIn('NL_SE', tables)

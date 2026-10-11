@@ -7,11 +7,11 @@ Tests data storage across:
 - PostgreSQL (if available)
 
 Schema Status:
-- Total defined: 80 tables (47 NL_* + 21 RT_* + 12 TS_*)
+- Total defined: 82 tables (47 NL_* + 21 RT_* record tables + 2 RT_CAPTURE_* log tables + 12 TS_*)
 - All tables should be created successfully with the current schema
 
 Note: The schema has been fully implemented with proper SQL syntax.
-All 80 tables should create successfully across all database backends.
+All 82 tables should create successfully across all database backends.
 DuckDB is outside this project's supported database matrix.
 """
 
@@ -48,8 +48,8 @@ class TestAllTablesCreation(unittest.TestCase):
         rt_tables = [name for name in SCHEMAS.keys() if name.startswith('RT_')]
 
         self.assertEqual(len(nl_tables), 47, "Should have 47 NL_* tables")
-        self.assertEqual(len(rt_tables), 21, "Should have 21 RT_* tables")
-        self.assertEqual(len(SCHEMAS), 80, "Should have 80 total tables")
+        self.assertEqual(len(rt_tables), 23, "Should have 21 RT_* record tables + 2 capture log tables")
+        self.assertEqual(len(SCHEMAS), 82, "Should have 82 total tables")
 
     def test_realtime_tables_subset(self):
         """Verify RT tables are only for real-time record types."""
@@ -57,7 +57,9 @@ class TestAllTablesCreation(unittest.TestCase):
         EXPECTED_RT_TYPES = {
             'AV', 'CC', 'DM', 'H1', 'H6', 'HR', 'JC',
             'O1', 'O2', 'O3', 'O4', 'O5', 'O6',
-            'RA', 'RC', 'SE', 'TC', 'TM', 'WE', 'WH', 'WF'
+            'RA', 'RC', 'SE', 'TC', 'TM', 'WE', 'WH', 'WF',
+            # Append-only 0B11/0B14 capture log (src/realtime/capture_log.py)
+            'CAPTURE_FETCH', 'CAPTURE_RECORD',
         }
 
         rt_tables = {name.replace('RT_', '') for name in SCHEMAS.keys() if name.startswith('RT_')}
@@ -106,7 +108,7 @@ class TestSQLiteAllTables(unittest.TestCase):
             )
 
     def test_create_all_rt_tables(self):
-        """Test creating RT_* tables (all 21 should succeed)."""
+        """Test creating RT_* tables (all 23 should succeed)."""
         rt_tables = [name for name in SCHEMAS.keys() if name.startswith('RT_')]
 
         created_count = 0
@@ -118,7 +120,7 @@ class TestSQLiteAllTables(unittest.TestCase):
             else:
                 failed_tables.append(table_name)
 
-        self.assertEqual(created_count, 21, f"Should create all 21 RT_* tables, failed: {failed_tables}")
+        self.assertEqual(created_count, 23, f"Should create all 23 RT_* tables, failed: {failed_tables}")
 
         # Verify all tables exist
         for table_name in rt_tables:
@@ -135,8 +137,8 @@ class TestSQLiteAllTables(unittest.TestCase):
         failed = sum(1 for success in results.values() if not success)
         failed_tables = [name for name, success in results.items() if not success]
 
-        # All 80 tables should create successfully (47 NL + 21 RT + 12 TS)
-        self.assertEqual(successful, 80, f"Should create all 80 tables, failed: {failed_tables}")
+        # All 82 tables should create successfully (47 NL + 23 RT + 12 TS)
+        self.assertEqual(successful, 82, f"Should create all 82 tables, failed: {failed_tables}")
         self.assertEqual(failed, 0, "Should have 0 failing tables")
 
         # Verify all tables exist
