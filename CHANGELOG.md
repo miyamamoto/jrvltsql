@@ -21,8 +21,9 @@
   同じ）。PostgreSQL の移行は `ACCESS EXCLUSIVE` lock を取る。
 - 2.2.0 への rollback: 2.2.0 は移行済みの RT_WH を主キー不一致として `create_all_tables`
   ごと拒否する（実測）。RT_WH を旧主キーに戻すか backup を restore してから戻す。
-- `RT_WH` は発表ごとに行が残るので、「馬ごとに 1 行」を前提にした読み手は
-  レースごとの最大 `HappyoTime` で絞る必要がある。
+- `RT_WH` は発表ごとに行が残る（同じレース・馬に複数行）。「馬ごとに 1 行」を前提にした
+  読み手（KPS の `sync_engine` の `rt_wh` 取込、kps-ingestion-runtime の `rt_wh` 参照など）は
+  レースごとに `HappyoTime` が最大の行で絞る必要がある。移行と同時かそれより前に直す。
 - 新しい表 `RT_CAPTURE_FETCH` / `RT_CAPTURE_RECORD` を作る（追加のみ）。
 
 ### Added

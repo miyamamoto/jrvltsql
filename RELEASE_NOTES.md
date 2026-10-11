@@ -64,8 +64,19 @@ RT_WH primary key …`, with or without `--ensure-tables`.
 5. Check the row count is unchanged, then restart collection.
 
 Both procedures are executed by `tests/test_realtime_capture_log.py`
-(PostgreSQL 17 and SQLite). Readers that assume one `RT_WH` row per race and
-horse must select the latest `HappyoTime` per race.
+(PostgreSQL 17 and SQLite).
+
+**Readers of `RT_WH` must change.** After the migration `RT_WH` holds one row
+per announcement (race + `HappyoTime` + horse), so a race and horse can have
+several rows. Code that assumes one row per race and horse (for example the
+KPS `sync_engine` copy of `rt_wh`, and anything in kps-ingestion-runtime that
+reads `rt_wh`) must select, per race, the rows of the largest `HappyoTime`
+(the latest announcement), e.g.
+`... WHERE (year, monthday, jyocd, kaiji, nichiji, racenum, happyotime) IN
+(SELECT year, monthday, jyocd, kaiji, nichiji, racenum, MAX(happyotime) FROM rt_wh
+GROUP BY 1, 2, 3, 4, 5, 6)`. Update those readers before or together with the
+migration. For "what was known at time T" use the capture log instead
+(`docs/capture_log.md`).
 
 ## Rollback
 
