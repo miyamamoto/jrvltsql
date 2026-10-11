@@ -2512,6 +2512,11 @@ def realtime_fetch(
         exit_code = oneshot.EXIT_ERROR
         console.print(f"[red]Error:[/red] {type(exc).__name__}: {exc}")
         logger.error("realtime fetch failed", error=f"{type(exc).__name__}: {exc}")
+    except KeyboardInterrupt as exc:
+        # The open spec was rolled back by the database context; exit 130.
+        error = exc
+        exit_code = oneshot.EXIT_INTERRUPTED
+        console.print("[yellow]Interrupted[/yellow]")
     finally:
         if summary_json:
             try:

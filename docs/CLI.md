@@ -105,7 +105,7 @@ jltsql realtime fetch --specs 0B14 --from-date 20261010 --to-date 20261011
 | `--db` / `--no-ensure-tables` | DB 種別 / 表の作成を省く |
 
 exit code: 0 正常、1 エラー（その spec は rollback、後続 spec は走らない）、2 引数エラー
-（JV-Link・DB に触れる前）、3 `--require-records` 不足。spec ごとに 1 transaction で、
+（JV-Link・DB に触れる前）、3 `--require-records` 不足、130 中断（Ctrl-C。実行中の spec は rollback、summary は `outcome: "error"`）。spec ごとに 1 transaction で、
 `0B11` / `0B14` は [取得ログ](capture_log.md) に追記します（`Producer` は
 `jltsql realtime fetch`）。
 

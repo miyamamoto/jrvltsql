@@ -213,3 +213,28 @@ def test_unwritable_summary_fails_an_otherwise_successful_fetch(run_fetch, tmp_p
 
     assert result.exit_code == 1
     assert "could not write --summary-json" in result.output
+
+
+def test_interrupt_exits_130_and_is_summarized_as_an_error(run_fetch, tmp_path):
+    class InterruptedJVLink(SpecJVLink):
+        def jv_rt_open(self, data_spec, key):
+            self.opened_keys.append((data_spec, key))
+            raise KeyboardInterrupt
+
+    summary_path = tmp_path / "summary.json"
+    result = run_fetch(
+        {},
+        "--specs",
+        "0B14",
+        "--date",
+        RACE_DATE,
+        "--summary-json",
+        str(summary_path),
+        jvlink=InterruptedJVLink({}),
+    )
+
+    assert result.exit_code == 130
+    document = _summary(summary_path)
+    assert document["outcome"] == "error"
+    assert document["exit_code"] == 130
+    assert document["error"].startswith("KeyboardInterrupt")
