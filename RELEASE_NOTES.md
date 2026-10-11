@@ -1,3 +1,98 @@
+# jrvltsql v2.3.0 Release Notes
+
+`2.3.0` releases #275 and #276 (merged on `master` since `2.2.0`): the
+race-day speed reports 0B11/0B14 become reconstructible as of a time, and a
+one-shot speed-report fetch replaces the resident loop for collectors.
+Parser byte layouts are unchanged. One primary key changes and **needs an
+operator migration** (see Upgrade); it is not applied automatically.
+
+## Highlights
+
+- **0B11 in daily_update** (#275): `scripts/daily_update.py` collects 0B11
+  (速報馬体重, WH) by default; `--specs 0B11` / `--require-records 0B11` work,
+  and the summary lists it as `kind: "jvrtopen"`.
+- **Append-only capture log** (#275): `RT_CAPTURE_FETCH` (one row per
+  JVRTOpen: dataspec, request key, return code, record count, UTC
+  requested/opened/completed times, producer, version) and
+  `RT_CAPTURE_RECORD` (one row per JVRead buffer: UTC collected time, raw
+  record, SHA-256, key fields cut from the official byte positions of
+  JV-Data 4.9.0.1 formats 101-106, parser output) for 0B11 and 0B14
+  (WH/WE/AV/JC/TC/CC). Written in the same transaction as the RT_* import;
+  only INSERTs. The 0B14 per-date replacement of RT_WE/RT_AV/RT_JC/RT_TC/RT_CC
+  (JV-Data ※1) is unchanged: RT_* is the current state, the log is the
+  history. `--summary-json` `opens[]` carry `fetch_id`. Contract and as-of
+  queries: `docs/capture_log.md`.
+- **RT_WH keeps every announcement** (#275): the key is race + `HappyoTime`
+  + horse (`HappyoTime NOT NULL`), because 0B11 adds a record per
+  announcement. `NL_WH` is unchanged.
+- **`jltsql realtime fetch`** (#276): opens each `YYYYMMDD` key of the
+  date-keyed speed-report specs (0B11/0B12/0B13/0B14/0B15/0B17/0B51) once,
+  imports, writes the capture log and the schema-1 summary
+  (`generator: "jltsql realtime fetch"`), and exits 0/1/2/3. The fetch body
+  moved to `src.realtime.oneshot` and is shared with daily_update.
+
+## Upgrade from 2.2.0 (operator migration for RT_WH)
+
+New tables `RT_CAPTURE_FETCH` / `RT_CAPTURE_RECORD` are created by the normal
+`create_all_tables` (additive).
+
+`RT_WH` gains `HappyoTime` in its primary key. A database created by 2.2.0 is
+**not migrated automatically**: startup and every other spec keep working,
+while 0B11 (`daily_update`, `realtime fetch`) stops before JVRTOpen and any
+WH write (including `realtime start`) is refused with `SchemaMigrationError:
+RT_WH primary key …`, with or without `--ensure-tables`.
+
+1. Stop every collector writing the database and back up `rt_wh`.
+2. `SELECT COUNT(*) FROM rt_wh WHERE happyotime IS NULL;` must return 0.
+3. PostgreSQL (check the constraint name with
+   `SELECT conname FROM pg_constraint WHERE conrelid = 'rt_wh'::regclass AND contype = 'p';`,
+   default `rt_wh_pkey`):
+
+   ```sql
+   BEGIN;
+   LOCK TABLE rt_wh IN ACCESS EXCLUSIVE MODE;
+   ALTER TABLE rt_wh DROP CONSTRAINT rt_wh_pkey, ADD PRIMARY KEY
+     (year, monthday, jyocd, kaiji, nichiji, racenum, happyotime, umaban);
+   COMMIT;
+   ```
+
+   `ACCESS EXCLUSIVE` blocks reads and writes of `rt_wh` while the key index
+   is rebuilt.
+4. SQLite cannot change a key in place: rename, create the 2.3.0 table, copy,
+   drop (full statements in `docs/record_contracts.md#wh`), then
+   `jltsql create-indexes`.
+5. Check the row count is unchanged, then restart collection.
+
+Both procedures are executed by `tests/test_realtime_capture_log.py`
+(PostgreSQL 17 and SQLite). Readers that assume one `RT_WH` row per race and
+horse must select the latest `HappyoTime` per race.
+
+## Rollback
+
+- Not migrated: re-adopt `v2.2.0`; the capture tables are ignored.
+- Migrated: 2.2.0 rejects the migrated `RT_WH` in `create_all_tables`
+  (measured: `SchemaMigrationError`), which with daily_update's default
+  `--ensure-tables` stops every spec. Restore the `rt_wh` backup, or keep only
+  the latest `HappyoTime` per race and horse and put the old key back (this
+  drops the announcement history), before re-adopting `v2.2.0`.
+
+## Validation and known constraints
+
+- Full suite incl. PostgreSQL integration on a disposable PostgreSQL 17
+  (`JLTSQL_RUN_POSTGRESQL_INTEGRATION=1`): see the release PR; CI
+  lint/test/windows-batch-syntax.
+- Not measured: a live JV-Link run of 0B11 and of `realtime fetch`, and its
+  duration. Before production use, on a race day after the RT_WH migration:
+  `jltsql realtime fetch --specs 0B11,0B14 --date <today> --summary-json /tmp/rt.json`
+  and read `rt.json`, `rt_capture_fetch` and `rt_wh`.
+- `jltsql realtime start` (RealtimeMonitor) does not write the capture log.
+- The capture log is never pruned by jltsql; retention is the user's.
+
+## Source and artifacts
+
+- tag: `v2.3.0` (full SHA filled in at release)
+- rollback tag: `v2.2.0` (`9779342f692a9640311064a1aa0bb63e2c5c7a8f`)
+
 # jrvltsql v2.2.0 Release Notes
 
 `2.2.0` releases everything merged on `master` since `2.1.2` (#263-#266,

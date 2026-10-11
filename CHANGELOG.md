@@ -7,6 +7,11 @@
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-10-11
+
+0B11/0B14 の取得ログと単発の速報取得（#275, #276）。**RT_WH の主キー移行はオペレーター作業**
+（下記と `RELEASE_NOTES.md`）。
+
 ### 移行（2.2.0 から上げる場合）
 
 - **`RT_WH` の主キーに `HappyoTime` が入った（`NOT NULL`）**。2.2.0 で作った DB の
@@ -732,7 +737,8 @@
 - quickstart.py 対話形式セットアップウィザード
 - CLI コマンド（fetch, status, monitor, init）
 
-[Unreleased]: https://github.com/miyamamoto/jrvltsql/compare/v2.2.0...HEAD
+[Unreleased]: https://github.com/miyamamoto/jrvltsql/compare/v2.3.0...HEAD
+[2.3.0]: https://github.com/miyamamoto/jrvltsql/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/miyamamoto/jrvltsql/compare/v2.1.2...v2.2.0
 [2.1.2]: https://github.com/miyamamoto/jrvltsql/compare/v2.1.1...v2.1.2
 [2.1.1]: https://github.com/miyamamoto/jrvltsql/compare/v2.1.0...v2.1.1

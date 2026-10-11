@@ -36,13 +36,15 @@ fail closed で止まります。
 parse、DB保存までの検証が完了するまでは、64-bit 対応済みとは扱いません。
 
 運用環境では正式リリースtagを固定してインストールします。次は現在の安定版
-`v2.2.0`の例です。2.1.2 で作った DB から上げる場合は、`NL_HR` / `RT_HR` の予備 flag
-3 列の型変更（INTEGER → TEXT）が必要です。手順は
-[RELEASE_NOTES.md](RELEASE_NOTES.md) の「Upgrade from 2.1.2」を参照してください。採用時には`git rev-parse HEAD`で得たfull SHAと、使用したartifactの
+`v2.3.0`の例です。2.2.0 で作った DB から上げる場合は、`RT_WH` の主キーへ `HappyoTime` を
+足すオペレーター移行が必要です（自動では行いません。未移行のあいだは 0B11 だけが止まります）。
+手順は [RELEASE_NOTES.md](RELEASE_NOTES.md) の「Upgrade from 2.2.0」を参照してください。
+2.1.2 から上げる場合は、さらに `NL_HR` / `RT_HR` の予備 flag 3 列の型変更（INTEGER → TEXT、
+「Upgrade from 2.1.2」）も必要です。採用時には`git rev-parse HEAD`で得たfull SHAと、使用したartifactの
 SHA-256も運用記録へ残してください。
 
 ```powershell
-git clone --branch v2.2.0 --depth 1 https://github.com/miyamamoto/jrvltsql.git
+git clone --branch v2.3.0 --depth 1 https://github.com/miyamamoto/jrvltsql.git
 cd jrvltsql
 git rev-parse HEAD
 pip install .
