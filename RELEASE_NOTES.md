@@ -44,7 +44,7 @@ New tables `RT_CAPTURE_FETCH` / `RT_CAPTURE_RECORD` are created by the normal
 **not migrated automatically**: startup and every other spec keep working,
 while 0B11 (`daily_update`, `realtime fetch`) stops before JVRTOpen and any
 WH write (including `realtime start`) is refused with `SchemaMigrationError:
-RT_WH primary key …`, with or without `--ensure-tables`.
+RT_WH primary key …`, whether or not table creation is skipped (`daily_update --no-ensure-tables`, `realtime fetch --no-ensure-tables`).
 
 1. Stop every collector writing the database and back up `rt_wh`.
 2. `SELECT COUNT(*) FROM rt_wh WHERE happyotime IS NULL;` must return 0.
