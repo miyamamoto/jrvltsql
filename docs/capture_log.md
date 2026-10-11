@@ -54,7 +54,7 @@
 | `DataSpec` / `RequestKey` | TEXT | `RT_CAPTURE_FETCH` と同じ |
 | `RecordSpec` / `DataKubun` / `MakeDate` | TEXT | レコード先頭 11 バイト（全形式共通のヘッダ） |
 | `Year` / `MonthDay` / `JyoCD` / `Kaiji` / `Nichiji` / `RaceNum` / `HappyoTime` / `HenkoID` / `Umaban` | TEXT | 生バイトの公式位置からそのまま切り出したキー項目（下表）。その形式に無い項目は NULL |
-| `RawEncoding` | TEXT | `cp932`（通常）。CP932 として読めないバイト列は `hex` |
+| `RawEncoding` | TEXT | `cp932`（通常）。CP932 として読めないバイト列と、CP932 で読めても同じバイト列に戻らないもの（NEC/IBM 拡張の重複コード、例 `0x8790` と `0x81E0` はどちらも「≒」）は `hex` |
 | `RawRecord` | TEXT | 受け取ったレコード全体（末尾 CR/LF を含む）。`RawEncoding` で元のバイト列に戻る |
 | `RawSha256` | TEXT | 元のバイト列の SHA-256 |
 | `RowsJson` | TEXT | jltsql のパーサ出力（WH は馬ごとの行の配列、ほかは 1 要素）。`_` で始まる内部キーを除く。パースできなければ NULL |
@@ -144,7 +144,14 @@ jltsql は取得ログを削除しません。daily_update を 5 分ごとに回
 
 ## migration
 
-2.3.0 の `create_all_tables`（daily_update の既定 `--ensure-tables` を含む）が
-2 表を `CREATE TABLE IF NOT EXISTS` で作ります。既存表の変更はありません。
+2.3.0 の `create_all_tables`（daily_update の既定 `--ensure-tables` を含む）は次の 2 つを
+行います。
+
+- この 2 表を `CREATE TABLE IF NOT EXISTS` で作る（追加のみ）。
+- 既存の `RT_WH` が 2.2.0 以前の主キー（レース識別子＋馬番）なら、主キーに
+  `HappyoTime` を足す移行を自動で行う（行の削除・書き換えなし）。`HappyoTime` が
+  NULL の行があれば移行せずに停止する（fail closed）。詳細は
+  [WH](record_contracts.md#wh) と 2.3.0 の release notes。
+
 `--no-ensure-tables` で運用している環境は、事前に `jltsql create-tables` などで
-作成してください。
+作成・移行してください。

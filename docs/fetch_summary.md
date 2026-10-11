@@ -118,7 +118,7 @@ WARNING（`daily_update spec returned no data`）を残します。TOKU や非�
 | `records_out_of_range` | int | パース後、client 側の `to_date` filter で落とした件数 |
 | `elapsed_seconds` | number | この spec の所要時間 |
 | `error` | string / null | status が error のときの例外 |
-| `opens` | object[] | JVOpen 1 回ごとの `fromtime` / `jvopen_code` / `read_count` / `download_count` / `lastfiletimestamp`。jvrtopen は日付キーごとの `key` / `jvrtopen_code` / `fetch_id`（2.3.0 以降。`0B11` / `0B14` で JVRTOpen が `0` か `-1` を返した open は [取得ログ](capture_log.md) の `RT_CAPTURE_FETCH.FetchId`、それ以外は null。spec が error で rollback された場合、その `fetch_id` の行は DB に残らない）。JVOpen の各要素には `recovery`（bool）があり、JVRead `-402`（p.56）からの自己修復で同じ条件のまま開き直した open は `true`。`recovery: true` の要素は `jvopen_code` / `fromtimes` / `read_count` / `download_count` / `lastfiletimestamp` の集計に入れない |
+| `opens` | object[] | JVOpen 1 回ごとの `fromtime` / `jvopen_code` / `read_count` / `download_count` / `lastfiletimestamp`。jvrtopen は日付キーごとの `key` / `jvrtopen_code` / `fetch_id`（2.3.0 以降。`0B11` / `0B14` で JVRTOpen が `0` か `-1` を返した open は [取得ログ](capture_log.md) の `RT_CAPTURE_FETCH.FetchId`、それ以外は null。spec が error で rollback された場合は、その spec の `fetch_id` をすべて null にする）。JVOpen の各要素には `recovery`（bool）があり、JVRead `-402`（p.56）からの自己修復で同じ条件のまま開き直した open は `true`。`recovery: true` の要素は `jvopen_code` / `fromtimes` / `read_count` / `download_count` / `lastfiletimestamp` の集計に入れない |
 
 | status | 条件 |
 | --- | --- |

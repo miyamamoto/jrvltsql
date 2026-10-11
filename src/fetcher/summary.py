@@ -179,12 +179,19 @@ def summarize_jvrtopen_spec(
     error: BaseException | None = None,
     skipped: bool = False,
     skipped_code: int | None = None,
+    committed: bool | None = None,
 ) -> dict:
     """Summarize one JVRTOpen speed-report dataspec (one open per date key).
 
     JVRTOpen has no readcount/downloadcount/lastfiletimestamp, so those are
     ``None`` and "has data" is judged on records actually read.
+
+    ``committed`` says whether the spec's transaction was committed (default:
+    no error). When it was rolled back, the capture-log rows named by
+    ``opens[].fetch_id`` do not exist, so those ids are reported as None.
     """
+    if committed is None:
+        committed = error is None
     records_read = int(stats.get("records_fetched", 0) or 0)
     open_code = aggregate_open_code(entry.get("jvrtopen_code") for entry in opens)
     if skipped and skipped_code is not None:
@@ -212,7 +219,10 @@ def summarize_jvrtopen_spec(
         "records_out_of_range": 0,
         "elapsed_seconds": round(elapsed_seconds, 3),
         "error": None if skipped else _error_text(error),
-        "opens": [dict(entry) for entry in opens],
+        "opens": [
+            dict(entry) if committed or "fetch_id" not in entry else {**entry, "fetch_id": None}
+            for entry in opens
+        ],
     }
 
 

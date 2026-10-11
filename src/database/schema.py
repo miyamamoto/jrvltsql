@@ -2443,7 +2443,7 @@ SCHEMAS = {
             Kaiji INTEGER,
             Nichiji INTEGER,
             RaceNum INTEGER,
-            HappyoTime TEXT,
+            HappyoTime TEXT NOT NULL,
             Umaban INTEGER,
             Bamei TEXT,
             BaTaijyu INTEGER,

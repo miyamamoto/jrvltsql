@@ -470,6 +470,8 @@ def _sync_jvrtopen_spec(
     stats: dict = {}
     error: Exception | None = None
     skipped_code: int | None = None
+    # An exception means _sync_realtime_spec rolled the spec back.
+    committed = True
     try:
         _sync_realtime_spec(
             database=database,
@@ -482,6 +484,7 @@ def _sync_jvrtopen_spec(
             stats=stats,
         )
     except Exception as exc:
+        committed = False
         code = _error_code_from_exception(exc)
         if code in ignored_error_codes or code in SUBSCRIPTION_ERROR_CODES:
             print(f"[daily-sync] {spec} skipped: JVOpen code {code} (unsubscribed/ignored)")
@@ -503,6 +506,7 @@ def _sync_jvrtopen_spec(
         error=error,
         skipped=skipped_code is not None,
         skipped_code=skipped_code,
+        committed=committed,
     )
     if error is None and skipped_code is None and stats:
         print(

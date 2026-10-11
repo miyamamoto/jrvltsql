@@ -425,9 +425,14 @@ def test_summary_json_reports_0b11_with_fetch_ids(tmp_path, monkeypatch):
 
 # --- 既存 DB の RT_WH 移行 -------------------------------------------------------
 
-_LEGACY_RT_WH = SCHEMAS["RT_WH"].replace(
-    "PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, HappyoTime, Umaban)",
-    "PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)",
+# The 2.2.0 table: race + horse key, HappyoTime nullable.
+_LEGACY_RT_WH = (
+    SCHEMAS["RT_WH"]
+    .replace(
+        "PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, HappyoTime, Umaban)",
+        "PRIMARY KEY (Year, MonthDay, JyoCD, Kaiji, Nichiji, RaceNum, Umaban)",
+    )
+    .replace("HappyoTime TEXT NOT NULL,", "HappyoTime TEXT,")
 )
 
 
@@ -577,3 +582,100 @@ def test_postgresql_widening_refuses_null_happyo_time(postgresql_db):  # noqa: F
         create_all_tables(database)
     database.rollback()
     assert database.fetch_one("SELECT COUNT(*) AS n FROM rt_wh")["n"] == 1
+
+
+# --- review follow-ups -----------------------------------------------------------
+
+
+def test_rt_wh_rejects_a_row_without_happyo_time(database):
+    """SQLite allows NULL in composite keys; NOT NULL keeps the history unique."""
+    from src.database.base import DatabaseError
+
+    with pytest.raises(DatabaseError):
+        database.execute(
+            "INSERT INTO RT_WH (RecordSpec, Year, MonthDay, JyoCD, Kaiji, Nichiji, "
+            "RaceNum, HappyoTime, Umaban) VALUES ('WH', 2026, 818, '05', 3, 8, 11, NULL, 1)"
+        )
+
+
+def test_raw_record_round_trips_cp932_duplicate_code_points(database):
+    """0x8790 (NEC) and 0x81E0 (JIS) both decode to the same character."""
+    from src.realtime.capture_log import begin_capture
+
+    raw = _wh("08180930")
+    raw = raw[:37] + b"\x87\x90" + raw[39:]
+    assert raw.decode("cp932").encode("cp932") != raw
+
+    capture = begin_capture(database, "0B11", RACE_DATE, producer="test")
+    capture.opened(0)
+    capture.append(raw)
+    capture.complete()
+
+    [record] = _records(database)
+    assert record["RawEncoding"] == "hex"
+    assert bytes.fromhex(record["RawRecord"]) == raw
+    assert record["RawSha256"] == hashlib.sha256(raw).hexdigest()
+
+
+def test_error_summary_does_not_name_rolled_back_fetch_ids():
+    from src.fetcher.summary import jvrtopen_entry, summarize_jvrtopen_spec
+
+    opens = [jvrtopen_entry(key=RACE_DATE, jvrtopen_code=0, fetch_id="abc")]
+    failed = summarize_jvrtopen_spec(
+        dataspec="0B11",
+        from_date=RACE_DATE,
+        to_date=RACE_DATE,
+        opens=opens,
+        stats={"records_fetched": 1},
+        elapsed_seconds=0.0,
+        error=RuntimeError("rejected"),
+    )
+    ok = summarize_jvrtopen_spec(
+        dataspec="0B11",
+        from_date=RACE_DATE,
+        to_date=RACE_DATE,
+        opens=opens,
+        stats={"records_fetched": 1},
+        elapsed_seconds=0.0,
+    )
+
+    assert failed["opens"] == [{"key": RACE_DATE, "jvrtopen_code": 0, "fetch_id": None}]
+    assert ok["opens"][0]["fetch_id"] == "abc"
+
+
+def test_summary_json_clears_fetch_ids_when_the_spec_rolls_back(tmp_path, monkeypatch):
+    from tests.test_daily_update_summary import FakeHistoricalJVLink, _Config
+
+    today = datetime.now().strftime("%Y%m%d")
+    record = _wh_record(
+        announcement=today[4:] + "0930", make_date=today, year=today[:4], month_day=today[4:]
+    )
+    realtime = FakeJVLink({today: [record, b"WH1" + b"0" * 37]})
+    db_path = tmp_path / "daily.db"
+
+    class _RealtimeFetcher:
+        def __init__(self, sid):
+            self.jvlink = realtime
+
+    monkeypatch.setattr("src.jvlink.bridge.find_bridge_executable", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "src.fetcher.base.JVLinkWrapper", lambda sid: FakeHistoricalJVLink((-1, 0, 0, ""))
+    )
+    monkeypatch.setattr("src.fetcher.realtime.RealtimeFetcher", _RealtimeFetcher)
+    monkeypatch.setattr(daily_update, "load_config", lambda path: _Config({"jvlink.sid": "TEST"}))
+    monkeypatch.setattr(
+        daily_update,
+        "create_database_from_config",
+        lambda config, db_type_override=None: SQLiteDatabase({"path": str(db_path)}),
+    )
+    monkeypatch.setattr(daily_update, "setup_logging", lambda **kwargs: None)
+    summary_path = tmp_path / "summary.json"
+
+    with pytest.raises(RuntimeError, match="rejected"):
+        daily_update.main(
+            ["--days-back", "1", "--specs", "0B11", "--summary-json", str(summary_path)]
+        )
+
+    [spec] = json.loads(summary_path.read_text(encoding="utf-8"))["specs"]
+    assert spec["status"] == "error"
+    assert [open_["fetch_id"] for open_ in spec["opens"]] == [None] * len(spec["opens"])

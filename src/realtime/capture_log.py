@@ -79,11 +79,19 @@ def _stamp(value: datetime) -> str:
 
 
 def _decode_raw(buff: bytes) -> tuple[str, str]:
-    """Return (encoding, text); bytes that are not CP932 are kept as hex."""
+    """Return (encoding, text) that gives back exactly ``buff``.
+
+    CP932 text is kept only when it re-encodes to the same bytes: duplicate
+    code points (e.g. NEC 0x8790 and JIS 0x81E0 both decode to "≒") would
+    otherwise lose the original bytes. Anything else is stored as hex.
+    """
     try:
-        return ENCODING_JVDATA, buff.decode(ENCODING_JVDATA)
+        text = buff.decode(ENCODING_JVDATA)
     except UnicodeDecodeError:
         return "hex", buff.hex()
+    if text.encode(ENCODING_JVDATA) != buff:
+        return "hex", buff.hex()
+    return ENCODING_JVDATA, text
 
 
 def _header(buff: bytes, start: int, end: int) -> str | None:
