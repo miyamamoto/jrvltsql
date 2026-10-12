@@ -80,12 +80,10 @@ class TestDatabaseMaintenanceCommand(unittest.TestCase):
         database.__exit__.return_value = None
         report = SokuhoCaptureIdentityMigrationReport(
             table_name="TS_SOKUHO_O3",
-            status="legacy",
-            primary_key=("year", "collectedat"),
+            status="publication",
+            primary_key=("year", "sourcespec"),
             total_rows=7,
-            distinct_publication_groups=3,
-            rows_to_delete=4,
-            collected_at_rewrite_groups=2,
+            null_collected_at=2,
         )
 
         with self.runner.isolated_filesystem():
@@ -121,10 +119,9 @@ class TestDatabaseMaintenanceCommand(unittest.TestCase):
         apply_migration.assert_not_called()
         self.assertIn("DRY RUN", result.output)
         self.assertIn("Total rows: 7", result.output)
-        self.assertIn("Distinct publication groups: 3", result.output)
-        self.assertIn("Rows that would be deleted: 4", result.output)
+        self.assertIn("Rows that would be deleted: 0", result.output)
         self.assertIn(
-            "Groups whose CollectedAt would be rewritten to earliest non-NULL: 2",
+            "Rows with NULL CollectedAt (apply refuses when nonzero): 2",
             result.output,
         )
         self.assertIn("no changes were applied", result.output)
@@ -138,11 +135,9 @@ class TestDatabaseMaintenanceCommand(unittest.TestCase):
         report = SokuhoCaptureIdentityMigrationReport(
             table_name="TS_SOKUHO_O2",
             status="migrated",
-            primary_key=("year", "collectedat"),
+            primary_key=("year", "sourcespec"),
             total_rows=2,
-            distinct_publication_groups=1,
-            rows_to_delete=1,
-            collected_at_rewrite_groups=1,
+            null_collected_at=0,
             applied=True,
         )
 

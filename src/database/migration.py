@@ -6,20 +6,17 @@ The production PostgreSQL database is used by near-real-time collectors, so
 ``quickstart`` must never wipe tables implicitly. Migrations are additive only:
 missing columns are added with ``ALTER TABLE`` and extra/renamed columns are
 preserved. Primary-key changes always fail closed during ordinary startup.
-The PostgreSQL TS_SOKUHO capture-key correction is available only through the
-explicit operator command; SQLite requires an operator-managed rebuild.
+The PostgreSQL TS_SOKUHO capture-key correction (adding CollectedAt back to a
+2.0-2.3 publication key) is available only through the explicit operator
+command; SQLite requires an operator-managed rebuild.
 """
 
 import re
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Set
-from uuid import uuid4
 
 from src.database.base import BaseDatabase
-from src.database.timeseries_capture import (
-    capture_timestamp_epoch_microseconds,
-    unqualified_table_name,
-)
+from src.database.timeseries_capture import unqualified_table_name
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -36,15 +33,18 @@ SOKUHO_CAPTURE_IDENTITY_MIGRATION_COMMAND = "jltsql db migrate-sokuho-capture-id
 
 @dataclass(frozen=True)
 class SokuhoCaptureIdentityMigrationReport:
-    """One table's deterministic operator migration report."""
+    """One table's deterministic operator migration report.
+
+    The migration only widens the key, so it never deletes a row.
+    ``null_collected_at`` counts rows that cannot join a key containing
+    CollectedAt; any such row makes ``--apply`` fail closed.
+    """
 
     table_name: str
     status: str
     primary_key: tuple[str, ...]
     total_rows: int
-    distinct_publication_groups: int
-    rows_to_delete: int
-    collected_at_rewrite_groups: int
+    null_collected_at: int
     applied: bool = False
 
 
@@ -362,40 +362,24 @@ def _add_missing_columns(
     return added
 
 
-def _validate_existing_capture_stamps(db: BaseDatabase, table_name: str) -> None:
-    """Reject a legacy Sokuho identity migration if a real stamp is invalid."""
-    table_identifier = _table_identifier(db, table_name)
-    rows = db.fetch_all(
-        f"SELECT DISTINCT CollectedAt AS collectedat FROM {table_identifier} "
-        "WHERE CollectedAt IS NOT NULL"
-    )
-    invalid = []
-    for row in rows:
-        value = row.get("collectedat")
-        try:
-            capture_timestamp_epoch_microseconds(value)
-        except (TypeError, ValueError):
-            invalid.append(repr(value))
-    if invalid:
-        examples = ", ".join(invalid[:5])
-        suffix = " ..." if len(invalid) > 5 else ""
-        raise SchemaMigrationError(
-            f"Cannot migrate {table_name}: invalid offset-aware CollectedAt values "
-            f"[{examples}{suffix}]"
-        )
-
-
-def _is_legacy_sokuho_capture_identity(
+def _is_publication_sokuho_capture_identity(
     table_name: str,
     existing_pk: List[str],
     expected_pk: List[str],
 ) -> bool:
-    """Recognize only the shipped Sokuho key that ended in CollectedAt."""
+    """Recognize the 2.0-2.3 Sokuho key: the current key minus CollectedAt.
+
+    That key made a 0B30-0B36 row one publication (HassoTime). HassoTime of a
+    速報 record does not advance while the odds move, so every later poll of
+    a race was folded into its first capture.
+    """
     if unqualified_table_name(table_name).upper() not in _SOKUHO_CAPTURE_TABLE_SET:
         return False
     existing = [column.lower() for column in existing_pk]
     expected = [column.lower() for column in expected_pk]
-    return existing == [*expected, "collectedat"]
+    if not expected or expected[-1] != "collectedat":
+        return False
+    return existing == expected[:-1]
 
 
 def sokuho_capture_identity_operator_command(
@@ -414,16 +398,17 @@ def sokuho_capture_identity_operator_command(
     )
 
 
-def legacy_sokuho_capture_identity_message(db: BaseDatabase, table_name: str) -> str:
+def publication_sokuho_capture_identity_message(db: BaseDatabase, table_name: str) -> str:
     """Build the shared actionable refusal for startup and write paths."""
     normalized = _normalize_sokuho_table_reference(table_name)
     refusal = (
-        f"{normalized} uses the legacy primary key ending in CollectedAt; "
+        f"{normalized} uses the 2.0-2.3 publication primary key without CollectedAt, "
+        "which folds every later poll of a race into its first capture; "
         "startup and time-series odds writes are blocked."
     )
     if db.get_db_type() == "sqlite":
         return (
-            f"{refusal} SQLite cannot migrate this key in place; create a "
+            f"{refusal} SQLite cannot change this key in place; create a "
             "backup and rebuild the table with the current schema"
         )
     return (
@@ -431,7 +416,7 @@ def legacy_sokuho_capture_identity_message(db: BaseDatabase, table_name: str) ->
         "dry run (the default; it does not change data): "
         f"{sokuho_capture_identity_operator_command(normalized, db.get_db_type())}. "
         "Review the report, stop all collectors, then rerun the same command with "
-        "--apply; --apply mutates the table"
+        "--apply; --apply adds CollectedAt to the primary key and deletes no row"
     )
 
 
@@ -461,7 +446,7 @@ def ensure_sokuho_capture_identity_for_write(
     table_name: str,
     existing_pk: Optional[List[str]] = None,
 ) -> None:
-    """Fail before a Sokuho write can preserve legacy poll identity."""
+    """Fail before a Sokuho write can fold polls into one publication row."""
     normalized = unqualified_table_name(table_name).upper()
     if normalized not in _SOKUHO_CAPTURE_TABLE_SET:
         return
@@ -473,8 +458,8 @@ def ensure_sokuho_capture_identity_for_write(
         if existing_pk is not None
         else _get_existing_primary_key_columns(db, table_name)
     )
-    if _is_legacy_sokuho_capture_identity(normalized, primary_key, expected_pk):
-        raise SchemaMigrationError(legacy_sokuho_capture_identity_message(db, table_name))
+    if _is_publication_sokuho_capture_identity(normalized, primary_key, expected_pk):
+        raise SchemaMigrationError(publication_sokuho_capture_identity_message(db, table_name))
 
 
 def _normalize_sokuho_table_reference(table_name: str) -> str:
@@ -523,7 +508,7 @@ def validate_sokuho_capture_identity_operator_backend(
     names = ", ".join(table_names)
     if normalized_type == "sqlite":
         raise SchemaMigrationError(
-            f"SQLite migration refused for {names}: legacy primary keys cannot be "
+            f"SQLite migration refused for {names}: a primary key cannot be "
             "changed safely in place; back up the database and rebuild each table "
             "with the current schema before polling"
         )
@@ -549,87 +534,44 @@ def _classify_sokuho_table(
     existing_pk = _get_existing_primary_key_columns(db, table_name)
     if [column.lower() for column in existing_pk] == [column.lower() for column in expected_pk]:
         return "current", existing_pk, expected_pk
-    if _is_legacy_sokuho_capture_identity(table_name, existing_pk, expected_pk):
-        return "legacy", existing_pk, expected_pk
+    if _is_publication_sokuho_capture_identity(table_name, existing_pk, expected_pk):
+        return "publication", existing_pk, expected_pk
     raise SchemaMigrationError(
         f"Cannot migrate {table_name}: unsupported primary key "
         f"existing={existing_pk}, expected={expected_pk}"
     )
 
 
-def _current_or_missing_sokuho_report(
+def _sokuho_row_counts(db: BaseDatabase, table_name: str) -> tuple[int, int]:
+    row = (
+        db.fetch_one(
+            "SELECT COUNT(*) AS total_rows, "
+            "COUNT(*) FILTER (WHERE collectedat IS NULL) AS null_collected_at "
+            f"FROM {_table_identifier(db, table_name)}"
+        )
+        or {}
+    )
+    return int(row.get("total_rows") or 0), int(row.get("null_collected_at") or 0)
+
+
+def _sokuho_report(
     db: BaseDatabase,
     table_name: str,
     status: str,
     existing_pk: List[str],
+    *,
+    applied: bool = False,
 ) -> SokuhoCaptureIdentityMigrationReport:
-    total_rows = 0
-    if status == "current":
-        row = db.fetch_one(
-            f"SELECT COUNT(*) AS total_rows FROM {_table_identifier(db, table_name)}"
-        )
-        total_rows = int((row or {}).get("total_rows") or 0)
+    total_rows, null_collected_at = (
+        _sokuho_row_counts(db, table_name) if status != "missing" else (0, 0)
+    )
     return SokuhoCaptureIdentityMigrationReport(
         table_name=table_name,
         status=status,
         primary_key=tuple(existing_pk),
         total_rows=total_rows,
-        distinct_publication_groups=total_rows,
-        rows_to_delete=0,
-        collected_at_rewrite_groups=0,
-    )
-
-
-def _legacy_sokuho_stats(
-    db: BaseDatabase,
-    table_name: str,
-    expected_pk: List[str],
-) -> tuple[int, int, int, int]:
-    table_identifier = _table_identifier(db, table_name)
-    partition = ", ".join(column.lower() for column in expected_pk)
-    row = (
-        db.fetch_one(
-            "WITH publication_groups AS ("
-            "SELECT COUNT(*) AS group_size, "
-            "(ARRAY_AGG(collectedat ORDER BY (collectedat IS NULL), "
-            "collectedat::timestamptz DESC, ctid DESC))[1] AS latest_collectedat, "
-            "(ARRAY_AGG(collectedat ORDER BY (collectedat IS NULL), "
-            "collectedat::timestamptz ASC, ctid ASC))[1] AS earliest_collectedat "
-            f"FROM {table_identifier} GROUP BY {partition}"
-            ") SELECT COALESCE(SUM(group_size), 0) AS total_rows, "
-            "COUNT(*) AS publication_groups, "
-            "COALESCE(SUM(group_size - 1), 0) AS rows_to_delete, "
-            "COUNT(*) FILTER (WHERE latest_collectedat IS DISTINCT FROM "
-            "earliest_collectedat) AS rewrite_groups FROM publication_groups"
-        )
-        or {}
-    )
-    return (
-        int(row.get("total_rows") or 0),
-        int(row.get("publication_groups") or 0),
-        int(row.get("rows_to_delete") or 0),
-        int(row.get("rewrite_groups") or 0),
-    )
-
-
-def _legacy_sokuho_report(
-    db: BaseDatabase,
-    table_name: str,
-    existing_pk: List[str],
-    expected_pk: List[str],
-) -> SokuhoCaptureIdentityMigrationReport:
-    _validate_existing_capture_stamps(db, table_name)
-    total_rows, publication_groups, rows_to_delete, rewrite_groups = _legacy_sokuho_stats(
-        db, table_name, expected_pk
-    )
-    return SokuhoCaptureIdentityMigrationReport(
-        table_name=table_name,
-        status="legacy",
-        primary_key=tuple(existing_pk),
-        total_rows=total_rows,
-        distinct_publication_groups=publication_groups,
-        rows_to_delete=rows_to_delete,
-        collected_at_rewrite_groups=rewrite_groups,
+        null_collected_at=null_collected_at,
+        applied=applied,
     )
 
 
@@ -650,13 +592,8 @@ def preview_sokuho_capture_identity_migration(
         db.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
         reports = []
         for table_name in selected:
-            status, existing_pk, expected_pk = _classify_sokuho_table(db, table_name)
-            if status == "legacy":
-                reports.append(_legacy_sokuho_report(db, table_name, existing_pk, expected_pk))
-            else:
-                reports.append(
-                    _current_or_missing_sokuho_report(db, table_name, status, existing_pk)
-                )
+            status, existing_pk, _expected_pk = _classify_sokuho_table(db, table_name)
+            reports.append(_sokuho_report(db, table_name, status, existing_pk))
         db.rollback()
         return reports
     except Exception as exc:
@@ -666,100 +603,50 @@ def preview_sokuho_capture_identity_migration(
         raise SchemaMigrationError(f"Failed to preview Sokuho migration: {exc}") from exc
 
 
-def _create_locked_sokuho_snapshot(
+def _apply_locked_sokuho_table_migration(
     db: BaseDatabase,
     table_name: str,
+    existing_pk: List[str],
     expected_pk: List[str],
-) -> tuple[str, str, SokuhoCaptureIdentityMigrationReport]:
-    """Create one grouping snapshot after the caller holds ACCESS EXCLUSIVE."""
+) -> SokuhoCaptureIdentityMigrationReport:
+    """Widen one locked publication key by CollectedAt; no row is touched."""
     table_identifier = _table_identifier(db, table_name)
-    temp_name = f"__jltsql_{table_name.lower()}_capture_pk_{uuid4().hex}"
-    temp_identifier = f'pg_temp."{temp_name}"'
-    key_columns = [column.lower() for column in expected_pk]
-    partition = ", ".join(key_columns)
-
-    _validate_existing_capture_stamps(db, table_name)
+    total_rows, null_collected_at = _sokuho_row_counts(db, table_name)
+    if null_collected_at:
+        raise SchemaMigrationError(
+            f"Cannot migrate {table_name}: {null_collected_at} of {total_rows} rows have "
+            "NULL CollectedAt and cannot join a key that contains it; nothing was changed"
+        )
     constraint = db.fetch_one(
-        "SELECT conname FROM pg_constraint " "WHERE conrelid = to_regclass(?) AND contype = 'p'",
+        "SELECT conname FROM pg_constraint WHERE conrelid = to_regclass(?) AND contype = 'p'",
         (table_name.lower(),),
     )
     if not constraint or not constraint.get("conname"):
         raise SchemaMigrationError(f"Cannot migrate {table_name}: primary key constraint not found")
     constraint_identifier = '"' + str(constraint["conname"]).replace('"', '""') + '"'
-    db.execute(
-        f'CREATE TEMP TABLE "{temp_name}" ON COMMIT DROP AS '
-        f"SELECT {partition}, COUNT(*) AS group_size, "
-        "(ARRAY_AGG(ctid ORDER BY (collectedat IS NULL), "
-        "collectedat::timestamptz DESC, ctid DESC))[1] AS keep_tid, "
-        "(ARRAY_AGG(collectedat ORDER BY (collectedat IS NULL), "
-        "collectedat::timestamptz DESC, ctid DESC))[1] AS latest_collectedat, "
-        "(ARRAY_AGG(collectedat ORDER BY (collectedat IS NULL), "
-        "collectedat::timestamptz ASC, ctid ASC))[1] AS earliest_collectedat "
-        f"FROM {table_identifier} GROUP BY {partition}"
-    )
-    row = (
-        db.fetch_one(
-            f"SELECT COALESCE(SUM(group_size), 0) AS total_rows, "
-            f"COUNT(*) AS publication_groups, "
-            f"COALESCE(SUM(group_size - 1), 0) AS rows_to_delete, "
-            f"COUNT(*) FILTER (WHERE latest_collectedat IS DISTINCT FROM "
-            f"earliest_collectedat) AS rewrite_groups FROM {temp_identifier}"
+    key_columns = ", ".join(column.lower() for column in expected_pk)
+    db.execute(f"ALTER TABLE {table_identifier} DROP CONSTRAINT {constraint_identifier}")
+    db.execute(f"ALTER TABLE {table_identifier} ADD PRIMARY KEY ({key_columns})")
+    remaining, _ = _sokuho_row_counts(db, table_name)
+    if remaining != total_rows:
+        raise SchemaMigrationError(
+            f"Cannot migrate {table_name}: row count changed {total_rows} -> {remaining}"
         )
-        or {}
-    )
-    existing_pk = _get_existing_primary_key_columns(db, table_name)
-    report = SokuhoCaptureIdentityMigrationReport(
+    return SokuhoCaptureIdentityMigrationReport(
         table_name=table_name,
         status="migrated",
         primary_key=tuple(existing_pk),
-        total_rows=int(row.get("total_rows") or 0),
-        distinct_publication_groups=int(row.get("publication_groups") or 0),
-        rows_to_delete=int(row.get("rows_to_delete") or 0),
-        collected_at_rewrite_groups=int(row.get("rewrite_groups") or 0),
+        total_rows=total_rows,
+        null_collected_at=0,
         applied=True,
     )
-    return temp_identifier, constraint_identifier, report
-
-
-def _apply_locked_sokuho_table_migration(
-    db: BaseDatabase,
-    table_name: str,
-    expected_pk: List[str],
-) -> SokuhoCaptureIdentityMigrationReport:
-    table_identifier = _table_identifier(db, table_name)
-    key_columns = [column.lower() for column in expected_pk]
-    grouped_keys = " AND ".join(f"existing.{column} = grouped.{column}" for column in key_columns)
-    temp_identifier, constraint_identifier, report = _create_locked_sokuho_snapshot(
-        db, table_name, expected_pk
-    )
-    db.execute(
-        f"DELETE FROM {table_identifier} AS existing USING {temp_identifier} AS grouped "
-        f"WHERE {grouped_keys} AND existing.ctid <> grouped.keep_tid"
-    )
-    db.execute(
-        f"UPDATE {table_identifier} AS existing "
-        f"SET collectedat = grouped.earliest_collectedat "
-        f"FROM {temp_identifier} AS grouped WHERE existing.ctid = grouped.keep_tid"
-    )
-    db.execute(f"ALTER TABLE {table_identifier} DROP CONSTRAINT {constraint_identifier}")
-    db.execute(f"ALTER TABLE {table_identifier} ALTER COLUMN collectedat DROP NOT NULL")
-    db.execute(f"ALTER TABLE {table_identifier} ADD PRIMARY KEY ({', '.join(key_columns)})")
-    remaining_row = db.fetch_one(f"SELECT COUNT(*) AS count FROM {table_identifier}") or {}
-    remaining = int(remaining_row.get("count") or 0)
-    if remaining != report.distinct_publication_groups:
-        raise SchemaMigrationError(
-            f"Cannot migrate {table_name}: retained {remaining} of "
-            f"{report.distinct_publication_groups} publication rows"
-        )
-    db.execute(f"DROP TABLE {temp_identifier}")
-    return report
 
 
 def apply_sokuho_capture_identity_migration(
     db: BaseDatabase,
     table_names: Optional[List[str] | tuple[str, ...]] = None,
 ) -> List[SokuhoCaptureIdentityMigrationReport]:
-    """Explicitly migrate selected PostgreSQL Sokuho tables in one transaction."""
+    """Explicitly widen selected PostgreSQL Sokuho keys in one transaction."""
     selected = normalize_sokuho_capture_identity_tables(table_names)
     _require_postgresql_operator_migration(db, selected)
     if db.has_pending_transaction():
@@ -770,36 +657,35 @@ def apply_sokuho_capture_identity_migration(
     db.begin_transaction()
     try:
         initial = {table_name: _classify_sokuho_table(db, table_name) for table_name in selected}
-        legacy_tables = [
-            table_name for table_name in selected if initial[table_name][0] == "legacy"
+        publication_tables = [
+            table_name for table_name in selected if initial[table_name][0] == "publication"
         ]
-        if legacy_tables:
+        if publication_tables:
             lock_targets = ", ".join(
-                _table_identifier(db, table_name) for table_name in legacy_tables
+                _table_identifier(db, table_name) for table_name in publication_tables
             )
-            # All target locks precede every grouping snapshot. The canonical
-            # table order also prevents two operator commands taking locks in
-            # opposite orders.
+            # All target locks precede every count. The canonical table order
+            # also prevents two operator commands taking locks in opposite orders.
             db.execute(f"LOCK TABLE {lock_targets} IN ACCESS EXCLUSIVE MODE")
 
         reports = []
         for table_name in selected:
             status, existing_pk, expected_pk = _classify_sokuho_table(db, table_name)
-            if status == "legacy":
-                if table_name not in legacy_tables:
+            if status == "publication":
+                if table_name not in publication_tables:
                     raise SchemaMigrationError(
-                        f"Cannot migrate {table_name}: it changed to a legacy primary key "
-                        "before an ACCESS EXCLUSIVE lock was acquired; retry the command"
+                        f"Cannot migrate {table_name}: it changed to a publication primary "
+                        "key before an ACCESS EXCLUSIVE lock was acquired; retry the command"
                     )
                 logger.warning(
-                    f"Explicitly migrating {table_name} from poll identity to "
-                    "publication identity"
+                    f"Explicitly migrating {table_name} from publication identity to "
+                    "poll identity (adding CollectedAt to the primary key)"
                 )
-                reports.append(_apply_locked_sokuho_table_migration(db, table_name, expected_pk))
-            else:
                 reports.append(
-                    _current_or_missing_sokuho_report(db, table_name, status, existing_pk)
+                    _apply_locked_sokuho_table_migration(db, table_name, existing_pk, expected_pk)
                 )
+            else:
+                reports.append(_sokuho_report(db, table_name, status, existing_pk))
         db.commit()
         return reports
     except Exception as exc:
@@ -870,8 +756,8 @@ def migrate_table_if_needed(
     expected_pk_lower = [column.lower() for column in expected_pk]
     existing_columns_lower = {column.lower() for column in existing_columns}
     expected_columns_lower = {column.lower() for column in expected_columns}
-    if _is_legacy_sokuho_capture_identity(table_name, existing_pk, expected_pk):
-        raise SchemaMigrationError(legacy_sokuho_capture_identity_message(db, table_name))
+    if _is_publication_sokuho_capture_identity(table_name, existing_pk, expected_pk):
+        raise SchemaMigrationError(publication_sokuho_capture_identity_message(db, table_name))
     if expected_pk_lower and existing_pk_lower != expected_pk_lower:
         logger.warning(
             f"Primary key mismatch for {table_name}: "
@@ -1004,8 +890,8 @@ def verify_table_schema(
     existing_pk_lower = [column.lower() for column in existing_pk]
     expected_pk_lower = [column.lower() for column in expected_pk]
 
-    if _is_legacy_sokuho_capture_identity(table_name, existing_pk, expected_pk):
-        raise SchemaMigrationError(legacy_sokuho_capture_identity_message(db, table_name))
+    if _is_publication_sokuho_capture_identity(table_name, existing_pk, expected_pk):
+        raise SchemaMigrationError(publication_sokuho_capture_identity_message(db, table_name))
 
     expected_text_types = {
         column.lower(): _definition_type(definition)

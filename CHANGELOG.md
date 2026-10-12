@@ -7,6 +7,22 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **`TS_SOKUHO_O1`〜`O6` の主キーに `CollectedAt` を戻した**（poll ごとに 1 行）。2.0〜2.3 は
+  `HassoTime` 単位の主キーで最初の取得だけを残していたが、0B30〜0B36 の `HassoTime` は
+  オッズが動いても変わらないため、同じレースの後の poll がすべて最初の 1 行に潰れていた。
+  公式時系列 `TS_O1` / `TS_O2` の主キーは変えない。
+
+### 移行
+
+- 1.x で作った `TS_SOKUHO_O*`（主キー末尾が `CollectedAt`）は**そのまま使える**。2.0〜2.3 の
+  `migrate-sokuho-capture-identity --apply` は 1.x の表を 1 発表 1 行に潰して行を削除する
+  ものだったが、このコマンドは**主キーに `CollectedAt` を足すだけ**（行は消えない）に変わった。
+- 2.0〜2.3 で作った表は起動と書き込みで fail closed する。`jltsql db
+  migrate-sokuho-capture-identity --db postgresql`（dry run）→ collector 停止 → `--apply`。
+  `CollectedAt` が NULL の行があれば apply は何も変えずに拒否する。潰れた過去の poll は戻らない。
+
 ## [2.3.0] - 2026-10-11
 
 0B11/0B14 の取得ログと単発の速報取得（#275, #276）。**RT_WH の主キー移行はオペレーター作業**

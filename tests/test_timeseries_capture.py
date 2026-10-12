@@ -43,7 +43,7 @@ def _sokuho_o2_row(*, collected_at, odds: float = 10.0, kumi: str = "0102") -> d
 
 
 def _raw_insert(database, table_name: str, row: dict) -> None:
-    """Seed legacy schemas without passing through the guarded writer."""
+    """Seed older schemas without passing through the guarded writer."""
     columns = list(row)
     placeholders = ", ".join("?" for _ in columns)
     database.execute(
@@ -52,10 +52,11 @@ def _raw_insert(database, table_name: str, row: dict) -> None:
     )
 
 
-def _legacy_sokuho_schema(table_name: str) -> str:
+def _publication_sokuho_schema(table_name: str) -> str:
+    """The 2.0-2.3 Sokuho key: one row per HassoTime, later polls folded in."""
     return SCHEMAS[table_name].replace(
-        "HassoTime, SourceSpec)",
         "HassoTime, SourceSpec, CollectedAt)",
+        "HassoTime, SourceSpec)",
     )
 
 
@@ -151,42 +152,50 @@ def test_sqlite_capture_comparison_normalizes_iso_offsets(tmp_path):
         database.disconnect()
 
 
-def test_sqlite_sokuho_uses_publication_identity_and_keeps_earliest_capture(tmp_path):
+def test_sqlite_sokuho_keeps_one_row_per_poll(tmp_path):
     database = SQLiteDatabase({"path": str(tmp_path / "sokuho.db")})
     database.connect()
     try:
         database.create_table("TS_SOKUHO_O2", SCHEMAS["TS_SOKUHO_O2"])
+        # Both polls carry the same HassoTime, as 0B30 does all day.
         database.insert(
             "TS_SOKUHO_O2",
-            _sokuho_o2_row(collected_at="2026-09-01T03:05:00+00:00", odds=10.0),
+            _sokuho_o2_row(collected_at="2026-09-01T03:00:00+00:00", odds=10.0),
         )
         database.insert(
             "TS_SOKUHO_O2",
-            _sokuho_o2_row(collected_at="2026-09-01T03:00:00+00:00", odds=12.5),
+            _sokuho_o2_row(collected_at="2026-09-01T03:10:00+00:00", odds=12.5),
+        )
+        # Re-importing one poll corrects that poll only.
+        database.insert(
+            "TS_SOKUHO_O2",
+            _sokuho_o2_row(collected_at="2026-09-01T03:10:00+00:00", odds=13.0),
         )
 
-        assert database.fetch_all("SELECT Odds, CollectedAt FROM TS_SOKUHO_O2") == [
-            {"Odds": 12.5, "CollectedAt": "2026-09-01T03:00:00+00:00"}
+        assert database.fetch_all(
+            "SELECT Odds, CollectedAt FROM TS_SOKUHO_O2 ORDER BY CollectedAt"
+        ) == [
+            {"Odds": 10.0, "CollectedAt": "2026-09-01T03:00:00+00:00"},
+            {"Odds": 13.0, "CollectedAt": "2026-09-01T03:10:00+00:00"},
         ]
     finally:
         database.disconnect()
 
 
-def test_sqlite_legacy_sokuho_key_fails_closed_without_schema_or_row_changes(tmp_path):
+def test_sqlite_publication_sokuho_key_fails_closed_without_schema_or_row_changes(tmp_path):
     from src.database.migration import (
         SchemaMigrationError,
         apply_sokuho_capture_identity_migration,
         preview_sokuho_capture_identity_migration,
     )
 
-    database = SQLiteDatabase({"path": str(tmp_path / "legacy-sokuho.db")})
+    database = SQLiteDatabase({"path": str(tmp_path / "publication-sokuho.db")})
     database.connect()
     try:
-        current_schema = SCHEMAS["TS_SOKUHO_O2"]
-        legacy_schema = _legacy_sokuho_schema("TS_SOKUHO_O2").replace(
+        publication_schema = _publication_sokuho_schema("TS_SOKUHO_O2").replace(
             "Odds REAL,", "Odds REAL CHECK (Odds >= 0),"
         )
-        database.create_table("TS_SOKUHO_O2", legacy_schema)
+        database.create_table("TS_SOKUHO_O2", publication_schema)
         _raw_insert(
             database,
             "TS_SOKUHO_O2",
@@ -195,7 +204,7 @@ def test_sqlite_legacy_sokuho_key_fails_closed_without_schema_or_row_changes(tmp
         _raw_insert(
             database,
             "TS_SOKUHO_O2",
-            _sokuho_o2_row(collected_at="2026-09-01T01:00:00+00:00", odds=12.5),
+            _sokuho_o2_row(collected_at="2026-09-01T01:00:00+00:00", odds=12.5, kumi="0203"),
         )
         database.commit()
         schema_before = database.fetch_one(
@@ -204,7 +213,7 @@ def test_sqlite_legacy_sokuho_key_fails_closed_without_schema_or_row_changes(tmp
 
         with pytest.raises(SchemaMigrationError) as startup_error:
             prepare_time_series_odds_table(database, "TS_SOKUHO_O2")
-        assert "TS_SOKUHO_O2 uses the legacy primary key ending in CollectedAt" in str(
+        assert "TS_SOKUHO_O2 uses the 2.0-2.3 publication primary key without CollectedAt" in str(
             startup_error.value
         )
         assert "backup and rebuild" in str(startup_error.value)
@@ -245,12 +254,12 @@ def test_sqlite_legacy_sokuho_key_fails_closed_without_schema_or_row_changes(tmp
             row for row in database.fetch_all('PRAGMA table_info("TS_SOKUHO_O2")') if row["pk"]
         ]
         primary_key = [row["name"] for row in sorted(primary_key_rows, key=lambda row: row["pk"])]
-        assert primary_key[-1] == "CollectedAt"
+        assert primary_key[-1] == "SourceSpec"
     finally:
         database.disconnect()
 
 
-def test_dual_write_preflights_legacy_secondary_before_primary_mutation(tmp_path):
+def test_dual_write_preflights_publication_secondary_before_primary_mutation(tmp_path):
     from src.database.dual_handler import DualDatabase
     from src.database.migration import SchemaMigrationError
 
@@ -260,7 +269,7 @@ def test_dual_write_preflights_legacy_secondary_before_primary_mutation(tmp_path
     database.connect()
     try:
         primary.execute(SCHEMAS["TS_SOKUHO_O2"])
-        secondary.execute(_legacy_sokuho_schema("TS_SOKUHO_O2"))
+        secondary.execute(_publication_sokuho_schema("TS_SOKUHO_O2"))
         _raw_insert(
             secondary,
             "TS_SOKUHO_O2",
@@ -285,7 +294,7 @@ def test_dual_write_preflights_legacy_secondary_before_primary_mutation(tmp_path
         database.disconnect()
 
 
-def test_dual_write_names_postgresql_override_for_legacy_postgresql_target(tmp_path):
+def test_dual_write_names_postgresql_override_for_publication_postgresql_target(tmp_path):
     from src.database.dual_handler import DualDatabase
     from src.database.migration import (
         SchemaMigrationError,
@@ -302,7 +311,7 @@ def test_dual_write_names_postgresql_override_for_legacy_postgresql_target(tmp_p
     expected_pk = _extract_primary_key_columns(SCHEMAS["TS_SOKUHO_O2"])
     assert expected_pk is not None
     secondary.fetch_all = MagicMock(  # type: ignore[method-assign]
-        return_value=[{"name": column.lower()} for column in [*expected_pk, "CollectedAt"]]
+        return_value=[{"name": column.lower()} for column in expected_pk[:-1]]
     )
     database = DualDatabase(primary, secondary)
 
@@ -314,7 +323,7 @@ def test_dual_write_names_postgresql_override_for_legacy_postgresql_target(tmp_p
             )
 
         assert (
-            "jltsql db migrate-sokuho-capture-identity --db postgresql " "--table TS_SOKUHO_O2."
+            "jltsql db migrate-sokuho-capture-identity --db postgresql --table TS_SOKUHO_O2."
         ) in str(error.value)
         assert primary.fetch_one("SELECT COUNT(*) AS count FROM TS_SOKUHO_O2") == {"count": 0}
     finally:
@@ -374,17 +383,17 @@ def test_schema_qualified_sqlite_sokuho_write_fails_closed(tmp_path, write_metho
     database = SQLiteDatabase({"path": str(tmp_path / f"qualified-{write_method}.db")})
     database.connect()
     try:
-        database.execute(_legacy_sokuho_schema("TS_SOKUHO_O2"))
+        database.execute(_publication_sokuho_schema("TS_SOKUHO_O2"))
         row = _sokuho_o2_row(collected_at="2026-09-01T03:00:00+00:00")
         payload = [row] if write_method == "insert_many" else row
 
-        with pytest.raises(SchemaMigrationError, match="legacy primary key") as startup_error:
+        with pytest.raises(SchemaMigrationError, match="publication primary key") as startup_error:
             prepare_time_series_odds_table(database, "main.TS_SOKUHO_O2")
-        with pytest.raises(SchemaMigrationError, match="legacy primary key") as error:
+        with pytest.raises(SchemaMigrationError, match="publication primary key") as error:
             getattr(database, write_method)("main.TS_SOKUHO_O2", payload)
 
         assert str(error.value) == str(startup_error.value)
-        assert "main.TS_SOKUHO_O2 uses the legacy primary key" in str(error.value)
+        assert "main.TS_SOKUHO_O2 uses the 2.0-2.3 publication primary key" in str(error.value)
         assert "backup and rebuild" in str(error.value)
         assert "migrate-sokuho-capture-identity" not in str(error.value)
         assert database.fetch_one("SELECT COUNT(*) AS count FROM TS_SOKUHO_O2") == {"count": 0}
@@ -392,8 +401,7 @@ def test_schema_qualified_sqlite_sokuho_write_fails_closed(tmp_path, write_metho
         database.disconnect()
 
 
-@pytest.mark.parametrize("table_name", ["TS_O2", "TS_SOKUHO_O2"])
-def test_postgresql_timeseries_upsert_normalizes_offsets_and_is_null_safe(table_name):
+def test_postgresql_timeseries_upsert_normalizes_offsets_and_is_null_safe():
     from src.database.postgresql_handler import PostgreSQLDatabase
 
     database = PostgreSQLDatabase({})
@@ -407,21 +415,40 @@ def test_postgresql_timeseries_upsert_normalizes_offsets_and_is_null_safe(table_
             "racenum",
             "kumi",
             "hassotime",
-            *(("sourcespec",) if table_name.startswith("TS_SOKUHO_") else ()),
         ]
     )
     database.execute = MagicMock(return_value=1)  # type: ignore[method-assign]
-    row = _o2_row(collected_at="2026-09-01T03:00:00+00:00", odds=12.5)
-    if table_name.startswith("TS_SOKUHO_"):
-        row["SourceSpec"] = "0B32"
 
-    database.insert(table_name, row)
+    database.insert("TS_O2", _o2_row(collected_at="2026-09-01T03:00:00+00:00", odds=12.5))
 
     sql = database.execute.call_args.args[0].lower()
     assert "excluded.collectedat is null" in sql
-    assert f"{table_name.lower()}.collectedat is null" in sql
+    assert "ts_o2.collectedat is null" in sql
     assert "excluded.collectedat::timestamptz" in sql
-    assert f"{table_name.lower()}.collectedat::timestamptz" in sql
+    assert "ts_o2.collectedat::timestamptz" in sql
+    assert "odds = excluded.odds" in sql
+
+
+def test_postgresql_sokuho_upsert_conflicts_only_on_the_same_poll():
+    from src.database.migration import _extract_primary_key_columns
+    from src.database.postgresql_handler import PostgreSQLDatabase
+
+    expected_pk = _extract_primary_key_columns(SCHEMAS["TS_SOKUHO_O2"])
+    assert expected_pk is not None and expected_pk[-1] == "CollectedAt"
+    database = PostgreSQLDatabase({})
+    database._get_primary_key_columns = MagicMock(  # type: ignore[method-assign]
+        return_value=[column.lower() for column in expected_pk]
+    )
+    database.execute = MagicMock(return_value=1)  # type: ignore[method-assign]
+
+    database.insert(
+        "TS_SOKUHO_O2",
+        _sokuho_o2_row(collected_at="2026-09-01T03:00:00+00:00", odds=12.5),
+    )
+
+    sql = database.execute.call_args.args[0].lower()
+    assert "hassotime, sourcespec, collectedat) do update" in sql
+    assert "collectedat = " not in sql
     assert "odds = excluded.odds" in sql
 
 
@@ -444,20 +471,20 @@ def test_postgresql_sokuho_write_fails_closed_when_primary_key_catalog_is_unread
     database.execute.assert_not_called()
 
 
-def test_postgresql_schema_qualified_legacy_message_preserves_schema():
-    from src.database.migration import legacy_sokuho_capture_identity_message
+def test_postgresql_schema_qualified_publication_message_preserves_schema():
+    from src.database.migration import publication_sokuho_capture_identity_message
     from src.database.postgresql_handler import PostgreSQLDatabase
 
     database = PostgreSQLDatabase({})
-    message = legacy_sokuho_capture_identity_message(database, "archive.TS_SOKUHO_O2")
+    message = publication_sokuho_capture_identity_message(database, "archive.TS_SOKUHO_O2")
 
-    assert "archive.TS_SOKUHO_O2 uses the legacy primary key" in message
+    assert "archive.TS_SOKUHO_O2 uses the 2.0-2.3 publication primary key" in message
     assert (
         "jltsql db migrate-sokuho-capture-identity --db postgresql "
         "--schema archive --table TS_SOKUHO_O2."
     ) in message
     assert "read-only dry run (the default; it does not change data)" in message
-    assert "--apply mutates the table" in message
+    assert "--apply adds CollectedAt to the primary key and deletes no row" in message
 
 
 def test_unrelated_sqlite_table_keeps_replace_behavior(tmp_path):
@@ -520,7 +547,7 @@ def postgresql_timeseries_db():
             database.disconnect()
 
 
-@pytest.mark.parametrize("table_name", ["TS_O2", "TS_SOKUHO_O2"])
+@pytest.mark.parametrize("table_name", ["TS_O2"])
 def test_postgresql_timeseries_capture_behavior(postgresql_timeseries_db, table_name):
     database = postgresql_timeseries_db
     database.execute(SCHEMAS[table_name])
@@ -575,11 +602,12 @@ def test_postgresql_timeseries_capture_behavior(postgresql_timeseries_db, table_
     ]
 
 
-def _create_postgresql_legacy_sokuho(database, table_name: str) -> None:
+def _create_postgresql_publication_sokuho(database, table_name: str) -> None:
+    """Seed a 2.0-2.3 table: one row per publication, two kumi."""
     odds_number = int(table_name.rsplit("O", 1)[1])
 
-    def row(*, collected_at: str, odds: float) -> dict:
-        record = _sokuho_o2_row(collected_at=collected_at, odds=odds)
+    def row(*, collected_at: str, odds: float, kumi: str) -> dict:
+        record = _sokuho_o2_row(collected_at=collected_at, odds=odds, kumi=kumi)
         record["RecordSpec"] = f"O{odds_number}"
         record["SourceSpec"] = f"0B3{odds_number}"
         if odds_number == 3:
@@ -587,24 +615,46 @@ def _create_postgresql_legacy_sokuho(database, table_name: str) -> None:
             record["OddsHigh"] = odds + 1.0
         return record
 
-    database.execute(_legacy_sokuho_schema(table_name))
+    database.execute(_publication_sokuho_schema(table_name))
     _raw_insert(
         database,
         table_name,
-        row(
-            collected_at="2026-09-01T09:30:00+09:00",
-            odds=10.0,
-        ),
+        row(collected_at="2026-09-01T09:30:00+09:00", odds=10.0, kumi="0102"),
     )
     _raw_insert(
         database,
         table_name,
-        row(
-            collected_at="2026-09-01T01:00:00+00:00",
-            odds=12.5,
-        ),
+        row(collected_at="2026-09-01T01:00:00+00:00", odds=12.5, kumi="0203"),
     )
     database.commit()
+
+
+def test_postgresql_sokuho_keeps_one_row_per_poll(postgresql_timeseries_db):
+    database = postgresql_timeseries_db
+    prepare_time_series_odds_table(database, "TS_SOKUHO_O2")
+    database.commit()
+
+    database.insert(
+        "TS_SOKUHO_O2",
+        _sokuho_o2_row(collected_at="2026-09-01T03:00:00+00:00", odds=10.0),
+    )
+    database.insert(
+        "TS_SOKUHO_O2",
+        _sokuho_o2_row(collected_at="2026-09-01T03:10:00+00:00", odds=12.5),
+    )
+    database.insert(
+        "TS_SOKUHO_O2",
+        _sokuho_o2_row(collected_at="2026-09-01T03:10:00+00:00", odds=13.0),
+    )
+    database.commit()
+
+    assert database.fetch_all(
+        "SELECT odds, collectedat FROM TS_SOKUHO_O2 ORDER BY collectedat"
+    ) == [
+        {"odds": 10.0, "collectedat": "2026-09-01T03:00:00+00:00"},
+        {"odds": 13.0, "collectedat": "2026-09-01T03:10:00+00:00"},
+    ]
+    assert database._get_primary_key_columns("TS_SOKUHO_O2")[-1] == "collectedat"
 
 
 def test_postgresql_sokuho_startup_and_write_fail_closed_then_explicit_migration(
@@ -618,26 +668,23 @@ def test_postgresql_sokuho_startup_and_write_fail_closed_then_explicit_migration
 
     database = postgresql_timeseries_db
     table_name = "TS_SOKUHO_O2"
-    _create_postgresql_legacy_sokuho(database, table_name)
+    _create_postgresql_publication_sokuho(database, table_name)
     before_rows = database.fetch_all(
-        f"SELECT odds, collectedat FROM {table_name} ORDER BY collectedat"
+        f"SELECT kumi, odds, collectedat FROM {table_name} ORDER BY kumi"
     )
     database.rollback()
 
     with pytest.raises(SchemaMigrationError) as startup_error:
         prepare_time_series_odds_table(database, table_name)
     assert (
-        "jltsql db migrate-sokuho-capture-identity --db postgresql " "--table TS_SOKUHO_O2."
+        "jltsql db migrate-sokuho-capture-identity --db postgresql --table TS_SOKUHO_O2."
     ) in str(startup_error.value)
     database.rollback()
 
     with pytest.raises(SchemaMigrationError) as write_error:
         database.insert(
             table_name,
-            _sokuho_o2_row(
-                collected_at="2026-09-01T03:10:00+00:00",
-                odds=15.0,
-            ),
+            _sokuho_o2_row(collected_at="2026-09-01T03:10:00+00:00", odds=15.0),
         )
     assert str(write_error.value) == str(startup_error.value)
     database.rollback()
@@ -657,18 +704,14 @@ def test_postgresql_sokuho_startup_and_write_fail_closed_then_explicit_migration
 
     assert len(reports) == 1
     report = reports[0]
-    assert report.status == "legacy"
+    assert report.status == "publication"
     assert report.total_rows == 2
-    assert report.distinct_publication_groups == 1
-    assert report.rows_to_delete == 1
-    assert report.collected_at_rewrite_groups == 1
+    assert report.null_collected_at == 0
+    assert report.applied is False
     assert any("REPEATABLE READ READ ONLY" in sql for sql in executed_sql)
     assert not any("ACCESS EXCLUSIVE" in sql for sql in executed_sql)
-    assert (
-        database.fetch_all(f"SELECT odds, collectedat FROM {table_name} ORDER BY collectedat")
-        == before_rows
-    )
-    assert database._get_primary_key_columns(table_name)[-1] == "collectedat"
+    assert not any(sql.startswith("ALTER TABLE") for sql in executed_sql)
+    assert database._get_primary_key_columns(table_name)[-1] == "sourcespec"
     database.rollback()
 
     executed_sql = []
@@ -679,45 +722,76 @@ def test_postgresql_sokuho_startup_and_write_fail_closed_then_explicit_migration
         database.execute = original_execute  # type: ignore[method-assign]
 
     assert applied_reports[0].applied is True
+    assert applied_reports[0].total_rows == 2
     lock_index = next(
         index for index, sql in enumerate(executed_sql) if sql.startswith("LOCK TABLE")
     )
-    snapshot_index = next(
-        index for index, sql in enumerate(executed_sql) if sql.startswith("CREATE TEMP TABLE")
+    alter_index = next(
+        index for index, sql in enumerate(executed_sql) if sql.startswith("ALTER TABLE")
     )
-    assert lock_index < snapshot_index
-    assert database.fetch_all(f"SELECT odds, collectedat FROM {table_name}") == [
-        {"odds": 12.5, "collectedat": "2026-09-01T09:30:00+09:00"}
-    ]
-    assert database._get_primary_key_columns(table_name)[-1] == "sourcespec"
+    assert lock_index < alter_index
+    assert not any(sql.lstrip().upper().startswith(("DELETE", "UPDATE")) for sql in executed_sql)
     assert (
-        database.fetch_all(
-            "SELECT tablename FROM pg_tables "
-            "WHERE schemaname = current_schema() AND tablename LIKE '__jltsql_%'"
-        )
-        == []
+        database.fetch_all(f"SELECT kumi, odds, collectedat FROM {table_name} ORDER BY kumi")
+        == before_rows
     )
+    assert database._get_primary_key_columns(table_name)[-1] == "collectedat"
     database.rollback()
 
+    # A later poll of the same publication now lands as its own row.
     database.insert(
         table_name,
-        _sokuho_o2_row(
-            collected_at="2026-09-01T03:10:00+00:00",
-            odds=15.0,
-        ),
+        _sokuho_o2_row(collected_at="2026-09-01T03:10:00+00:00", odds=15.0),
     )
     database.commit()
-    assert database.fetch_all(f"SELECT odds, collectedat FROM {table_name}") == [
-        {"odds": 15.0, "collectedat": "2026-09-01T09:30:00+09:00"}
+    assert database.fetch_all(
+        f"SELECT odds, collectedat FROM {table_name} WHERE kumi = '0102' ORDER BY odds"
+    ) == [
+        {"odds": 10.0, "collectedat": "2026-09-01T09:30:00+09:00"},
+        {"odds": 15.0, "collectedat": "2026-09-01T03:10:00+00:00"},
     ]
+
+
+def test_postgresql_poll_key_table_needs_no_migration(postgresql_timeseries_db):
+    """A 1.x table (poll key) is already current; nothing is changed."""
+    from src.database.migration import (
+        apply_sokuho_capture_identity_migration,
+        preview_sokuho_capture_identity_migration,
+    )
+
+    database = postgresql_timeseries_db
+    database.execute(SCHEMAS["TS_SOKUHO_O2"])
+    _raw_insert(
+        database,
+        "TS_SOKUHO_O2",
+        _sokuho_o2_row(collected_at="2026-09-01T03:00:00+00:00", odds=10.0),
+    )
+    _raw_insert(
+        database,
+        "TS_SOKUHO_O2",
+        _sokuho_o2_row(collected_at="2026-09-01T03:10:00+00:00", odds=12.5),
+    )
+    database.commit()
+
+    prepare_time_series_odds_table(database, "TS_SOKUHO_O2")
+    database.commit()
+    assert [
+        report.status
+        for report in preview_sokuho_capture_identity_migration(database, ["TS_SOKUHO_O2"])
+    ] == ["current"]
+    applied = apply_sokuho_capture_identity_migration(database, ["TS_SOKUHO_O2"])
+    assert [(report.status, report.applied, report.total_rows) for report in applied] == [
+        ("current", False, 2)
+    ]
+    assert database.fetch_one("SELECT COUNT(*) AS count FROM TS_SOKUHO_O2") == {"count": 2}
 
 
 def test_postgresql_sokuho_migration_table_restriction(postgresql_timeseries_db):
     from src.database.migration import apply_sokuho_capture_identity_migration
 
     database = postgresql_timeseries_db
-    _create_postgresql_legacy_sokuho(database, "TS_SOKUHO_O3")
-    _create_postgresql_legacy_sokuho(database, "TS_SOKUHO_O4")
+    _create_postgresql_publication_sokuho(database, "TS_SOKUHO_O3")
+    _create_postgresql_publication_sokuho(database, "TS_SOKUHO_O4")
 
     reports = apply_sokuho_capture_identity_migration(
         database,
@@ -725,8 +799,8 @@ def test_postgresql_sokuho_migration_table_restriction(postgresql_timeseries_db)
     )
 
     assert [report.table_name for report in reports] == ["TS_SOKUHO_O3"]
-    assert database._get_primary_key_columns("TS_SOKUHO_O3")[-1] == "sourcespec"
-    assert database._get_primary_key_columns("TS_SOKUHO_O4")[-1] == "collectedat"
+    assert database._get_primary_key_columns("TS_SOKUHO_O3")[-1] == "collectedat"
+    assert database._get_primary_key_columns("TS_SOKUHO_O4")[-1] == "sourcespec"
 
 
 def test_postgresql_sokuho_migration_preserves_schema_qualified_target(
@@ -740,35 +814,30 @@ def test_postgresql_sokuho_migration_preserves_schema_qualified_target(
     database = postgresql_timeseries_db
     schema_name = f"jltsql_sokuho_{uuid4().hex}"
     table_name = f"{schema_name}.TS_SOKUHO_O2"
-    legacy_schema = _legacy_sokuho_schema("TS_SOKUHO_O2").replace(
+    publication_schema = _publication_sokuho_schema("TS_SOKUHO_O2").replace(
         "CREATE TABLE IF NOT EXISTS TS_SOKUHO_O2",
         f"CREATE TABLE IF NOT EXISTS {table_name}",
         1,
     )
     database.execute(f"CREATE SCHEMA {schema_name}")
-    database.execute(legacy_schema)
+    database.execute(publication_schema)
     _raw_insert(
         database,
         table_name,
         _sokuho_o2_row(collected_at="2026-09-01T09:30:00+09:00", odds=10.0),
-    )
-    _raw_insert(
-        database,
-        table_name,
-        _sokuho_o2_row(collected_at="2026-09-01T01:00:00+00:00", odds=12.5),
     )
     database.commit()
 
     try:
         preview = preview_sokuho_capture_identity_migration(database, [table_name])
         assert preview[0].table_name == table_name
-        assert preview[0].rows_to_delete == 1
+        assert preview[0].status == "publication"
 
         applied = apply_sokuho_capture_identity_migration(database, [table_name])
         assert applied[0].table_name == table_name
-        assert database._get_primary_key_columns(table_name)[-1] == "sourcespec"
+        assert database._get_primary_key_columns(table_name)[-1] == "collectedat"
         assert database.fetch_all(f"SELECT odds, collectedat FROM {table_name}") == [
-            {"odds": 12.5, "collectedat": "2026-09-01T09:30:00+09:00"}
+            {"odds": 10.0, "collectedat": "2026-09-01T09:30:00+09:00"}
         ]
     finally:
         database.rollback()
@@ -776,7 +845,7 @@ def test_postgresql_sokuho_migration_preserves_schema_qualified_target(
         database.commit()
 
 
-def test_sokuho_apply_rolls_back_if_unlocked_table_becomes_legacy(monkeypatch):
+def test_sokuho_apply_rolls_back_if_unlocked_table_becomes_publication(monkeypatch):
     import src.database.migration as migration
 
     database = MagicMock()
@@ -786,7 +855,7 @@ def test_sokuho_apply_rolls_back_if_unlocked_table_becomes_legacy(monkeypatch):
     classifications = iter(
         [
             ("current", expected_pk, expected_pk),
-            ("legacy", [*expected_pk, "CollectedAt"], expected_pk),
+            ("publication", expected_pk[:-1], expected_pk),
         ]
     )
     monkeypatch.setattr(
@@ -816,12 +885,12 @@ def test_postgresql_sokuho_migration_rolls_back_every_table_on_failure(
     database = postgresql_timeseries_db
     table_names = ["TS_SOKUHO_O5", "TS_SOKUHO_O6"]
     for table_name in table_names:
-        _create_postgresql_legacy_sokuho(database, table_name)
+        _create_postgresql_publication_sokuho(database, table_name)
 
     original_execute = database.execute
 
     def injected_failure(sql, parameters=None):
-        if sql.startswith("ALTER TABLE ts_sokuho_o6 DROP CONSTRAINT"):
+        if sql.startswith("ALTER TABLE ts_sokuho_o6 ADD PRIMARY KEY"):
             raise RuntimeError("injected migration failure")
         return original_execute(sql, parameters)
 
@@ -833,18 +902,11 @@ def test_postgresql_sokuho_migration_rolls_back_every_table_on_failure(
         database.execute = original_execute  # type: ignore[method-assign]
 
     for table_name in table_names:
-        assert database._get_primary_key_columns(table_name)[-1] == "collectedat"
+        assert database._get_primary_key_columns(table_name)[-1] == "sourcespec"
         assert database.fetch_one(f"SELECT COUNT(*) AS count FROM {table_name}") == {"count": 2}
-    assert (
-        database.fetch_all(
-            "SELECT tablename FROM pg_tables "
-            "WHERE schemaname = current_schema() AND tablename LIKE '__jltsql_%'"
-        )
-        == []
-    )
 
 
-def test_postgresql_sokuho_migration_rejects_invalid_collected_at(
+def test_postgresql_sokuho_migration_refuses_null_collected_at(
     postgresql_timeseries_db,
 ):
     from src.database.migration import (
@@ -855,23 +917,23 @@ def test_postgresql_sokuho_migration_rejects_invalid_collected_at(
 
     database = postgresql_timeseries_db
     table_name = "TS_SOKUHO_O2"
-    database.execute(_legacy_sokuho_schema(table_name))
+    database.execute(_publication_sokuho_schema(table_name))
+    _raw_insert(database, table_name, _sokuho_o2_row(collected_at=None))
     _raw_insert(
         database,
         table_name,
-        _sokuho_o2_row(collected_at="not-an-offset-timestamp"),
+        _sokuho_o2_row(collected_at="2026-09-01T03:00:00+00:00", kumi="0203"),
     )
     database.commit()
 
-    for operator_function in (
-        preview_sokuho_capture_identity_migration,
-        apply_sokuho_capture_identity_migration,
-    ):
-        with pytest.raises(
-            SchemaMigrationError,
-            match="invalid offset-aware CollectedAt",
-        ):
-            operator_function(database, [table_name])
+    preview = preview_sokuho_capture_identity_migration(database, [table_name])
+    assert (preview[0].status, preview[0].total_rows, preview[0].null_collected_at) == (
+        "publication",
+        2,
+        1,
+    )
+    with pytest.raises(SchemaMigrationError, match="1 of 2 rows have NULL CollectedAt"):
+        apply_sokuho_capture_identity_migration(database, [table_name])
 
-    assert database._get_primary_key_columns(table_name)[-1] == "collectedat"
-    assert database.fetch_one(f"SELECT COUNT(*) AS count FROM {table_name}") == {"count": 1}
+    assert database._get_primary_key_columns(table_name)[-1] == "sourcespec"
+    assert database.fetch_one(f"SELECT COUNT(*) AS count FROM {table_name}") == {"count": 2}

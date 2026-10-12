@@ -661,10 +661,13 @@ def database_maintenance():
 )
 @click.pass_context
 def migrate_sokuho_capture_identity(ctx, database_type, table_names, schema_name, apply):
-    """Report or explicitly migrate legacy TS_SOKUHO primary keys.
+    """Report or explicitly widen 2.0-2.3 TS_SOKUHO primary keys.
 
-    Dry run is the default. Stop all collectors before using --apply.
-    SQLite is intentionally refused and requires backup plus table rebuild.
+    Those releases keyed a速報 row by HassoTime, which folds every later poll
+    of a race into its first capture. --apply adds CollectedAt back to the key
+    and deletes no row. Dry run is the default. Stop all collectors before
+    using --apply. SQLite is intentionally refused and requires backup plus
+    table rebuild.
     """
     from src.database import create_database_from_config, DatabaseError
     from src.database.migration import (
@@ -718,11 +721,10 @@ def migrate_sokuho_capture_identity(ctx, database_type, table_names, schema_name
         click.echo(f"  Status: {report.status}")
         click.echo(f"  Current primary key: {primary_key}")
         click.echo(f"  Total rows: {report.total_rows}")
-        click.echo("  Distinct publication groups: " f"{report.distinct_publication_groups}")
-        click.echo(f"  Rows that would be deleted: {report.rows_to_delete}")
+        click.echo("  Rows that would be deleted: 0")
         click.echo(
-            "  Groups whose CollectedAt would be rewritten to earliest non-NULL: "
-            f"{report.collected_at_rewrite_groups}"
+            "  Rows with NULL CollectedAt (apply refuses when nonzero): "
+            f"{report.null_collected_at}"
         )
     if apply:
         click.echo("Migration apply completed.")

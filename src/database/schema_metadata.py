@@ -1730,7 +1730,8 @@ for _source_table, _target_table in (
     _metadata["description"] = _metadata["description"].replace("（時系列）", "（速報時系列）")
     _metadata["purpose"] = (
         _metadata["purpose"].replace("時間推移を記録する", "開催週速報オッズの時間推移を記録する")
-        + "。SourceSpecをキーに含め、0B30と0B31-0B36の上書きを避ける"
+        + "。SourceSpecをキーに含め、0B30と0B31-0B36の上書きを避ける。"
+        "CollectedAtもキーに含め、poll ごとに1行を残す（HassoTime は発表時刻として更新されない）"
     )
     _metadata["columns"].insert(
         1,
@@ -1742,7 +1743,7 @@ for _source_table, _target_table in (
             "nullable": False,
         },
     )
-    _metadata["primary_key"] = [*_metadata["primary_key"], "SourceSpec"]
+    _metadata["primary_key"] = [*_metadata["primary_key"], "SourceSpec", "CollectedAt"]
     TABLE_METADATA[_target_table] = _metadata
 
 

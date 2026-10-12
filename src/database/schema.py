@@ -2717,6 +2717,11 @@ def _build_sokuho_timeseries_schema(source_table: str, target_table: str) -> str
     retention windows. Keep them in separate physical tables and include
     SourceSpec in the速報 primary key so 0B30 and 0B31-0B36 imports cannot
     overwrite each other.
+
+    CollectedAt ends the速報 primary key: every poll is its own row. The
+    HassoTime of a 0B30-0B36 record is not a publication instant -- it keeps
+    the morning value all day while the odds move -- so a HassoTime key would
+    fold every later poll into the first one (docs/timeseries_odds.md).
     """
     schema_sql = SCHEMAS[source_table].replace(
         f"CREATE TABLE IF NOT EXISTS {source_table}",
@@ -2728,7 +2733,7 @@ def _build_sokuho_timeseries_schema(source_table: str, target_table: str) -> str
         "RecordSpec TEXT,\n            SourceSpec TEXT,\n",
         1,
     )
-    return schema_sql.replace("HassoTime)", "HassoTime, SourceSpec)")
+    return schema_sql.replace("HassoTime)", "HassoTime, SourceSpec, CollectedAt)")
 
 
 for _source_table, _target_table in (
