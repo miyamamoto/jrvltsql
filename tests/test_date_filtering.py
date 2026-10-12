@@ -96,6 +96,46 @@ class TestDateFiltering:
         record4 = {"Year": "2024", "MonthDay": "0629"}
         assert fetcher._is_within_date_range(record4, "20240630") is True
 
+    def test_integer_month_day_from_parsers(self, fetcher):
+        """CK/TC/JC/CC/WE parsers return MonthDay as an int (MONTH_DAY: "0105" -> 105).
+
+        Concatenating it unpadded made "2026105" sort after "20261011", so every
+        January-September record of the to_date's year was dropped.
+        """
+        from src.parser.converters import convert_value
+
+        def record(year: str, month_day: str) -> dict:
+            return {
+                "Year": convert_value(year, "SMALLINT"),
+                "MonthDay": convert_value(month_day, "MONTH_DAY"),
+            }
+
+        assert record("2026", "0105") == {"Year": 2026, "MonthDay": 105}
+        for month_day in ("0101", "0105", "0630", "0930", "1001", "1011"):
+            assert fetcher._is_within_date_range(record("2026", month_day), "20261011") is True
+        assert fetcher._is_within_date_range(record("2026", "1012"), "20261011") is False
+        assert fetcher._is_within_date_range(record("2025", "1231"), "20261011") is True
+        assert fetcher._is_within_date_range(record("2027", "0101"), "20261011") is False
+        # a to_date early in the year must not drop or keep by string accident either
+        assert fetcher._is_within_date_range(record("2026", "0310"), "20260315") is True
+        assert fetcher._is_within_date_range(record("2026", "0316"), "20260315") is False
+
+
+def test_cache_event_date_accepts_integer_month_day():
+    """The NL cache buckets records by event date; int MonthDay must not lose it."""
+    from src.fetcher.historical import _extract_record_date
+    from src.parser.converters import convert_value
+
+    record = {
+        "Year": convert_value("2026", "SMALLINT"),
+        "MonthDay": convert_value("0105", "MONTH_DAY"),
+    }
+    assert _extract_record_date(record) == "20260105"
+    assert _extract_record_date({"Year": "2026", "MonthDay": "0105"}) == "20260105"
+    assert _extract_record_date({"Year": 2026, "MonthDay": 1011}) == "20261011"
+    assert _extract_record_date({"Year": "26", "MonthDay": "0105"}) is None
+    assert _extract_record_date({"ChokyoDate": "20260105"}) == "20260105"
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

@@ -26,8 +26,12 @@ def _extract_record_date(record: dict) -> Optional[str]:
     """Extract YYYYMMDD from a parsed record dict."""
     year = record.get("Year") or record.get("headYear") or record.get("KaisaiNen")
     monthday = record.get("MonthDay") or record.get("headMonthDay") or record.get("KaisaiTsukihi")
-    if year and monthday and len(str(year)) == 4 and len(str(monthday)) == 4:
-        return str(year) + str(monthday)
+    if year and monthday:
+        # CK/TC/JC/CC/WE parsers return ints (MONTH_DAY: "0105" -> 105); pad them.
+        year_text = f"{year:04d}" if isinstance(year, int) else str(year)
+        monthday_text = f"{monthday:04d}" if isinstance(monthday, int) else str(monthday)
+        if len(year_text) == 4 and len(monthday_text) == 4:
+            return year_text + monthday_text
     chokyo_date = record.get("ChokyoDate")
     if chokyo_date and len(str(chokyo_date)) == 8:
         return str(chokyo_date)

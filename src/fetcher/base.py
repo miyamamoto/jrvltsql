@@ -487,7 +487,10 @@ class BaseFetcher(ABC):
         month_day = data.get("MonthDay")
 
         if year and month_day:
-            record_date = f"{year}{month_day}"
+            # CK/TC/JC/CC/WE parsers return Year/MonthDay as ints (MONTH_DAY:
+            # "0105" -> 105). Pad both before comparing as YYYYMMDD strings, or
+            # "2026105" sorts after "20261011" and Jan-Sep records are dropped.
+            record_date = f"{str(year).strip().zfill(4)}{str(month_day).strip().zfill(4)}"
         else:
             chokyo_date = data.get("ChokyoDate")
             record_date = str(chokyo_date) if chokyo_date else None
