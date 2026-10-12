@@ -1,3 +1,45 @@
+# jrvltsql v2.3.1 Release Notes
+
+`2.3.1` is a fix release for the JRA decision-time odds (#278, #279). Parser
+byte layouts are unchanged.
+
+## Fixes
+
+- **TS_SOKUHO keeps every poll again** (#278). 2.0-2.3.0 keyed
+  `TS_SOKUHO_O1`-`O6` by `HassoTime` and kept only the first capture, but the
+  `HassoTime` of a 0B30-0B36 record does not advance while the odds move, so
+  every later poll of a race was folded into its first row. The key is again
+  `(…, Kumi, HassoTime, SourceSpec, CollectedAt)` -- exactly the 1.x key,
+  column order included. `TS_O1` / `TS_O2` (0B41/0B42) are unchanged.
+- **Piped time-series progress no longer glues onto the terminal Keys line**
+  (#279). rich drops a leading carriage return, so the in-place
+  `Keys: … last=…` / `Processed: …` progress (printed without a newline) was
+  joined to the terminal `Keys:` summary on piped stdout, and
+  jrvltsql-wine-runtime's prospective 0B41/0B42 evidence check (exactly one
+  terminal Keys line) failed for every run with a due race. Progress now ends
+  with a newline unless the output stream is a TTY.
+
+## Upgrade to 2.3.1 (TS_SOKUHO)
+
+- **Tables created by 1.x** (key ending in `CollectedAt`): current; nothing to
+  do. **Do not run the 2.0-2.3.0 `migrate-sokuho-capture-identity --apply`
+  on them** -- that version collapsed them to one row per publication and
+  deleted rows.
+- **Tables created by 2.0-2.3.0** (no `CollectedAt` in the key): startup and
+  writes fail closed. Run the dry run, stop every collector, then `--apply`:
+
+  ```bash
+  jltsql db migrate-sokuho-capture-identity --db postgresql
+  jltsql db migrate-sokuho-capture-identity --db postgresql --apply
+  ```
+
+  The apply only adds `CollectedAt` to the key under an `ACCESS EXCLUSIVE`
+  lock; it deletes and rewrites no row, refuses when any `CollectedAt` is NULL,
+  and rolls every table back on failure. Polls already folded by 2.x are not
+  recovered. SQLite: back up and rebuild the table.
+- The other upgrade steps from older releases (RT_WH key from 2.2.0, NL_HR /
+  RT_HR flag types from 2.1.2) are unchanged; see below.
+
 # jrvltsql v2.3.0 Release Notes
 
 `2.3.0` releases #275 and #276 (merged on `master` since `2.2.0`): the

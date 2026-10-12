@@ -111,7 +111,7 @@ def test_removed_public_setup_contract_is_recorded_for_2_0() -> None:
     assert "2.0.0" in changelog
     assert "## [2.0.0] - 2026-08-27" in changelog
     assert (
-        "[Unreleased]: https://github.com/miyamamoto/jrvltsql/compare/" "v2.3.0...HEAD"
+        "[Unreleased]: https://github.com/miyamamoto/jrvltsql/compare/" "v2.3.1...HEAD"
     ) in changelog
     assert (
         "[2.0.0]: https://github.com/miyamamoto/jrvltsql/compare/" "v1.6.10...v2.0.0"
@@ -124,7 +124,7 @@ def test_removed_public_setup_contract_is_recorded_for_2_0() -> None:
     assert "RECORD_TYPE_O1" in release_notes
     assert "RECORD_TYPE_O6" in release_notes
     assert "uses_external_runner" in release_notes
-    assert project["project"]["version"] == "2.3.0"
+    assert project["project"]["version"] == "2.3.1"
     assert "wrapper.py の JVSetServiceKey 呼び出し箇所" not in constants
     for record_type in range(1, 7):
         assert f"DATA_SPEC_O{record_type} =" not in constants

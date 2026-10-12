@@ -36,7 +36,9 @@ fail closed で止まります。
 parse、DB保存までの検証が完了するまでは、64-bit 対応済みとは扱いません。
 
 運用環境では正式リリースtagを固定してインストールします。次は現在の安定版
-`v2.3.0`の例です。2.2.0 で作った DB から上げる場合は、`RT_WH` の主キーへ `HappyoTime` を
+`v2.3.1`の例です。`TS_SOKUHO_O*` は 2.3.1 で poll 単位の主キー（末尾 `CollectedAt`、1.x と同じ）
+に戻りました。2.0〜2.3.0 で作った `TS_SOKUHO_O*` は拡幅の移行が要ります（行は消えません。
+「Upgrade to 2.3.1」）。2.2.0 で作った DB から上げる場合は、`RT_WH` の主キーへ `HappyoTime` を
 足すオペレーター移行が必要です（自動では行いません。未移行のあいだは 0B11 だけが止まります）。
 手順は [RELEASE_NOTES.md](RELEASE_NOTES.md) の「Upgrade from 2.2.0」を参照してください。
 2.1.2 から上げる場合は、さらに `NL_HR` / `RT_HR` の予備 flag 3 列の型変更（INTEGER → TEXT、
@@ -44,7 +46,7 @@ parse、DB保存までの検証が完了するまでは、64-bit 対応済みと
 SHA-256も運用記録へ残してください。
 
 ```powershell
-git clone --branch v2.3.0 --depth 1 https://github.com/miyamamoto/jrvltsql.git
+git clone --branch v2.3.1 --depth 1 https://github.com/miyamamoto/jrvltsql.git
 cd jrvltsql
 git rev-parse HEAD
 pip install .

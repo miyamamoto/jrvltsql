@@ -7,6 +7,8 @@
 
 ## [Unreleased]
 
+## [2.3.1] - 2026-10-12
+
 ### Fixed
 
 - **`TS_SOKUHO_O1`〜`O6` の主キーに `CollectedAt` を戻した**（poll ごとに 1 行）。2.0〜2.3 は
@@ -765,7 +767,8 @@
 - quickstart.py 対話形式セットアップウィザード
 - CLI コマンド（fetch, status, monitor, init）
 
-[Unreleased]: https://github.com/miyamamoto/jrvltsql/compare/v2.3.0...HEAD
+[Unreleased]: https://github.com/miyamamoto/jrvltsql/compare/v2.3.1...HEAD
+[2.3.1]: https://github.com/miyamamoto/jrvltsql/compare/v2.3.0...v2.3.1
 [2.3.0]: https://github.com/miyamamoto/jrvltsql/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/miyamamoto/jrvltsql/compare/v2.1.2...v2.2.0
 [2.1.2]: https://github.com/miyamamoto/jrvltsql/compare/v2.1.1...v2.1.2
