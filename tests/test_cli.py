@@ -896,6 +896,134 @@ auto_update_check: false
         # nonemptyキーを区別し、token順を固定する。
         self.assertIn("ok=1 nonempty=1 no_data=0", result.output)
 
+    def test_timeseries_piped_output_keeps_terminal_keys_line_on_its_own_line(self):
+        """Piped output: progress must not glue onto the terminal Keys line.
+
+        The Wine collector reads the captured stdout line by line and requires
+        exactly one line that is the whole terminal Keys summary. rich drops
+        the leading carriage return, so a progress print ending without a
+        newline used to be joined to the summary that followed it.
+        """
+        import re
+
+        database = MagicMock()
+        database.__enter__.return_value = database
+        database.__exit__.return_value = None
+        fetcher = MagicMock()
+
+        def fetch_rows(**kwargs):
+            callback = kwargs["progress_callback"]
+            callback(
+                {
+                    "status": "window_filter",
+                    "key": None,
+                    "processed_keys": 0,
+                    "total_keys": 1,
+                    "considered_keys": 1,
+                    "window_candidate_keys": 1,
+                    "window_kept_keys": 1,
+                    "omitted_canceled_keys": 0,
+                    "dropped_too_far_future": 0,
+                    "dropped_too_far_past": 0,
+                    "skipped_out_of_window_by_date": 0,
+                    "success_keys": 0,
+                    "nonempty_keys": 0,
+                    "no_data_keys": 0,
+                    "error_keys": 0,
+                    "total_records": 0,
+                }
+            )
+            # 120 records trip the "Processed:" progress print at 100.
+            for _ in range(120):
+                yield {"RecordSpec": "O1"}
+            callback(
+                {
+                    "status": "success",
+                    "key": "202609010501",
+                    "processed_keys": 1,
+                    "total_keys": 1,
+                    "success_keys": 1,
+                    "nonempty_keys": 1,
+                    "no_data_keys": 0,
+                    "error_keys": 0,
+                    "records_for_key": 120,
+                    "total_records": 120,
+                }
+            )
+
+        fetcher.fetch_time_series_batch_from_db.side_effect = fetch_rows
+        updater = MagicMock()
+        updater.process_parsed_records_batch.side_effect = lambda records, **_: {
+            "success": True,
+            "inserted": len(records),
+            "errors": 0,
+        }
+
+        with self.runner.isolated_filesystem():
+            config_path = Path("config.yaml")
+            config_path.write_text("""
+database:
+  type: postgresql
+databases:
+  postgresql:
+    enabled: true
+jvlink:
+  sid: TEST
+auto_update_check: false
+""")
+            with (
+                patch("src.database.create_database_from_config", return_value=database),
+                patch("src.fetcher.realtime.RealtimeFetcher", return_value=fetcher),
+                patch("src.realtime.updater.RealtimeUpdater", return_value=updater),
+                patch("src.database.timeseries_capture.prepare_time_series_odds_table"),
+            ):
+                result = self.runner.invoke(
+                    cli,
+                    [
+                        "--config",
+                        str(config_path),
+                        "realtime",
+                        "timeseries",
+                        "--spec",
+                        "0B41",
+                        "--from",
+                        "20260901",
+                        "--to",
+                        "20260901",
+                        "--db",
+                        "postgresql",
+                        "--post-time-within-minutes",
+                        "30",
+                        "--post-time-not-past-minutes",
+                        "2",
+                    ],
+                )
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        # The collector's exact line contract (jrvltsql-wine-runtime
+        # scripts/collector_service.py PROSPECTIVE_KEYS_RE / _WINDOW_RE).
+        count = r"(?:0|[1-9][0-9]{0,2}(?:,[0-9]{3})*)"
+        keys_re = re.compile(
+            rf"^\s*Keys: ({count})/({count}) ok=({count}) nonempty=({count}) "
+            rf"no_data=({count}) errors=({count}) records=({count})\s*$"
+        )
+        window_re = re.compile(
+            rf"^\s*Window: considered={count} candidates={count} kept={count} "
+            rf"canceled={count} future={count} past={count} date_excluded={count}\s*$"
+        )
+        lines = result.output.splitlines()
+        terminal = [line for line in lines if keys_re.fullmatch(line)]
+        self.assertEqual(len(terminal), 1, result.output)
+        self.assertEqual(
+            keys_re.fullmatch(terminal[0]).groups(),
+            ("1", "1", "1", "1", "0", "0", "120"),
+        )
+        self.assertEqual(sum(bool(window_re.fullmatch(line)) for line in lines), 1)
+        self.assertIn("  [OK] 0B41: 120 records processed", lines)
+        for line in lines:
+            # No line may hold two progress/summary prints.
+            self.assertLessEqual(line.count("Keys:") + line.count("Processed:"), 1, line)
+
     def test_timeseries_window_idle_run_emits_zero_keys_summary(self):
         """対象0件のidle実行でもspecごとに終端Keysサマリを1行だけ出す。
 

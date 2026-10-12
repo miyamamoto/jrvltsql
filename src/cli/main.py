@@ -24,6 +24,16 @@ err_console = Console(stderr=True, legacy_windows=True)
 logger = get_logger(__name__)
 
 
+def _progress_line_end() -> str:
+    """End an in-place progress print: stay on the line only on a terminal.
+
+    rich drops a leading carriage return, so on piped output a print ending in
+    "" is joined to whatever prints next. Collectors parse that output line by
+    line, so piped progress gets its own line.
+    """
+    return "" if console.is_terminal else "\n"
+
+
 FETCH_NOTE_SETUP_MODE = "セットアップモード - 全データ取得（ダイアログが表示されます）"
 FETCH_NOTE_OPTION2_RANGE = (
     "option=2（今週データ）でも --from は JVOpen の fromtime に渡され、"
@@ -2217,7 +2227,7 @@ def timeseries(
                             f"errors={progress.get('error_keys', 0):,} "
                             f"records={progress.get('total_records', 0):,} "
                             f"last={progress.get('key') or '-'}:{status}",
-                            end="",
+                            end=_progress_line_end(),
                             soft_wrap=True,
                         )
 
@@ -2250,7 +2260,10 @@ def timeseries(
 
                         # Progress indicator
                         if record_count % 100 == 0:
-                            console.print(f"\r  Processed: {record_count:,} records", end="")
+                            console.print(
+                                f"\r  Processed: {record_count:,} records",
+                                end=_progress_line_end(),
+                            )
 
                     flush_batch(records_batch)
                     window_requested = (
