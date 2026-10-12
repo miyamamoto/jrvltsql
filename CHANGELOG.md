@@ -7,6 +7,14 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- `realtime timeseries` / `odds-timeseries` / `odds-sokuho-timeseries` の進捗表示（`Keys: … last=…`
+  と `Processed: …`）を、端末以外（パイプ）では改行で終えるようにした。rich は先頭の `\r` を
+  落とすため、パイプ出力では進捗が直後の終端 `Keys:` 行とつながり、行単位で読む
+  jrvltsql-wine-runtime の prospective 証拠検査（終端 `Keys:` 行がちょうど 1 行）が、対象
+  レースが 1 件以上ある回で必ず失敗していた。端末では従来どおり同じ行を上書きする。
+
 ## [2.3.0] - 2026-10-11
 
 0B11/0B14 の取得ログと単発の速報取得（#275, #276）。**RT_WH の主キー移行はオペレーター作業**
