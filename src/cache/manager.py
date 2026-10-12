@@ -38,7 +38,14 @@ class CacheManager:
     NL_SPEC_SCHEMA_VERSIONS = {"SNPN": 4}
 
     def _schema_version(self, spec: str) -> int:
-        return self.NL_SPEC_SCHEMA_VERSIONS.get(spec.upper(), self.NL_CACHE_SCHEMA_VERSION)
+        # A concatenated dataspec request (e.g. "RACESNPN") is keyed as one cache
+        # spec; it takes the highest bump of its 4-character components.
+        upper = spec.upper()
+        parts = [upper[i : i + 4] for i in range(0, len(upper), 4)] if len(upper) % 4 == 0 else [upper]
+        return max(
+            (self.NL_SPEC_SCHEMA_VERSIONS.get(part, self.NL_CACHE_SCHEMA_VERSION) for part in parts),
+            default=self.NL_CACHE_SCHEMA_VERSION,
+        )
 
     def __init__(self, cache_dir: Path):
         self.cache_dir = Path(cache_dir)

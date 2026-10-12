@@ -146,6 +146,17 @@ class TestNlIndex:
         assert cm.has_nl_range("SNPN", "20260105", "20260105") is True
         assert list(cm.read_nl("SNPN", "20260105", "20260105")) == [b"fresh"]
 
+    @pytest.mark.parametrize("spec", ["RACESNPN", "SNPNRACE", "snpn"])
+    def test_snpn_bump_applies_to_concatenated_specs(self, tmp_path, spec):
+        cm = _make_cache(tmp_path)
+        cm._save_index(
+            cm._index_path(spec),
+            {"20260105": {"complete": True, "schema_version": 3, "count": 0}},
+        )
+        assert cm.has_nl_range(spec, "20260105", "20260105") is False
+        assert cm._schema_version(spec) == 4
+        assert cm._schema_version("RACEDIFN") == CacheManager.NL_CACHE_SCHEMA_VERSION
+
     def test_legacy_complete_cache_is_not_reused_or_appended(self, tmp_path):
         cm = _make_cache(tmp_path)
         legacy_path = cm._nl_dir("RACE") / "20260401.bin"
