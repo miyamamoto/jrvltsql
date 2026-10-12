@@ -1029,6 +1029,28 @@ auto_update_check: false
             # No line may hold two progress/summary prints.
             self.assertLessEqual(line.count("Keys:") + line.count("Processed:"), 1, line)
 
+    def test_progress_line_end_asks_the_stream_not_the_forced_terminal_flag(self):
+        """FORCE_COLOR / TTY_COMPATIBLE make rich report a terminal for a pipe."""
+        from unittest.mock import PropertyMock
+
+        import src.cli.main as cli_main
+
+        class Stream:
+            def __init__(self, tty):
+                self.tty = tty
+
+            def isatty(self):
+                return self.tty
+
+        with patch.object(
+            type(cli_main.console), "is_terminal", new_callable=PropertyMock, return_value=True
+        ):
+            for stream, expected in ((Stream(False), "\n"), (Stream(True), "")):
+                with patch.object(
+                    type(cli_main.console), "file", new_callable=PropertyMock, return_value=stream
+                ):
+                    self.assertEqual(cli_main._progress_line_end(), expected)
+
     def test_timeseries_window_idle_run_emits_zero_keys_summary(self):
         """対象0件のidle実行でもspecごとに終端Keysサマリを1行だけ出す。
 
