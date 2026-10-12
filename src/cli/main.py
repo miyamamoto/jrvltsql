@@ -25,13 +25,20 @@ logger = get_logger(__name__)
 
 
 def _progress_line_end() -> str:
-    """End an in-place progress print: stay on the line only on a terminal.
+    """End an in-place progress print: stay on the line only on a real TTY.
 
     rich drops a leading carriage return, so on piped output a print ending in
     "" is joined to whatever prints next. Collectors parse that output line by
-    line, so piped progress gets its own line.
+    line, so piped progress gets its own line. The stream itself is asked,
+    not ``console.is_terminal``, which FORCE_COLOR / TTY_COMPATIBLE turn on
+    for a pipe as well.
     """
-    return "" if console.is_terminal else "\n"
+    isatty = getattr(console.file, "isatty", None)
+    try:
+        on_tty = bool(isatty is not None and isatty())
+    except (OSError, ValueError):
+        on_tty = False
+    return "" if on_tty else "\n"
 
 
 FETCH_NOTE_SETUP_MODE = "セットアップモード - 全データ取得（ダイアログが表示されます）"
