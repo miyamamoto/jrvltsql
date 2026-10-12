@@ -125,6 +125,27 @@ class TestNlIndex:
             == CacheManager.NL_CACHE_SCHEMA_VERSION
         )
 
+    def test_snpn_v3_cache_from_the_month_day_filter_bug_is_not_reused(self, tmp_path):
+        """jltsql <= 2.3.1 dropped int-MonthDay CK records before caching, so an
+        SNPN v3 day could be marked complete with records missing. RACE v3 stays."""
+        cm = _make_cache(tmp_path)
+        for spec in ("SNPN", "RACE"):
+            v3 = cm._nl_dir(spec) / "20260105.v3.bin"
+            v3.write_bytes(cm.HEADER.pack(2) + b"v3")
+            cm._save_index(
+                cm._index_path(spec),
+                {"20260105": {"complete": True, "schema_version": 3, "count": 1}},
+            )
+        assert cm.has_nl_range("SNPN", "20260105", "20260105") is False
+        assert list(cm.read_nl("SNPN", "20260105", "20260105")) == []
+        assert cm.has_nl_range("RACE", "20260105", "20260105") is True
+        assert list(cm.read_nl("RACE", "20260105", "20260105")) == [b"v3"]
+
+        cm.write_nl_record("SNPN", "20260105", _raw("fresh"))
+        cm.mark_nl_complete("SNPN", "20260105")
+        assert cm.has_nl_range("SNPN", "20260105", "20260105") is True
+        assert list(cm.read_nl("SNPN", "20260105", "20260105")) == [b"fresh"]
+
     def test_legacy_complete_cache_is_not_reused_or_appended(self, tmp_path):
         cm = _make_cache(tmp_path)
         legacy_path = cm._nl_dir("RACE") / "20260401.bin"
