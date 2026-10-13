@@ -14,8 +14,10 @@ unchanged; no database migration.
   middle of a key (e.g. `-403`), or a bridge timeout. Up to 2.3.1 the summary's
   `Errors:` counted only persistence failures, so such a run printed
   `Errors: 0` and exited 0 while races were missing.
-  - Every spec is still fetched and every row that was read is saved and
-    committed before the command exits; only the verdict changes.
+  - Every spec is still fetched, and the rows of every key that was fetched
+    completely are saved and committed before the command exits. A key that
+    failed part-way keeps none of its rows (they are discarded, as in 2.3.1);
+    re-fetch it. Only the verdict changes.
   - The summary gains a `Failed keys:` line: `0` when every key was fetched,
     otherwise the failed key count per spec, e.g. `Failed keys:    0B42=184`.
     It is a separate line so that callers which parse `Errors:` keep reading
@@ -30,7 +32,7 @@ unchanged; no database migration.
 | 0 | every key fetched (or returned no data) and every row saved |
 | 1 | error (persistence failure, setup failure, …) |
 | 2 | usage error |
-| 4 | some race keys could not be fetched; the rows that were read are saved |
+| 4 | some race keys could not be fetched; the rows of the completely fetched keys are saved |
 
 ## Upgrade to 2.3.2
 
