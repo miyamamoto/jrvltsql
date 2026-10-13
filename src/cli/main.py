@@ -2300,7 +2300,10 @@ def timeseries(
                             f"records={key_progress['total_records']:,}",
                             soft_wrap=True,
                         )
-                    key_errors_by_spec[spec_code] = int(key_progress["error_keys"])
+                    # accumulate: a spec listed twice must not hide its earlier lost keys
+                    key_errors_by_spec[spec_code] = key_errors_by_spec.get(spec_code, 0) + int(
+                        key_progress["error_keys"]
+                    )
                     console.print(
                         f"  [green][OK][/green] {spec_code}: {record_count:,} records processed"
                     )

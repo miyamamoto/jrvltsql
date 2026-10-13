@@ -682,16 +682,24 @@ class TestRealtimeTimeseriesCommand(unittest.TestCase):
         self.prepare_table = self.prepare_table_patcher.start()
         self.addCleanup(self.prepare_table_patcher.stop)
 
-    def _run_with_key_progress(self, progress_by_spec):
-        """Run 'realtime timeseries' for the given specs; each spec ends with the given counters."""
+    def _run_with_key_progress(self, progress_by_spec, spec_option=None):
+        """Run 'realtime timeseries' for the given specs; each spec ends with the given counters.
+
+        A spec whose value is a list answers its successive fetches in order.
+        """
 
         database = MagicMock()
         database.__enter__.return_value = database
         database.__exit__.return_value = None
         fetcher = MagicMock()
 
+        answers = {
+            spec: iter(value if isinstance(value, list) else [value] * 10)
+            for spec, value in progress_by_spec.items()
+        }
+
         def fetch_rows(**kwargs):
-            counters = progress_by_spec[kwargs["data_spec"]]
+            counters = next(answers[kwargs["data_spec"]])
             total = sum(counters.values())
             kwargs["progress_callback"](
                 {
@@ -728,7 +736,7 @@ class TestRealtimeTimeseriesCommand(unittest.TestCase):
                         "realtime",
                         "timeseries",
                         "--spec",
-                        ",".join(progress_by_spec),
+                        spec_option or ",".join(progress_by_spec),
                         "--from",
                         "20250501",
                         "--to",
@@ -758,6 +766,24 @@ class TestRealtimeTimeseriesCommand(unittest.TestCase):
         self.assertEqual(result.exit_code, TIMESERIES_EXIT_KEY_ERRORS, result.output)
         self.assertNotIn(TIMESERIES_EXIT_KEY_ERRORS, (0, 1, 2))
         self.assertEqual(fetcher.fetch_time_series_batch_from_db.call_count, 2)
+        self.assertIn("Failed keys:    0B42=184", result.output)
+
+    def test_timeseries_key_errors_of_a_repeated_spec_are_not_overwritten(self):
+        """--spec 0B42,0B42: a clean second pass must not hide the first pass's lost keys."""
+        from src.cli.main import TIMESERIES_EXIT_KEY_ERRORS
+
+        result, fetcher = self._run_with_key_progress(
+            {
+                "0B42": [
+                    {"ok": 128, "no_data": 0, "errors": 184},
+                    {"ok": 0, "no_data": 312, "errors": 0},
+                ]
+            },
+            spec_option="0B42,0B42",
+        )
+
+        self.assertEqual(fetcher.fetch_time_series_batch_from_db.call_count, 2)
+        self.assertEqual(result.exit_code, TIMESERIES_EXIT_KEY_ERRORS, result.output)
         self.assertIn("Failed keys:    0B42=184", result.output)
 
     def test_timeseries_no_data_keys_alone_still_succeed(self):
