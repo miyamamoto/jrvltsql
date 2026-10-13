@@ -157,6 +157,17 @@ class TestNlIndex:
         assert cm._schema_version(spec) == 4
         assert cm._schema_version("RACEDIFN") == CacheManager.NL_CACHE_SCHEMA_VERSION
 
+    @pytest.mark.parametrize("spec", ["SNPN", "RACESNPN"])
+    def test_per_spec_bump_never_falls_below_the_global_version(
+        self, tmp_path, monkeypatch, spec
+    ):
+        """A per-spec bump is a lower bound: a later global bump past it must
+        still invalidate that spec's cache."""
+        monkeypatch.setattr(CacheManager, "NL_CACHE_SCHEMA_VERSION", 5)
+        cm = _make_cache(tmp_path)
+        assert cm._schema_version(spec) == 5
+        assert cm._schema_version("RACE") == 5
+
     def test_legacy_complete_cache_is_not_reused_or_appended(self, tmp_path):
         cm = _make_cache(tmp_path)
         legacy_path = cm._nl_dir("RACE") / "20260401.bin"
@@ -377,6 +388,16 @@ class TestClear:
         cm.clear(spec="RACE", date_str="20260401")
         assert list(cm.read_nl("RACE", "20260401", "20260401")) == []
         assert list(cm.read_nl("RACE", "20260402", "20260402")) == [_raw("day2")]
+
+    def test_clear_specific_date_removes_every_versioned_file(self, tmp_path):
+        cm = _make_cache(tmp_path)
+        d = cm._nl_dir("SNPN")
+        for name in ("20260105.bin", "20260105.v3.bin", "20260105.v4.bin"):
+            (d / name).write_bytes(cm.HEADER.pack(1) + b"x")
+        keep = d / "20260106.v3.bin"
+        keep.write_bytes(cm.HEADER.pack(1) + b"y")
+        assert cm.clear(spec="SNPN", date_str="20260105") == 3
+        assert sorted(p.name for p in d.glob("*.bin")) == ["20260106.v3.bin"]
 
     def test_clear_rt(self, tmp_path):
         cm = _make_cache(tmp_path)

@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import stat
 import struct
 import tempfile
@@ -10,6 +11,8 @@ from collections.abc import Iterable, Iterator
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Optional
+
+_VERSIONED_BIN = re.compile(r"\.v\d+\.bin")
 
 
 class CacheManager:
@@ -39,12 +42,14 @@ class CacheManager:
 
     def _schema_version(self, spec: str) -> int:
         # A concatenated dataspec request (e.g. "RACESNPN") is keyed as one cache
-        # spec; it takes the highest bump of its 4-character components.
+        # spec; it takes the highest bump of its 4-character components. A
+        # per-spec bump is a lower bound, never a replacement: a later global
+        # bump past it still invalidates that spec.
         upper = spec.upper()
         parts = [upper[i : i + 4] for i in range(0, len(upper), 4)] if len(upper) % 4 == 0 else [upper]
         return max(
-            (self.NL_SPEC_SCHEMA_VERSIONS.get(part, self.NL_CACHE_SCHEMA_VERSION) for part in parts),
-            default=self.NL_CACHE_SCHEMA_VERSION,
+            self.NL_CACHE_SCHEMA_VERSION,
+            *(self.NL_SPEC_SCHEMA_VERSIONS.get(part, 0) for part in parts),
         )
 
     def __init__(self, cache_dir: Path):
@@ -290,9 +295,12 @@ class CacheManager:
             if not d.is_dir():
                 continue
             if date_str:
-                cache_files = [
-                    d / f"{date_str}.bin",
-                    d / f"{date_str}.v{self._schema_version(d.name)}.bin",
+                # Every schema version's file for the date, not only the
+                # current one: a bumped spec leaves older versioned files.
+                cache_files = [d / f"{date_str}.bin"] + [
+                    f
+                    for f in d.glob(f"{date_str}.v*.bin")
+                    if _VERSIONED_BIN.fullmatch(f.name[len(date_str) :])
                 ]
                 for f in cache_files:
                     if f.exists():
