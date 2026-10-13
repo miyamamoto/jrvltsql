@@ -27,6 +27,7 @@ from src.importer.importer import (
 )
 from src.importer.importer_optimized import OptimizedDataImporter
 from src.parser.um_parser import UMParser
+from tests.importer_support import import_one
 
 ZENKAKU_SPACE = b"\x81\x40"
 
@@ -377,7 +378,7 @@ def _import_um_records(database, entrypoint, records, auto_commit, *, standard):
             iter(records), auto_commit=auto_commit
         )
     importer = DataImporter(database, use_jravan_schema=standard)
-    return [importer.import_single_record(record, auto_commit=auto_commit) for record in records]
+    return [import_one(importer, record, auto_commit=auto_commit) for record in records]
 
 
 def _import_standard_um_records(database, entrypoint, records, auto_commit):
@@ -900,12 +901,12 @@ def test_um_standard_single_record_respects_the_caller_transaction(tmp_path):
         importer = DataImporter(database, use_jravan_schema=True)
 
         database.begin_transaction()
-        assert importer.import_single_record(parsed_record(), auto_commit=False) is True
+        assert import_one(importer, parsed_record(), auto_commit=False) is True
         assert database.fetch_one("SELECT COUNT(*) AS count FROM UMA")["count"] == 1
         database.rollback()
         assert database.fetch_one("SELECT COUNT(*) AS count FROM UMA")["count"] == 0
 
-        assert importer.import_single_record(parsed_record(), auto_commit=True) is True
+        assert import_one(importer, parsed_record(), auto_commit=True) is True
         assert database.fetch_one(
             "SELECT KettoNum, DelDate, SogoChakukaisu1, Jyotai12Chakukaisu6, "
             "Kyori6Chakukaisu6, Kyakusitu4, TorokuRaceSu FROM UMA"
@@ -1011,7 +1012,7 @@ def test_um_postgresql_single_record_preserves_expanded_body(postgresql_db):
     postgresql_db.commit()
     importer = DataImporter(postgresql_db, use_jravan_schema=True)
 
-    assert importer.import_single_record(parsed_record(), auto_commit=True) is True
+    assert import_one(importer, parsed_record(), auto_commit=True) is True
     assert postgresql_db.fetch_one(
         'SELECT kettonum AS "KettoNum", deldate AS "DelDate", '
         'sogochakukaisu1 AS "SogoChakukaisu1", '

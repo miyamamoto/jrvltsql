@@ -31,6 +31,7 @@ from src.importer.importer import (
 from src.importer.importer_optimized import OptimizedDataImporter
 from src.parser.h1_parser import H1Parser
 from src.realtime.updater import RealtimeUpdater
+from tests.importer_support import import_one
 
 STANDARD_TABLES = (
     "HYOSU",
@@ -323,9 +324,9 @@ def test_h1_single_record_erase_is_physical(
         _create(database, tables)
         importer = DataImporter(database, use_jravan_schema=use_standard)
         for row in h1_rows():
-            assert importer.import_single_record(row, auto_commit=auto_commit)
+            assert import_one(importer, row, auto_commit=auto_commit)
         for row in h1_erase():
-            assert importer.import_single_record(row, auto_commit=auto_commit)
+            assert import_one(importer, row, auto_commit=auto_commit)
         for table_name in tables:
             assert database.fetch_one(f"SELECT COUNT(*) AS count FROM {table_name}") == {
                 "count": 0
@@ -555,7 +556,7 @@ def test_h1_single_record_path_rejects_each_unsafe_contract_before_dml(
         database.commit()
         importer = DataImporter(database)
         with pytest.raises(SchemaMigrationError):
-            importer.import_single_record(h1_row(), auto_commit=auto_commit)
+            import_one(importer, h1_row(), auto_commit=auto_commit)
         assert database.fetch_one("SELECT COUNT(*) AS count FROM NL_H1") == {"count": 0}
 
 

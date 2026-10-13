@@ -25,6 +25,7 @@ from src.importer.importer import DataImporter
 from src.importer.importer_optimized import OptimizedDataImporter
 from src.parser.hc_parser import HCParser
 from src.realtime.updater import RealtimeUpdater
+from tests.importer_support import import_one
 
 FIELDS = (
     ("RecordSpec", 1, 2, b"HC"),
@@ -495,14 +496,14 @@ def test_hc_single_record_uses_the_same_validator_and_exact_delete(
         database.execute(schema)
         database.commit()
         importer = DataImporter(database, use_jravan_schema=standard)
-        assert importer.import_single_record(parsed_record(), auto_commit=auto_commit)
+        assert import_one(importer, parsed_record(), auto_commit=auto_commit)
         invalid = parsed_record()
         invalid["ChokyoTime"] = "1160"
         with pytest.raises(SchemaMigrationError):
-            importer.import_single_record(invalid, auto_commit=auto_commit)
+            import_one(importer, invalid, auto_commit=auto_commit)
         delete = parsed_record(data_kubun="0")
         delete["HaronTime4"] = "not interpreted"
-        assert importer.import_single_record(delete, auto_commit=auto_commit)
+        assert import_one(importer, delete, auto_commit=auto_commit)
         assert database.fetch_one(f"SELECT COUNT(*) AS count FROM {table_name}") == {"count": 0}
 
 

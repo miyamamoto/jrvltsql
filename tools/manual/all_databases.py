@@ -22,7 +22,7 @@ from src.parser.factory import ParserFactory, ALL_RECORD_TYPES
 from src.database.sqlite_handler import SQLiteDatabase
 from src.database.postgresql_handler import PostgreSQLDatabase
 from src.database.schema import SchemaManager, SCHEMAS
-from src.importer.importer import DataImporter
+from src.importer.importer import DataImporter, rollback_pending_retry_or_raise
 from src.jvlink.wrapper import JVLinkWrapper
 
 
@@ -162,8 +162,21 @@ class DatabaseTester:
                         if rec_type:
                             record_types.add(rec_type)
 
-                        # インポート
-                        if importer.import_single_record(record):
+                        # インポート。診断ツールなので1件の不良で全体を止めない
+                        # （import_records は import_single_record と違って送出する）
+                        # import_records は呼び出しごとに統計を初期化するので、
+                        # 成否はこの呼び出しが返した統計で判定する。
+                        try:
+                            stats = importer.import_records(iter([record]))
+                        except Exception as error:
+                            print(f"  スキップ ({rec_type}): {error}")
+                            # 失敗した transaction を次のレコードへ持ち越さない
+                            rollback_pending_retry_or_raise(
+                                importer.database,
+                                context=f"manual import failed for {rec_type}",
+                            )
+                            continue
+                        if stats['records_failed'] == 0:
                             imported += 1
 
                 jv.jv_close()

@@ -18,6 +18,7 @@ from src.importer.importer import DataImporter, TransactionRecoveryError
 from src.importer.importer_optimized import OptimizedDataImporter
 from src.parser.tm_parser import TMParser
 from src.realtime.updater import RealtimeUpdater
+from tests.importer_support import import_one
 
 RACE_KEY = ["Year", "MonthDay", "JyoCD", "Kaiji", "Nichiji", "RaceNum"]
 NATIVE_KEY = [*RACE_KEY, "Umaban"]
@@ -454,7 +455,7 @@ def test_tm_importers_propagate_unrecoverable_snapshot_transaction(
         try:
             with pytest.raises(TransactionRecoveryError):
                 if entrypoint == "single":
-                    importer.import_single_record(parsed[0], auto_commit=auto_commit)
+                    import_one(importer, parsed[0], auto_commit=auto_commit)
                 else:
                     importer.import_records(iter(parsed), auto_commit=auto_commit)
         finally:

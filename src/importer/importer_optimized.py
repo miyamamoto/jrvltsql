@@ -148,6 +148,9 @@ class OptimizedDataImporter:
         self._records_imported = 0
         self._records_failed = 0
         self._batches_processed = 0
+        # Snapshot of the last row of the last successful import_records call;
+        # see previous_snapshot there.
+        self._last_snapshot: list[dict] | None = None
         self._jravan_tables_ready = not use_jravan_schema
         self._verified_mining_native_tables: set[str] = set()
         self._verified_hy_tables: set[str] = set()
@@ -439,12 +442,30 @@ class OptimizedDataImporter:
         verified_ch_result_tables: Dict[str, str] = {}
         verified_ks_result_tables: Dict[str, str] = {}
         last_expanded_record_fingerprint = None
+        # The parsed O1-O6 / DM / TM snapshot of the previous record. A follower
+        # row is redundant only right after a row of the same snapshot (rows of
+        # one physical record share one list), including the last row of the
+        # previous successful call; otherwise - a lone follower, a call that
+        # starts mid-snapshot, a delete in between - it applies its whole
+        # snapshot, as the removed import_single_record did. A failed call
+        # forgets it, so a rolled-back snapshot is never assumed stored.
+        previous_snapshot = self._last_snapshot
+        self._last_snapshot = None
 
         try:
             for record in records:
                 record_type, _ = validate_import_record_header(record)
                 # Get record type and table name
                 table_name = self._get_table_name(record_type)
+                record_snapshot = None
+                if table_name:
+                    record_snapshot = _odds_native_snapshot_rows(
+                        record, table_name
+                    ) or _mining_native_snapshot_rows(record, table_name)
+                follows_previous_snapshot = (
+                    record_snapshot is not None and record_snapshot is previous_snapshot
+                )
+                previous_snapshot = record_snapshot
                 if not table_name:
                     logger.warning(
                         f"Unknown record type: {record_type}",
@@ -624,10 +645,14 @@ class OptimizedDataImporter:
                     last_expanded_record_fingerprint = None
                     continue
 
-                if _is_odds_snapshot_follower(record, table_name):
+                odds_follower = _is_odds_snapshot_follower(record, table_name)
+                if odds_follower and follows_previous_snapshot:
                     continue
 
-                if _is_mining_snapshot_follower(record, table_name):
+                if _is_mining_snapshot_follower(record, table_name) and (
+                    follows_previous_snapshot
+                    or _mining_native_snapshot_rows(record, table_name) is None
+                ):
                     continue
 
                 mining_snapshot_rows = _mining_native_snapshot_rows(record, table_name)
@@ -680,7 +705,8 @@ class OptimizedDataImporter:
                     except Exception:
                         self.database.rollback()
                         raise
-                    self._records_imported += rows
+                    # Rows are counted once, on the leading row, as before.
+                    self._records_imported += 0 if odds_follower else rows
                     self._batches_processed += 1
                     continue
 
@@ -856,6 +882,9 @@ class OptimizedDataImporter:
             stats = self.get_statistics()
             logger.info("Import completed", **stats)
 
+            # Only a committed snapshot may excuse the next call's followers; a
+            # caller-owned transaction can still be rolled back after return.
+            self._last_snapshot = previous_snapshot if auto_commit else None
             return stats
 
         except TransactionRecoveryError:

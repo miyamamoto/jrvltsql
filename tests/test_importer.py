@@ -11,6 +11,7 @@ from src.database.sqlite_handler import SQLiteDatabase
 from src.importer.importer import DataImporter
 from src.parser.hr_parser import HRParser
 from tests.fixtures.record_factory import make_hr_record
+from tests.importer_support import import_one
 
 
 class TestDataImporter:
@@ -62,7 +63,7 @@ class TestDataImporter:
             }
 
             # Import record
-            success = importer.import_single_record(record, auto_commit=False)
+            success = import_one(importer, record, auto_commit=False)
             assert success is True
 
             db.commit()

@@ -28,6 +28,7 @@ from src.importer.importer import (
 from src.importer.importer_optimized import OptimizedDataImporter
 from src.parser.odds_domain import SNAPSHOT_ROWS_KEY, TOTAL_COMBINATION
 from src.realtime.updater import RealtimeUpdater
+from tests.importer_support import import_one
 from tests.test_o1_o6_official_contract import (
     ALL_RECORD_TYPES,
     IMPORTERS,
@@ -393,7 +394,7 @@ def test_single_record_path_rejects_an_unsafe_contract_before_dml(
         database.commit()
         importer = DataImporter(database, batch_size=1)
         with pytest.raises(SchemaMigrationError):
-            importer.import_single_record(_o_record(record_type))
+            import_one(importer, _o_record(record_type))
         assert database.fetch_one(f"SELECT COUNT(*) AS cnt FROM {table_name}")["cnt"] == 0
 
 
@@ -580,7 +581,7 @@ def test_markers_survive_both_transaction_modes(
         _create(database, (table_name,))
         importer = DataImporter(database, batch_size=10)
         for row in _marker_rows(record_type, "-"):
-            assert importer.import_single_record(row, auto_commit=auto_commit)
+            assert import_one(importer, row, auto_commit=auto_commit)
         if not auto_commit:
             database.commit()
         field_name, width = NATIVE_MARKER_FIELDS[record_type][0]
@@ -699,12 +700,12 @@ def test_single_record_snapshot_replacement_removes_withdrawn_combinations(
         _create(database, (table_name,))
         importer = DataImporter(database)
         for row in _rows(record_type, filled=3):
-            assert importer.import_single_record(row)
+            assert import_one(importer, row)
         assert _stored_combinations(database, table_name) == _expected_combinations(
             record_type, 3
         )
         for row in _rows(record_type, filled=2):
-            assert importer.import_single_record(row)
+            assert import_one(importer, row)
         assert _stored_combinations(database, table_name) == _expected_combinations(
             record_type, 2
         )
@@ -748,7 +749,98 @@ def test_single_record_follower_row_alone_still_stores_the_whole_snapshot(
     with database:
         _create(database, (table_name,))
         rows = _rows(record_type, filled=3)
-        assert DataImporter(database).import_single_record(rows[-1])
+        assert import_one(DataImporter(database), rows[-1])
+        assert _stored_combinations(database, table_name) == _expected_combinations(
+            record_type, 3
+        )
+
+
+@pytest.mark.parametrize("record_type", ALL_RECORD_TYPES)
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+@pytest.mark.parametrize("auto_commit", (True, False), ids=("owned", "caller"))
+def test_batch_starting_mid_snapshot_still_stores_the_whole_snapshot(
+    tmp_path: Path,
+    importer_class,
+    record_type: str,
+    auto_commit: bool,
+) -> None:
+    """先頭行を含まない追従行の並びでも、snapshot 全体を1回だけ適用する。"""
+
+    table_name = _native_table(record_type)
+    database = SQLiteDatabase(
+        {"path": str(tmp_path / f"mid-{record_type}-{importer_class.__name__}.db")}
+    )
+    with database:
+        _create(database, (table_name,))
+        importer = importer_class(database, batch_size=10)
+        assert importer.import_records(iter(_rows(record_type, filled=3)))[
+            "records_failed"
+        ] == 0
+        followers = _rows(record_type, filled=2)[1:]
+        stats = importer.import_records(iter(followers), auto_commit=auto_commit)
+        if not auto_commit:
+            database.commit()
+        assert stats["records_failed"] == 0
+        assert stats["batches_processed"] == 1
+        assert _stored_combinations(database, table_name) == _expected_combinations(
+            record_type, 2
+        )
+
+
+@pytest.mark.parametrize("record_type", ALL_RECORD_TYPES)
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+@pytest.mark.parametrize("auto_commit", (True, False), ids=("owned", "caller"))
+def test_follower_after_a_delete_reapplies_its_snapshot(
+    tmp_path: Path,
+    importer_class,
+    record_type: str,
+    auto_commit: bool,
+) -> None:
+    """先頭行の後に削除が入れば、続く追従行は snapshot 全体を適用し直す。"""
+
+    table_name = _native_table(record_type)
+    database = SQLiteDatabase(
+        {"path": str(tmp_path / f"delete-{record_type}-{importer_class.__name__}.db")}
+    )
+    with database:
+        _create(database, (table_name,))
+        rows = _rows(record_type, filled=3)
+        delete = _rows(record_type, data_kubun="0", filled=0, sale_flag=b"1")
+        importer = importer_class(database, batch_size=10)
+        stats = importer.import_records(
+            iter([rows[0], *delete, *rows[1:]]), auto_commit=auto_commit
+        )
+        if not auto_commit:
+            database.commit()
+        assert stats["records_failed"] == 0
+        assert _stored_combinations(database, table_name) == _expected_combinations(
+            record_type, 3
+        )
+
+
+@pytest.mark.parametrize("record_type", ALL_RECORD_TYPES)
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+def test_followers_after_a_rolled_back_leader_store_the_snapshot(
+    tmp_path: Path,
+    importer_class,
+    record_type: str,
+) -> None:
+    """呼び出し側が先頭行を rollback したら、次の呼び出しの追従行が snapshot を適用する。"""
+
+    table_name = _native_table(record_type)
+    database = SQLiteDatabase(
+        {"path": str(tmp_path / f"rollback-{record_type}-{importer_class.__name__}.db")}
+    )
+    with database:
+        _create(database, (table_name,))
+        rows = _rows(record_type, filled=3)
+        importer = importer_class(database, batch_size=10)
+        assert importer.import_records(iter(rows[:1]), auto_commit=False)[
+            "records_failed"
+        ] == 0
+        database.rollback()
+        assert _stored_combinations(database, table_name) == []
+        assert importer.import_records(iter(rows[1:]))["records_failed"] == 0
         assert _stored_combinations(database, table_name) == _expected_combinations(
             record_type, 3
         )
@@ -788,6 +880,44 @@ def test_postgresql_snapshot_replacement_removes_withdrawn_combinations(
             row["kumi"]
             for row in postgresql_db.fetch_all(f'SELECT Kumi AS kumi FROM {table_name}')
         ] == [TOTAL_COMBINATION]
+    finally:
+        postgresql_db.execute(f"DROP TABLE IF EXISTS {table_name}")
+        postgresql_db.commit()
+
+
+@pytest.mark.parametrize("record_type", ALL_RECORD_TYPES)
+@pytest.mark.parametrize("importer_class", (DataImporter, OptimizedDataImporter))
+@pytest.mark.parametrize("auto_commit", (True, False), ids=("owned", "caller"))
+def test_postgresql_batch_starting_mid_snapshot_stores_the_whole_snapshot(
+    postgresql_db,
+    importer_class,
+    record_type: str,
+    auto_commit: bool,
+) -> None:
+    """PostgreSQL でも追従行だけの並びが snapshot 全体を置換する。"""
+
+    table_name = _native_table(record_type)
+    postgresql_db.execute(f"DROP TABLE IF EXISTS {table_name}")
+    postgresql_db.execute(SCHEMAS[table_name])
+    postgresql_db.commit()
+    try:
+        importer = importer_class(postgresql_db, batch_size=10)
+        assert importer.import_records(iter(_rows(record_type, filled=3)))[
+            "records_failed"
+        ] == 0
+        stats = importer.import_records(
+            iter(_rows(record_type, filled=2)[1:]), auto_commit=auto_commit
+        )
+        if not auto_commit:
+            postgresql_db.commit()
+        assert stats["records_failed"] == 0
+        assert stats["batches_processed"] == 1
+        assert [
+            row["kumi"]
+            for row in postgresql_db.fetch_all(
+                f"SELECT Kumi AS kumi FROM {table_name} ORDER BY Kumi"
+            )
+        ] == _expected_combinations(record_type, 2)
     finally:
         postgresql_db.execute(f"DROP TABLE IF EXISTS {table_name}")
         postgresql_db.commit()

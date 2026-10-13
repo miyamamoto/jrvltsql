@@ -18,6 +18,7 @@ from src.database.table_mappings import JLTSQL_TO_JRAVAN, JRAVAN_TO_JLTSQL
 from src.importer.importer import DataImporter
 from src.importer.importer_optimized import OptimizedDataImporter
 from src.parser.jg_parser import JGParser
+from tests.importer_support import import_one
 
 
 def _pad(value: str, width: int) -> bytes:
@@ -533,9 +534,9 @@ def test_jg_data_importer_single_record_uses_the_same_exact_delete_contract(
         missing_status = parsed_record()
         missing_status.pop("DataKubun")
         with pytest.raises(SchemaMigrationError, match="DataKubun.*required"):
-            importer.import_single_record(missing_status, auto_commit=auto_commit)
+            import_one(importer, missing_status, auto_commit=auto_commit)
         assert (
-            importer.import_single_record(
+            import_one(importer,
                 parsed_record(
                     data_kubun="0",
                     bamei="",

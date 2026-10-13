@@ -21,6 +21,7 @@ from src.database.sqlite_handler import SQLiteDatabase
 from src.importer.importer import DataImporter, validate_import_record_header
 from src.importer.importer_optimized import OptimizedDataImporter
 from src.parser.cs_parser import CSParser
+from tests.importer_support import import_each
 
 OFFICIAL_FIXTURES = Path(__file__).parent / "fixtures" / "official_layout"
 OFFICIAL_MANIFEST = json.loads(
@@ -100,10 +101,9 @@ def _import_records(database, entrypoint, records, *, standard, auto_commit):
         assert result["records_failed"] == 0
     else:
         importer = DataImporter(database, use_jravan_schema=standard)
-        assert all(
-            importer.import_single_record(record, auto_commit=auto_commit) for record in records
-        )
-        assert importer.get_statistics()["records_imported"] == len(records)
+        totals = import_each(importer, records, auto_commit=auto_commit)
+        assert totals["records_imported"] == len(records)
+        assert totals["records_failed"] == 0
     if not auto_commit:
         database.commit()
 

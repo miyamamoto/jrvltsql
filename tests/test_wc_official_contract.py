@@ -21,6 +21,7 @@ from src.database.table_mappings import JLTSQL_TO_JRAVAN, JRAVAN_TO_JLTSQL
 from src.importer.importer import _STANDARD_FIELD_ALIASES, DataImporter
 from src.importer.importer_optimized import OptimizedDataImporter
 from src.parser.wc_parser import WCParser
+from tests.importer_support import import_one
 
 
 def _pad(value: str, width: int) -> bytes:
@@ -655,11 +656,11 @@ def test_wc_single_record_uses_the_same_validation_and_exact_delete(
         missing_status = parsed_record()
         missing_status.pop("DataKubun")
         with pytest.raises(SchemaMigrationError):
-            importer.import_single_record(missing_status, auto_commit=auto_commit)
+            import_one(importer, missing_status, auto_commit=auto_commit)
         invalid_time = parsed_record()
         invalid_time["ChokyoTime"] = "1160"
         with pytest.raises(SchemaMigrationError):
-            importer.import_single_record(invalid_time, auto_commit=auto_commit)
+            import_one(importer, invalid_time, auto_commit=auto_commit)
         opaque_delete = parsed_record(
             data_kubun="0",
             course="8",
@@ -667,7 +668,7 @@ def test_wc_single_record_uses_the_same_validation_and_exact_delete(
             field_overrides={"HaronTime10Total": "ABCD"},
         )
         opaque_delete["reserved"] = "OVERSIZED"
-        assert importer.import_single_record(opaque_delete, auto_commit=auto_commit)
+        assert import_one(importer, opaque_delete, auto_commit=auto_commit)
         assert database.fetch_one(f"SELECT COUNT(*) AS count FROM {table_name}")["count"] == 0
 
 

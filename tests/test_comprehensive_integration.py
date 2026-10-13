@@ -28,6 +28,7 @@ from src.jvlink.constants import JV_RT_SUCCESS
 from src.parser.factory import ParserFactory
 from src.services.realtime_monitor import RealtimeMonitor
 from tests.fixtures.record_factory import make_hr_record, make_ra_record, make_se_record
+from tests.importer_support import import_one
 
 
 class TestFullPipelineIntegration(unittest.TestCase):
@@ -59,7 +60,7 @@ class TestFullPipelineIntegration(unittest.TestCase):
         self.assertEqual(record["RecordSpec"], "RA")
 
         importer = DataImporter(self.database, batch_size=10)
-        self.assertTrue(importer.import_single_record(record))
+        self.assertTrue(import_one(importer, record))
 
         rows = self.database.fetch_all("SELECT Hondai FROM NL_RA")
         self.assertEqual(rows, [{"Hondai": "統合テスト競走"}])
@@ -117,7 +118,7 @@ class TestFullPipelineIntegration(unittest.TestCase):
             parsed = self.factory.parse(sample)
             self.assertIsNotNone(parsed)
             self.assertEqual(parsed["RecordSpec"], record_type)
-            self.assertTrue(importer.import_single_record(parsed))
+            self.assertTrue(import_one(importer, parsed))
             rows = self.database.fetch_all(f"SELECT RecordSpec FROM NL_{record_type}")
             self.assertEqual(rows, [{"RecordSpec": record_type}])
 
@@ -226,7 +227,7 @@ class TestTransactionHandling(unittest.TestCase):
 
         sample = ParserFactory().parse(make_ra_record(hondai="コミット確認"))
         self.assertIsNotNone(sample)
-        self.assertTrue(importer.import_single_record(sample))
+        self.assertTrue(import_one(importer, sample))
 
         rows = self.database.fetch_all("SELECT Hondai FROM NL_RA")
         self.assertEqual(rows, [{"Hondai": "コミット確認"}])
@@ -312,7 +313,7 @@ class TestEdgeCases(unittest.TestCase):
         self.assertIsNotNone(sample)
 
         importer = DataImporter(self.database, batch_size=10)
-        self.assertTrue(importer.import_single_record(sample))
+        self.assertTrue(import_one(importer, sample))
         rows = self.database.fetch_all("SELECT Hondai FROM NL_RA")
         self.assertEqual(rows, [{"Hondai": "東京新聞杯"}])
 

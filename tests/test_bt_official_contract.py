@@ -17,6 +17,7 @@ from src.database.table_mappings import JLTSQL_TO_JRAVAN, JRAVAN_TO_JLTSQL
 from src.importer.importer import DataImporter, ImporterError
 from src.importer.importer_optimized import OptimizedDataImporter
 from src.parser.bt_parser import BTParser
+from tests.importer_support import import_one
 
 BUSINESS_FIELDS = {
     "RecordSpec",
@@ -460,7 +461,7 @@ def test_standard_preflight_rejects_before_any_additive_schema_mutation(
         with pytest.raises(SchemaMigrationError, match="column capacities"):
             importer = importer_class(database, use_jravan_schema=True)
             if single_record:
-                importer.import_single_record(parsed_record(), auto_commit=auto_commit)
+                import_one(importer, parsed_record(), auto_commit=auto_commit)
             else:
                 importer.import_records(iter(()), auto_commit=auto_commit)
 

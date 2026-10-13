@@ -22,6 +22,7 @@ from src.database.sqlite_handler import SQLiteDatabase
 from src.importer.importer import DataImporter
 from src.importer.importer_optimized import OptimizedDataImporter
 from src.parser.ck_parser import CKParser
+from tests.importer_support import import_one
 
 
 @pytest.fixture
@@ -462,11 +463,11 @@ def test_ck_single_record_api_uses_the_same_coupled_contract(tmp_path) -> None:
     with database:
         _create_ck_tables(database)
         importer = DataImporter(database)
-        assert importer.import_single_record(parsed)
+        assert import_one(importer, parsed)
         assert database.fetch_one("SELECT CKStorageVersion FROM NL_CK") == {"CKStorageVersion": 1}
         assert database.fetch_one("SELECT COUNT(*) AS count FROM NL_CK_CHAKU")["count"] == 278
         assert database.fetch_one("SELECT COUNT(*) AS count FROM NL_CK_RUIKEI")["count"] == 8
-        assert importer.import_single_record(deletion)
+        assert import_one(importer, deletion)
         assert database.fetch_one("SELECT COUNT(*) AS count FROM NL_CK")["count"] == 0
 
 

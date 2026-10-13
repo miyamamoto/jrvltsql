@@ -16,6 +16,7 @@ from src.database.sqlite_handler import SQLiteDatabase
 from src.importer.importer import DataImporter, ImporterError
 from src.importer.importer_optimized import OptimizedDataImporter
 from src.parser.ch_parser import CHParser
+from tests.importer_support import import_one
 
 
 @pytest.fixture
@@ -325,8 +326,8 @@ def test_ch_single_record_api_stores_one_header_and_three_results(
     with database:
         database.create_table(main_table, main_schema)
         database.create_table(result_table, result_schema)
-        inserted = DataImporter(database, use_jravan_schema=use_standard).import_single_record(
-            parsed
+        inserted = import_one(
+            DataImporter(database, use_jravan_schema=use_standard), parsed
         )
         main_count = database.fetch_one(f"SELECT COUNT(*) AS count FROM {main_table}")["count"]
         result_count = database.fetch_one(f"SELECT COUNT(*) AS count FROM {result_table}")["count"]
@@ -428,14 +429,17 @@ def test_ch_single_record_caller_transaction_rolls_back_parent_when_child_fails(
             return original_insert_many(table_name, rows, use_replace)
 
         database.insert_many = fail_child_before_sql
-        inserted = DataImporter(database).import_single_record(parsed, auto_commit=False)
+        # The removed `import_single_record` swallowed the child failure and
+        # returned False; `import_records` raises. Either way the parent row must
+        # not survive the failed child.
+        with pytest.raises(ImporterError):
+            import_one(DataImporter(database), parsed, auto_commit=False)
         database.commit()
         main_count = database.fetch_one("SELECT COUNT(*) AS count FROM NL_CH")["count"]
         result_count = database.fetch_one("SELECT COUNT(*) AS count FROM NL_CH_SEISEKI")[
             "count"
         ]
 
-    assert inserted is False
     assert main_count == 0
     assert result_count == 0
 
@@ -487,7 +491,7 @@ def test_ch_rollback_failure_never_enters_parent_only_fallback(tmp_path, importe
 
 
 def test_ch_single_record_rollback_failure_preserves_false_contract(tmp_path) -> None:
-    """A swallowed insert error must not make context teardown raise a new error."""
+    """A failed insert must not make context teardown raise a new error."""
     database = SQLiteDatabase({"path": str(tmp_path / "single-rollback-failure.db")})
     parsed = CHParser().parse(build_record()[0])
     assert parsed is not None
@@ -517,14 +521,17 @@ def test_ch_single_record_rollback_failure_preserves_false_contract(tmp_path) ->
 
         database.insert_many = fail_child_once
         database.rollback = fail_rollback_once
-        inserted = DataImporter(database).import_single_record(parsed)
+        # The removed `import_single_record` swallowed both failures and returned
+        # False; `import_records` raises. What this test is about is the context
+        # teardown below: the failed rollback must not turn into a second error.
+        with pytest.raises(ImporterError):
+            import_one(DataImporter(database), parsed)
 
     assert database.is_connected() is False
     with database:
         main_count = database.fetch_one("SELECT COUNT(*) AS count FROM NL_CH")["count"]
         result_count = database.fetch_one("SELECT COUNT(*) AS count FROM NL_CH_SEISEKI")["count"]
 
-    assert inserted is False
     assert child_failed is True
     assert rollback_failed is True
     assert main_count == 0
