@@ -104,8 +104,8 @@ wheel に入るのは `jltsql` コマンド（`src/`）だけです。`quickstar
 - 2.3.2 では、時系列オッズのコマンド（`realtime timeseries` / `odds-timeseries` /
   `odds-sokuho-timeseries`）が、一部のレースで取得に失敗したとき exit 4 で終わります
   （2.3.1 までは exit 0）。呼び出す側が exit 0 以外を失敗として扱うなら、その動きも変わります。
-  たとえば jrvltsql-wine-runtime の `official_odds_only` は、exit 0 以外を受けるとその日付チャンクを
-  失敗にして、残りのチャンクを実行せずに止まります。
+  たとえば日付を区切って順に取得する呼び出し側が、exit 0 以外でその区切りを失敗にして止まる場合は、
+  失敗した日付を取り直す手順を用意してください。
 
 ## 使い方
 
