@@ -855,6 +855,14 @@ class TestRealtimeTimeseriesCommand(unittest.TestCase):
             "inserted": len(batch),
             "errors": 0,
         }
+        # The real fetcher logs through module-level structlog proxies. Do not let
+        # this test cache them on the current configuration's processor list:
+        # later tests reconfigure structlog and capture logs on a new list.
+        import structlog
+
+        cache_was = structlog.get_config()["cache_logger_on_first_use"]
+        structlog.configure(cache_logger_on_first_use=False)
+        self.addCleanup(structlog.configure, cache_logger_on_first_use=cache_was)
         with self.runner.isolated_filesystem():
             config_path = Path("config.yaml")
             config_path.write_text(
@@ -876,6 +884,8 @@ class TestRealtimeTimeseriesCommand(unittest.TestCase):
                 patch("src.database.create_database_from_config", return_value=database),
                 patch("src.jvlink.bridge.find_bridge_executable", return_value=None),
                 patch("src.fetcher.base.JVLinkWrapper", FakeJVLink),
+                # no log file in the temporary directory, no handler on its streams
+                patch("src.cli.main.setup_logging_from_config"),
                 patch("src.realtime.updater.RealtimeUpdater", return_value=updater),
             ):
                 result = self.runner.invoke(
