@@ -786,6 +786,110 @@ class TestRealtimeTimeseriesCommand(unittest.TestCase):
         self.assertEqual(result.exit_code, TIMESERIES_EXIT_KEY_ERRORS, result.output)
         self.assertIn("Failed keys:    0B42=184", result.output)
 
+    def test_timeseries_jvread_failure_inside_a_key_exits_4_end_to_end(self):
+        """A JVRead -403 part-way through a key (2025-05-03, race 9) ends in exit 4.
+
+        Runs the real RealtimeFetcher over an SQLite NL_RA with two races; only
+        JV-Link is faked. The first key is read completely and saved; the second
+        yields a record and then JVRead fails, so its partial rows are discarded,
+        it is counted as a failed key, and the command exits 4.
+        """
+        import sqlite3
+        import types
+        from contextlib import closing
+
+        from src.cli.main import TIMESERIES_EXIT_KEY_ERRORS
+        from src.fetcher.realtime import RealtimeFetcher
+
+        class FakeJVLink:
+            def __init__(self):
+                self.keys = []
+
+            def jv_init(self):
+                return 0
+
+            def jv_rt_open(self, data_spec, key):
+                self.keys.append(key)
+                return 0, 1
+
+            def jv_close(self):
+                pass
+
+        def make_fetcher(*_args, **_kwargs):
+            fetcher = object.__new__(RealtimeFetcher)
+            fetcher.jvlink = FakeJVLink()
+
+            def read_key(self):
+                key = self.jvlink.keys[-1]
+                yield {"RecordSpec": "O2", "Year": 2025, "MonthDay": 503, "_key": key}
+                if key.endswith("09"):
+                    raise RuntimeError(f"Realtime JVRead returned -403 for 0B420000000000{key}.jvd")
+
+            fetcher._fetch_and_parse = types.MethodType(read_key, fetcher)
+            return fetcher
+
+        database = MagicMock()
+        database.__enter__.return_value = database
+        database.__exit__.return_value = None
+        updater = MagicMock()
+        updater.process_parsed_records_batch.side_effect = lambda batch, **_k: {
+            "success": True,
+            "inserted": len(batch),
+            "errors": 0,
+        }
+        with self.runner.isolated_filesystem():
+            config_path = Path("config.yaml")
+            config_path.write_text(
+                "database:\n  type: sqlite\ndatabases:\n  sqlite:\n    enabled: true\n"
+                "jvlink:\n  sid: TEST\nauto_update_check: false\n"
+            )
+            db_path = Path("keiba.db").resolve()
+            with closing(sqlite3.connect(db_path)) as conn:
+                conn.execute(
+                    "CREATE TABLE NL_RA (Year INTEGER, MonthDay INTEGER, JyoCD TEXT,"
+                    " Kaiji INTEGER, Nichiji INTEGER, RaceNum INTEGER)"
+                )
+                conn.executemany(
+                    "INSERT INTO NL_RA VALUES (?, ?, ?, ?, ?, ?)",
+                    [(2025, 503, "05", 2, 3, 8), (2025, 503, "05", 2, 3, 9)],
+                )
+                conn.commit()
+            with (
+                patch("src.database.create_database_from_config", return_value=database),
+                patch("src.fetcher.realtime.RealtimeFetcher", side_effect=make_fetcher),
+                patch("src.realtime.updater.RealtimeUpdater", return_value=updater),
+            ):
+                result = self.runner.invoke(
+                    cli,
+                    [
+                        "--config",
+                        str(config_path),
+                        "realtime",
+                        "timeseries",
+                        "--spec",
+                        "0B42",
+                        "--from",
+                        "20250503",
+                        "--to",
+                        "20250503",
+                        "--db",
+                        "sqlite",
+                        "--db-path",
+                        str(db_path),
+                    ],
+                )
+
+        self.assertEqual(result.exit_code, TIMESERIES_EXIT_KEY_ERRORS, result.output)
+        self.assertIn("Failed keys:    0B42=1", result.output)
+        self.assertIn("errors=1", result.output)
+        saved = [
+            row
+            for call in updater.process_parsed_records_batch.call_args_list
+            for row in call.args[0]
+        ]
+        # only the completely read key (race 8) is saved; race 9's partial row is not
+        self.assertEqual(len(saved), 1)
+
     def test_timeseries_no_data_keys_alone_still_succeed(self):
         """A key without data (e.g. a cancelled race) is not a fetch error."""
 
