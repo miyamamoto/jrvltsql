@@ -44,10 +44,10 @@ JV-Link（JRA-VAN が配布する Windows 用のデータ取得部品）には 2
 ## インストール
 
 運用環境では、正式リリースの tag を固定してインストールします。
-現在の安定版は `v2.3.1` です。
+現在の安定版は `v2.3.2` です。
 
 ```powershell
-git clone --branch v2.3.1 --depth 1 https://github.com/miyamamoto/jrvltsql.git
+git clone --branch v2.3.2 --depth 1 https://github.com/miyamamoto/jrvltsql.git
 cd jrvltsql
 git rev-parse HEAD
 pip install .
@@ -58,8 +58,8 @@ pip install .
 - `git rev-parse HEAD` が出した full SHA（40 桁のコミット ID）
 - 使った配布物（artifact）の SHA-256
 
-[GitHub Release](https://github.com/miyamamoto/jrvltsql/releases/tag/v2.3.1) には
-wheel（`jltsql-2.3.1-py3-none-any.whl`）と sdist（`jltsql-2.3.1.tar.gz`）があります。
+[GitHub Release](https://github.com/miyamamoto/jrvltsql/releases/tag/v2.3.2) には
+wheel（`jltsql-2.3.2-py3-none-any.whl`）と sdist（`jltsql-2.3.2.tar.gz`）があります。
 wheel に入るのは `jltsql` コマンド（`src/`）だけです。`quickstart.bat` などの batch や
 `scripts/daily_update.py` を使う場合は、上の手順で tag を clone してください。
 
@@ -72,13 +72,13 @@ wheel に入るのは `jltsql` コマンド（`src/`）だけです。`quickstar
 
 ## アップグレード
 
-既存の DB を 2.3.1 で使う前に、DB を作った版に応じて移行が要ります。
+既存の DB を 2.3.2 で使う前に、DB を作った版に応じて移行が要ります。
 移行は自動では行いません。どの手順も、先に書き込み中の collector をすべて止め、
 バックアップを取ってから行います。
 
-| DB を作った版 | 2.3.1 の前に必要なこと |
+| DB を作った版 | 2.3.2 の前に必要なこと |
 | --- | --- |
-| 2.3.1 | なし |
+| 2.3.1 | DB の移行はなし（終了コードが変わる。下の注意を参照） |
 | 2.3.0 | `TS_SOKUHO_O*` の主キーに `CollectedAt` を戻す拡幅。行は消えません。 |
 | 2.2.0 | 上の行に加えて、`RT_WH` の主キーに `HappyoTime` を足す移行 |
 | 2.0.0〜2.1.2 | 上の 2 つに加えて、`NL_HR` / `RT_HR` の予備 flag 3 列の型変更（INTEGER → TEXT） |
@@ -98,9 +98,14 @@ wheel に入るのは `jltsql` コマンド（`src/`）だけです。`quickstar
 - `TS_SOKUHO_O*` の拡幅は、PostgreSQL では `jltsql db migrate-sokuho-capture-identity` で行います。
   既定は報告だけ（dry run）で、`--apply` を付けたときだけ変更します。
   SQLite では使えません。バックアップを取って表を作り直します。
-- 1.x で作った `TS_SOKUHO_O*` は、すでに 2.3.1 と同じ主キーです。
+- 1.x で作った `TS_SOKUHO_O*` は、すでに 2.3.1 以降と同じ主キーです。
   2.0〜2.3.0 の `migrate-sokuho-capture-identity --apply` を当ててはいけません（行が消えます）。
 - `RT_WH` の移行後は、同じ馬に発表ごとの行ができます。`RT_WH` を読む側の変更も要ります。
+- 2.3.2 では、時系列オッズのコマンド（`realtime timeseries` / `odds-timeseries` /
+  `odds-sokuho-timeseries`）が、一部のレースで取得に失敗したとき exit 4 で終わります
+  （2.3.1 までは exit 0）。呼び出す側が exit 0 以外を失敗として扱うなら、その動きも変わります。
+  たとえば jrvltsql-wine-runtime の `official_odds_only` は、exit 0 以外を受けるとその日付チャンクを
+  失敗にして、残りのチャンクを実行せずに止まります。
 
 ## 使い方
 
@@ -192,15 +197,18 @@ Escape で拒否します（承諾はしません）。応答待ちの上限は 
 | `scripts/daily_update.py` | 0 正常、1 エラー、2 引数の誤り、3 `--require-records` の spec が何も返さなかった |
 | `jltsql realtime fetch` | `daily_update.py` と同じ |
 | `jltsql fetch` | 0 正常、1 エラー、2 必須オプションの欠落などの引数の誤り。途中の spec が失敗したら、残りの spec は実行しません。 |
+| `jltsql realtime timeseries` / `odds-timeseries` / `odds-sokuho-timeseries` | 0 正常、1 エラー、2 引数の誤り、4 一部のレースで取得（JVRTOpen）に失敗した（2.3.2 以降） |
 
 - 0 件でも、`--require-records` を付けなければ exit 0 です。「空なら失敗」にしたい spec を
   `--require-records` に書きます。
 - JVOpen の戻り値 `-1` は「該当データ無し」以外の意味も持つので、空であることの証明にはしません。
 - `--summary-json PATH` を付けると、spec ごとの戻り値と件数を JSON に書きます（失敗時も書きます）。
   形式は [取得サマリ JSON](docs/fetch_summary.md)。
-- 現在の `jltsql realtime timeseries` / `odds-timeseries` は、一部のレースで
-  取得（JVRTOpen）が失敗しても exit 0 で終わります。失敗の数は出力の
-  `Keys: … errors=N` 行に出るので、その値を確かめてください。
+- 時系列オッズのコマンドは、取得に失敗したレースがあっても全 spec を取り終え、取れた分を保存してから
+  exit 4 で終わります。失敗の数は出力の `Failed keys:` 行に spec ごとに `0B42=184` の形で出ます
+  （失敗がなければ `0`）。その日付を取り直してください。
+- データが無いレース（中止など）は失敗に数えません。
+- 2.3.1 までは、取得に失敗したレースがあっても exit 0 でした。
 
 ## 開発・テスト
 
