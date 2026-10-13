@@ -7,6 +7,18 @@
 
 ## [Unreleased]
 
+## [2.3.2] - 2026-10-13
+
+### Changed
+
+- **時系列オッズのコマンドが、一部のレースの取得に失敗したら exit 4 で終わる**（#283）。
+  対象は `realtime timeseries` / `odds-timeseries` / `odds-sokuho-timeseries`。
+  - 失敗に数えるのは、レースのキーごとの取得の失敗（JVRTOpen の負の戻り値、キーの途中の JVRead の失敗、bridge の timeout など）。
+  - 取り終えたキー（レース）の行は保存してから終わる。途中で失敗したキーの行は 1 行も残らない（2.3.1 と同じく破棄）。全 spec を取り終えてから判定する。
+  - 要約に `Failed keys:` 行を足した（spec ごとの失敗キー数。失敗がなければ `0`）。
+  - データが無いレース（中止など、`no_data`）は失敗に数えない。
+  - 2.3.1 までは、要約の `Errors:` が保存の失敗しか数えず、取得に失敗したキーがあっても `Errors: 0`・exit 0 だった。同じ spec を 2 回指定しても、先の失敗は消えない。
+
 ## [2.3.1] - 2026-10-12
 
 ### Fixed
@@ -767,7 +779,8 @@
 - quickstart.py 対話形式セットアップウィザード
 - CLI コマンド（fetch, status, monitor, init）
 
-[Unreleased]: https://github.com/miyamamoto/jrvltsql/compare/v2.3.1...HEAD
+[Unreleased]: https://github.com/miyamamoto/jrvltsql/compare/v2.3.2...HEAD
+[2.3.2]: https://github.com/miyamamoto/jrvltsql/compare/v2.3.1...v2.3.2
 [2.3.1]: https://github.com/miyamamoto/jrvltsql/compare/v2.3.0...v2.3.1
 [2.3.0]: https://github.com/miyamamoto/jrvltsql/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/miyamamoto/jrvltsql/compare/v2.1.2...v2.2.0
