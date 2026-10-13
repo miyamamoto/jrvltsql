@@ -682,6 +682,118 @@ class TestRealtimeTimeseriesCommand(unittest.TestCase):
         self.prepare_table = self.prepare_table_patcher.start()
         self.addCleanup(self.prepare_table_patcher.stop)
 
+    def _run_with_key_progress(self, progress_by_spec, spec_option=None):
+        """Run 'realtime timeseries' for the given specs; each spec ends with the given counters.
+
+        A spec whose value is a list answers its successive fetches in order.
+        """
+
+        database = MagicMock()
+        database.__enter__.return_value = database
+        database.__exit__.return_value = None
+        fetcher = MagicMock()
+
+        answers = {
+            spec: iter(value if isinstance(value, list) else [value] * 10)
+            for spec, value in progress_by_spec.items()
+        }
+
+        def fetch_rows(**kwargs):
+            counters = next(answers[kwargs["data_spec"]])
+            total = sum(counters.values())
+            kwargs["progress_callback"](
+                {
+                    "status": "success",
+                    "key": "202505040501",
+                    "processed_keys": total,
+                    "total_keys": total,
+                    "success_keys": counters["ok"],
+                    "nonempty_keys": counters["ok"],
+                    "no_data_keys": counters["no_data"],
+                    "error_keys": counters["errors"],
+                    "total_records": counters["ok"],
+                }
+            )
+            return iter(())
+
+        fetcher.fetch_time_series_batch_from_db.side_effect = fetch_rows
+        with self.runner.isolated_filesystem():
+            config_path = Path("config.yaml")
+            config_path.write_text(
+                "database:\n  type: postgresql\ndatabases:\n  postgresql:\n    enabled: true\n"
+                "jvlink:\n  sid: TEST\nauto_update_check: false\n"
+            )
+            with (
+                patch("src.database.create_database_from_config", return_value=database),
+                patch("src.fetcher.realtime.RealtimeFetcher", return_value=fetcher),
+                patch("src.realtime.updater.RealtimeUpdater", return_value=MagicMock()),
+            ):
+                result = self.runner.invoke(
+                    cli,
+                    [
+                        "--config",
+                        str(config_path),
+                        "realtime",
+                        "timeseries",
+                        "--spec",
+                        spec_option or ",".join(progress_by_spec),
+                        "--from",
+                        "20250501",
+                        "--to",
+                        "20250531",
+                        "--db",
+                        "postgresql",
+                    ],
+                )
+        return result, fetcher
+
+    def test_timeseries_key_errors_are_not_a_successful_exit(self):
+        """JVRTOpen failures on keys (2025-05 0B42: -413 on 184 keys) must not exit 0.
+
+        "Errors:" counts only persistence failures, so a fetch that lost keys used
+        to print "Errors: 0" and exit 0. Every spec is still fetched and saved;
+        the command then exits with TIMESERIES_EXIT_KEY_ERRORS and names the specs.
+        """
+        from src.cli.main import TIMESERIES_EXIT_KEY_ERRORS
+
+        result, fetcher = self._run_with_key_progress(
+            {
+                "0B41": {"ok": 312, "no_data": 0, "errors": 0},
+                "0B42": {"ok": 128, "no_data": 0, "errors": 184},
+            }
+        )
+
+        self.assertEqual(result.exit_code, TIMESERIES_EXIT_KEY_ERRORS, result.output)
+        self.assertNotIn(TIMESERIES_EXIT_KEY_ERRORS, (0, 1, 2))
+        self.assertEqual(fetcher.fetch_time_series_batch_from_db.call_count, 2)
+        self.assertIn("Failed keys:    0B42=184", result.output)
+
+    def test_timeseries_key_errors_of_a_repeated_spec_are_not_overwritten(self):
+        """--spec 0B42,0B42: a clean second pass must not hide the first pass's lost keys."""
+        from src.cli.main import TIMESERIES_EXIT_KEY_ERRORS
+
+        result, fetcher = self._run_with_key_progress(
+            {
+                "0B42": [
+                    {"ok": 128, "no_data": 0, "errors": 184},
+                    {"ok": 0, "no_data": 312, "errors": 0},
+                ]
+            },
+            spec_option="0B42,0B42",
+        )
+
+        self.assertEqual(fetcher.fetch_time_series_batch_from_db.call_count, 2)
+        self.assertEqual(result.exit_code, TIMESERIES_EXIT_KEY_ERRORS, result.output)
+        self.assertIn("Failed keys:    0B42=184", result.output)
+
+    def test_timeseries_no_data_keys_alone_still_succeed(self):
+        """A key without data (e.g. a cancelled race) is not a fetch error."""
+
+        result, _ = self._run_with_key_progress({"0B41": {"ok": 288, "no_data": 12, "errors": 0}})
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertIn("Failed keys:    0", result.output)
+
     def test_timeseries_commits_table_setup_and_fails_closed_on_batch_error(self):
         database = MagicMock()
         database.__enter__.return_value = database
