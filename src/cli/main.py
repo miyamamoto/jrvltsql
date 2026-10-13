@@ -1769,8 +1769,9 @@ def realtime():
 # They cover O1(単複枠) and O2(馬連). 0B30 is a one-week速報 all-bets snapshot
 # source and is kept for current-week/future accumulation.
 HISTORICAL_TIMESERIES_ODDS_SPECS = "0B41,0B42"
-# Exit of the time-series commands when JVRTOpen failed for some race keys (e.g.
-# -413 server errors). Every spec is still fetched and its rows saved, but the
+# Exit of the time-series commands when the fetch failed for some race keys
+# (a negative JVRTOpen such as -413, a JVRead failure inside a key such as -403,
+# or a bridge timeout). Every spec is still fetched and its rows saved, but the
 # fetch is incomplete: "Errors:" counts only persistence failures, so without
 # this the command printed "Errors: 0" and exited 0 for a fetch that lost keys.
 # Distinct from 1 (error) and 2 (usage) so callers can re-fetch instead of alarm.
@@ -2335,7 +2336,7 @@ def timeseries(
     # After the database context closed normally: the saved rows are committed.
     if failed_keys:
         console.print(
-            "[red]Incomplete:[/red] JVRTOpen failed for "
+            "[red]Incomplete:[/red] the fetch (JVRTOpen/JVRead) failed for "
             + ", ".join(f"{n:,} {spec} keys" for spec, n in failed_keys.items())
             + "; re-fetch those dates"
         )

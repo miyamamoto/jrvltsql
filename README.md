@@ -197,7 +197,7 @@ Escape で拒否します（承諾はしません）。応答待ちの上限は 
 | `scripts/daily_update.py` | 0 正常、1 エラー、2 引数の誤り、3 `--require-records` の spec が何も返さなかった |
 | `jltsql realtime fetch` | `daily_update.py` と同じ |
 | `jltsql fetch` | 0 正常、1 エラー、2 必須オプションの欠落などの引数の誤り。途中の spec が失敗したら、残りの spec は実行しません。 |
-| `jltsql realtime timeseries` / `odds-timeseries` / `odds-sokuho-timeseries` | 0 正常、1 エラー、2 引数の誤り、4 一部のレースで取得（JVRTOpen）に失敗した（2.3.2 以降） |
+| `jltsql realtime timeseries` / `odds-timeseries` / `odds-sokuho-timeseries` | 0 正常、1 エラー、2 引数の誤り、4 一部のレースで取得（JVRTOpen / JVRead）に失敗した（2.3.2 以降） |
 
 - 0 件でも、`--require-records` を付けなければ exit 0 です。「空なら失敗」にしたい spec を
   `--require-records` に書きます。

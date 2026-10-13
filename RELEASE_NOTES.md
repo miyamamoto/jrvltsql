@@ -1,3 +1,54 @@
+# jrvltsql v2.3.2 Release Notes
+
+`2.3.2` is a fix release: the time-series odds commands no longer report an
+incomplete fetch as a success (#283). Parser byte layouts and table schemas are
+unchanged; no database migration.
+
+## Fixes
+
+- **Lost race keys make the time-series commands exit 4** (#283).
+  `realtime timeseries`, `realtime odds-timeseries` and
+  `realtime odds-sokuho-timeseries` (the latter two run the same code) now end
+  with exit code **4** when the fetch failed for at least one race key:
+  a negative JVRTOpen return (e.g. `-413` server error), a JVRead failure in the
+  middle of a key (e.g. `-403`), or a bridge timeout. Up to 2.3.1 the summary's
+  `Errors:` counted only persistence failures, so such a run printed
+  `Errors: 0` and exited 0 while races were missing.
+  - Every spec is still fetched and every row that was read is saved and
+    committed before the command exits; only the verdict changes.
+  - The summary gains a `Failed keys:` line: `0` when every key was fetched,
+    otherwise the failed key count per spec, e.g. `Failed keys:    0B42=184`.
+    It is a separate line so that callers which parse `Errors:` keep reading
+    the persistence count.
+  - A key that returns no data (e.g. a cancelled race, counted as `no_data`
+    in the `Keys:` line) is not a failure.
+  - A spec listed twice (`--spec 0B42,0B42`) accumulates its failures; a clean
+    second pass does not hide the first.
+
+| Exit code | Meaning (time-series commands, 2.3.2) |
+| --- | --- |
+| 0 | every key fetched (or returned no data) and every row saved |
+| 1 | error (persistence failure, setup failure, …) |
+| 2 | usage error |
+| 4 | some race keys could not be fetched; the rows that were read are saved |
+
+## Upgrade to 2.3.2
+
+- No database migration; tables and keys are those of 2.3.1.
+- **Exit codes change.** A caller that treats any non-zero exit as a failure
+  will now see a failure where 2.3.1 reported success:
+  - A caller that fetches date ranges in sequence and stops at the first
+    non-zero exit will stop at the range with a lost key instead of
+    continuing. Decide how those dates are re-fetched (for example, re-run the
+    same range; the upsert keeps the rows already saved).
+  - A caller that checked only `Errors:` or the `[OK] <spec>` line for success
+    still passes those checks; read the exit code or the `Failed keys:` line
+    to see the lost keys.
+  - Exit 4 is distinct from 1 so that a caller can schedule a re-fetch rather
+    than raise an alarm for a broken setup.
+- Callers that pin an exact release (tag or commit) are unaffected until they
+  move the pin to 2.3.2; review the points above before moving it.
+
 # jrvltsql v2.3.1 Release Notes
 
 `2.3.1` is a fix release for the JRA decision-time odds (#278, #279). Parser
