@@ -1769,6 +1769,12 @@ def realtime():
 # They cover O1(単複枠) and O2(馬連). 0B30 is a one-week速報 all-bets snapshot
 # source and is kept for current-week/future accumulation.
 HISTORICAL_TIMESERIES_ODDS_SPECS = "0B41,0B42"
+# Exit of the time-series commands when JVRTOpen failed for some race keys (e.g.
+# -413 server errors). Every spec is still fetched and its rows saved, but the
+# fetch is incomplete: "Errors:" counts only persistence failures, so without
+# this the command printed "Errors: 0" and exited 0 for a fetch that lost keys.
+# Distinct from 1 (error) and 2 (usage) so callers can re-fetch instead of alarm.
+TIMESERIES_EXIT_KEY_ERRORS = 4
 SOKUHO_TIMESERIES_ODDS_SPECS = "0B30"
 OFFICIAL_HISTORICAL_TIMESERIES_ODDS_SPECS = frozenset(HISTORICAL_TIMESERIES_ODDS_SPECS.split(","))
 
@@ -2047,6 +2053,7 @@ def timeseries(
     from src.realtime.updater import RealtimeUpdater
 
     config = ctx.obj.get("config")
+    failed_keys = {}
 
     # Determine database type and path
     if db:
@@ -2161,6 +2168,7 @@ def timeseries(
             total_records = 0
             total_success = 0
             total_errors = 0
+            key_errors_by_spec = {}
             default_save_batch_size = 100 if db_type in ("postgresql", "dual") else 5000
             save_batch_size = int(
                 os.getenv("JRVLTSQL_TS_SAVE_BATCH_SIZE", str(default_save_batch_size))
@@ -2292,6 +2300,7 @@ def timeseries(
                             f"records={key_progress['total_records']:,}",
                             soft_wrap=True,
                         )
+                    key_errors_by_spec[spec_code] = int(key_progress["error_keys"])
                     console.print(
                         f"  [green][OK][/green] {spec_code}: {record_count:,} records processed"
                     )
@@ -2306,11 +2315,29 @@ def timeseries(
             console.print(f"  Total records:  {total_records:,}")
             console.print(f"  Saved:          {total_success:,}")
             console.print(f"  Errors:         {total_errors:,}")
+            failed_keys = {spec: n for spec, n in key_errors_by_spec.items() if n}
+            # "Failed keys:" is a contract line like Keys: (0 when every key was fetched);
+            # it avoids "Errors:", which callers already parse as the persistence count.
+            console.print(
+                "  Failed keys:    "
+                + (" ".join(f"{spec}={n:,}" for spec, n in failed_keys.items()) or "0"),
+                soft_wrap=True,
+            )
 
     except Exception as e:
         console.print(f"\n[red]Error:[/red] {e}", style="bold")
         logger.error("Failed to fetch time series data", error=str(e), exc_info=True)
         sys.exit(1)
+
+    # After the database context closed normally: the saved rows are committed.
+    if failed_keys:
+        console.print(
+            "[red]Incomplete:[/red] JVRTOpen failed for "
+            + ", ".join(f"{n:,} {spec} keys" for spec, n in failed_keys.items())
+            + "; re-fetch those dates"
+        )
+        logger.error("Time-series fetch lost keys", key_errors=failed_keys)
+        sys.exit(TIMESERIES_EXIT_KEY_ERRORS)
 
 
 @realtime.command("odds-timeseries")
